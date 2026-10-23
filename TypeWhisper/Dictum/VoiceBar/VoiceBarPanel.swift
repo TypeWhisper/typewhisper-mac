@@ -17,6 +17,14 @@ final class VoiceBarPresentation: ObservableObject {
     private var feedbackCaptured = false
     static var enabled: Bool { UserDefaults.standard.object(forKey: "dictumVoiceBarEnabled") as? Bool ?? true }
 
+#if DEBUG
+    static let debugCondition: String? = {
+        guard let index = CommandLine.arguments.firstIndex(of: "--dictum-voicebar-condition"),
+              CommandLine.arguments.indices.contains(index + 1) else { return nil }
+        return CommandLine.arguments[index + 1]
+    }()
+#endif
+
     var contentSize: NSSize {
         guard state.showsTranscript, !text.isEmpty else { return NSSize(width: state.collapsedWidth, height: 44) }
         let paragraph = NSMutableParagraphStyle()
@@ -90,7 +98,32 @@ final class VoiceBarPresentation: ObservableObject {
             }
         default: break
         }
+#if DEBUG
+        if let condition = Self.debugCondition {
+            let parts = condition.split(separator: ":", maxSplits: 1)
+            switch parts.first {
+            case "downloading": input.model = .downloading(parts.count > 1 ? Double(parts[1]) : nil)
+            case "loading": input.model = .loading
+            case "failed": input.model = .failed(parts.count > 1 ? String(parts[1]) : "")
+            case "recovered-error": input.outcome = .recoveredError
+            case "blocking-error": input.outcome = .blockingError(parts.count > 1 ? String(parts[1]) : "")
+            case "no-ai": input.outcome = .noAI
+            case "no-speech": input.outcome = .noSpeech
+            default: break
+            }
+        }
+#endif
         var nextState = VoiceBarState.derive(input)
+#if DEBUG
+        if Self.debugCondition != nil {
+            isActive = nextState != .idle
+            if isActive { state = nextState }
+            duration = vm.recordingDuration
+            levels.removeFirst()
+            levels.append(vm.audioLevel)
+            return
+        }
+#endif
         if let lifetime = nextState.feedbackLifetime, !feedbackCaptured {
             feedback = (nextState, Date().addingTimeInterval(lifetime))
             feedbackCaptured = true
@@ -225,13 +258,13 @@ struct VoiceBarView: View {
             if model.state.showsTranscript && !model.text.isEmpty {
                 transcript.padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 2)
             }
-            HStack(spacing: 10) { controls }.padding(.horizontal, 14).frame(height: 44)
+            HStack(spacing: 10) { controls }.padding(.leading, 15).padding(.trailing, 7).frame(height: 44)
         }
         .frame(width: model.contentSize.width, height: model.contentSize.height, alignment: .bottom)
         .foregroundStyle(.white)
         .background { VoiceBarMaterial().overlay(.black.opacity(0.55)) }
         .clipShape(RoundedRectangle(cornerRadius: model.state.showsTranscript ? 20 : 22))
-        .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.14), lineWidth: 0.5) }
+        .overlay { RoundedRectangle(cornerRadius: model.state.showsTranscript ? 20 : 22).strokeBorder(.white.opacity(0.14), lineWidth: 0.5) }
         .overlay(alignment: .bottomLeading) {
             if case .cancelled(let remaining) = model.state {
                 Capsule().fill(.white.opacity(0.45)).frame(width: model.contentSize.width * remaining, height: 2).padding(.bottom, 1)
@@ -311,7 +344,10 @@ struct VoiceBarView: View {
         case .copied:
             Image(systemName: "doc.on.doc")
             label("Copied. No text field found.")
-            Text(verbatim: "⌘V")
+            Text(verbatim: "⌘V").font(.system(size: 12, weight: .medium))
+                .frame(minWidth: 22, minHeight: 22)
+                .padding(.horizontal, 6)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
         case .recoveredError:
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DictumTheme.warning)
             label("Polishing failed. Original inserted.")
@@ -319,13 +355,16 @@ struct VoiceBarView: View {
         case .blockingError(let message):
             Image(systemName: "mic.slash.fill").foregroundStyle(DictumTheme.danger)
             if message.isEmpty { label("Microphone unavailable") } else { Text(verbatim: message).lineLimit(1) }
-            action("Settings") { model.dismissFeedback(); DictumNavigation.shared.open(.general) }
+            action("Open Settings") { model.dismissFeedback(); DictumNavigation.shared.open(.general) }
             Button { model.dismissFeedback() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel(Text("Close", tableName: "DictumHome"))
         case .noSpeech:
             Image(systemName: "mic.slash")
             label("Didn't hear anything")
         case .downloading(let progress):
-            ProgressView(value: progress).frame(width: 32)
+            ZStack {
+                Circle().stroke(.white.opacity(0.18), lineWidth: 2)
+                Circle().trim(from: 0, to: progress ?? 0.25).stroke(.white, lineWidth: 2).rotationEffect(.degrees(-90))
+            }.frame(width: 18, height: 18)
             label("Downloading speech model")
             if let progress { Text(progress, format: .percent.precision(.fractionLength(0))) }
             action("View") { DictumNavigation.shared.open(.speech) }

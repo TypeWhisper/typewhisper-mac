@@ -5378,17 +5378,19 @@ final class DictationViewModel: ObservableObject {
         cancellationSamples = []
         recordingDuration = 0
         isRecordingInputSilent = false
+#if DEBUG
+        if let index = CommandLine.arguments.firstIndex(of: "--dictum-recording-elapsed"),
+           CommandLine.arguments.indices.contains(index + 1),
+           let elapsed = TimeInterval(CommandLine.arguments[index + 1]), elapsed.isFinite {
+            let offset = min(540, max(0, elapsed))
+            recordingStartTime = recordingStartTime?.addingTimeInterval(-offset)
+            recordingDuration = offset
+        }
+#endif
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let start = self.recordingStartTime else { return }
                 self.recordingDuration = Date().timeIntervalSince(start)
-#if DEBUG
-                if let index = CommandLine.arguments.firstIndex(of: "--dictum-recording-elapsed"),
-                   CommandLine.arguments.indices.contains(index + 1),
-                   let elapsed = TimeInterval(CommandLine.arguments[index + 1]), elapsed.isFinite {
-                    self.recordingDuration += min(540, max(0, elapsed))
-                }
-#endif
                 self.updateRecordingInputSilence()
                 if self.recordingDuration >= 540 {
                     self.stopDictation()

@@ -26,8 +26,9 @@ struct HomePage: View {
                     if !accessibilityGranted { permission("dictum needs Accessibility access to type into other apps.", pane: "Privacy_Accessibility") }
                     if !microphoneGranted { permission("dictum needs microphone access to dictate.", pane: "Privacy_Microphone") }
                     stats
+                    if history.recentRecords.isEmpty { firstRun }
                     activity
-                    recent
+                    if !history.recentRecords.isEmpty { recent }
                 }.padding(.horizontal, 28).padding(.top, 4).padding(.bottom, 28)
             }
         }
@@ -81,15 +82,32 @@ struct HomePage: View {
     private var activity: some View {
         let streak = HomeMetrics.streaks(statistics.days)
         return VStack(spacing: 12) {
-            HStack {
+            HStack(spacing: 6) {
                 Text("Activity", tableName: "DictumHome").font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Image(systemName: "flame.fill").foregroundStyle(.orange)
-                Text(String(localized: "\(streak.current)-day streak", table: "DictumHome"))
-                Text(String(localized: "Longest \(streak.longest) days", table: "DictumHome")).foregroundStyle(DictumTheme.textTertiary)
-            }.font(.system(size: 11))
-            HomeHeatmap(days: statistics.days).padding(.vertical, 16).padding(.horizontal, 8).background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
+                Image(systemName: "flame.fill").font(.system(size: 14)).foregroundStyle(DictumTheme.flame)
+                Text(String(localized: "\(streak.current)-day streak", table: "DictumHome")).font(.system(size: 13))
+                Text(String(localized: "Longest \(streak.longest) days", table: "DictumHome")).font(.system(size: 11)).foregroundStyle(DictumTheme.textTertiary)
+            }
+            HomeHeatmap(days: statistics.days).padding(.top, 16).padding(.horizontal, 18).padding(.bottom, 14).background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
         }
+    }
+
+    private var firstRun: some View {
+        HStack(spacing: 28) {
+            Text(verbatim: "fn")
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 56, height: 48)
+                .background(DictumTheme.raised, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DictumTheme.separatorStrong, lineWidth: 0.5))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Press fn and say your first sentence", tableName: "DictumHome").font(.system(size: 17, weight: .semibold))
+                Text("Works in any text field. Press fn again when you're done and the text appears at the cursor.", tableName: "DictumHome").font(.system(size: 13)).foregroundStyle(DictumTheme.textSecondary)
+            }
+            Spacer(minLength: 0)
+            Button { UserDefaults.standard.set(true, forKey: "dictumPracticeRequested"); ManagedAppWindowOpener.shared.open(id: "setup") } label: { Text("Try it", tableName: "DictumHome") }
+        }.padding(.vertical, 28).padding(.horizontal, 30)
+            .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var recent: some View {
@@ -99,34 +117,32 @@ struct HomePage: View {
                 Spacer()
                 Button { DictumNavigation.shared.open(.history) } label: { Text("All history", tableName: "DictumHome") }.buttonStyle(.plain).foregroundStyle(DictumTheme.accent)
             }
-            if history.recentRecords.isEmpty {
-                VStack(spacing: 12) {
-                    Text(verbatim: "fn").font(.system(size: 28, weight: .medium)).padding(16).background(DictumTheme.inset, in: RoundedRectangle(cornerRadius: 12))
-                    Text("Press fn and say your first sentence", tableName: "DictumHome").font(.headline)
-                    Text("Works in any text field. Press fn again when you're done and the text appears at the cursor.", tableName: "DictumHome").foregroundStyle(.secondary)
-                    Button { UserDefaults.standard.set(true, forKey: "dictumPracticeRequested"); ManagedAppWindowOpener.shared.open(id: "setup") } label: { Text("Try it", tableName: "DictumHome") }
-                }.frame(maxWidth: .infinity).padding(24).background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(history.recentRecords.prefix(5))) { record in
-                        HStack(spacing: 10) {
-                            if let bundle = record.appBundleIdentifier, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
-                                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 20, height: 20)
-                            } else { Image(systemName: "app").frame(width: 20, height: 20).foregroundStyle(.secondary) }
+            VStack(spacing: 0) {
+                ForEach(Array(history.recentRecords.prefix(5))) { record in
+                    HStack(spacing: 12) {
+                        if let bundle = record.appBundleIdentifier, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 20, height: 20)
+                        } else { Image(systemName: "app").frame(width: 20, height: 20).foregroundStyle(.secondary) }
+                        Button {
+                            HistoryViewModel.shared.requestOpenRecord(withID: record.id)
+                            DictumNavigation.shared.open(.history)
+                        } label: { Text(verbatim: record.finalText).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain)
+                        if hovered == record.id {
                             Button {
-                                HistoryViewModel.shared.requestOpenRecord(withID: record.id)
-                                DictumNavigation.shared.open(.history)
-                            } label: { Text(verbatim: record.finalText).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain)
-                            if hovered == record.id {
-                                Button {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(record.finalText, forType: .string)
-                                } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).accessibilityLabel(Text("Copy", tableName: "DictumHome"))
-                            } else { Text(verbatim: HomeMetrics.recentDate(record.timestamp)).foregroundStyle(.secondary).font(.system(size: 11)) }
-                        }.padding(.horizontal, 14).frame(height: 44).onHover { hovered = $0 ? record.id : nil }
-                    }
-                }.background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
-            }
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(record.finalText, forType: .string)
+                            } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).accessibilityLabel(Text("Copy", tableName: "DictumHome"))
+                        } else {
+                            Text(verbatim: HomeMetrics.recentDate(record.timestamp))
+                                .font(.system(size: 12)).monospacedDigit()
+                                .foregroundStyle(DictumTheme.textTertiary)
+                                .frame(width: 40, alignment: .trailing)
+                        }
+                    }.padding(.horizontal, 12).frame(height: 44)
+                        .background(hovered == record.id ? DictumTheme.selected : .clear, in: RoundedRectangle(cornerRadius: 8))
+                        .onHover { hovered = $0 ? record.id : nil }
+                }
+            }.padding(4).background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 

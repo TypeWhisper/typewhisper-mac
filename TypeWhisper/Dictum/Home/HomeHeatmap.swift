@@ -14,6 +14,7 @@ struct HomeHeatmap: View {
 
     var body: some View {
         let dates = dates
+        let today = Calendar.current.startOfDay(for: Date())
         let counts = Dictionary(days.map { (Calendar.current.startOfDay(for: $0.day), $0.totalWords) }, uniquingKeysWith: +)
         VStack(alignment: .trailing, spacing: 8) {
             Canvas { context, _ in
@@ -28,7 +29,9 @@ struct HomeHeatmap: View {
                         context.draw(Text(date, format: .dateTime.weekday(.narrow)).font(.system(size: 9)).foregroundStyle(.secondary), at: CGPoint(x: 0, y: 25 + row * 14), anchor: .leading)
                     }
                     let rect = CGRect(x: 28 + column * 14, y: 20 + row * 14, width: 11, height: 11)
-                    context.fill(Path(roundedRect: rect, cornerRadius: 2.5), with: .color(DictumTheme.heat[HomeMetrics.heatLevel(words: counts[date, default: 0])]))
+                    if date <= today {
+                        context.fill(Path(roundedRect: rect, cornerRadius: 2.5), with: .color(DictumTheme.heat[HomeMetrics.heatLevel(words: counts[date, default: 0])]))
+                    }
                 }
             }.frame(height: 118)
                 .onContinuousHover { phase in
@@ -38,7 +41,7 @@ struct HomeHeatmap: View {
                         hovered = location.x >= 28 && location.y >= 20 && (0..<52).contains(column) && (0..<7).contains(row) ? column * 7 + row : nil
                     } else { hovered = nil }
                 }
-                .help(hovered.map { "\(dates[$0].formatted(date: .abbreviated, time: .omitted)) · \(counts[dates[$0], default: 0].formatted())" } ?? "")
+                .help(tooltip(dates: dates, counts: counts))
                 .accessibilityChildren {
                     ForEach(dates, id: \.self) { date in
                         Text(date, format: .dateTime.year().month().day()).accessibilityValue(counts[date, default: 0].formatted())
@@ -50,5 +53,13 @@ struct HomeHeatmap: View {
                 Text("More", tableName: "DictumHome")
             }.font(.system(size: 10)).foregroundStyle(.secondary)
         }
+    }
+
+    private func tooltip(dates: [Date], counts: [Date: Int]) -> String {
+        guard let index = hovered, dates.indices.contains(index) else { return "" }
+        let count = counts[dates[index], default: 0]
+        guard count > 0 else { return String(localized: "No dictation", table: "DictumHome") }
+        let day = dates[index].formatted(.dateTime.month().day())
+        return "\(day) · \(count.formatted()) \(String(localized: "words", table: "DictumHome"))"
     }
 }

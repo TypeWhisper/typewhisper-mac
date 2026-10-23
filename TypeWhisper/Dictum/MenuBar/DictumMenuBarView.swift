@@ -45,8 +45,8 @@ struct DictumMenuBarView: View {
             Label {
                 if !AXIsProcessTrusted() { text("Accessibility access needed") }
                 else if dictation.state == .recording { text("Dictating") + Text(verbatim: " · \(Int(dictation.recordingDuration) / 60):\(String(format: "%02d", Int(dictation.recordingDuration) % 60))") }
-                else { Text(SidebarStatus.current().titleKey, tableName: "DictumShell") + Text(verbatim: " · \(models.activeModelName ?? "")") }
-            } icon: { Image(systemName: "circle.fill") }.disabled(true)
+                else { Text(SidebarStatus.current().titleKey, tableName: "DictumShell") + Text(verbatim: statusDetail.isEmpty ? "" : " · \(statusDetail)") }
+            } icon: { Image(systemName: "circle.fill").font(.system(size: 7)) }.disabled(true)
             if !AXIsProcessTrusted() {
                 Button { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!) } label: { text("Open System Settings") }
                 Divider()
@@ -65,11 +65,9 @@ struct DictumMenuBarView: View {
                 }
             } label: { text("Translate To") }
             Menu {
-                Picker(selection: $polishLevel) {
-                    Text("Light", tableName: "DictumHome").tag("light")
-                    Text("Standard", tableName: "DictumHome").tag("standard")
-                    Text("Rewrite", tableName: "DictumHome").tag("rewrite")
-                } label: { text("Polish Strength") }
+                Toggle(isOn: polishBinding("light")) { text("Light") }
+                Toggle(isOn: polishBinding("standard")) { text("Standard") }
+                Toggle(isOn: polishBinding("rewrite")) { text("Rewrite") }
             } label: { text("Polish Strength") }
             Divider()
             if let record = recent.latestEntry(historyRecords: history.recentRecords) {
@@ -96,6 +94,17 @@ struct DictumMenuBarView: View {
     }
 
     private func text(_ key: LocalizedStringKey) -> Text { Text(key, tableName: "DictumHome") }
+    private func polishBinding(_ level: String) -> Binding<Bool> {
+        Binding(get: { polishLevel == level }, set: { if $0 { polishLevel = level } })
+    }
+    private var statusDetail: String {
+        switch SidebarStatus.current() {
+        case .downloading(let progress):
+            return progress.map { "\(Int(($0 * 100).rounded()))%" } ?? ""
+        default:
+            return models.activeModelName ?? ""
+        }
+    }
     private func start(translation: Bool) {
         MenuBarActionDispatcher.performAfterMenuDismissal {
             MenuBarDictationSession.shared.start(translation: translation)

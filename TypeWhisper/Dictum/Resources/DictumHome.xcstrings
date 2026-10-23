@@ -67,6 +67,7 @@
     "For example: Nice weather today.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"For example: Nice weather today."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"比如：“今天天气不错。”"}}}},
     "Sounds great": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Sounds great"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"听得很清楚"}}}},
     "No sound yet. Try another microphone.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No sound yet. Try another microphone."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有听到声音，换一个麦克风试试"}}}},
+    "No dictation": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No dictation"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有听写"}}}},
     "Listening for sound…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Listening for sound…"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"等待声音…"}}}},
     "Getting the speech model ready": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Getting the speech model ready"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"准备语音模型"}}}},
     "Qwen3-ASR recognizes Chinese and English on this Mac, no internet needed.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Qwen3-ASR recognizes Chinese and English on this Mac, no internet needed."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Qwen3-ASR 在这台 Mac 上识别中英文，不需要联网。"}}}},
@@ -108,6 +109,7 @@
     "To hear you": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"To hear you"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"听你说话"}}}},
     "To type into other apps and detect the fn key": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"To type into other apps and detect the fn key"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"把文字输入到其他应用，并识别 fn 键"}}}},
     "Open Keyboard Settings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Keyboard Settings"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"打开键盘设置"}}}},
+    "Open Settings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Settings"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"打开设置"}}}},
     "Press fn + Left ⇧, say this in Chinese, then press fn.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Press fn + Left ⇧, say this in Chinese, then press fn."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"按 fn + 左 ⇧，用中文说下面这句话，再按一下 fn。"}}}},
     "Fillers and corrections handled": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Fillers and corrections handled"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"口头禅和改口都处理好了"}}}},
     "Click the language on the voice bar to switch targets": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Click the language on the voice bar to switch targets"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"在语音条上点语言，可以换成其他目标语言"}}}}
