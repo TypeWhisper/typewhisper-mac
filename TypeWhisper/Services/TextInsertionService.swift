@@ -1647,8 +1647,11 @@ final class TextInsertionService {
             logger.notice("insertText duplicate insertion found but its copy could not be removed: bundle=\(bundleId ?? "nil", privacy: .public)")
             return false
         }
-        guard captureFocusedTextState(for: element)?.value == expectation.singleValue else {
-            if let selection = checkedState.selectedRange {
+        let valueAfterRemoval = captureFocusedTextState(for: element)?.value
+        guard valueAfterRemoval == expectation.singleValue else {
+            // 只有字段仍是检查时的值（删除确实没有生效）才还原光标；
+            // 删除之后字段又变化过时，检查时的光标位置已经不对应当前内容。
+            if valueAfterRemoval == checkedState.value, let selection = checkedState.selectedRange {
                 _ = setSelectedRange(selection, on: element)
             }
             logger.notice("insertText duplicate insertion removal did not take effect: bundle=\(bundleId ?? "nil", privacy: .public)")

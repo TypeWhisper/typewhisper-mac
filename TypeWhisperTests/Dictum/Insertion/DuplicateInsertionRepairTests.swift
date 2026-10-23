@@ -19,6 +19,8 @@ final class DuplicateInsertionRepairTests: XCTestCase {
         var ignoresRemoval = false
         /// 选区设置完成后调用，用来模拟字段在检查之后又被别的进程修改。
         var afterSelectionChange: (() -> Void)?
+        /// 删除生效之后调用，用来模拟字段在删除的同一时刻又发生变化。
+        var afterRemoval: (() -> Void)?
 
         init(value: String, selection: NSRange) {
             self.value = value
@@ -48,6 +50,7 @@ final class DuplicateInsertionRepairTests: XCTestCase {
             guard NSMaxRange(range) <= current.length else { return }
             value = current.replacingCharacters(in: range, with: "")
             selection = NSRange(location: range.location, length: 0)
+            afterRemoval?()
         }
     }
 
@@ -153,6 +156,24 @@ final class DuplicateInsertionRepairTests: XCTestCase {
         XCTAssertTrue(field.removedRanges.isEmpty)
         XCTAssertEqual(field.selection, NSRange(location: 10, length: 0))
         XCTAssertEqual(selectionChanges, 2)
+    }
+
+    /// 删除生效、字段在同一时刻又变化时，检查时的光标位置已不对应当前内容，不还原光标。
+    func testCaretStaysWhenFieldChangesRightAfterTheRemoval() async throws {
+        let field = FieldDouble(value: "开始", selection: NSRange(location: 2, length: 0))
+        let service = makeService(field: field, paste: {
+            field.replaceSelection(with: "你好世界你好世界")
+        })
+        field.afterRemoval = {
+            field.value += "新增"
+        }
+
+        let result = try await service.insertText("你好世界", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(field.value, "开始你好世界新增")
+        XCTAssertEqual(field.removedRanges, [NSRange(location: 6, length: 4)])
+        XCTAssertEqual(field.selection, NSRange(location: 6, length: 0))
     }
 
     /// 只落地一份文本时不触发删除。
