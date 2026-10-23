@@ -9,11 +9,7 @@ public enum PluginHosting: String, Codable, Sendable {
     }
 }
 
-/// Where a plugin processes the audio and text it receives, declared by the manifest's `locality`.
-///
-/// Managed settings that restrict cloud processing let only `local` plugins run. The value is read
-/// as a string, so a manifest with a value this host does not know still loads; such a plugin counts
-/// as unknown and is treated like one without the field.
+/// 插件清单的 `locality` 字段声明音频和文本的处理位置。
 public enum PluginLocality: String, Sendable, CaseIterable {
     /// Nothing the plugin receives leaves the Mac.
     case local

@@ -240,7 +240,6 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     var resolvedEngine: TranscriptionEnginePlugin? {
-        // An enforced pair replaces the chosen engine, as it does when the recording is transcribed.
         guard let engineId = modelManager.effectiveEngineId(selectedEngine) else { return nil }
         guard let pluginManager = PluginManager.shared else { return nil }
         return pluginManager.transcriptionEngine(for: engineId)
@@ -292,7 +291,6 @@ final class DictationRecoveryViewModel: ObservableObject {
         task: TranscriptionTask
     ) -> DictationRecoveryFallbackConfiguration? {
         guard automaticFallbackEnabled else { return nil }
-        // An enforced pair decides the engine, so a fallback would only run the same engine again.
         guard let selectedEngine, !selectedEngine.isEmpty else { return nil }
         guard selectedEngine != primaryEngineId else { return nil }
         guard let engine = resolvedEngine else { return nil }

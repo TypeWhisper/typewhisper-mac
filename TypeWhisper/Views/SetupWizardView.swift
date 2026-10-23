@@ -503,8 +503,6 @@ struct SetupWizardView: View {
                     )
                 } else {
                     VStack(alignment: .trailing, spacing: 8) {
-                        // Required and optional access differ in text, not only in icon
-                        // and color. Only the App Store edition has optional permissions.
                         if isRequired {
                             statusPill(
                                 localizedAppText("Needs Access", de: "Zugriff nötig"),

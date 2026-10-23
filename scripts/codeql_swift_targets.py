@@ -10,7 +10,7 @@ touches, so a plugin-only change does not compile the app and 52 other plugins:
   into the SDK): every target
 - app, extension or CLI sources: the app targets
 - sources in `TypeWhisperPluginSDK/Plugins/<Name>/`: that plugin's target
-- anything else (tests, docs, resources, the App Store edition): nothing
+- 其他文件（测试、文档、资源）：不选择目标
 
 Sources are Swift files plus the C and Objective-C files and headers that
 Swift imports through bridging headers or module maps.

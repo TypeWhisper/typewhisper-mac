@@ -40,7 +40,6 @@ def validate_manifest(manifest: dict, expected_version: str | None = None) -> No
             f"manifest sdkCompatibilityVersion {sdk_version!r} must be 'v1' or 'v1-model-import'"
         )
 
-    # Managed settings that restrict cloud processing refuse plugins without a known locality.
     locality = manifest.get("locality")
     if locality not in VALID_LOCALITIES:
         raise ValueError(

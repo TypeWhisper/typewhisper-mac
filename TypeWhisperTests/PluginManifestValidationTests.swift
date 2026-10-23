@@ -414,10 +414,6 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    /// Managed settings that restrict cloud processing run only `local` plugins, so a wrong value
-    /// either blocks a local engine or lets content leave the Mac. Classification follows
-    /// TypeWhisper for Windows (typewhisper-win#661); `configurable` covers user-defined endpoints,
-    /// scripts and commands.
     func testEveryPluginDeclaresItsLocality() throws {
         let expected: [String: PluginLocality] = [
             "com.typewhisper.qwen3": .local, "com.typewhisper.speaker-diarization": .local,
