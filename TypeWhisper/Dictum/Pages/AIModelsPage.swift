@@ -138,9 +138,12 @@ struct AIModelsPage: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("API key", tableName: "DictumStyle").font(.system(size: 12)).foregroundStyle(.secondary)
                 HStack {
-                    SecureField(hasStoredKey ? "••••••••••••" : "", text: $key).focused($keyFocused)
+                    SecureField(hasStoredKey ? "••••••••••••" : "", text: $key).textFieldStyle(.plain).focused($keyFocused)
                         .accessibilityLabel(Text("API key", tableName: "DictumStyle")).onSubmit { saveKey(item) }
-                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(processing.failedFallbackIDs.contains(item.id) ? DictumTheme.danger : .clear))
+                        .padding(.horizontal, 10).frame(height: 28)
+                        .background(DictumTheme.control, in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(
+                            processing.failedFallbackIDs.contains(item.id) ? DictumTheme.danger : DictumTheme.controlBorder, lineWidth: 0.5))
                     Button {
                         if let pasted = NSPasteboard.general.string(forType: .string) { key = pasted; saveKey(item) }
                     } label: { Text("Paste", tableName: "DictumStyle") }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(.secondary)
@@ -167,7 +170,7 @@ struct AIModelsPage: View {
                 Button { test(item) } label: { Text("Test Connection", tableName: "DictumStyle") }
                     .buttonStyle(DictumControlStyle(kind: .smallButton)).disabled(testing)
             }.font(.system(size: 12))
-        }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 18).frame(maxWidth: .infinity, alignment: .leading)
             .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
     }
 
