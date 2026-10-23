@@ -145,43 +145,8 @@ private struct APIDiscoveryDocument: Encodable {
     let token: String
 }
 
-/// API 服务运行时令牌本来就以明文写在 api-discovery.json 里，钥匙串不增加保护；
-/// 本机签名没有 Team ID，令牌放在钥匙串里时每次重新构建都会要求输入登录密码。
-struct LocalAPITokenFile: Sendable {
-    let url: URL
-
-    static var standard: LocalAPITokenFile {
-        LocalAPITokenFile(url: AppConstants.appSupportDirectory.appendingPathComponent("local-api-token"))
-    }
-
-    func load() -> String? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// 临时文件创建时就是 0600，之后才写入令牌，令牌从不出现在其他用户可读的文件里；
-    /// 写完再改名替换，读取方不会读到写了一半的令牌。
-    func save(_ token: String) throws {
-        let directory = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let temporaryURL = directory.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString)")
-        let descriptor = open(temporaryURL.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
-        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        do {
-            try handle.write(contentsOf: Data(token.utf8))
-            try handle.close()
-            guard rename(temporaryURL.path, url.path) == 0 else {
-                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-            }
-        } catch {
-            try? FileManager.default.removeItem(at: temporaryURL)
-            throw error
-        }
-    }
-}
-
 final class LocalAPIAuthenticator: @unchecked Sendable {
+    private static let keychainService = "local-api-token"
     private static let tokenByteCount = 32
 
     private let token: OSAllocatedUnfairLock<String?>
@@ -193,10 +158,10 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
         initialToken: String? = nil,
         requiresAuthentication: Bool = LocalAPIAuthenticator.storedRequiresAuthentication(),
         tokenLoader: @escaping @Sendable () -> String? = {
-            LocalAPITokenFile.standard.load()
+            KeychainService.load(service: LocalAPIAuthenticator.keychainService)
         },
         tokenSaver: @escaping @Sendable (String) throws -> Void = {
-            try LocalAPITokenFile.standard.save($0)
+            try KeychainService.save(key: $0, service: LocalAPIAuthenticator.keychainService)
         }
     ) {
         token = OSAllocatedUnfairLock<String?>(initialState: initialToken)

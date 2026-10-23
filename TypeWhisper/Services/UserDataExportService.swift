@@ -76,12 +76,10 @@ struct UserDataLocations: Sendable {
 /// snippets, workflows, profiles, plugin data, logs), all preferences as JSON,
 /// and an importable settings backup.
 ///
-/// Secrets stay out of the archive: provider API keys, license activations and
-/// the premium account token live in the Keychain, and the local API token file
-/// is skipped. Downloaded and imported models and plugin bundles are skipped as
-/// well: model weights are not personal data and would make the archive
-/// gigabytes large. The UI names imported models explicitly, since the managed
-/// copy may be the only one left.
+/// 密钥不进入归档：供应商 API 密钥和本机接口令牌保存在 `secrets.json` 中，
+/// `api-discovery.json` 也被排除。已下载和已导入的模型以及插件包同样不导出：
+/// 模型权重不是个人数据，会让归档大到数 GB。界面会明确列出已导入的模型，
+/// 因为受管理的那份副本可能是唯一的一份。
 enum UserDataExportService {
     enum ExportError: LocalizedError {
         case archiveFailed(Int32)
@@ -124,7 +122,7 @@ enum UserDataExportService {
     /// downloads, the local API port/token files, and voice profiles, which
     /// are biometric data that stays on this Mac.
     static let excludedTopLevelNames: Set<String> = [
-        "Plugins", "MarketplaceCache", "models", "api-port", "api-discovery.json", "local-api-token", "VoiceProfiles",
+        "Plugins", "MarketplaceCache", "models", "api-port", "api-discovery.json", "VoiceProfiles",
     ]
 
     /// Model download folders inside `PluginData/<pluginId>/`, compared
@@ -134,7 +132,7 @@ enum UserDataExportService {
     static func shouldExport(relativePath: String) -> Bool {
         let components = (relativePath as NSString).pathComponents
         guard let first = components.first else { return false }
-        if excludedTopLevelNames.contains(first) { return false }
+        if excludedTopLevelNames.contains(first) || SecretFileStore.isSecretFileName(first) { return false }
         if first == "PluginData", components.count >= 3,
            excludedPluginDataNames.contains(components[2].lowercased()) {
             return false
@@ -369,8 +367,8 @@ enum UserDataExportService {
           history audio, dictation recovery audio, imported sounds, plugin data
           such as memories, the error log and watch folder history.
 
-        Not included: provider API keys, license activations and the premium
-        account token (stored in the macOS Keychain), the local API token,
-        downloaded or imported models and installed plugin bundles.
+        Not included: provider API keys (stored in a private file on this Mac),
+        the local API token, downloaded or imported models and installed plugin
+        bundles.
         """
 }

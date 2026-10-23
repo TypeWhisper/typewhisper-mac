@@ -71,7 +71,7 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         try? FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
     }
 
-    // MARK: - Keychain
+    // MARK: - Secrets
 
     func storeSecret(key: String, value: String) throws {
         if AppConstants.isScreenshotAutomation {
@@ -96,8 +96,8 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         }
 
         let scopedService = "\(pluginId).\(key)"
-        // Plugins read credentials synchronously in activate(host:), so keychain
-        // latency is part of launch. The interval carries no key or value.
+        // 插件在 activate(host:) 中同步读取凭据，读取密钥文件的耗时计入启动时间。
+        // 记录的时间段不含密钥名和密钥值。
         let signposter = LaunchSignposts.signposter
         return signposter.withIntervalSignpost("Plugin.loadSecret", id: signposter.makeSignpostID()) {
             KeychainService.load(service: scopedService)

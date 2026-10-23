@@ -16631,13 +16631,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(AppConstants.preferencesDomain, TestHostIsolation.defaultsSuiteName)
     }
 
-    func testTestHostDoesNotUseTheAppsKeychainItems() {
-        XCTAssertEqual(AppConstants.keychainServicePrefix, "com.schneidervvv.dictum.tests.apikey.")
+    func testTestHostDoesNotUseTheAppsSecrets() {
+        XCTAssertEqual(AppConstants.secretKeyPrefix, "com.schneidervvv.dictum.tests.apikey.")
     }
 
-    func testDevAndReleaseKeychainItemsAreIsolated() {
-        let dev = AppConstants.devKeychainServicePrefix
-        let release = AppConstants.releaseKeychainServicePrefix
+    func testDevAndReleaseSecretsAreIsolated() {
+        let dev = AppConstants.devSecretKeyPrefix
+        let release = AppConstants.releaseSecretKeyPrefix
         XCTAssertEqual(dev, "com.schneidervvv.dictum.dev.apikey.")
         XCTAssertEqual(release, "com.schneidervvv.dictum.apikey.")
         XCTAssertNotEqual(dev, release)
