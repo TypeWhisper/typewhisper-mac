@@ -9,6 +9,7 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
+*.profraw
 
 # SPM
 .build/
