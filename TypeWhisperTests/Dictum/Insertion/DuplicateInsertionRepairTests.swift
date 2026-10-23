@@ -15,6 +15,10 @@ final class DuplicateInsertionRepairTests: XCTestCase {
         var selection: NSRange
         var removedRanges: [NSRange] = []
         var insertedTexts: [String] = []
+        /// 为 true 时删除请求报告成功，字段内容却保持不变。
+        var ignoresRemoval = false
+        /// 选区设置完成后调用，用来模拟字段在检查之后又被别的进程修改。
+        var afterSelectionChange: (() -> Void)?
 
         init(value: String, selection: NSRange) {
             self.value = value
@@ -60,11 +64,16 @@ final class DuplicateInsertionRepairTests: XCTestCase {
         service.focusedTextStateOverride = { _ in field.snapshot }
         service.setSelectedRangeOverride = { _, range in
             field.selection = range
+            field.afterSelectionChange?()
             return true
         }
         service.insertTextAtOverride = { _, text in
             if text.isEmpty {
-                field.removeSelection(field.selection)
+                if field.ignoresRemoval {
+                    field.removedRanges.append(field.selection)
+                } else {
+                    field.removeSelection(field.selection)
+                }
             } else {
                 field.insertedTexts.append(text)
                 field.replaceSelection(with: text)
@@ -104,6 +113,45 @@ final class DuplicateInsertionRepairTests: XCTestCase {
         XCTAssertEqual(result, .pasted(verification: .verified))
         XCTAssertEqual(field.value, "开始你好世界你好世界另外的内容")
         XCTAssertTrue(field.removedRanges.isEmpty)
+    }
+
+    /// 删除请求报告成功但字段内容没有变化时，不按已修复处理：记录修复未生效，
+    /// 结果由原有的"字段已变化"检查给出，字段内容保持原样。
+    func testRemovalThatDoesNotTakeEffectFallsThroughToLooseCheck() async throws {
+        let field = FieldDouble(value: "开始", selection: NSRange(location: 2, length: 0))
+        field.ignoresRemoval = true
+        let service = makeService(field: field, paste: {
+            field.replaceSelection(with: "你好世界你好世界")
+        })
+
+        let result = try await service.insertText("你好世界", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(field.value, "开始你好世界你好世界")
+        XCTAssertEqual(field.removedRanges, [NSRange(location: 6, length: 4)])
+    }
+
+    /// 选中第二份之后字段已被别的进程修改时，不删除任何内容，并把光标还原到检查时的位置。
+    func testRepairAbortsWhenFieldChangedAfterTheCheck() async throws {
+        let field = FieldDouble(value: "开始", selection: NSRange(location: 2, length: 0))
+        let service = makeService(field: field, paste: {
+            field.replaceSelection(with: "你好世界你好世界")
+        })
+        var selectionChanges = 0
+        field.afterSelectionChange = {
+            selectionChanges += 1
+            if selectionChanges == 1 {
+                field.value += "新增"
+            }
+        }
+
+        let result = try await service.insertText("你好世界", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(field.value, "开始你好世界你好世界新增")
+        XCTAssertTrue(field.removedRanges.isEmpty)
+        XCTAssertEqual(field.selection, NSRange(location: 10, length: 0))
+        XCTAssertEqual(selectionChanges, 2)
     }
 
     /// 只落地一份文本时不触发删除。

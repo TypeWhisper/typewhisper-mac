@@ -1357,9 +1357,11 @@ final class TextInsertionService {
         return focusedElement == observation.element ? .same : .different
     }
 
-    func canRestoreClipboard(afterPasteUsing state: PasteVerificationState) -> Bool {
-        guard let initialState = state.focusedTextState,
-              let currentState = captureFocusedTextState(for: initialState.element) else {
+    fileprivate func canRestoreClipboard(
+        afterPasteUsing state: PasteVerificationState,
+        currentState: FocusedTextState?
+    ) -> Bool {
+        guard let initialState = state.focusedTextState, let currentState else {
             return false
         }
         return Self.focusedTextDidChange(
@@ -1543,32 +1545,37 @@ final class TextInsertionService {
         var duplicateRepairAttempted = false
         let attempts = max(0, pasteVerificationAttempts)
         for attempt in 0...attempts {
-            if let expectation, let currentValue = captureFocusedTextState(for: initialState.element)?.value {
+            let currentState = captureFocusedTextState(for: initialState.element)
+            if let expectation, let currentState, let currentValue = currentState.value {
                 if currentValue == expectation.singleValue {
                     return .verified
                 }
-                if let duplicateRange = expectation.duplicateRange(in: currentValue), !duplicateRepairAttempted {
+                if !duplicateRepairAttempted, let duplicateRange = expectation.duplicateRange(in: currentValue) {
                     duplicateRepairAttempted = true
-                    if removeDuplicatedInsertion(in: duplicateRange, on: initialState.element, bundleId: bundleId) {
-                        guard attempt < attempts, !Task.isCancelled else { break }
-                        try? await Task.sleep(for: pasteVerificationPollingDelay)
-                        continue
+                    if removeDuplicatedInsertion(
+                        in: duplicateRange,
+                        checkedState: currentState,
+                        expecting: expectation,
+                        bundleId: bundleId
+                    ) {
+                        return .verified
                     }
                 }
             }
-            if canRestoreClipboard(afterPasteUsing: state) {
+            if canRestoreClipboard(afterPasteUsing: state, currentState: currentState) {
                 return .verified
             }
             guard attempt < attempts, !Task.isCancelled else { break }
             try? await Task.sleep(for: pasteVerificationPollingDelay)
         }
 
-        if canRestoreClipboard(afterPasteUsing: state) {
+        let finalState = captureFocusedTextState(for: initialState.element)
+        if canRestoreClipboard(afterPasteUsing: state, currentState: finalState) {
             return .verified
         }
         // Only a field readable before and after the paste proves that the paste missed it.
         guard initialState.hasReadableText,
-              let currentState = captureFocusedTextState(for: initialState.element),
+              let currentState = finalState,
               currentState.keepsReadableText(of: initialState) else {
             return .unverified(.focusedTextStateUnavailable)
         }
@@ -1615,18 +1622,33 @@ final class TextInsertionService {
     }
 
     /// Removes exactly one copy of the text this insertion added, and only when the field still
-    /// holds nothing but that doubled insertion. Any other content stays untouched.
+    /// holds nothing but that doubled insertion. Any other content stays untouched. Returns true
+    /// only when the field afterwards holds the single-copy value.
     private func removeDuplicatedInsertion(
         in range: NSRange,
-        on element: AXUIElement,
+        checkedState: FocusedTextState,
+        expecting expectation: InsertionExpectation,
         bundleId: String?
     ) -> Bool {
+        let element = checkedState.element
         guard setSelectedRange(range, on: element) else {
             logger.notice("insertText duplicate insertion found but its range could not be selected: bundle=\(bundleId ?? "nil", privacy: .public)")
             return false
         }
+        // 选中之后、删除之前再读一次，字段在检查之后变化过就放弃并还原光标。
+        guard captureFocusedTextState(for: element)?.value == checkedState.value else {
+            if let selection = checkedState.selectedRange {
+                _ = setSelectedRange(selection, on: element)
+            }
+            logger.notice("insertText duplicate insertion found but the field changed before its copy was removed: bundle=\(bundleId ?? "nil", privacy: .public)")
+            return false
+        }
         guard insertTextAt(element: element, text: "") else {
             logger.notice("insertText duplicate insertion found but its copy could not be removed: bundle=\(bundleId ?? "nil", privacy: .public)")
+            return false
+        }
+        guard captureFocusedTextState(for: element)?.value == expectation.singleValue else {
+            logger.notice("insertText duplicate insertion removal did not take effect: bundle=\(bundleId ?? "nil", privacy: .public)")
             return false
         }
         logger.notice("insertText removed duplicated insertion: bundle=\(bundleId ?? "nil", privacy: .public), location=\(range.location, privacy: .public), length=\(range.length, privacy: .public)")
