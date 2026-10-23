@@ -8,15 +8,20 @@ import TypeWhisperPluginSDK
     static let shared = DictumDebugDictation()
     private var task: Task<Void, Never>?
     private var eventMonitor: Any?
+    private let pasteEventCounter = OSAllocatedUnfairLock(initialState: 0)
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "DebugDictation")
 
     func handle(_ url: URL) {
         if eventMonitor == nil, ProcessInfo.processInfo.arguments.contains("--audio-diagnostics") {
+            let counter = pasteEventCounter
             eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
-                guard let cgEvent = event.cgEvent,
-                      cgEvent.getIntegerValueField(.eventSourceUserData) == TextInsertionService.simulatedClipboardShortcutEventMarker else { return }
+                guard let cgEvent = event.cgEvent, event.keyCode == 9, event.modifierFlags.contains(.command) else { return }
+                let sequence = counter.withLock { count in
+                    if event.type == .keyDown { count += 1 }
+                    return count
+                }
                 Logger(subsystem: AppConstants.loggerSubsystem, category: "DebugDictation").notice(
-                    "Clipboard event received type=\(cgEvent.type.rawValue, privacy: .public) key=\(event.keyCode, privacy: .public) pid=\(cgEvent.getIntegerValueField(.eventSourceUnixProcessID), privacy: .public) repeat=\(event.isARepeat, privacy: .public)"
+                    "Clipboard event received sequence=\(sequence, privacy: .public) source=NSEvent.globalMonitor type=\(cgEvent.type.rawValue, privacy: .public) key=\(event.keyCode, privacy: .public) pid=\(cgEvent.getIntegerValueField(.eventSourceUnixProcessID), privacy: .public) marker=\(cgEvent.getIntegerValueField(.eventSourceUserData), privacy: .public) timestamp=\(cgEvent.timestamp, privacy: .public) repeat=\(event.isARepeat, privacy: .public)"
                 )
             }
         }
@@ -46,6 +51,38 @@ import TypeWhisperPluginSDK
                 guard dictation.canStartAPIRecording else { throw CocoaError(.userCancelled) }
                 if let mode = components.queryItems?.first(where: { $0.name == "mode" })?.value {
                     let services = ServiceContainer.shared
+                    if mode == "paste" {
+                        struct Receipt: Decodable { let text: String }
+                        let text = try JSONDecoder().decode(Receipt.self, from: Data(contentsOf: audioURL)).text
+                        let target = services.textInsertionService.captureActiveApp()
+                        var trace = DictationLatencyTrace(requestUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds)
+                        let result = try await services.textInsertionService.insertText(text, awaitPasteVerification: true)
+                        if let timing = services.textInsertionService.lastInsertionTiming {
+                            trace.recordInsertion(result, timing: timing)
+                        }
+                        try writeResult(status: "completed", text: text, error: nil, trace: trace,
+                                        appBundleIdentifier: target.bundleId, to: resultURL)
+                        return
+                    }
+                    if mode == "hotkey" {
+                        guard ProcessInfo.processInfo.arguments.contains("--audio-file-manual-stop") else {
+                            throw CocoaError(.featureUnsupported)
+                        }
+                        DictumDebugAudioConfiguration.select(audioURL)
+                        let previous = services.historyService.recentRecords.first?.id
+                        let deadline = ContinuousClock.now.advanced(by: .seconds(180))
+                        while ContinuousClock.now < deadline {
+                            try await Task.sleep(for: .milliseconds(100))
+                            guard let record = services.historyService.recentRecords.first,
+                                  record.id != previous,
+                                  let trace = dictation.apiDictationLatency(id: record.id), trace.isComplete,
+                                  dictation.canStartAPIRecording else { continue }
+                            try writeResult(status: "completed", text: record.finalText, error: nil,
+                                            trace: trace, appBundleIdentifier: record.appBundleIdentifier, to: resultURL)
+                            return
+                        }
+                        throw CocoaError(.coderValueNotFound)
+                    }
                     let samples = try await services.audioFileService.loadAudioSamples(from: audioURL)
                     let text: String
                     switch mode {
@@ -77,6 +114,7 @@ import TypeWhisperPluginSDK
                     case .completed:
                         let trace = dictation.apiDictationLatency(id: sessionID)
                         if trace?.isComplete == false { continue }
+                        if !dictation.canStartAPIRecording { continue }
                         try writeResult(status: "completed", text: session.transcription?.text, error: nil,
                                         trace: trace, appBundleIdentifier: session.transcription?.appBundleIdentifier, to: resultURL)
                         logger.notice("Debug dictation completed session=\(sessionID.uuidString, privacy: .public)")
@@ -107,6 +145,9 @@ import TypeWhisperPluginSDK
             let inserted: Bool
             let accessibilityGranted: Bool
             let appBundleIdentifier: String?
+            let engine: String?
+            let model: String?
+            let usedLiveResult: Bool?
         }
         let inserted = trace?.insertion == .accessibility || trace?.insertion == .liveField
             || (trace?.insertion == .paste && trace?.pasteVerification == .verified)
@@ -114,7 +155,8 @@ import TypeWhisperPluginSDK
             status: status, text: text, error: error,
             insertion: trace?.insertion?.rawValue, pasteVerification: trace?.pasteVerification?.name,
             inserted: inserted, accessibilityGranted: ServiceContainer.shared.textInsertionService.isAccessibilityGranted,
-            appBundleIdentifier: appBundleIdentifier
+            appBundleIdentifier: appBundleIdentifier,
+            engine: trace?.engine, model: trace?.model, usedLiveResult: trace?.usedLiveResult
         ))
         try data.write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
