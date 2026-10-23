@@ -348,7 +348,6 @@ enum MenuBarActionDispatcher {
     }
 }
 
-
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
@@ -389,7 +388,6 @@ struct MenuBarView: View {
                     }
                 }
             }
-
 
             Divider()
 

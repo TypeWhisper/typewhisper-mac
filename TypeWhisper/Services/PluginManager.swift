@@ -208,7 +208,6 @@ struct LoadedPlugin: Identifiable {
     }
 }
 
-
 enum PluginModelManagementError: LocalizedError {
     case pluginNotFound
     case pluginNotLoaded(String)
@@ -233,7 +232,6 @@ enum PluginModelManagementError: LocalizedError {
 }
 
 // MARK: - Plugin Manager
-
 
 @MainActor
 final class PluginManager: ObservableObject {
@@ -265,7 +263,6 @@ final class PluginManager: ObservableObject {
     private var deletingModelPluginIds = Set<String>()
     private var registryNotificationBatchDepth = 0
     private var registryChangedDuringBatch = false
-
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
@@ -348,7 +345,6 @@ final class PluginManager: ObservableObject {
             .filter { $0.isEnabled && permits($0, .audio) }
             .compactMap { $0.instance as? any SpeakerDiarizationProviderPlugin }
     }
-
 
     // MARK: - Managed settings
 
@@ -724,7 +720,6 @@ final class PluginManager: ObservableObject {
             isBundled: isBundled
         )
     }
-
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -1310,7 +1305,6 @@ final class PluginManager: ObservableObject {
         loadedPlugins.remove(at: index)
         logger.info("Removed plugin from runtime registry: \(pluginId)")
     }
-
 
     func bundleURL(for pluginId: String) -> URL? {
         loadedPlugins.first { $0.manifest.id == pluginId }?.sourceURL

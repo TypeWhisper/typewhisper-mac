@@ -279,7 +279,7 @@ final class PluginManagerLaunchScanTests: XCTestCase {
             builtInPluginsURL: appSupportDirectory.appendingPathComponent("BuiltInPlugins"),
             runtimeLoader: PluginRuntimeLoader { _, manifest in
                 guard let pluginClass = classes[manifest.principalClass] else {
-                    // Keeps built-in bundles of the test host out of the scan.
+                    // 停用的插件包使用不存在的主类；一旦被加载，这里会让扫描失败。
                     throw FakeLoadError.unknownPrincipalClass(manifest.principalClass)
                 }
                 return pluginClass

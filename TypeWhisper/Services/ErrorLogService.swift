@@ -372,7 +372,6 @@ private struct DiagnosticsReport: Encodable {
         let runtimeMemory: PluginRuntimeMemoryInfo?
     }
 
-
     struct SettingsSnapshot: Encodable {
         let bundledReleaseChannel: String
         let selectedLanguage: String?
@@ -534,7 +533,6 @@ final class ErrorLogService: ObservableObject {
                 runtimeMemory: runtimeMemory.map(DiagnosticsReport.PluginRuntimeMemoryInfo.init)
             ))
         }
-
 
         return DiagnosticsReport(
             schemaVersion: 12,
