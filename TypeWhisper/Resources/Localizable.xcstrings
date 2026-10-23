@@ -26632,6 +26632,16 @@
         }
       }
     },
+    "Qwen3 could not be set up. %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qwen3 未能完成设置。%@"
+          }
+        }
+      }
+    },
     "Qwen3 is ready for local dictation" : {
       "localizations" : {
         "ja" : {

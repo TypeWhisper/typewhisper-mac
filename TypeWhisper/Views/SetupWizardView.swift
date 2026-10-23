@@ -22,6 +22,7 @@ struct SetupWizardView: View {
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingQwen3 = false
     @State private var qwen3ModelProgress: Double?
+    @State private var qwen3ActivationFailure: String?
     @State private var manuallySelectedSetupProviderId: String?
     @State private var isLogoHovering = false
     @State private var isMovingForward = true
@@ -953,6 +954,13 @@ struct SetupWizardView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if let failure = visibleQwen3ActivationFailure(manifestId: manifestId, availability: availability) {
+                        Label(String(localized: "Qwen3 could not be set up. \(failure)"), systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Spacer()
@@ -985,6 +993,16 @@ struct SetupWizardView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
+    }
+
+    private func visibleQwen3ActivationFailure(
+        manifestId: String,
+        availability: SetupWizardRecommendationAvailability
+    ) -> String? {
+        guard manifestId == SetupWizardQwen3Recommendation.manifestId,
+              availability == .setupRequired,
+              !isActivatingQwen3 else { return nil }
+        return qwen3ActivationFailure
     }
 
     /// The card shows its own settings button, which must stay a separate control.
@@ -1020,7 +1038,9 @@ struct SetupWizardView: View {
                     statusPill(localizedAppText("Ready", de: "Bereit"), systemImage: "checkmark.circle.fill", color: .green)
                 }
             case .setupRequired:
-                if manifestId == SetupWizardQwen3Recommendation.manifestId {
+                if visibleQwen3ActivationFailure(manifestId: manifestId, availability: availability) != nil {
+                    statusPill(String(localized: "Retry"), systemImage: "arrow.clockwise.circle.fill", color: .blue)
+                } else if manifestId == SetupWizardQwen3Recommendation.manifestId {
                     statusPill(localizedAppText("Activate", de: "Aktivieren"), systemImage: "play.circle.fill", color: .blue)
                 } else {
                     RecommendationSettingsButton(manifestId: manifestId)
@@ -1055,13 +1075,16 @@ struct SetupWizardView: View {
         availability: SetupWizardRecommendationAvailability,
         isSelected: Bool
     ) -> Bool {
-        guard manifestId == SetupWizardQwen3Recommendation.manifestId, !isSelected else {
+        guard manifestId == SetupWizardQwen3Recommendation.manifestId else {
             return false
         }
 
+        // 激活失败后 Qwen3 仍是已选引擎，卡片要保持可点击才能重试。
         switch availability {
-        case .ready, .setupRequired:
+        case .setupRequired:
             return true
+        case .ready:
+            return !isSelected
         default:
             return false
         }
@@ -1094,6 +1117,7 @@ struct SetupWizardView: View {
         guard !isActivatingQwen3 else { return }
 
         manuallySelectedSetupProviderId = SetupWizardQwen3Recommendation.providerId
+        qwen3ActivationFailure = nil
         isActivatingQwen3 = true
         defer {
             isActivatingQwen3 = false
@@ -1115,6 +1139,9 @@ struct SetupWizardView: View {
             try await SetupWizardQwen3Recommendation.activate(engine) { qwen3ModelProgress = $0 }
         } catch {
             setupWizardLogger.error("Qwen3 activation failed: \(error.localizedDescription, privacy: .public)")
+            if case TranscriptionEngineError.modelLoadFailed(let reason) = error {
+                qwen3ActivationFailure = reason
+            }
         }
     }
 
