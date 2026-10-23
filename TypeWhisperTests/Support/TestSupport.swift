@@ -150,6 +150,8 @@ enum TestSupport {
 /// touched. A test that selects an engine would still leak that choice into later tests,
 /// so after every test the engine and model selection are set back to the values from
 /// before the run. When the bundle finishes, the run's preferences domain is removed.
+///
+/// 测试包开始时这个类会创建 `ServiceContainer.shared`，之后的测试才可以安装自己的单例。
 final class TestHostDefaultsGuard: NSObject, XCTestObservation {
     private static let preservedKeys = [
         UserDefaultsKeys.selectedEngine,

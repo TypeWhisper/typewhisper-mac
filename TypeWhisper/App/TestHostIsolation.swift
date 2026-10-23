@@ -12,10 +12,10 @@ import os
 ///
 /// When XCTest hosts the process, `UserDefaults.standard` returns the defaults of a preferences
 /// domain that belongs to this run alone and starts empty. The argument, global and registration
-/// domains are still searched, so launch arguments such as `-AppleLanguages` keep working. The
-/// test bundle removes the domain, and the suites the tests created, when it finishes.
-/// `NSPasteboard.general` is replaced the same way, so tests never read or clear the clipboard
-/// of the person using the Mac.
+/// domains are still searched, so launch arguments such as `-AppleLanguages` keep working.
+///
+/// 测试包结束时清空这个域和测试创建的套件；偏好设置文件由下一次测试宿主启动时清理。
+/// `NSPasteboard.general` 同样被替换，测试不会读取或清空正在使用这台 Mac 的人的剪贴板。
 enum TestHostIsolation {
     /// Unique per process, so concurrent test runs on one Mac do not share preferences.
     static let defaultsSuiteName =
@@ -43,10 +43,12 @@ enum TestHostIsolation {
         isolateGeneralPasteboard()
     }
 
-    /// Deletes the run's preferences domain and every suite the tests created.
-    /// Called when the test bundle finishes.
+    /// 测试包结束时调用。进程里仍存活的 UserDefaults 对象会在文件删除后再写出一个空文件，
+    /// 所以这里清空域并把套件名写入清单，文件留给下一次测试宿主启动时在本进程结束后删除。
     static func removeIsolatedDefaults() {
-        for name in createdSuiteNames.withLock({ $0 }) {
+        let names = createdSuiteNames.withLock { $0 }
+        writeSuiteManifest(names, in: suiteManifestDirectory)
+        for name in names {
             removeDomain(name)
         }
         removeDomain(defaultsSuiteName)
@@ -64,13 +66,33 @@ enum TestHostIsolation {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences", isDirectory: true)
     }
 
+    /// 每个测试宿主在自己的进程号下留一份套件清单，进程结束后由后续启动的宿主按清单清理。
+    static var suiteManifestDirectory: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("TypeWhisper-TestHost-Suites", isDirectory: true)
+    }
+
+    static func writeSuiteManifest(_ names: Set<String>, in directory: URL) {
+        guard let data = try? JSONEncoder().encode(names.sorted()) else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? data.write(to: manifestURL(in: directory, processID: ProcessInfo.processInfo.processIdentifier))
+    }
+
+    private static func manifestURL(in directory: URL, processID: pid_t) -> URL {
+        directory.appendingPathComponent("\(processID).json")
+    }
+
+    static func processHasEnded(_ processID: pid_t) -> Bool {
+        kill(processID, 0) != 0 && errno == ESRCH
+    }
+
     /// 测试用例创建的偏好设置套件只在运行结束时才能知道哪些需要删除，所以创建时记录下来。
     static let createdSuiteNames = OSAllocatedUnfairLock(initialState: Set<String>())
 
     /// 测试宿主的通用剪贴板，只属于这次运行。
     nonisolated(unsafe) private static var isolatedPasteboard: NSPasteboard?
 
-    /// 记录测试创建的、运行前并不存在的偏好设置套件。应用自己的域和全局域不记录。
+    /// 记录测试代码创建的、运行前并不存在的偏好设置套件。系统框架也会用空域调用这个初始化方法，
+    /// 它们的域不属于测试，所以只记录调用方在测试包里的套件。应用自己的域和全局域不记录。
     private static func recordSuitesCreatedByTests() {
         let selector = NSSelectorFromString("initWithSuiteName:")
         guard let method = class_getInstanceMethod(UserDefaults.self, selector) else { return }
@@ -80,15 +102,43 @@ enum TestHostIsolation {
         let appDomain = Bundle.main.bundleIdentifier
         let replacement: @convention(block) (AnyObject, NSString?) -> AnyObject? = { object, name in
             if let name = name as String?,
-               name != appDomain,
-               name != UserDefaults.globalDomain,
-               !name.hasPrefix("/"),
-               isolatedDefaults?.persistentDomain(forName: name) == nil {
+               shouldRecordSuite(
+                   named: name,
+                   appDomain: appDomain,
+                   exists: isolatedDefaults?.persistentDomain(forName: name) != nil,
+                   callerIsInTestBundle: { callerIsInTestBundle() }
+               ) {
                 createdSuiteNames.withLock { _ = $0.insert(name) }
             }
             return original(object, selector, name)
         }
         method_setImplementation(method, imp_implementationWithBlock(replacement))
+    }
+
+    static func shouldRecordSuite(
+        named name: String,
+        appDomain: String?,
+        exists: Bool,
+        callerIsInTestBundle: () -> Bool
+    ) -> Bool {
+        name != appDomain
+            && name != UserDefaults.globalDomain
+            && !name.hasPrefix("/")
+            && !exists
+            && callerIsInTestBundle()
+    }
+
+    /// 调用栈上第一个不在本映像里的帧所在的映像是测试包时返回 true。
+    /// 栈里属于本映像的帧是替换后的初始化方法自己，以及测试直接调用的应用代码。
+    static func callerIsInTestBundle(ownImage: UnsafeRawPointer = #dsohandle) -> Bool {
+        for address in Thread.callStackReturnAddresses {
+            var info = Dl_info()
+            guard let pointer = UnsafeRawPointer(bitPattern: address.uintValue),
+                  dladdr(pointer, &info) != 0,
+                  UnsafeRawPointer(info.dli_fbase) != ownImage else { continue }
+            return String(cString: info.dli_fname).contains("/TypeWhisperTests.xctest/")
+        }
+        return false
     }
 
     /// 测试宿主与已安装的应用共用剪贴板，写入或清空剪贴板会破坏正在进行的粘贴。
@@ -107,16 +157,29 @@ enum TestHostIsolation {
         isolatedPasteboard = pasteboard
     }
 
-    /// 崩溃或被终止的测试运行来不及删除自己的偏好设置域，下一次启动时按进程号清理。
-    private static func removeDomainsOfEndedRuns() {
+    /// 崩溃或被终止的测试运行来不及删除自己的偏好设置域，下一次启动时按进程号清理；
+    /// 正常结束的运行留下了套件清单，按清单删除它列出的套件。
+    static func removeDomainsOfEndedRuns(manifestDirectory: URL = suiteManifestDirectory) {
         let prefix = defaultsSuiteName.split(separator: ".").dropLast().joined(separator: ".") + "."
         let names = (try? FileManager.default.contentsOfDirectory(atPath: preferencesDirectory.path)) ?? []
         for fileName in names where fileName.hasPrefix(prefix) && fileName.hasSuffix(".plist") {
             let domain = String(fileName.dropLast(".plist".count))
             guard let processID = pid_t(domain.dropFirst(prefix.count)),
                   processID != ProcessInfo.processInfo.processIdentifier,
-                  kill(processID, 0) != 0, errno == ESRCH else { continue }
+                  processHasEnded(processID) else { continue }
             removeDomain(domain)
+        }
+
+        let manifests = (try? FileManager.default.contentsOfDirectory(at: manifestDirectory, includingPropertiesForKeys: nil)) ?? []
+        for manifest in manifests where manifest.pathExtension == "json" {
+            guard let processID = pid_t(manifest.deletingPathExtension().lastPathComponent),
+                  processID != ProcessInfo.processInfo.processIdentifier,
+                  processHasEnded(processID) else { continue }
+            let suiteNames = (try? Data(contentsOf: manifest)).flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
+            for name in suiteNames {
+                removeDomain(name)
+            }
+            try? FileManager.default.removeItem(at: manifest)
         }
     }
 }

@@ -30,17 +30,45 @@ final class TestHostIsolationTests: XCTestCase {
         XCTAssertTrue(TestHostIsolation.createdSuiteNames.withLock { $0.contains(suiteName) })
     }
 
-    func testRemovingADomainDeletesItsPreferencesFile() throws {
+    func testSuiteOpenedByCodeOutsideTheTestBundleIsNotRecorded() throws {
         let suiteName = "TestHostIsolationTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defaults.set("value", forKey: "key")
-        CFPreferencesAppSynchronize(suiteName as CFString)
-        let file = TestHostIsolation.preferencesDirectory.appendingPathComponent(suiteName + ".plist")
-        let deadline = Date().addingTimeInterval(5)
-        while !FileManager.default.fileExists(atPath: file.path), Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        defer { TestHostIsolation.removeDomain(suiteName) }
+        let allocated = try XCTUnwrap(
+            UserDefaults.self.perform(NSSelectorFromString("alloc"))?.takeUnretainedValue()
+        )
+
+        // 初始化方法由运行循环调用，调用栈上紧接着的映像不是测试包。
+        allocated.perform(NSSelectorFromString("initWithSuiteName:"), with: suiteName, afterDelay: 0)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        XCTAssertFalse(TestHostIsolation.createdSuiteNames.withLock { $0.contains(suiteName) })
+    }
+
+    func testOnlyNewSuitesOpenedByTestCodeAreRecorded() throws {
+        let appDomain = "com.example.app"
+        func shouldRecord(
+            _ name: String,
+            exists: Bool = false,
+            inTestBundle: Bool = true
+        ) -> Bool {
+            TestHostIsolation.shouldRecordSuite(
+                named: name,
+                appDomain: appDomain,
+                exists: exists,
+                callerIsInTestBundle: { inTestBundle }
+            )
         }
-        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+
+        XCTAssertTrue(shouldRecord("TestHostIsolationTests-suite"))
+        XCTAssertFalse(shouldRecord(appDomain))
+        XCTAssertFalse(shouldRecord(UserDefaults.globalDomain))
+        XCTAssertFalse(shouldRecord("/Users/test/Library/Preferences/example"))
+        XCTAssertFalse(shouldRecord("TestHostIsolationTests-suite", exists: true))
+        XCTAssertFalse(shouldRecord("TestHostIsolationTests-suite", inTestBundle: false))
+    }
+
+    func testRemovingADomainDeletesItsPreferencesFile() throws {
+        let (suiteName, file) = try makeSuiteWithPreferencesFile()
 
         TestHostIsolation.removeDomain(suiteName)
 
@@ -49,11 +77,65 @@ final class TestHostIsolationTests: XCTestCase {
         TestHostIsolation.removeDomain(suiteName)
     }
 
-    func testAppDomainIsNeverRecordedForRemoval() throws {
-        let appDomain = try XCTUnwrap(Bundle.main.bundleIdentifier)
-        _ = UserDefaults(suiteName: appDomain)
+    func testSuiteManifestListsTheSuitesTheTestsCreated() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let (suiteName, _) = try makeSuiteWithPreferencesFile()
+        defer { TestHostIsolation.removeDomain(suiteName) }
 
-        XCTAssertFalse(TestHostIsolation.createdSuiteNames.withLock { $0.contains(appDomain) })
+        TestHostIsolation.writeSuiteManifest(
+            TestHostIsolation.createdSuiteNames.withLock { $0 },
+            in: directory
+        )
+
+        let manifest = directory.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
+        let names = try JSONDecoder().decode([String].self, from: Data(contentsOf: manifest))
+        XCTAssertTrue(names.contains(suiteName))
+    }
+
+    func testEndedRunsSuitesAreRemovedAfterTheirProcessEnded() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let endedProcessID = try endedProcessIdentifier()
+        let (endedSuite, endedFile) = try makeSuiteWithPreferencesFile()
+        let (runningSuite, runningFile) = try makeSuiteWithPreferencesFile()
+        defer { TestHostIsolation.removeDomain(runningSuite) }
+        let endedManifest = directory.appendingPathComponent("\(endedProcessID).json")
+        try JSONEncoder().encode([endedSuite]).write(to: endedManifest)
+        TestHostIsolation.writeSuiteManifest([runningSuite], in: directory)
+        let runningManifest = directory.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
+
+        TestHostIsolation.removeDomainsOfEndedRuns(manifestDirectory: directory)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: endedFile.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: endedManifest.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: runningFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: runningManifest.path))
+    }
+
+    private func makeSuiteWithPreferencesFile() throws -> (name: String, file: URL) {
+        let suiteName = "TestHostIsolationTests-\(UUID().uuidString)"
+        let file = TestHostIsolation.preferencesDirectory.appendingPathComponent(suiteName + ".plist")
+        do {
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+            defaults.set("value", forKey: "key")
+            CFPreferencesAppSynchronize(suiteName as CFString)
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: file.path), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        return (suiteName, file)
+    }
+
+    private func endedProcessIdentifier() throws -> pid_t {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertTrue(TestHostIsolation.processHasEnded(process.processIdentifier))
+        return process.processIdentifier
     }
 
     func testHotkeyEventTapOnlyListens() throws {
