@@ -1,0 +1,52 @@
+import XCTest
+@testable import TypeWhisper
+
+final class VoiceBarStateTests: XCTestCase {
+    func testAllStatesAndModelNotices() {
+        var input = VoiceBarState.Input()
+        XCTAssertEqual(VoiceBarState.derive(input), .idle)
+        input.activity = .preparing
+        XCTAssertEqual(VoiceBarState.derive(input), .preparing)
+        input.activity = .recording
+        XCTAssertEqual(VoiceBarState.derive(input), .listening)
+        input.confirmedText = "今天天气不错。"
+        XCTAssertEqual(VoiceBarState.derive(input), .listeningWithText)
+        input.translation = true
+        XCTAssertEqual(VoiceBarState.derive(input), .translating)
+        input.targetMenuOpen = true
+        XCTAssertEqual(VoiceBarState.derive(input), .targetMenu)
+        input.activity = .processing
+        XCTAssertEqual(VoiceBarState.derive(input), .polishing(translating: true))
+        input.translation = false
+        XCTAssertEqual(VoiceBarState.derive(input), .polishing(translating: false))
+        let outcomes: [(VoiceBarState.Input.Outcome, VoiceBarState)] = [
+            (.inserted(7), .inserted(count: 7)), (.copied, .copied),
+            (.recoveredError, .recoveredError), (.blockingError("Microphone unavailable"), .blockingError("Microphone unavailable")),
+            (.noSpeech, .noSpeech), (.noAI, .noAI)
+        ]
+        for (outcome, expected) in outcomes {
+            input.outcome = outcome
+            XCTAssertEqual(VoiceBarState.derive(input), expected)
+        }
+        input.outcome = nil
+        input.model = .downloading(0.62)
+        XCTAssertEqual(VoiceBarState.derive(input), .downloading(0.62))
+        input.model = .loading
+        XCTAssertEqual(VoiceBarState.derive(input), .preparing)
+        input.model = .notDownloaded
+        XCTAssertEqual(VoiceBarState.derive(input), .downloading(nil))
+        input.model = .failed("Download failed")
+        XCTAssertEqual(VoiceBarState.derive(input), .blockingError("Download failed"))
+        input.model = nil
+        input.activity = .recording
+        input.duration = 498
+        XCTAssertEqual(VoiceBarState.derive(input), .countdown(seconds: 42))
+        input.duration = 541
+        XCTAssertEqual(VoiceBarState.derive(input), .countdown(seconds: 0))
+        input.cancellationRemaining = 1.5
+        XCTAssertEqual(VoiceBarState.derive(input), .cancelled(remaining: 0.5))
+        input.cancellationRemaining = 0
+        input.activity = .idle
+        XCTAssertEqual(VoiceBarState.derive(input), .idle)
+    }
+}

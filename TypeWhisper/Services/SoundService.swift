@@ -80,24 +80,32 @@ enum SoundChoice: Hashable, Sendable {
 
 enum SoundEvent: CaseIterable {
     case recordingStarted
+    case recordingStopped
     case transcriptionSuccess
     case error
 
     var fileName: String {
         switch self {
         case .recordingStarted: return "recording_start"
+        case .recordingStopped: return "recording_stop"
         case .transcriptionSuccess: return "transcription_success"
         case .error: return "error"
         }
     }
 
     var defaultChoice: SoundChoice {
-        .bundled(fileName)
+        switch self {
+        case .recordingStarted: .system("Tink")
+        case .recordingStopped: .system("Pop")
+        case .transcriptionSuccess: .none
+        case .error: .system("Funk")
+        }
     }
 
     var userDefaultsKey: String {
         switch self {
         case .recordingStarted: return UserDefaultsKeys.soundRecordingStarted
+        case .recordingStopped: return "soundRecordingStopped"
         case .transcriptionSuccess: return UserDefaultsKeys.soundTranscriptionSuccess
         case .error: return UserDefaultsKeys.soundError
         }
@@ -106,6 +114,7 @@ enum SoundEvent: CaseIterable {
     var displayName: String {
         switch self {
         case .recordingStarted: return String(localized: "Recording started")
+        case .recordingStopped: return DictumHomeStrings.recordingStopped
         case .transcriptionSuccess: return String(localized: "Transcription success")
         case .error: return String(localized: "Error")
         }
@@ -263,7 +272,11 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
     private var activePlayers: [any SoundCuePlayback] = []
 
     init(
-        makePlayer: @escaping PlayerFactory = { try AVAudioPlayer(contentsOf: $0) },
+        makePlayer: @escaping PlayerFactory = {
+            let player = try AVAudioPlayer(contentsOf: $0)
+            player.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
+            return player
+        },
         preparationQueue: DispatchQueue = DispatchQueue(label: "com.typewhisper.sound-cue-preparation", qos: .utility),
         observesOutputDeviceChanges: Bool = true
     ) {
@@ -420,6 +433,7 @@ class SoundService {
             return true
         }
         guard let sound = sound(for: choice) else { return false }
+        sound.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
         sound.stop()
         return sound.play()
     }

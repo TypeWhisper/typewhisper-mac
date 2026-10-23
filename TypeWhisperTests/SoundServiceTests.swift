@@ -110,8 +110,8 @@ final class SoundServiceTests: XCTestCase {
 
         service.deleteCustomSound(filename)
 
-        XCTAssertEqual(service.choice(for: .recordingStarted), .bundled("recording_start"))
-        XCTAssertEqual(service.choice(for: .error), .bundled("error"))
+        XCTAssertEqual(service.choice(for: .recordingStarted), .system("Tink"))
+        XCTAssertEqual(service.choice(for: .error), .system("Funk"))
         XCTAssertEqual(service.choice(for: .transcriptionSuccess), .system("Ping"))
         XCTAssertEqual(SoundChoice.installedCustomSounds(), [])
     }
@@ -128,7 +128,7 @@ final class SoundServiceTests: XCTestCase {
 
         service.play(.recordingStarted, enabled: true)
 
-        XCTAssertEqual(oneShotPlayer.playedURLs.map(\.lastPathComponent), ["recording_start.wav"])
+        XCTAssertEqual(oneShotPlayer.playedURLs.map(\.lastPathComponent), ["Tink.aiff"])
         XCTAssertTrue(service.resolvedChoices.isEmpty)
     }
 
@@ -208,7 +208,7 @@ final class SoundServiceTests: XCTestCase {
 
         XCTAssertEqual(service.playbackDuration(for: .recordingStarted, enabled: true), 0.25)
         XCTAssertNil(service.playbackDuration(for: .recordingStarted, enabled: false))
-        XCTAssertEqual(oneShotPlayer.durationRequests.map(\.lastPathComponent), ["recording_start.wav"])
+        XCTAssertEqual(oneShotPlayer.durationRequests.map(\.lastPathComponent), ["Tink.aiff"])
         XCTAssertTrue(service.resolvedChoices.isEmpty)
     }
 
@@ -225,14 +225,14 @@ final class SoundServiceTests: XCTestCase {
 
         XCTAssertEqual(
             oneShotPlayer.preparedURLSets.last.map { Set($0.map(\.lastPathComponent)) },
-            ["recording_start.wav", "transcription_success.wav", "error.wav"]
+            ["Tink.aiff", "Pop.aiff", "Funk.aiff"]
         )
 
         service.updateChoice(for: .recordingStarted, choice: .none)
 
         XCTAssertEqual(
             oneShotPlayer.preparedURLSets.last.map { Set($0.map(\.lastPathComponent)) },
-            ["transcription_success.wav", "error.wav"]
+            ["Pop.aiff", "Funk.aiff"]
         )
     }
 
