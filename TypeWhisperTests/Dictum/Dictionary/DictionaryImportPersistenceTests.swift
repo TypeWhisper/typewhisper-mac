@@ -19,6 +19,17 @@ final class DictionaryImportPersistenceTests: XCTestCase {
         XCTAssertEqual(service.entries.count, 2)
     }
 
+    func testWordFirstFileImportedWithDefaultFormatKeepsTheWordAndItsMishearing() throws {
+        let root = try TestSupport.makeTemporaryDirectory(prefix: "dictum-import-default")
+        defer { TestSupport.remove(root) }
+        let service = DictionaryService(appSupportDirectory: root)
+        let data = Data("dictum,迪克腾\nKubernetes,酷伯尼特斯\n".utf8)
+        XCTAssertEqual(try service.importCSV(data, format: .default).items.count, 2)
+        let entry = try XCTUnwrap(service.entries.first { $0.replacement == "dictum" })
+        XCTAssertEqual(entry.original, "迪克腾")
+        XCTAssertEqual(entry.type, .correction)
+    }
+
     func testImportPersistsAndRepeatedImportSkipsDuplicates() throws {
         let root = try TestSupport.makeTemporaryDirectory(prefix: "dictum-import")
         defer { TestSupport.remove(root) }

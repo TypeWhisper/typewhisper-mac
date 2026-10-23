@@ -10,6 +10,18 @@ final class DictionaryCSVTests: XCTestCase {
         XCTAssertEqual(result.items[2].original, "00123")
     }
 
+    func testDefaultFormatReadsTheFirstColumnAsTheWord() throws {
+        XCTAssertEqual(DictionaryCSVFormat.default, .wordFirst)
+        let result = try DictionaryCSV.parse(Data("dictum,迪克腾\n".utf8), format: .default)
+        XCTAssertEqual(result.items, [.init(original: "迪克腾", replacement: "dictum")])
+        XCTAssertEqual(result.items.first?.word, "dictum")
+    }
+
+    func testHeardAsCandidatesSplitOnBothCommasAndTrim() {
+        XCTAssertEqual(DictionaryCSV.heardAsCandidates(from: "迪克腾, dick tom，Dicktum ,"), ["迪克腾", "dick tom", "Dicktum"])
+        XCTAssertEqual(DictionaryCSV.heardAsCandidates(from: ""), [])
+    }
+
     func testQuotedChineseBOMAndDuplicateRows() throws {
         let csv = "\u{feff}\"项目,星河\",星河项目\r\n\"项目,星河\",星河项目\r\n\r\nQwen3,\r\n"
         let result = try DictionaryCSV.parse(Data(csv.utf8), format: .wordFirst)

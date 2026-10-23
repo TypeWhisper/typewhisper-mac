@@ -122,7 +122,7 @@ struct DictionaryAddSheet: View {
     }
 
     private func add() {
-        let candidates = heard.split(separator: ",").map(String.init)
+        let candidates = DictionaryCSV.heardAsCandidates(from: heard)
         guard service.entries.count + 1 + candidates.count <= DictionaryCSV.maximumWords else { error = DictionaryCSVError.count.localizedDescription; return }
         do {
             _ = try service.applyDictionaryTraining(canonicalWord: word, approvedCandidates: candidates)
@@ -135,7 +135,7 @@ struct DictionaryImportSheet: View {
     @ObservedObject var service: DictionaryService
     var onExport: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var format = DictionaryCSVFormat.wisprFlow
+    @State private var format = DictionaryCSVFormat.default
     @State private var data: Data?
     @State private var preview: DictionaryCSVResult?
     @State private var error: String?
@@ -159,10 +159,14 @@ struct DictionaryImportSheet: View {
             if let preview {
                 HStack(alignment: .top, spacing: 0) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(String(format: String(localized: "%lld new words, %lld duplicates skipped", table: "DictumHistory"), Int64(preview.items.count), Int64(preview.duplicates)))
+                        Text(String(format: String(localized: "%lld new words, %lld already in your dictionary will be skipped", table: "DictumHistory"), Int64(preview.items.count), Int64(preview.duplicates)))
                             .font(.system(size: 13)).foregroundStyle(DictumTheme.textPrimary)
                         Text(verbatim: previewCaption(preview))
                             .font(.system(size: 11)).foregroundStyle(DictumTheme.textTertiary).lineLimit(1)
+                        ForEach(Array(preview.items.prefix(3).enumerated()), id: \.offset) { _, item in
+                            Text(verbatim: previewRow(item))
+                                .font(.system(size: 11)).foregroundStyle(DictumTheme.textSecondary).lineLimit(1)
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -187,7 +191,7 @@ struct DictionaryImportSheet: View {
                     .buttonStyle(DictumActionButtonStyle())
                     .keyboardShortcut(.cancelAction)
                 Button { importNow() } label: {
-                    Text(preview.map { String(format: String(localized: "Import %lld words", table: "DictumHistory"), Int64($0.items.count)) } ?? String(localized: "Import", table: "DictumHistory"))
+                    Text(preview.map { String(format: String(localized: "Import %lld Words", table: "DictumHistory"), Int64($0.items.count)) } ?? String(localized: "Import", table: "DictumHistory"))
                 }
                 .buttonStyle(DictumActionButtonStyle(prominent: true))
                 .disabled(preview?.items.isEmpty != false || error != nil)
@@ -211,7 +215,9 @@ struct DictionaryImportSheet: View {
                 Button { choosing = true } label: { Text("Choose file…", tableName: "DictumHistory") }
                     .buttonStyle(.plain).foregroundStyle(DictumTheme.accent)
             }.font(.system(size: 13)).foregroundStyle(DictumTheme.textSecondary)
-            Text("The first column is the word; an optional second column lists how it is often heard.", tableName: "DictumHistory")
+            Text(format == .wordFirst
+                 ? "First column: the word. Optional second column: how it's often heard."
+                 : "First column: how it's often heard. Second column: the word.", tableName: "DictumHistory")
                 .font(.system(size: 11)).foregroundStyle(DictumTheme.textTertiary).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity).frame(height: 120)
@@ -244,9 +250,13 @@ struct DictionaryImportSheet: View {
     }
 
     private func previewCaption(_ preview: DictionaryCSVResult) -> String {
-        let words = preview.items.prefix(4).map(\.word).joined(separator: "、")
-        let first = String(localized: "First few:", table: "DictumHistory")
-        return [fileName, words.isEmpty ? nil : first + words + "…"].compactMap { $0 }.joined(separator: " · ")
+        [fileName, preview.items.isEmpty ? nil : String(localized: "First rows as “word ← heard as”:", table: "DictumHistory")]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private func previewRow(_ item: DictionaryCSVItem) -> String {
+        guard item.replacement != nil else { return item.word }
+        return "\(item.word) ← \(item.original)"
     }
 
     private func formatName(_ format: DictionaryCSVFormat) -> String {

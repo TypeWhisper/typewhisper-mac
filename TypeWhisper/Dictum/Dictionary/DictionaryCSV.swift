@@ -5,6 +5,7 @@ enum DictionaryCSVFormat: String, CaseIterable, Identifiable {
     case wordFirst
     case wisprFlow
     var id: String { rawValue }
+    static let `default` = DictionaryCSVFormat.wordFirst
 }
 
 struct DictionaryCSVItem: Equatable {
@@ -38,6 +39,13 @@ enum DictionaryCSVError: LocalizedError {
 enum DictionaryCSV {
     static let maximumBytes = 5_000_000
     static let maximumWords = 3000
+
+    /// 分隔"常被听成"的写法时同时接受半角和全角逗号，与中文输入习惯一致。
+    static func heardAsCandidates(from text: String) -> [String] {
+        text.split(whereSeparator: { $0 == "," || $0 == "，" }).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+    }
 
     static func parse(_ data: Data, format: DictionaryCSVFormat, existing: Set<String> = []) throws -> DictionaryCSVResult {
         guard data.count <= maximumBytes else { throw DictionaryCSVError.size }
