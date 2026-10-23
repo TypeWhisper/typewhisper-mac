@@ -30,7 +30,8 @@ struct AIModelsPage: View {
                         else { Text(verbatim: choice.name) }
                     }
                 }
-            } label: { Text("Add", tableName: "DictumStyle") }.fixedSize()
+            } label: { Label { Text("Add", tableName: "DictumStyle") } icon: { Image(systemName: "plus") } }
+                .menuIndicator(.hidden).buttonStyle(DictumControlStyle(kind: .smallButton)).fixedSize()
         }) {
             if processing.fallbackPriorityList.isEmpty { emptyState }
             else {
@@ -40,7 +41,8 @@ struct AIModelsPage: View {
                 }.padding(.horizontal, 28).padding(.top, 4).padding(.bottom, 28)
                     .frame(maxHeight: .infinity, alignment: .top)
             }
-        }.onChange(of: selected?.id, initial: true) { _, _ in loadSelection() }
+        }.font(DictumTheme.Typography.body)
+            .onChange(of: selected?.id, initial: true) { _, _ in loadSelection() }
             .onChange(of: processing.modelsForProvider(selected?.providerId ?? "").map(\.id)) { _, _ in
                 if let id = selected?.providerId, id.hasPrefix("openai-compatible"),
                    let snapshot = try? ProviderConfiguration.configure(["id": id]) {
@@ -71,8 +73,9 @@ struct AIModelsPage: View {
 
     private var providerList: some View {
         VStack(alignment: .leading, spacing: 12) {
-            List(selection: $selection) {
+            List {
                 ForEach(Array(processing.fallbackPriorityList.enumerated()), id: \.element.id) { index, item in
+                    Button { selection = item.id } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "line.3.horizontal").font(.system(size: 10)).foregroundStyle(.tertiary)
                             .opacity(hoveredProvider == item.id ? 1 : 0)
@@ -87,7 +90,11 @@ struct AIModelsPage: View {
                         Circle().fill(processing.failedFallbackIDs.contains(item.id) ? DictumTheme.danger :
                                         processing.isProviderReady(item.providerId) ? DictumTheme.success : DictumTheme.warning)
                             .frame(width: 7, height: 7)
-                    }.padding(.vertical, 6).tag(item.id)
+                    }.padding(.vertical, 6).padding(.horizontal, 4).contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(RoundedRectangle(cornerRadius: 9).fill(selected?.id == item.id ? DictumTheme.accentSoft : .clear))
                         .onHover { hoveredProvider = $0 ? item.id : nil }
                 }.onMove { processing.moveLLMFallbacks(from: $0, to: $1) }
             }.listStyle(.plain).scrollContentBackground(.hidden)
@@ -119,7 +126,8 @@ struct AIModelsPage: View {
                     }
                     Divider()
                     Button(role: .destructive) { processing.removeLLMFallback(item) } label: { Text("Remove", tableName: "DictumStyle") }
-                } label: { Image(systemName: "ellipsis") }.fixedSize()
+                } label: { Image(systemName: "ellipsis") }
+                    .menuIndicator(.hidden).buttonStyle(.borderless).tint(DictumTheme.textSecondary).fixedSize()
             }
             if item.providerId.hasPrefix("openai-compatible"), showEndpoint {
                 VStack(alignment: .leading, spacing: 6) {
@@ -128,14 +136,14 @@ struct AIModelsPage: View {
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("API key", tableName: "DictumStyle")
+                Text("API key", tableName: "DictumStyle").font(.system(size: 12)).foregroundStyle(.secondary)
                 HStack {
                     SecureField(hasStoredKey ? "••••••••••••" : "", text: $key).focused($keyFocused)
                         .accessibilityLabel(Text("API key", tableName: "DictumStyle")).onSubmit { saveKey(item) }
                         .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(processing.failedFallbackIDs.contains(item.id) ? DictumTheme.danger : .clear))
                     Button {
                         if let pasted = NSPasteboard.general.string(forType: .string) { key = pasted; saveKey(item) }
-                    } label: { Text("Paste", tableName: "DictumStyle") }
+                    } label: { Text("Paste", tableName: "DictumStyle") }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
             modelPicker(item)
@@ -156,7 +164,8 @@ struct AIModelsPage: View {
                     }
                 }
                 Spacer(minLength: 4)
-                Button { test(item) } label: { Text("Test Connection", tableName: "DictumStyle") }.disabled(testing)
+                Button { test(item) } label: { Text("Test Connection", tableName: "DictumStyle") }
+                    .buttonStyle(DictumControlStyle(kind: .smallButton)).disabled(testing)
             }.font(.system(size: 12))
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
             .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
@@ -164,7 +173,7 @@ struct AIModelsPage: View {
 
     private func modelPicker(_ item: LLMFallbackPriorityItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Model", tableName: "DictumStyle")
+            Text("Model", tableName: "DictumStyle").font(.system(size: 12)).foregroundStyle(.secondary)
             let models = processing.modelsForProvider(item.providerId)
             if models.isEmpty || !modelsKnown {
                 TextField("", text: $customModel).onSubmit { saveModel(item, model: customModel) }
@@ -173,7 +182,11 @@ struct AIModelsPage: View {
                 Picker(selection: Binding(get: { item.modelId ?? processing.defaultModelId(for: item.providerId) ?? models.first?.id ?? "" },
                                           set: { saveModel(item, model: $0) })) {
                     ForEach(models, id: \.id) { model in Text(verbatim: model.displayName).tag(model.id) }
-                } label: { Text("Model", tableName: "DictumStyle") }.labelsHidden()
+                } label: { Text("Model", tableName: "DictumStyle") }
+                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).tint(.primary)
+                    .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 28)
+                    .background(DictumTheme.control, in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(DictumTheme.controlBorder, lineWidth: 0.5))
             }
         }
     }
