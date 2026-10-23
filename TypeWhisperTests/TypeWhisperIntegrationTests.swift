@@ -10273,8 +10273,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let defaults = UserDefaults.standard
         let keys = [UserDefaultsKeys.historyEnabled, UserDefaultsKeys.saveAudioWithHistory,
                     UserDefaultsKeys.liveFieldTranscriptEnabled, UserDefaultsKeys.preserveClipboard,
-                    UserDefaultsKeys.targetAppCorrectionLearningEnabled,
-                    UserDefaultsKeys.improveTypeWhisperCaptureEnabled]
+                    UserDefaultsKeys.targetAppCorrectionLearningEnabled]
         let originals = keys.map { defaults.object(forKey: $0) }
         defer {
             for (key, value) in zip(keys, originals) { Self.restoreUserDefault(value, forKey: key) }
@@ -10285,7 +10284,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         defaults.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
         defaults.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         defaults.set(false, forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
-        defaults.set(false, forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
         MockTranscriptionPlugin.reset()
         let raw = "  hello world \n"
         MockTranscriptionPlugin.setResponseText(raw)
@@ -11732,89 +11730,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         XCTAssertEqual(context.targetAppCorrectionLearningService.latestAttempt?.learnedCorrectionCount, 0)
         XCTAssertEqual(context.dictionaryService.correctionsCount, 0)
-        XCTAssertEqual(accessibilityObservationBundleIdentifiers, ["com.example.electron"])
-        XCTAssertEqual(accessibilityObservationEndCount, 1)
-    }
-
-    @MainActor
-    func testContributionOnlyDictationBeginsChromiumAccessibilityObservation() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
-        let improveCaptureKey = UserDefaultsKeys.improveTypeWhisperCaptureEnabled
-        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
-        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
-        let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
-        let originalLearningEnabled = UserDefaults.standard.object(forKey: learningEnabledKey)
-        let originalImproveCapture = UserDefaults.standard.object(forKey: improveCaptureKey)
-        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
-        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
-        let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
-        var dictationContext: DictationContext?
-        defer {
-            dictationContext = nil
-            Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
-            Self.restoreUserDefault(originalImproveCapture, forKey: improveCaptureKey)
-            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
-            Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
-            Self.restoreUserDefault(originalSaveAudio, forKey: saveAudioKey)
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        UserDefaults.standard.set(false, forKey: learningEnabledKey)
-        UserDefaults.standard.set(true, forKey: improveCaptureKey)
-        UserDefaults.standard.set(false, forKey: liveFieldKey)
-        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
-        UserDefaults.standard.set(false, forKey: saveAudioKey)
-
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.preserveClipboard = false
-        let pasteboard = NSPasteboard.withUniqueName()
-        context.textInsertionService.pasteboardProvider = { pasteboard }
-        context.textInsertionService.captureActiveAppOverride = {
-            ("Electron Target", "com.example.electron", nil)
-        }
-        context.textInsertionService.accessibilityGrantedOverride = true
-        context.textInsertionService.selectedTextOverride = { nil }
-        // An unreadable field: TypeWhisper cannot observe the text, but the paste may have landed.
-        let unreadableElement = AXUIElementCreateSystemWide()
-        context.textInsertionService.focusedTextElementOverride = { unreadableElement }
-        context.textInsertionService.focusedTextStateOverride = { _ in
-            (value: nil, selectedText: nil, selectedRange: nil)
-        }
-        context.textInsertionService.pasteSimulatorOverride = {}
-        var accessibilityObservationBundleIdentifiers: [String?] = []
-        var accessibilityObservationEndCount = 0
-        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier, _ in
-            accessibilityObservationBundleIdentifiers.append(bundleIdentifier)
-            return TargetAppAccessibilityObservationLease {
-                accessibilityObservationEndCount += 1
-            }
-        }
-        context.audioRecordingService.hasMicrophonePermissionOverride = true
-        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = {}
-        context.audioRecordingService.stopRecordingOverride = { _ in
-            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
-        }
-
-        let sessionID = context.dictationViewModel.apiStartRecording()
-        await context.dictationViewModel.testingWaitForRecordingStart()
-        _ = context.dictationViewModel.apiStopRecording()
-
-        for _ in 0..<80 {
-            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed,
-               context.targetAppCorrectionLearningService.latestAttempt != nil,
-               accessibilityObservationEndCount == 1 {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-
-        XCTAssertEqual(
-            context.targetAppCorrectionLearningService.latestAttempt?.outcome,
-            .unsupportedTextObservation
-        )
         XCTAssertEqual(accessibilityObservationBundleIdentifiers, ["com.example.electron"])
         XCTAssertEqual(accessibilityObservationEndCount, 1)
     }

@@ -7,12 +7,6 @@ import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "DictationViewModel")
 
-private struct CorrectionContributionContext: Sendable {
-    let language: String?
-    let engineId: String
-    let modelId: String?
-}
-
 struct DictationSessionTranscription: Sendable, Equatable {
     var text: String
     let rawText: String
@@ -3183,10 +3177,8 @@ final class DictationViewModel: ObservableObject {
                         standaloneValueFinalPeriodCleanupEnabled: DictationInsertionTextFormatter
                             .standaloneValueFinalPeriodCleanupEnabled()
                     )
-                    let shouldObservePostInsertionEdits = (
-                        shouldTrackTargetAppCorrectionLearning
-                            || improveTypeWhisperCaptureEnabled
-                    ) && resolvedOutputFormat == nil
+                    let shouldObservePostInsertionEdits = shouldTrackTargetAppCorrectionLearning
+                        && resolvedOutputFormat == nil
                     var didInsertText = false
                     var shouldUseNormalInsertion = true
                     var insertionResult: TextInsertionService.InsertionResult?
@@ -3355,17 +3347,9 @@ final class DictationViewModel: ObservableObject {
                 finishLatencyTraceAfterInsertion(sessionID: sessionID)
 
                 if let insertedTextForCorrectionTracking {
-                    let contributionContext: CorrectionContributionContext? = improveTypeWhisperCaptureEnabled
-                        ? CorrectionContributionContext(
-                            language: result.detectedLanguage ?? language,
-                            engineId: result.engineUsed,
-                            modelId: transcription.modelId
-                        )
-                        : nil
                     didTransferAccessibilityObservationLease = startTargetAppCorrectionLearningIfNeeded(
                         insertedText: insertedTextForCorrectionTracking,
                         baseline: targetAppCorrectionBaseline,
-                        contributionContext: contributionContext,
                         accessibilityObservationLease: accessibilityObservationLease
                     )
                 }
@@ -4997,14 +4981,12 @@ final class DictationViewModel: ObservableObject {
     private func startTargetAppCorrectionLearningIfNeeded(
         insertedText: String,
         baseline: TextInsertionService.FocusedTextObservation?,
-        contributionContext: CorrectionContributionContext?,
         accessibilityObservationLease: TargetAppAccessibilityObservationLease?
     ) -> Bool {
         targetAppCorrectionLearningTask?.cancel()
         targetAppCorrectionLearningTask = nil
 
-        let shouldLearn = shouldTrackTargetAppCorrectionLearning
-        guard shouldLearn || contributionContext != nil else {
+        guard shouldTrackTargetAppCorrectionLearning else {
             return false
         }
 
@@ -5013,8 +4995,6 @@ final class DictationViewModel: ObservableObject {
                 weak self,
                 baseline,
                 insertedText,
-                contributionContext,
-                shouldLearn,
                 accessibilityObservationLease
             ] in
             defer {
@@ -5030,31 +5010,10 @@ final class DictationViewModel: ObservableObject {
             )
             guard !Task.isCancelled else { return }
             self.targetAppCorrectionLearningTask = nil
-            if let contributionContext,
-               let correctionObservation = result.correctionObservation {
-                EventBus.shared.emit(.textCorrectionCommitted(TextCorrectionCommittedPayload(
-                    id: UUID(),
-                    capturedAt: Date(),
-                    originalText: insertedText,
-                    correctedText: correctionObservation.correctedInsertedText,
-                    language: contributionContext.language,
-                    engineId: contributionContext.engineId,
-                    modelId: contributionContext.modelId,
-                    appVersion: AppConstants.appVersion,
-                    appBuild: AppConstants.buildVersion,
-                    platformVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    commitSignal: correctionObservation.commitSignal?.contributionPayloadValue,
-                    sourceChannel: AppConstants.isDevelopment ? .development : .production
-                )))
-            }
-            guard shouldLearn, !result.learnedCorrections.isEmpty else { return }
+            guard !result.learnedCorrections.isEmpty else { return }
             self.showLearnedCorrectionsFeedback(result.learnedCorrections)
         }
         return true
-    }
-
-    private var improveTypeWhisperCaptureEnabled: Bool {
-        UserDefaults.standard.bool(forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
     }
 
     private func cancelTargetAppCorrectionLearning() {
@@ -5070,7 +5029,6 @@ final class DictationViewModel: ObservableObject {
             return
         }
         guard shouldTrackTargetAppCorrectionLearning
-                || improveTypeWhisperCaptureEnabled
                 || liveFieldTranscriptEnabled else {
             return
         }
