@@ -345,7 +345,7 @@ final class R2T2PluginTests: XCTestCase {
         try await Task.sleep(for: .seconds(1))
         try await Self.waitForServerProcessCount(0, config: assets.serverConfigURL)
 
-        let plugin = R2T2Plugin()
+        let plugin = Self.builtInCapablePlugin()
         plugin.activate(host: host)
         defer { plugin.deactivate() }
         XCTAssertTrue(plugin.isConfigured)
