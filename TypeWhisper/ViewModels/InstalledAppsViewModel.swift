@@ -20,18 +20,16 @@ struct InstalledApp: Identifiable, Hashable {
 final class InstalledAppsViewModel: ObservableObject {
     @Published private(set) var installedApps: [InstalledApp] = []
 
-    init() {
-        scanInstalledApps()
+    init(directories: [URL] = [
+        URL(fileURLWithPath: "/Applications"),
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
+        URL(fileURLWithPath: "/System/Applications"),
+    ]) {
+        scanInstalledApps(in: directories)
     }
 
-    private func scanInstalledApps() {
+    private func scanInstalledApps(in directories: [URL]) {
         var apps: [String: InstalledApp] = [:]
-
-        let directories = [
-            URL(fileURLWithPath: "/Applications"),
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
-            URL(fileURLWithPath: "/System/Applications"),
-        ]
 
         for dir in directories {
             guard let contents = try? FileManager.default.contentsOfDirectory(

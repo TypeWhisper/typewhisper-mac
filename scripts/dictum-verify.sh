@@ -70,6 +70,7 @@ test_all() {
   if xcode build-for-testing >"$receipts/test-build.log" 2>&1; then
     sign_app
     xcode test-without-building -parallel-testing-enabled NO \
+      "$@" \
       -resultBundlePath "$receipts/tests.xcresult" >"$receipts/test.log" 2>&1 || xcode_status=$?
   else
     xcode_status=$?
@@ -250,7 +251,7 @@ dictate() {
 
 case "${1:-}" in
   build) build ;;
-  test) test_all ;;
+  test) shift; test_all "$@" ;;
   dictate) shift; dictate "$@" ;;
   run|stop)
     command="$1"
