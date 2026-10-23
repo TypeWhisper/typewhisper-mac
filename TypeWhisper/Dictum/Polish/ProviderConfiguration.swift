@@ -63,6 +63,16 @@ enum ProviderConfiguration {
             compatiblePlugin?.perform(selector, with: providerID)
         }
     }
+    /// 同一个兼容供应商可以有多个模型行，只有最后一行被移除时才删除配置和密钥。
+    static func removeFallback(
+        _ item: LLMFallbackPriorityItem,
+        from processing: PromptProcessingService,
+        removeProfile: @MainActor (String) -> Void = ProviderConfiguration.removeProfile
+    ) {
+        processing.removeLLMFallback(item)
+        guard !processing.fallbackPriorityList.contains(where: { $0.providerId == item.providerId }) else { return }
+        removeProfile(item.providerId)
+    }
     static func refreshModels(_ providerID: String) {
         let selector = NSSelectorFromString("dictumRefreshModels:")
         if compatiblePlugin?.responds(to: selector) == true {

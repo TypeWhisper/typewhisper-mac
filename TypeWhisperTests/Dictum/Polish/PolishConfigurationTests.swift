@@ -29,6 +29,27 @@ final class PolishConfigurationTests: XCTestCase {
         XCTAssertEqual(ProviderConfiguration.connectionErrorKey(URLError(.timedOut)), "provider.error.network")
     }
 
+    func testRemovingOneOfTwoModelRowsKeepsSharedProfile() throws {
+        let suite = "PolishConfigurationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let processing = PromptProcessingService(userDefaults: defaults)
+        processing.addLLMFallback(providerId: "openai-compatible:deepseek", modelId: "deepseek-v4-flash")
+        processing.addLLMFallback(providerId: "openai-compatible:deepseek", modelId: "deepseek-v4-pro")
+        processing.addLLMFallback(providerId: "openai-compatible:qwen", modelId: "qwen-plus")
+        let flash = try XCTUnwrap(processing.fallbackPriorityList.first { $0.modelId == "deepseek-v4-flash" })
+        let pro = try XCTUnwrap(processing.fallbackPriorityList.first { $0.modelId == "deepseek-v4-pro" })
+        var removedProfiles: [String] = []
+
+        ProviderConfiguration.removeFallback(flash, from: processing) { removedProfiles.append($0) }
+        XCTAssertEqual(processing.fallbackPriorityList.map(\.modelId), ["deepseek-v4-pro", "qwen-plus"])
+        XCTAssertEqual(removedProfiles, [])
+
+        ProviderConfiguration.removeFallback(pro, from: processing) { removedProfiles.append($0) }
+        XCTAssertEqual(processing.fallbackPriorityList.map(\.modelId), ["qwen-plus"])
+        XCTAssertEqual(removedProfiles, ["openai-compatible:deepseek"])
+    }
+
     func testStrengthTracksExternalAppStorageWrites() async throws {
         let suite = "PolishConfigurationTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

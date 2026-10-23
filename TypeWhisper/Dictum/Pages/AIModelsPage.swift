@@ -238,8 +238,7 @@ struct AIModelsPage: View {
         } catch { testResult = .failed("provider.configurationError") }
     }
     private func remove(_ item: LLMFallbackPriorityItem) {
-        processing.removeLLMFallback(item)
-        ProviderConfiguration.removeProfile(item.providerId)
+        ProviderConfiguration.removeFallback(item, from: processing)
     }
     private func configuredItem(_ choice: ProviderConfiguration.Choice) -> LLMFallbackPriorityItem? {
         guard choice.id != "custom" else { return nil }
