@@ -5,6 +5,13 @@ import XCTest
 @testable import R2T2Plugin
 
 final class R2T2PluginTests: XCTestCase {
+    /// Built-in mode tests also run on Intel test machines, where the plugin would hide that mode.
+    private static func builtInCapablePlugin() -> R2T2Plugin {
+        let plugin = R2T2Plugin()
+        plugin.supportsBuiltInServer = true
+        return plugin
+    }
+
     func testLanguageMappingUsesCanonicalNamesAndAutoFallback() {
         XCTAssertNil(R2T2Protocol.languageName(for: nil))
         XCTAssertNil(R2T2Protocol.languageName(for: " "))
@@ -170,7 +177,7 @@ final class R2T2PluginTests: XCTestCase {
 
     func testPluginDefaultsToBuiltInServerWithoutDownloads() throws {
         let host = try PluginTestHostServices()
-        let plugin = R2T2Plugin()
+        let plugin = Self.builtInCapablePlugin()
         plugin.activate(host: host)
         XCTAssertFalse(plugin.isConfigured)
         XCTAssertEqual(plugin.selectedModelId, "r2t2-q8_0")
@@ -219,7 +226,7 @@ final class R2T2PluginTests: XCTestCase {
         try handle.truncate(atOffset: UInt64(model.fileSize))
         try handle.close()
 
-        let plugin = R2T2Plugin()
+        let plugin = Self.builtInCapablePlugin()
         plugin.activate(host: host)
         XCTAssertTrue(plugin.isConfigured)
         XCTAssertEqual(plugin.selectedModelId, "r2t2-q4_k_m")
@@ -227,7 +234,7 @@ final class R2T2PluginTests: XCTestCase {
 
         // The install state is read on activation, after an install and after a delete.
         try fileManager.removeItem(at: assets.modelDirectory(model).appendingPathComponent("NOTICE"))
-        let reactivated = R2T2Plugin()
+        let reactivated = Self.builtInCapablePlugin()
         reactivated.activate(host: host)
         XCTAssertFalse(reactivated.isConfigured, "license files are part of the install")
     }
@@ -236,7 +243,7 @@ final class R2T2PluginTests: XCTestCase {
         let host = try PluginTestHostServices(defaults: [R2T2Plugin.builtInModelKey: "r2t2-q8_0"])
         let assets = R2T2ManagedAssets(pluginDataDirectory: host.pluginDataDirectory)
         try Self.fakeInstall(assets: assets, models: [.q4km, .q8])
-        let plugin = R2T2Plugin()
+        let plugin = Self.builtInCapablePlugin()
         plugin.activate(host: host)
         XCTAssertEqual(plugin.selectedModelId, "r2t2-q8_0")
 

@@ -71,12 +71,13 @@ enum R2T2Runtime {
     static let releaseURL = URL(string: "https://github.com/0xShug0/audio.cpp/releases/tag/\(version)")!
 
     /// The pinned release ships only an arm64 build, so Intel Macs can use an own server only.
-    static var runsOnThisMac: Bool {
-        #if arch(arm64)
-        true
-        #else
-        false
-        #endif
+    /// Asks the hardware, not the loaded slice: under Rosetta the arm64 server still runs natively.
+    static let runsOnThisMac: Bool = sysctlFlag("hw.optional.arm64") || sysctlFlag("sysctl.proc_translated")
+
+    private static func sysctlFlag(_ name: String) -> Bool {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return sysctlbyname(name, &value, &size, nil, 0) == 0 && value == 1
     }
 }
 
