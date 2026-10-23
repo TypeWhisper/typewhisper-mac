@@ -13,7 +13,7 @@ struct OptionCard: View {
                 Text(title, tableName: tableName).font(DictumTheme.Typography.section)
                 Text(detail, tableName: tableName).font(DictumTheme.Typography.secondary).foregroundStyle(DictumTheme.textSecondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.vertical, 10).padding(.horizontal, 12)
             .background(isSelected ? DictumTheme.accentSoft : .clear, in: RoundedRectangle(cornerRadius: 9))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(isSelected ? DictumTheme.accent : DictumTheme.separator, lineWidth: isSelected ? 2 : 1))

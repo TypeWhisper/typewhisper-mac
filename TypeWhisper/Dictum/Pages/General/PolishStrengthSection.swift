@@ -10,7 +10,6 @@ struct PolishStrengthSection: View {
                         ForEach(PolishLevel.allCases, id: \.self) { level in
                             OptionCard(title: LocalizedStringKey(level.rawValue), detail: LocalizedStringKey("polish." + level.rawValue),
                                        isSelected: store.level == level, tableName: "DictumStyle") { store.level = level }
-                                .frame(maxHeight: .infinity, alignment: .top)
                         }
                     }
                 }
