@@ -1870,7 +1870,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
-    #if !APPSTORE
     private final class FakeMediaPlaybackController: MediaPlaybackControlling {
         var returnedSnapshot: MediaPlaybackSnapshot? = FakeMediaPlaybackController.snapshot(
             isPlaying: false,
@@ -1949,7 +1948,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             }
         }
     }
-    #endif
 
     func testRouterHandlesOptionsAndNotFound() async {
         let router = APIRouter()
@@ -3240,133 +3238,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(response["text"] as? String, "transcribed")
         XCTAssertEqual(MockTranscriptionPlugin.lastPrompt, "TypeWhisper, WhisperKit")
-    }
-
-    func testTranscribeEndpointRefusesWhileTheEnforcedPairCannotBeUsed() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var context: APIContext?
-        defer {
-            context = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        MockTranscriptionPlugin.reset()
-        context = await MainActor.run {
-            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
-            PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
-                enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "x")
-            ))
-            context.modelManager.restoreProviderSelection()
-            return context
-        }
-
-        let router = try XCTUnwrap(context?.router)
-        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
-        let boundary = "TestBoundary-\(UUID().uuidString)"
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(wavData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-        // No engine or model in the request: the unusable pair still decides, instead of "No engine selected".
-        let response = await router.route(
-            HTTPRequest(
-                method: "POST",
-                path: "/v1/transcribe",
-                queryParams: [:],
-                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
-                body: body
-            )
-        )
-
-        XCTAssertEqual(response.status, 403)
-        let error = try XCTUnwrap(Self.jsonObject(response)["error"] as? [String: Any])
-        let reason = await MainActor.run { PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason }
-        XCTAssertNotNil(reason)
-        XCTAssertEqual(error["message"] as? String, reason)
-        XCTAssertEqual(error["code"] as? String, "forbidden")
-    }
-
-    func testTranscribeEndpointRefusesAnEngineTheManagedSettingsRefuse() async throws {
-        // The refused engine leaves the engine list; the API names the policy, not an unknown engine.
-        try await assertTranscribeRefusedByPolicy(
-            ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]),
-            field: "engine",
-            value: { $0 },
-            expectedReason: { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: $0) }
-        )
-    }
-
-    func testTranscribeEndpointRefusesAModelOfAnEngineTheManagedSettingsRefuse() async throws {
-        // Only the model is named; its engine is refused, so the API names the policy, not an unknown model.
-        try await assertTranscribeRefusedByPolicy(
-            ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]),
-            field: "model",
-            value: { _ in "tiny" },
-            expectedReason: { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: $0) }
-        )
-    }
-
-    func testTranscribeEndpointRefusesAModelOfAPluginRefusedAsAWhole() async throws {
-        // The refused plugin stops and offers no models any more; the models it offered are remembered.
-        try await assertTranscribeRefusedByPolicy(
-            ManagedProviderPolicy(allowedPlugins: ["com.typewhisper.tests.other"]),
-            field: "model",
-            value: { _ in "tiny" },
-            expectedReason: { _ in PluginManager.shared.policyRefusals["com.typewhisper.mock.transcription"] }
-        )
-    }
-
-    /// Applies `policy`, sends a transcription request with `field`, and expects the policy's 403
-    /// without the engine being called.
-    private func assertTranscribeRefusedByPolicy(
-        _ policy: ManagedProviderPolicy,
-        field: String,
-        value: @escaping (_ engineId: String) -> String,
-        expectedReason: @escaping @MainActor (_ engineId: String) -> String?
-    ) async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var context: APIContext?
-        defer {
-            context = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        MockTranscriptionPlugin.reset()
-        let engineId = try await MainActor.run { () throws -> String in
-            let made = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
-            context = made
-            let engineId = try XCTUnwrap(PluginManager.shared.transcriptionEngines.first?.providerId)
-            PluginManager.shared.applyProviderPolicy(policy)
-            return engineId
-        }
-
-        let router = try XCTUnwrap(context?.router)
-        let boundary = "TestBoundary-\(UUID().uuidString)"
-        let response = await router.route(
-            HTTPRequest(
-                method: "POST",
-                path: "/v1/transcribe",
-                queryParams: [:],
-                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
-                body: Self.multipartTranscribeBody(
-                    wavData: WavEncoder.encode(Array(repeating: Float(0), count: 1600)),
-                    boundary: boundary,
-                    fields: [(name: field, value: value(engineId))]
-                )
-            )
-        )
-
-        XCTAssertEqual(response.status, 403)
-        let error = try XCTUnwrap(Self.jsonObject(response)["error"] as? [String: Any])
-        let reason = await MainActor.run { expectedReason(engineId) }
-        XCTAssertNotNil(reason)
-        XCTAssertEqual(error["message"] as? String, reason)
-        XCTAssertEqual(error["code"] as? String, "forbidden")
-        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
     }
 
     func testTranscribeEndpointUsesDefaultNumberThreshold() async throws {
@@ -12913,7 +12784,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         _ = context.dictationViewModel.apiStopRecording()
     }
 
-    #if !APPSTORE
     @MainActor
     func testMediaPlaybackServicePausesAndResumesFromConfirmedTrackInfo() {
         let controller = FakeMediaPlaybackController()
@@ -13395,7 +13265,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(controller.pauseCalls, 1)
         XCTAssertEqual(controller.playCalls, 1)
     }
-    #endif
 
     @MainActor
     func testApiStartRecording_showsSelectModelErrorWhenNoProviderIsSelected() async throws {
@@ -16745,29 +16614,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(CFPreferencesCopyAppValue(key as CFString, kCFPreferencesCurrentApplication))
     }
 
-    /// A Debug build started from a checkout with `--store-screenshots` has the Dev app's bundle
-    /// identifier; its preferences and managed settings come from the screenshot domain instead.
+    /// 截图检查使用独立的偏好设置。
     func testScreenshotRunsUseTheScreenshotDomainWhateverTheBundleIdentifier() {
         let screenshots = "com.schneidervvv.dictum.screenshots"
         XCTAssertEqual(AppConstants.screenshotPreferencesDomain, screenshots)
-        for bundleIdentifier in ["com.typewhisper.mac.dev", "com.typewhisper.mac", "com.typewhisper.typewhisper-app.dev", nil] {
+        for bundleIdentifier in ["com.schneidervvv.dictum.dev", "com.schneidervvv.dictum", nil] {
             XCTAssertEqual(
                 ScreenshotPreferencesIsolation.domainReplacingAppPreferences(bundleIdentifier: bundleIdentifier),
                 screenshots,
                 String(describing: bundleIdentifier)
             )
-            XCTAssertEqual(
-                AppConstants.resolveManagedPreferencesDomain(isScreenshotAutomation: true, bundleIdentifier: bundleIdentifier),
-                screenshots
-            )
         }
-        // The fastlane lane builds the app with the screenshot domain as its identifier.
         XCTAssertNil(ScreenshotPreferencesIsolation.domainReplacingAppPreferences(bundleIdentifier: screenshots))
 
-        XCTAssertEqual(
-            AppConstants.resolveManagedPreferencesDomain(isScreenshotAutomation: false, bundleIdentifier: "com.typewhisper.mac.dev"),
-            "com.typewhisper.mac.dev"
-        )
         XCTAssertNil(ScreenshotPreferencesIsolation.isolatedDefaults, "A test run is no screenshot run")
         XCTAssertEqual(AppConstants.preferencesDomain, TestHostIsolation.defaultsSuiteName)
     }
@@ -17910,59 +17769,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(plugin.restoreInvocationCount, 0)
         XCTAssertEqual(plugin.selectedModelId, "tiny")
         XCTAssertTrue(plugin.isConfigured)
-    }
-
-    @MainActor
-    func testModelsLoadEndpointLoadsOnlyTheEnforcedModel() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let context = Self.makeAPIContext(
-            appSupportDirectory: appSupportDirectory,
-            withMockTranscriptionPlugin: false
-        )
-        let plugin = ModelLifecycleTranscriptionPlugin()
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: ModelLifecycleTranscriptionPlugin.pluginId,
-                    name: ModelLifecycleTranscriptionPlugin.pluginName,
-                    version: "1.0.0",
-                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
-                ),
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
-        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
-            enforcedTranscription: ManagedSelectionPair(providerId: ModelLifecycleTranscriptionPlugin.pluginId, modelId: "tiny")
-        ))
-        defer { PluginManager.shared.applySelectionPolicy(.unmanaged) }
-
-        func load(_ model: String) async -> HTTPResponse {
-            await context.router.route(
-                HTTPRequest(
-                    method: "POST",
-                    path: "/v1/models/load",
-                    queryParams: [:],
-                    headers: ["content-type": "application/json"],
-                    body: Data(#"{"engine":"model-lifecycle-mock","model":"\#(model)"}"#.utf8)
-                )
-            )
-        }
-
-        let refused = await load("large")
-        XCTAssertEqual(refused.status, 403)
-        let error = try XCTUnwrap(Self.jsonObject(refused)["error"] as? [String: Any])
-        XCTAssertEqual(error["code"] as? String, "forbidden")
-        XCTAssertEqual(plugin.restoreInvocationCount, 0, "A model the pair does not name is never loaded")
-
-        let loaded = await load("tiny")
-        XCTAssertEqual(loaded.status, 200)
-        XCTAssertEqual(plugin.selectedModelId, "tiny")
     }
 
     @MainActor
@@ -20413,8 +20219,6 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.isEventTapEnabledForTesting)
     }
 
-    #if !APPSTORE
-    // The App Store edition's listen-only tap never waits for the main thread.
     func testEventTapReleasesInputWhileMainThreadIsBlocked() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -20461,7 +20265,6 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         XCTAssertEqual(cancelCount, 1)
     }
-    #endif
 
     func testEventTapGateWaitsForClaimedHandlerWithinItsOwnBound() throws {
         let gate = HotkeyService.EventTapMainThreadGate()

@@ -242,15 +242,6 @@ final class PluginManager: ObservableObject {
     var loadedPlugins: [LoadedPlugin] = [] {
         willSet { publishRegistryChange() }
     }
-    /// Plugins the managed settings refuse as a whole, with the localized reason. They are
-    /// registered without loading their code.
-    private(set) var policyRefusals: [String: String] = [:] {
-        willSet { publishRegistryChange() }
-    }
-    /// The cloud, provider and plugin restrictions of the managed settings.
-    private(set) var providerPolicy: ManagedProviderPolicy = .unmanaged
-    /// The enforced and recommended provider and model pairs of the managed settings.
-    private(set) var selectionPolicy: ManagedSelectionPolicy = .unmanaged
     /// 注册表变更时递增，批量扫描只发布一次。
     @Published private(set) var registryRevision = 0
     @Published private(set) var readinessRevision = 0
@@ -266,14 +257,14 @@ final class PluginManager: ObservableObject {
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
-            .filter { $0.isEnabled && permitsText($0) }
+            .filter { $0.isEnabled }
             .compactMap { $0.instance as? PostProcessorPlugin }
             .sorted { $0.priority < $1.priority }
     }
 
     var fileJobAutomations: [FileJobAutomationPlugin] {
         loadedPlugins
-            .filter { $0.isEnabled && permitsText($0) }
+            .filter { $0.isEnabled }
             .compactMap { $0.instance as? FileJobAutomationPlugin }
             .sorted { $0.priority < $1.priority }
     }
@@ -295,7 +286,7 @@ final class PluginManager: ObservableObject {
 
     var llmProviders: [LLMProviderPlugin] {
         loadedPlugins
-            .filter { $0.isEnabled && policyRefusals[$0.manifest.id] == nil }
+            .filter { $0.isEnabled }
             .flatMap { plugin -> [LLMProviderPlugin] in
                 var providers: [LLMProviderPlugin] = []
                 if let provider = plugin.instance as? LLMProviderPlugin {
@@ -304,15 +295,13 @@ final class PluginManager: ObservableObject {
                 if let expanded = plugin.instance as? AdditionalLLMProvidersProviding {
                     providers.append(contentsOf: expanded.additionalLLMProviders)
                 }
-                return providers.filter { llmRefusal(for: $0, in: plugin) == nil }
+                return providers
             }
     }
 
-    /// Engines the managed settings refuse are left out, so pickers and fallbacks never offer them;
-    /// `transcriptionPolicyRefusal(forProviderId:)` names the reason for a refused selection.
     var transcriptionEngines: [TranscriptionEnginePlugin] {
         loadedPlugins
-            .filter { $0.isEnabled && policyRefusals[$0.manifest.id] == nil }
+            .filter { $0.isEnabled }
             .flatMap { plugin -> [TranscriptionEnginePlugin] in
                 var engines: [TranscriptionEnginePlugin] = []
                 if let engine = plugin.instance as? TranscriptionEnginePlugin {
@@ -321,13 +310,13 @@ final class PluginManager: ObservableObject {
                 if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
                     engines.append(contentsOf: expanded.additionalTranscriptionEngines)
                 }
-                return engines.filter { transcriptionRefusal(for: $0.providerId, in: plugin) == nil }
+                return engines
             }
     }
 
     var actionPlugins: [ActionPlugin] {
         loadedPlugins
-            .filter { $0.isEnabled && permitsText($0) }
+            .filter { $0.isEnabled }
             .flatMap { plugin -> [ActionPlugin] in
                 var actions: [ActionPlugin] = []
                 if let action = plugin.instance as? ActionPlugin {
@@ -342,324 +331,8 @@ final class PluginManager: ObservableObject {
 
     var speakerDiarizationProviders: [any SpeakerDiarizationProviderPlugin] {
         loadedPlugins
-            .filter { $0.isEnabled && permits($0, .audio) }
+            .filter { $0.isEnabled }
             .compactMap { $0.instance as? any SpeakerDiarizationProviderPlugin }
-    }
-
-    // MARK: - Managed settings
-
-    private func permits(_ plugin: LoadedPlugin, _ content: ManagedProviderPolicy.Content) -> Bool {
-        policyRefusals[plugin.manifest.id] == nil
-            && providerPolicy.cloudRefusal(content, locality: plugin.manifest.resolvedLocality) == nil
-    }
-
-    private func permitsText(_ plugin: LoadedPlugin) -> Bool {
-        policyRefusals[plugin.manifest.id] == nil
-            && providerPolicy.textRefusal(pluginId: plugin.manifest.id, locality: plugin.manifest.resolvedLocality) == nil
-    }
-
-    private func transcriptionRefusal(for providerId: String, in plugin: LoadedPlugin) -> String? {
-        policyRefusals[plugin.manifest.id] ?? providerPolicy.transcriptionRefusal(
-            pluginId: plugin.manifest.id,
-            providerId: providerId,
-            locality: plugin.manifest.resolvedLocality
-        )
-    }
-
-    private func llmRefusal(for provider: LLMProviderPlugin, in plugin: LoadedPlugin) -> String? {
-        policyRefusals[plugin.manifest.id] ?? providerPolicy.llmRefusal(
-            pluginId: plugin.manifest.id,
-            providerId: provider.llmProviderId,
-            locality: plugin.manifest.resolvedLocality
-        )
-    }
-
-    /// Why the managed settings refuse audio for this engine, or nil. Also finds engines the
-    /// filtered lists leave out and plugins refused as a whole, so a refused selection reports the
-    /// reason instead of a missing engine.
-    func transcriptionPolicyRefusal(forProviderId providerId: String) -> String? {
-        guard let plugin = loadedPlugins.first(where: { $0.isEnabled && Self.plugin($0, provides: providerId) }) else {
-            return refusalOfRefusedPackage(exposing: providerId)
-        }
-        return transcriptionRefusal(for: providerId, in: plugin)
-    }
-
-    /// Why the managed settings refuse the engine that offers this model, for requests that name
-    /// only a model. Searches the engines the filtered lists leave out.
-    func transcriptionPolicyRefusal(forModelId modelId: String) -> String? {
-        for plugin in loadedPlugins where plugin.isEnabled {
-            var engines: [TranscriptionEnginePlugin] = []
-            if let engine = plugin.instance as? TranscriptionEnginePlugin {
-                engines.append(engine)
-            }
-            if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
-                engines.append(contentsOf: expanded.additionalTranscriptionEngines)
-            }
-            for engine in engines where engine.modelCatalog.contains(where: { $0.id == modelId }) {
-                if let refusal = transcriptionRefusal(for: engine.providerId, in: plugin) {
-                    return refusal
-                }
-            }
-        }
-        // A plugin refused as a whole is a placeholder without models; match the ones it offered.
-        return policyRefusals.first { pluginId, _ in
-            (UserDefaults.standard.stringArray(forKey: Self.knownModelIdsKey(pluginId)) ?? []).contains(modelId)
-        }?.value
-    }
-
-    /// Provider IDs a plugin exposed when it last ran, so a plugin refused before it loads can still
-    /// be matched to the engine or language model a user selected.
-    static func knownProviderIdsKey(_ pluginId: String) -> String {
-        "plugin.\(pluginId).knownProviderIds"
-    }
-
-    /// Transcription model IDs a plugin offered when it last ran, for requests that name only a model.
-    static func knownModelIdsKey(_ pluginId: String) -> String {
-        "plugin.\(pluginId).knownTranscriptionModelIds"
-    }
-
-    private func rememberProviderIds(of plugin: LoadedPlugin) {
-        var ids = transcriptionProviderIds(exposedBy: plugin.instance)
-        var llmProviders: [LLMProviderPlugin] = []
-        if let provider = plugin.instance as? LLMProviderPlugin {
-            llmProviders.append(provider)
-        }
-        if let expanded = plugin.instance as? AdditionalLLMProvidersProviding {
-            llmProviders.append(contentsOf: expanded.additionalLLMProviders)
-        }
-        for provider in llmProviders {
-            ids.insert(provider.llmProviderId)
-            ids.insert(provider.providerName)
-            ids.insert(provider.llmProviderDisplayName)
-            ids.formUnion(provider.llmProviderLegacyAliases)
-        }
-        Self.remember(ids, forKey: Self.knownProviderIdsKey(plugin.manifest.id))
-
-        var engines: [TranscriptionEnginePlugin] = []
-        if let engine = plugin.instance as? TranscriptionEnginePlugin {
-            engines.append(engine)
-        }
-        if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
-            engines.append(contentsOf: expanded.additionalTranscriptionEngines)
-        }
-        Self.remember(Set(engines.flatMap { $0.modelCatalog.map(\.id) }), forKey: Self.knownModelIdsKey(plugin.manifest.id))
-    }
-
-    private static func remember(_ ids: Set<String>, forKey key: String) {
-        let sorted = ids.sorted()
-        guard !sorted.isEmpty, UserDefaults.standard.stringArray(forKey: key) != sorted else { return }
-        UserDefaults.standard.set(sorted, forKey: key)
-    }
-
-    private func refusalOfRefusedPackage(exposing providerId: String) -> String? {
-        policyRefusals.first { pluginId, _ in
-            (UserDefaults.standard.stringArray(forKey: Self.knownProviderIdsKey(pluginId)) ?? [])
-                .contains { $0.caseInsensitiveCompare(providerId) == .orderedSame }
-        }?.value
-    }
-
-    /// Why the managed settings refuse text for this language model provider, or nil.
-    func llmPolicyRefusal(forProviderId providerId: String) -> String? {
-        let providerId = providerId.trimmingCharacters(in: .whitespacesAndNewlines)
-        for plugin in loadedPlugins where plugin.isEnabled {
-            var providers: [LLMProviderPlugin] = []
-            if let provider = plugin.instance as? LLMProviderPlugin {
-                providers.append(provider)
-            }
-            if let expanded = plugin.instance as? AdditionalLLMProvidersProviding {
-                providers.append(contentsOf: expanded.additionalLLMProviders)
-            }
-            // The same names llmProvider(for:) accepts, so saved legacy aliases report the refusal too.
-            if let provider = providers.first(where: { provider in
-                ([provider.llmProviderId, provider.providerName, provider.llmProviderDisplayName]
-                    + provider.llmProviderLegacyAliases)
-                    .contains { $0.caseInsensitiveCompare(providerId) == .orderedSame }
-            }) {
-                return llmRefusal(for: provider, in: plugin)
-            }
-        }
-        return refusalOfRefusedPackage(exposing: providerId)
-    }
-
-    /// Whether dictionary terms may travel as prompt text with audio sent to this engine.
-    func allowsPromptText(forTranscriptionProviderId providerId: String) -> Bool {
-        guard let plugin = loadedTranscriptionPlugin(for: providerId) else { return true }
-        return providerPolicy.allowsPromptText(toTranscriptionLocality: plugin.manifest.resolvedLocality)
-    }
-
-    /// Applies new managed settings: plugins refused as a whole stop and stay unloaded, refused
-    /// providers drop out of the lists, and plugins the user enabled load again once allowed. Neither
-    /// the enabled preference nor the selected engine is written; code that was already loaded stays
-    /// mapped until the next launch.
-    func applyProviderPolicy(_ policy: ManagedProviderPolicy) {
-        guard policy != providerPolicy else { return }
-        providerPolicy = policy
-        coalescingRegistryChangeNotifications {
-            for plugin in loadedPlugins {
-                let refusal = policy.packageRefusal(for: plugin.manifest)
-                let wasRefused = policyRefusals[plugin.manifest.id] != nil
-                if let refusal {
-                    policyRefusals[plugin.manifest.id] = refusal
-                    if plugin.isEnabled {
-                        stopRefusedPlugin(plugin.manifest.id)
-                    }
-                } else if wasRefused {
-                    policyRefusals.removeValue(forKey: plugin.manifest.id)
-                    if !plugin.isEnabled, storedEnabledState(for: plugin) {
-                        resumeAllowedPlugin(plugin.manifest.id)
-                    }
-                }
-            }
-        }
-        publishRegistryChange()
-    }
-
-    /// Applies new provider and model pairs. Listeners re-resolve the engine and language model.
-    func applySelectionPolicy(_ policy: ManagedSelectionPolicy) {
-        guard policy != selectionPolicy else { return }
-        selectionPolicy = policy
-        publishRegistryChange()
-    }
-
-    /// The engine the enforced transcription pair selects, nil when no pair is enforced.
-    var enforcedTranscriptionResolution: ManagedPairResolution? {
-        if selectionPolicy.isTranscriptionBlocked {
-            return .unavailable(ManagedProviderPolicy.blockedMessage)
-        }
-        return selectionPolicy.enforcedTranscription.map(resolveTranscriptionPair)
-    }
-
-    /// The language model the enforced LLM pair selects, nil when no pair is enforced.
-    var enforcedLlmResolution: ManagedPairResolution? {
-        if selectionPolicy.isLlmBlocked {
-            return .unavailable(ManagedProviderPolicy.blockedMessage)
-        }
-        return selectionPolicy.enforcedLlm.map(resolveLlmPair)
-    }
-
-    func resolveTranscriptionPair(_ pair: ManagedSelectionPair) -> ManagedPairResolution {
-        let (pluginId, qualifier) = pair.components
-        guard let plugin = loadedPlugins.first(where: { $0.manifest.id.caseInsensitiveCompare(pluginId) == .orderedSame }) else {
-            return .unavailable(String(localized: "The transcription provider your organization requires is not installed."))
-        }
-        if let refusal = policyRefusals[plugin.manifest.id] {
-            return .unavailable(refusal)
-        }
-        guard plugin.isEnabled, plugin.isRuntimeLoaded else {
-            return .unavailable(String(localized: "The transcription provider your organization requires is turned off."))
-        }
-        var engines: [TranscriptionEnginePlugin] = []
-        if let engine = plugin.instance as? TranscriptionEnginePlugin {
-            engines.append(engine)
-        }
-        if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
-            engines.append(contentsOf: expanded.additionalTranscriptionEngines)
-        }
-        let engine: TranscriptionEnginePlugin? = if let qualifier {
-            engines.first { $0.providerId.caseInsensitiveCompare(qualifier) == .orderedSame }
-        } else {
-            engines.count == 1 ? engines.first : nil
-        }
-        guard let engine else {
-            return .unavailable(String(localized: "Your organization's transcription provider does not name one of this plugin's engines."))
-        }
-        if let refusal = transcriptionRefusal(for: engine.providerId, in: plugin) {
-            return .unavailable(refusal)
-        }
-        // The catalog lists every selectable model; some engines list only the loaded one as models.
-        guard let modelId = Self.matchingModelId(pair.modelId, in: engine.modelCatalog.map(\.id)) else {
-            return .unavailable(String(localized: "The transcription model your organization requires is not offered by this provider."))
-        }
-        return .resolved(providerId: engine.providerId, modelId: modelId)
-    }
-
-    func resolveLlmPair(_ pair: ManagedSelectionPair) -> ManagedPairResolution {
-        let (pluginId, qualifier) = pair.components
-        if pluginId.caseInsensitiveCompare(ManagedProviderPolicy.appleIntelligenceId) == .orderedSame {
-            if let refusal = providerPolicy.llmRefusal(
-                pluginId: ManagedProviderPolicy.appleIntelligenceId,
-                providerId: PromptProcessingService.appleIntelligenceId,
-                locality: .local
-            ) {
-                return .unavailable(refusal)
-            }
-            // The built-in provider exists from macOS 26 on.
-            guard #available(macOS 26, *) else {
-                return .unavailable(String(localized: "The language model provider your organization requires needs macOS 26 or later."))
-            }
-            return .resolved(providerId: PromptProcessingService.appleIntelligenceId, modelId: pair.modelId)
-        }
-        guard let plugin = loadedPlugins.first(where: { $0.manifest.id.caseInsensitiveCompare(pluginId) == .orderedSame }) else {
-            return .unavailable(String(localized: "The language model provider your organization requires is not installed."))
-        }
-        if let refusal = policyRefusals[plugin.manifest.id] {
-            return .unavailable(refusal)
-        }
-        guard plugin.isEnabled, plugin.isRuntimeLoaded else {
-            return .unavailable(String(localized: "The language model provider your organization requires is turned off."))
-        }
-        var providers: [LLMProviderPlugin] = []
-        if let provider = plugin.instance as? LLMProviderPlugin {
-            providers.append(provider)
-        }
-        if let expanded = plugin.instance as? AdditionalLLMProvidersProviding {
-            providers.append(contentsOf: expanded.additionalLLMProviders)
-        }
-        let provider: LLMProviderPlugin? = if let qualifier {
-            providers.first {
-                $0.llmProviderId.caseInsensitiveCompare(qualifier) == .orderedSame
-                    || $0.providerName.caseInsensitiveCompare(qualifier) == .orderedSame
-            }
-        } else {
-            providers.count == 1 ? providers.first : nil
-        }
-        guard let provider else {
-            return .unavailable(String(localized: "Your organization's language model provider does not name one of this plugin's providers."))
-        }
-        if let refusal = llmRefusal(for: provider, in: plugin) {
-            return .unavailable(refusal)
-        }
-        guard let modelId = Self.matchingModelId(pair.modelId, in: provider.supportedModels.map(\.id)) else {
-            return .unavailable(String(localized: "The language model your organization requires is not offered by this provider."))
-        }
-        return .resolved(providerId: provider.llmProviderId, modelId: modelId)
-    }
-
-    /// The catalog's spelling of `modelId`. Providers whose models are not listed in advance accept it as is.
-    private static func matchingModelId(_ modelId: String, in catalog: [String]) -> String? {
-        guard !catalog.isEmpty else { return modelId }
-        return catalog.first { $0.caseInsensitiveCompare(modelId) == .orderedSame }
-    }
-
-    private func storedEnabledState(for plugin: LoadedPlugin) -> Bool {
-        (UserDefaults.standard.object(forKey: "plugin.\(plugin.manifest.id).enabled") as? Bool) ?? plugin.isBundled
-    }
-
-    private func stopRefusedPlugin(_ pluginId: String) {
-        guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
-        let plugin = loadedPlugins[index]
-        PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
-        if plugin.isRuntimeLoaded {
-            rememberProviderIds(of: plugin)
-            plugin.instance.deactivate()
-        }
-        if let placeholder = try? makeUnloadedPluginRecord(manifest: plugin.manifest, sourceURL: plugin.sourceURL) {
-            loadedPlugins[index] = placeholder
-        } else {
-            loadedPlugins[index].isEnabled = false
-        }
-        logger.info("Stopped plugin \(pluginId, privacy: .public) refused by managed settings")
-    }
-
-    private func resumeAllowedPlugin(_ pluginId: String) {
-        guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
-        let placeholder = loadedPlugins.remove(at: index)
-        do {
-            try loadPlugin(at: placeholder.sourceURL)
-        } catch {
-            logger.error("Failed to load plugin \(pluginId, privacy: .public) allowed again by managed settings: \(error.localizedDescription, privacy: .public)")
-            loadedPlugins.insert(placeholder, at: min(index, loadedPlugins.count))
-        }
     }
 
     func transcriptionEngine(for providerId: String) -> TranscriptionEnginePlugin? {
@@ -888,8 +561,6 @@ final class PluginManager: ObservableObject {
         }
 
         let isEnabled = resolvedEnabledState(for: manifest, isBundledSource: isBundledSource)
-        // A plugin the managed settings refuse is registered like a disabled one: none of its code runs.
-        let policyRefusal = providerPolicy.packageRefusal(for: manifest)
 
         if let existingIndex = loadedPlugins.firstIndex(where: { $0.manifest.id == manifest.id }) {
             let existing = loadedPlugins[existingIndex]
@@ -906,14 +577,7 @@ final class PluginManager: ObservableObject {
             logger.info("Replacing plugin \(manifest.id) from \(existing.sourceURL.lastPathComponent) with \(url.lastPathComponent)")
         }
 
-        // Only the copy that is registered decides the plugin's refusal; a skipped copy must not change it.
-        if let policyRefusal {
-            policyRefusals[manifest.id] = policyRefusal
-        } else if policyRefusals[manifest.id] != nil {
-            policyRefusals.removeValue(forKey: manifest.id)
-        }
-
-        if !isEnabled || policyRefusal != nil {
+        if !isEnabled {
             let unloaded = try makeUnloadedPluginRecord(manifest: manifest, sourceURL: url)
             loadedPlugins.append(unloaded)
             logger.info("Registered disabled plugin without loading bundle: \(manifest.name) v\(manifest.version)")
@@ -1022,7 +686,6 @@ final class PluginManager: ObservableObject {
 
         let host = HostServicesImpl(
             pluginId: plugin.manifest.id,
-            locality: plugin.manifest.resolvedLocality,
             eventBus: EventBus.shared,
             ruleNamesProvider: ruleNamesProvider,
             workflowProvider: workflowProvider,
@@ -1033,7 +696,6 @@ final class PluginManager: ObservableObject {
         host.performPluginActivation(suppressPassiveLoadedModelRestore: shouldSuppressPassiveLoadedModelRestore(for: plugin)) {
             plugin.instance.activate(host: host)
         }
-        rememberProviderIds(of: plugin)
         logger.info("Activated plugin: \(plugin.manifest.id)")
     }
 
@@ -1111,10 +773,6 @@ final class PluginManager: ObservableObject {
 
     func setPluginEnabled(_ pluginId: String, enabled: Bool) {
         guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
-        if enabled, let refusal = policyRefusals[pluginId] {
-            logger.info("Refused enabling \(pluginId, privacy: .public): \(refusal, privacy: .public)")
-            return
-        }
 
         UserDefaults.standard.set(enabled, forKey: "plugin.\(pluginId).enabled")
 
@@ -1289,10 +947,6 @@ final class PluginManager: ObservableObject {
         } else {
             providerIdsAwaitingRelaunch[pluginId] = nil
             UserDefaults.standard.removeObject(forKey: Self.disabledEngineIdsKey(pluginId))
-            // An uninstalled plugin no longer explains a refusal of the providers it exposed.
-            policyRefusals.removeValue(forKey: pluginId)
-            UserDefaults.standard.removeObject(forKey: Self.knownProviderIdsKey(pluginId))
-            UserDefaults.standard.removeObject(forKey: Self.knownModelIdsKey(pluginId))
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
             if !disabledProviderIds.isEmpty {
                 uninstalledTranscriptionEngines.send(disabledProviderIds)

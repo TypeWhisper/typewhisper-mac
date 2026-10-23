@@ -1704,24 +1704,6 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
     }
 
-    func testRecoveryAutomaticFallbackStaysOffUnderAnEnforcedPair() throws {
-        setupPluginManager()
-        let defaults = try makeDefaults()
-        let viewModel = makeRecoveryViewModel(defaults: defaults)
-        viewModel.selectedEngine = "backup"
-        viewModel.selectedModel = "backup-large"
-        viewModel.automaticFallbackEnabled = true
-        XCTAssertNotNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
-
-        // The enforced engine runs for the fallback too, so it would only repeat the same work.
-        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
-            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.enforced", modelId: "any")
-        ))
-        defer { PluginManager.shared.applySelectionPolicy(.unmanaged) }
-
-        XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
-    }
-
     func testRecoveryAutomaticFallbackRejectsPrimaryEngine() throws {
         setupPluginManager()
         let defaults = try makeDefaults()

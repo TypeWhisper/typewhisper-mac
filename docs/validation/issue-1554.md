@@ -13,7 +13,7 @@ Validated locally on 2026-10-12 on branch `seofood/1554-speaker-profile-api`.
   without increasing the learning weight. A filesystem failure in the voice
   store did not publish a profile or confirm a name.
 - Naming, enrollment, confirmation, Premium requirements, mandatory tokens,
-  Remote Link exclusion, stale revisions, model changes, deleted profiles,
+  stale revisions, model changes, deleted profiles,
   explicit profile IDs, equal names, and existing workspace behavior were tested.
 - Review regressions cover stale requests after merge, assign and split,
   receipt provenance across speaker renumbering and restart, partly learned
@@ -49,7 +49,6 @@ xcodebuild test -skipPackagePluginValidation -disableAutomaticPackageResolution 
   -only-testing:TypeWhisperTests/VoiceProfileMatchingTests \
   -only-testing:TypeWhisperTests/HistoryServiceTests \
   -only-testing:TypeWhisperTests/HTTPRequestParserTests \
-  -only-testing:TypeWhisperTests/RemoteLinkTests \
   -only-testing:TypeWhisperTests/SpeakerSyncHistoryTests \
   -only-testing:TypeWhisperTests/SpeakerWorkspaceTests \
   -only-testing:TypeWhisperTests/SpeakerWorkspaceModelTests \
@@ -57,7 +56,6 @@ xcodebuild test -skipPackagePluginValidation -disableAutomaticPackageResolution 
   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
 "$HOME/Projects/typewhisper-dev-tools/build-typewhisper-mac-dev.sh" --run "$PWD"
-scripts/appstore/build-dev.sh --run
 
 git diff --check
 bash scripts/check_first_party_warnings.sh /tmp/typewhisper-1554-review-final-tests.log

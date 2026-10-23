@@ -16,8 +16,7 @@ struct AppSection: View {
             GroupedFormToggle(title: "Launch at login", isOn: Binding(
                     get: { launchAtLogin.isEnabled || launchAtLogin.requiresApproval },
                     set: { launchAtLogin.setUserChoice($0) }
-                ), separated: false).disabled(launchAtLogin.isLocked)
-                .managedLockAccessibilityHint(isLocked: launchAtLogin.isLocked, reason: nil)
+                ), separated: false)
             if let error = launchAtLogin.lastErrorDescription {
                 Text(error).font(DictumTheme.Typography.secondary).foregroundStyle(DictumTheme.danger).padding(10)
             }

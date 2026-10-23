@@ -137,30 +137,16 @@ class PromptProcessingService: ObservableObject {
     }
 
     weak var modelManagerService: ModelManagerService?
-    private var appleIntelligenceProvider: LLMProvider?
     private var cancellables = Set<AnyCancellable>()
     var processActivityManager: any ProcessActivityManaging = DefaultProcessActivityManager()
-
-    static let appleIntelligenceId = "appleIntelligence"
 
     var primaryFallbackItem: LLMFallbackPriorityItem? {
         fallbackPriorityList.first
     }
 
-    var isAppleIntelligenceAvailable: Bool {
-        if #available(macOS 26, *) {
-            return appleIntelligenceProvider?.isAvailable ?? false
-        }
-        return false
-    }
-
     /// Returns (id, displayName) pairs for all available providers.
     var availableProviders: [(id: String, displayName: String)] {
         var result: [(id: String, displayName: String)] = []
-
-        if #available(macOS 26, *) {
-            result.append((id: Self.appleIntelligenceId, displayName: "Apple Intelligence"))
-        }
 
         for plugin in PluginManager.shared?.llmProviders ?? [] {
             result.append((id: plugin.llmProviderId, displayName: plugin.llmProviderDisplayName))
@@ -174,23 +160,16 @@ class PromptProcessingService: ObservableObject {
     }
 
     func isProviderReady(_ providerId: String) -> Bool {
-        if providerId == Self.appleIntelligenceId {
-            return isAppleIntelligenceAvailable
-        }
         return PluginManager.shared?.llmProvider(for: providerId)?.isAvailable ?? false
     }
 
     /// Returns supported models for a given provider.
     func modelsForProvider(_ providerId: String) -> [PluginModelInfo] {
-        if providerId == Self.appleIntelligenceId {
-            return []
-        }
         return PluginManager.shared?.llmProvider(for: providerId)?.supportedModels ?? []
     }
 
     func effortsForProvider(_ providerId: String, modelId: String?) -> [PluginLLMEffortInfo] {
-        guard providerId != Self.appleIntelligenceId,
-              let provider = PluginManager.shared?.llmProvider(for: providerId),
+        guard let provider = PluginManager.shared?.llmProvider(for: providerId),
               let effortProvider = provider as? any LLMEffortControllableProvider
         else { return [] }
 
@@ -203,8 +182,7 @@ class PromptProcessingService: ObservableObject {
     }
 
     func defaultEffortId(for providerId: String, modelId: String?) -> String? {
-        guard providerId != Self.appleIntelligenceId,
-              let provider = PluginManager.shared?.llmProvider(for: providerId),
+        guard let provider = PluginManager.shared?.llmProvider(for: providerId),
               let effortProvider = provider as? any LLMEffortControllableProvider
         else { return nil }
 
@@ -219,9 +197,6 @@ class PromptProcessingService: ObservableObject {
     /// Returns display name for a provider ID, retaining an unknown saved ID so
     /// the user can repair it rather than silently losing that fallback entry.
     func displayName(for providerId: String) -> String {
-        if providerId == Self.appleIntelligenceId {
-            return "Apple Intelligence"
-        }
         return PluginManager.shared?.llmProvider(for: providerId)?.llmProviderDisplayName ?? providerId
     }
 
@@ -229,7 +204,6 @@ class PromptProcessingService: ObservableObject {
     /// Handles migration from old enum rawValues ("groq") to plugin IDs.
     func normalizeProviderId(_ id: String) -> String {
         let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed == Self.appleIntelligenceId { return trimmed }
         return PluginManager.shared?.llmProvider(for: trimmed)?.llmProviderId ?? trimmed
     }
 
@@ -237,16 +211,8 @@ class PromptProcessingService: ObservableObject {
         self.userDefaults = userDefaults
         let initialList = Self.loadInitialFallbackPriorityList(from: userDefaults)
         self.fallbackPriorityList = initialList
-        self.selectedProviderId = initialList.first?.providerId ?? Self.appleIntelligenceId
+        self.selectedProviderId = initialList.first?.providerId ?? ""
         self.selectedCloudModel = initialList.first?.modelId ?? ""
-
-        setupProviders()
-    }
-
-    private func setupProviders() {
-        if #available(macOS 26, *) {
-            appleIntelligenceProvider = FoundationModelsProvider()
-        }
     }
 
     func observePluginManager() {
@@ -266,42 +232,15 @@ class PromptProcessingService: ObservableObject {
     /// again after an integration is reinstalled.
     func validateSelectionAfterPluginLoad() {
         setFallbackPriorityList(fallbackPriorityList, normalizeProviderIds: true)
-        applyRecommendedLlmPairIfNeeded()
-    }
-
-    /// A recommended LLM pair becomes the default language model of a profile that still has the
-    /// built-in default, once. The user can change it afterwards.
-    func applyRecommendedLlmPairIfNeeded() {
-        guard !userDefaults.bool(forKey: UserDefaultsKeys.managedLlmRecommendationApplied),
-              let manager = PluginManager.shared,
-              let recommended = manager.selectionPolicy.recommendedLlm,
-              case .resolved(let providerId, let modelId) = manager.resolveLlmPair(recommended) else { return }
-        let keepsBuiltInDefault = fallbackPriorityList.count == 1
-            && fallbackPriorityList[0].providerId == Self.appleIntelligenceId
-            && fallbackPriorityList[0].modelId == nil
-        // A provider that is not ready yet would fail every call; a later plugin change retries.
-        guard keepsBuiltInDefault, isProviderReady(providerId) else { return }
-        userDefaults.set(true, forKey: UserDefaultsKeys.managedLlmRecommendationApplied)
-        setFallbackPriorityList(
-            [LLMFallbackPriorityItem(providerId: providerId, modelId: providerId == Self.appleIntelligenceId ? nil : modelId)],
-            normalizeProviderIds: true
-        )
     }
 
     // MARK: - Fallback list management
-
-    /// An enforced LLM pair replaces the list for every call; the list stays as the user saved it
-    /// for when the pair is removed, so it cannot be edited meanwhile.
-    var isFallbackListLocked: Bool {
-        PluginManager.shared?.selectionPolicy.enforcesLlm == true
-    }
 
     func addLLMFallback(
         providerId: String,
         modelId: String? = nil,
         effortId: String? = nil
     ) {
-        guard !isFallbackListLocked else { return }
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
@@ -328,8 +267,7 @@ class PromptProcessingService: ObservableObject {
         modelId: String? = nil,
         effortId: String? = nil
     ) {
-        guard !isFallbackListLocked,
-              let index = fallbackPriorityList.firstIndex(where: { $0.id == item.id }) else { return }
+        guard let index = fallbackPriorityList.firstIndex(where: { $0.id == item.id }) else { return }
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
@@ -348,7 +286,6 @@ class PromptProcessingService: ObservableObject {
     }
 
     func removeLLMFallback(_ item: LLMFallbackPriorityItem) {
-        guard !isFallbackListLocked else { return }
         setFallbackPriorityList(
             fallbackPriorityList.filter { $0.id != item.id },
             normalizeProviderIds: false
@@ -356,7 +293,7 @@ class PromptProcessingService: ObservableObject {
     }
 
     func moveLLMFallbacks(from source: IndexSet, to destination: Int) {
-        guard !isFallbackListLocked, !source.isEmpty else { return }
+        guard !source.isEmpty else { return }
 
         var items = fallbackPriorityList
         let validSource = source.filter { items.indices.contains($0) }.sorted()
@@ -433,23 +370,6 @@ class PromptProcessingService: ObservableObject {
         return !setupStatus.requiresExternalCredentials
     }
 
-    /// Prewarms Apple Intelligence when a workflow request with `providerOverride` tries it
-    /// first, so its model loads while recording instead of after the stop.
-    func prewarmWorkflowLLMProvider(providerOverride: String?) {
-        guard let first = candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil).first,
-              normalizeProviderId(first.providerId) == Self.appleIntelligenceId,
-              let provider = appleIntelligenceProvider, provider.isAvailable else {
-            return
-        }
-        provider.prewarm()
-    }
-
-#if DEBUG
-    func testingSetAppleIntelligenceProvider(_ provider: LLMProvider?) {
-        appleIntelligenceProvider = provider
-    }
-#endif
-
     /// Whether workflow requests with `providerOverride` can reach an on-device model.
     /// Without an override any entry of the LLM fallback list may handle the
     /// request, so one local entry is enough. Unresolvable providers count as remote.
@@ -460,9 +380,6 @@ class PromptProcessingService: ObservableObject {
 
     private func isLocalLLMProviderId(_ providerId: String) -> Bool {
         let normalizedId = normalizeProviderId(providerId)
-        if normalizedId == Self.appleIntelligenceId {
-            return true
-        }
         guard let plugin = PluginManager.shared?.llmProvider(for: normalizedId) else {
             return false
         }
@@ -498,19 +415,11 @@ class PromptProcessingService: ObservableObject {
         )
     }
 
-    /// The attempts `execute` makes: the enforced pair, the explicit provider, or the fallback list.
     private func candidates(
         providerOverride: String?,
         cloudModelOverride: String?,
         effortOverride: String?
     ) -> [LLMFallbackPriorityItem] {
-        // An enforced pair replaces every workflow, prompt and request selection, without fallbacks.
-        if case .resolved(let providerId, let modelId)? = PluginManager.shared?.enforcedLlmResolution {
-            return [LLMFallbackPriorityItem(
-                providerId: providerId,
-                modelId: providerId == Self.appleIntelligenceId ? nil : modelId
-            )]
-        }
         guard let explicitProviderId = Self.trimmedOrNil(providerOverride) else {
             return fallbackPriorityList
         }
@@ -554,11 +463,7 @@ class PromptProcessingService: ObservableObject {
         let totalStart = ContinuousClock.now
         let effectivePrompt = prompt
 
-        if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
-            throw ManagedPolicyRefusal(reason: reason)
-        }
         let usesFallbackList = Self.trimmedOrNil(providerOverride) == nil
-            && PluginManager.shared?.enforcedLlmResolution == nil
         let candidates = self.candidates(
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
@@ -578,8 +483,6 @@ class PromptProcessingService: ObservableObject {
         }
 
         var failures: [LLMFallbackAttemptFailure] = []
-        // When the managed settings refuse every candidate, the refusal is the answer, not exhaustion.
-        var policyRefusals: [ManagedPolicyRefusal] = []
         var emptyResultCount = 0
         var emptyProviderIds: Set<String> = []
         var firstEmptyCandidate: LLMFallbackPriorityItem?
@@ -662,9 +565,6 @@ class PromptProcessingService: ObservableObject {
                     throw error
                 }
 
-                if let refusal = error as? ManagedPolicyRefusal {
-                    policyRefusals.append(refusal)
-                }
                 if case LLMFallbackAttemptError.emptyResult = error {
                     emptyResultCount += 1
                     emptyProviderIds.insert(providerId)
@@ -754,9 +654,6 @@ class PromptProcessingService: ObservableObject {
             }
         }
 
-        if let refusal = policyRefusals.first, policyRefusals.count == failures.count {
-            throw refusal
-        }
         throw LLMFallbackExhaustedError(failures: failures)
     }
 
@@ -769,34 +666,6 @@ class PromptProcessingService: ObservableObject {
         temperatureDirective: PluginLLMTemperatureDirective,
         onLocalProviderUsed: (any LLMProviderPlugin) -> Void
     ) async throws -> String {
-        if providerId == Self.appleIntelligenceId {
-            if let refusal = PluginManager.shared?.providerPolicy.llmRefusal(
-                pluginId: ManagedProviderPolicy.appleIntelligenceId,
-                providerId: Self.appleIntelligenceId,
-                locality: .local
-            ) {
-                throw ManagedPolicyRefusal(reason: refusal)
-            }
-            guard let provider = appleIntelligenceProvider, provider.isAvailable else {
-                throw LLMError.notAvailable
-            }
-
-            logger.info("Processing prompt with Apple Intelligence")
-            let providerStart = ContinuousClock.now
-            do {
-                let result = try await provider.process(systemPrompt: prompt, userText: text)
-                logger.info("Prompt provider call finished in \(ContinuousClock.now - providerStart)")
-                return result
-            } catch {
-                logger.error("Prompt provider call failed after \(ContinuousClock.now - providerStart): \(error.localizedDescription)")
-                throw error
-            }
-        }
-
-        // Refused providers are not in the provider list; name the reason instead of a missing provider.
-        if let refusal = PluginManager.shared?.llmPolicyRefusal(forProviderId: providerId) {
-            throw ManagedPolicyRefusal(reason: refusal)
-        }
         guard let plugin = PluginManager.shared?.llmProvider(for: providerId) else {
             throw LLMError.noProviderConfigured
         }
@@ -1004,9 +873,7 @@ class PromptProcessingService: ObservableObject {
         case .prompt:
             fallbackText
         case .workflow(let originalText):
-            providerId == Self.appleIntelligenceId
-                ? originalText
-                : TypeWhisperDictatedTextBoundary.wrap(originalText)
+            TypeWhisperDictatedTextBoundary.wrap(originalText)
         }
     }
 
@@ -1019,13 +886,11 @@ class PromptProcessingService: ObservableObject {
         case .prompt:
             result
         case .workflow(let originalText):
-            providerId == Self.appleIntelligenceId
-                ? result
-                : TypeWhisperDictatedTextBoundary.sanitize(
-                    result,
-                    originalUserText: originalText,
-                    fallbackToOriginalUserText: false
-                )
+            TypeWhisperDictatedTextBoundary.sanitize(
+                result,
+                originalUserText: originalText,
+                fallbackToOriginalUserText: false
+            )
         }
     }
 
@@ -1089,7 +954,7 @@ class PromptProcessingService: ObservableObject {
 
     private func synchronizeLegacySelection() {
         isSynchronizingLegacySelection = true
-        selectedProviderId = fallbackPriorityList.first?.providerId ?? Self.appleIntelligenceId
+        selectedProviderId = fallbackPriorityList.first?.providerId ?? ""
         selectedCloudModel = fallbackPriorityList.first?.modelId ?? ""
         isSynchronizingLegacySelection = false
     }
@@ -1104,7 +969,7 @@ class PromptProcessingService: ObservableObject {
            let decoded = try? JSONDecoder().decode([LLMFallbackPriorityItem].self, from: data) {
             let normalized = deduplicatedFallbackPriorityList(decoded.compactMap { item in
                 let providerId = item.providerId.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !providerId.isEmpty else { return nil }
+                guard !providerId.isEmpty, providerId != "appleIntelligence" else { return nil }
                 return LLMFallbackPriorityItem(
                     id: item.id,
                     providerId: providerId,
@@ -1135,9 +1000,6 @@ class PromptProcessingService: ObservableObject {
         ) {
             migrated.append(promptDefault)
         }
-        if migrated.isEmpty {
-            migrated = [LLMFallbackPriorityItem(providerId: appleIntelligenceId)]
-        }
 
         let normalized = deduplicatedFallbackPriorityList(migrated)
         persistInitialFallbackPriorityList(normalized, to: defaults)
@@ -1149,7 +1011,8 @@ class PromptProcessingService: ObservableObject {
         modelKey: String,
         defaults: UserDefaults
     ) -> LLMFallbackPriorityItem? {
-        guard let providerId = trimmedOrNil(defaults.string(forKey: providerKey)) else { return nil }
+        guard let providerId = trimmedOrNil(defaults.string(forKey: providerKey)),
+              providerId != "appleIntelligence" else { return nil }
         return LLMFallbackPriorityItem(
             providerId: providerId,
             modelId: normalizedModelId(defaults.string(forKey: modelKey))

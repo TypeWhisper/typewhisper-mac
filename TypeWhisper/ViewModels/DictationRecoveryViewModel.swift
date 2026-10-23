@@ -293,7 +293,6 @@ final class DictationRecoveryViewModel: ObservableObject {
     ) -> DictationRecoveryFallbackConfiguration? {
         guard automaticFallbackEnabled else { return nil }
         // An enforced pair decides the engine, so a fallback would only run the same engine again.
-        guard PluginManager.shared?.enforcedTranscriptionResolution == nil else { return nil }
         guard let selectedEngine, !selectedEngine.isEmpty else { return nil }
         guard selectedEngine != primaryEngineId else { return nil }
         guard let engine = resolvedEngine else { return nil }

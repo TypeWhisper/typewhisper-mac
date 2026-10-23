@@ -1,1 +1,0 @@
-dictado,voz a texto,transcripción,escritura por voz,Whisper,sin conexión,notas de reunión,IA

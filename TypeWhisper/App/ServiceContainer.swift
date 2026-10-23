@@ -52,8 +52,7 @@ final class ServiceContainer: ObservableObject {
     static let shared = ServiceContainer()
 
     // Services
-    let managedPolicyService: ManagedPolicyService
-    let launchAtLoginController: LaunchAtLoginPolicyController
+    let launchAtLoginController: LaunchAtLoginController
     let modelManagerService: ModelManagerService
     let audioFileService: AudioFileService
     let audioRecordingService: AudioRecordingService
@@ -99,8 +98,6 @@ final class ServiceContainer: ObservableObject {
     // HTTP API
     let httpServer: HTTPServer
     let apiServerViewModel: APIServerViewModel
-    let remoteLinkServer: RemoteLinkServer
-    let remoteLinkViewModel: RemoteLinkViewModel
 
     // ViewModels
     let fileTranscriptionViewModel: FileTranscriptionViewModel
@@ -119,16 +116,8 @@ final class ServiceContainer: ObservableObject {
     let audioRecorderViewModel: AudioRecorderViewModel
     let watchFolderViewModel: WatchFolderViewModel
 
-    private var managedPolicySubscription: AnyCancellable?
-
     private init() {
-        // Managed preferences are read before any service that may consult them.
-        managedPolicyService = ManagedPolicyService(
-            source: AppConstants.isRunningTests ? EmptyManagedPolicySource() : ManagedPreferencesPolicySource(),
-            snapshotStore: .shared
-        )
-        managedPolicyService.refresh()
-        launchAtLoginController = LaunchAtLoginPolicyController(snapshot: managedPolicyService.current)
+        launchAtLoginController = LaunchAtLoginController()
 
         // Services
         let inputActivationGuard = AudioInputDeviceActivationGuard()
@@ -382,13 +371,10 @@ final class ServiceContainer: ObservableObject {
                 translationService: translationService,
                 workflowService: workflowService,
                 vocabularyProvider: { [dictionaryService] in dictionaryService.vocabularyForPrompt() }
-            ),
-            isRemoteWritingAllowed: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.remoteLinkWritingAllowed) }
+            )
         ).register(on: router)
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
-        remoteLinkServer = RemoteLinkServer(router: router)
-        remoteLinkViewModel = RemoteLinkViewModel(server: remoteLinkServer)
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,
@@ -424,7 +410,6 @@ final class ServiceContainer: ObservableObject {
         SettingsViewModel._shared = settingsViewModel
         DictationViewModel._shared = dictationViewModel
         APIServerViewModel._shared = apiServerViewModel
-        RemoteLinkViewModel._shared = remoteLinkViewModel
         HistoryViewModel._shared = historyViewModel
         DictionaryViewModel._shared = dictionaryViewModel
         SnippetsViewModel._shared = snippetsViewModel
@@ -448,38 +433,12 @@ final class ServiceContainer: ObservableObject {
         watchFolderViewModel.observePluginManager()
     }
 
-    /// Applies policy effects that are not evaluated on use: the plugin restrictions, the login item
-    /// and, for a changed managed license key, a new activation pass.
-    private func applyManagedPolicy(_ snapshot: ManagedPolicySnapshot, previous: ManagedPolicySnapshot?) {
-        // Runs before plugins are scanned at launch, so refused plugins never load.
-        pluginManager.applyProviderPolicy(ManagedProviderPolicy(snapshot: snapshot))
-        pluginManager.applySelectionPolicy(ManagedSelectionPolicy(snapshot: snapshot))
-        if previous != nil {
-            // At launch these run after the plugins are loaded.
-            modelManagerService.restoreProviderSelection()
-            promptProcessingService.applyRecommendedLlmPairIfNeeded()
-        }
-        launchAtLoginController.apply(
-            snapshot,
-            setupCompleted: UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted)
-        )
-    }
-
     func initialize() async {
         guard !AppConstants.isRunningTests else { return }
 
         let signposter = LaunchSignposts.signposter
         let initializeState = signposter.beginInterval("Launch.initialize")
         defer { signposter.endInterval("Launch.initialize", initializeState) }
-
-        managedPolicyService.startMonitoring()
-        applyManagedPolicy(managedPolicyService.current, previous: nil)
-        managedPolicySubscription = managedPolicyService.$current
-            .dropFirst()
-            .scan((ManagedPolicySnapshot?.none, managedPolicyService.current)) { ($0.1, $1) }
-            .sink { [weak self] previous, current in
-                self?.applyManagedPolicy(current, previous: previous)
-            }
 
         calendarMeetingAutomationController.initialize()
         historyService.failInterruptedSpeakerTranscripts()
@@ -496,7 +455,6 @@ final class ServiceContainer: ObservableObject {
         if apiServerViewModel.isEnabled {
             apiServerViewModel.startServer()
         }
-        remoteLinkViewModel.startIfEnabled()
 
         pluginManager.setRuleNamesProvider { [weak self] in
             self?.workflowService.availableRuleNames ?? []

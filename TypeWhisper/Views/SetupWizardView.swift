@@ -34,12 +34,7 @@ struct SetupWizardView: View {
     init() {
         let saved = UserDefaults.standard.integer(forKey: UserDefaultsKeys.setupWizardCurrentStep)
         let maxStep = SetupWizardStep.allCases.count - 1
-        let managedStep = ManagedOnboardingPolicy.initialStep(
-            ServiceContainer.shared.managedPolicyService.current,
-            savedStep: saved,
-            readiness: .current()
-        )
-        _currentStep = State(initialValue: min(max(managedStep ?? saved, 0), maxStep))
+        _currentStep = State(initialValue: min(max(saved, 0), maxStep))
         _promptProcessingService = ObservedObject(wrappedValue: ServiceContainer.shared.promptProcessingService)
 
         if !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty {
@@ -451,41 +446,6 @@ struct SetupWizardView: View {
                 action: { dictation.requestMicPermission() }
             )
 
-#if APPSTORE
-            // Both are optional: without them, text is copied to the clipboard and only
-            // shortcuts with a regular key work.
-            if AppStoreInputAccess.isAutoPasteEnabled {
-                permissionCard(
-                    title: AppStoreInputAccess.postEventSettingsName,
-                    description: localizedAppText(
-                        "Pastes text into other apps. Without it, text is copied to the clipboard.",
-                        de: "Fügt Text in andere Apps ein. Ohne diesen Zugriff wird der Text in die Zwischenablage kopiert."
-                    ),
-                    systemImage: "figure.stand",
-                    isGranted: !dictation.needsAccessibilityPermission,
-                    isRequired: false,
-                    action: { dictation.requestAccessibilityPermission() }
-                )
-
-                AppStorePermissionRestartHint(dictation: dictation, kind: .accessibility)
-                    .padding(.horizontal, 4)
-            }
-
-            permissionCard(
-                title: AppStoreInputAccess.listenEventSettingsName,
-                description: localizedAppText(
-                    "Needed for Fn, modifier-only, double-tap and mouse-button shortcuts, and for Esc in other apps.",
-                    de: "Nötig für Fn-, Modifier-, Doppeltipp- und Maustasten-Kurzbefehle sowie für Esc in anderen Apps."
-                ),
-                systemImage: "keyboard",
-                isGranted: dictation.isInputMonitoringGranted,
-                isRequired: false,
-                action: { dictation.requestInputMonitoringPermission() }
-            )
-
-            AppStorePermissionRestartHint(dictation: dictation, kind: .inputMonitoring)
-                .padding(.horizontal, 4)
-#else
             permissionCard(
                 title: AccessibilityPermissionPane.text(
                     legacy: localizedAppText("Accessibility Access", de: "Bedienungshilfen-Zugriff"),
@@ -497,7 +457,6 @@ struct SetupWizardView: View {
                 isRequired: true,
                 action: { dictation.requestAccessibilityPermission() }
             )
-#endif
 
             Label(
                 localizedAppText("You can change permissions anytime in System Settings.", de: "Du kannst diese Berechtigungen jederzeit in den Systemeinstellungen ändern."),
@@ -738,14 +697,8 @@ struct SetupWizardView: View {
 
     private func shouldShowRecorder(for mode: HotkeySlotType) -> Bool {
         if mode != selectedHotkeyMode { return false }
-        #if APPSTORE
-        // The selected mode always offers a recorder, so the recommended or an
-        // existing shortcut can be replaced right here.
-        return true
-        #else
         if !dictation.hotkeys(for: mode).isEmpty { return false }
         return mode != .hybrid || !recommendedHotkeyResolution.shouldApply
-        #endif
     }
 
     private func hotkeyRecorder(for mode: HotkeySlotType) -> some View {
@@ -793,14 +746,7 @@ struct SetupWizardView: View {
 
         let recommendedName = HotkeyService.displayName(for: SetupWizardDefaultHotkey.recommendedHybridHotkey)
         if selectedHotkeyMode == .hybrid, recommendedHotkeyResolution.shouldApply {
-            #if APPSTORE
-            let message = localizedAppText(
-                "\(recommendedName) will be set when you continue. Click the shortcut to record another one.",
-                de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen."
-            )
-            #else
             let message = localizedAppText("Fn will be set automatically when you continue.", de: "Fn wird beim Fortfahren automatisch gesetzt.")
-            #endif
             return (
                 message,
                 "keyboard",
@@ -845,7 +791,6 @@ struct SetupWizardView: View {
 
             appleSpeechCard
 
-            appleIntelligenceCard
 
             cloudProvidersHint
         }
@@ -1264,50 +1209,6 @@ struct SetupWizardView: View {
         }
     }
 
-    @ViewBuilder
-    private var appleIntelligenceCard: some View {
-        setupCard(isSelected: false) {
-            HStack(spacing: 14) {
-                Image(systemName: "wand.and.stars")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                    .frame(width: 36)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 7) {
-                        Text(String(localized: "Apple Intelligence"))
-                            .font(.headline)
-                        Text(localizedAppText("Built-in", de: "Integriert"))
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Color.blue.opacity(0.18))
-                            .foregroundStyle(.blue)
-                            .clipShape(Capsule())
-                    }
-
-                    Text(localizedAppText("On-device AI processing. No API key needed.", de: "KI-Verarbeitung auf dem Gerät. Kein API-Key nötig."))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if #available(macOS 26, *) {
-                    if promptProcessingService.isAppleIntelligenceAvailable {
-                        statusPill(localizedAppText("Ready", de: "Bereit"), systemImage: "checkmark.circle.fill", color: .green)
-                    } else {
-                        statusPill(localizedAppText("Optional", de: "Optional"), systemImage: "circle", color: .secondary)
-                    }
-                } else {
-                    statusPill(localizedAppText("macOS 26", de: "macOS 26"), systemImage: "circle", color: .secondary)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
     // MARK: - Finish
 
     private var trialSuccessTitle: String {
@@ -1450,7 +1351,6 @@ struct SetupWizardView: View {
         if dictation.needsMicPermission {
             return String(localized: "Microphone access is required for dictation.")
         }
-#if !APPSTORE
         if dictation.needsAccessibilityPermission {
             return AccessibilityPermissionPane.text(
                 legacy: String(localized: "Accessibility access is required to paste text into other apps."),
@@ -1462,7 +1362,6 @@ struct SetupWizardView: View {
                 )
             )
         }
-#endif
         if isPreparingAppleSpeechFallback {
             return localizedAppText(
                 "Apple Speech is being prepared for this test.",
@@ -1543,18 +1442,11 @@ struct SetupWizardView: View {
         modelManager.canPrepareForTranscription(engine)
     }
 
-#if APPSTORE
-    private static let requiresAccessibilityForSetup = false
-#else
-    private static let requiresAccessibilityForSetup = true
-#endif
-
     private var setupReadiness: SetupWizardReadiness {
         SetupWizardReadiness(
             canPrepareEngine: hasEngineReadyForSetupTest,
             microphoneGranted: !dictation.needsMicPermission,
-            // The App Store edition falls back to the clipboard without PostEvent access.
-            accessibilityGranted: Self.requiresAccessibilityForSetup ? !dictation.needsAccessibilityPermission : true
+            accessibilityGranted: !dictation.needsAccessibilityPermission
         )
     }
 
@@ -1851,7 +1743,6 @@ private extension View {
     }
 }
 
-// Raw values are persisted and mirrored by `ManagedOnboardingPolicy.Step`.
 private enum SetupWizardStep: Int, CaseIterable, Identifiable {
     case welcome
     case permissions
@@ -1919,17 +1810,7 @@ enum SetupWizardDefaultHotkey {
     }
 
     static let triggerSlots: [HotkeySlotType] = [.hybrid, .pushToTalk, .toggle]
-    #if APPSTORE
-    // Option-Space is a Carbon hotkey and needs no permission; Fn needs Input
-    // Monitoring in the sandbox and cannot suppress the globe-key action.
-    static let recommendedHybridHotkey = UnifiedHotkey(
-        keyCode: 49,
-        modifierFlags: NSEvent.ModifierFlags.option.rawValue,
-        isFn: false
-    )
-    #else
     static let recommendedHybridHotkey = UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
-    #endif
 
     static func resolve(
         existingTriggerHotkeys: [HotkeySlotType: [UnifiedHotkey]],

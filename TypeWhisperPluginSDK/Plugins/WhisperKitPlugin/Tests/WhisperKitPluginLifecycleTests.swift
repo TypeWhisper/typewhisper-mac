@@ -54,7 +54,7 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         func unsubscribe(id: UUID) {}
     }
 
-    private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
+    private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
         private var defaults: [String: Any]
         private var secrets: [String: String] = [:]
 
@@ -64,7 +64,6 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         var activeAppName: String?
         var availableRuleNames: [String] = []
         var shouldRestoreLoadedModelsPassively: Bool
-        var modelDownloadRefusal: String?
         private(set) var capabilitiesChangedCount = 0
 
         init(
@@ -816,60 +815,11 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
     }
 
-    func testRefusedDownloadReportsReasonBeforeStartingTheDownload() async throws {
-        let modelId = "openai_whisper-tiny"
-        let reason = "Your organization does not allow model downloads."
-        let host = try makeHost(defaults: ["loadedModel": modelId],
-                                shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        host.modelDownloadRefusal = reason
-        // Starting a download clears this cache of an interrupted one first.
-        let staleDownloadCache = host.pluginDataDirectory
-            .appendingPathComponent("models/models/argmaxinc/whisperkit-coreml/.cache/huggingface/download")
-            .appendingPathComponent(modelId, isDirectory: true)
-        try FileManager.default.createDirectory(at: staleDownloadCache, withIntermediateDirectories: true)
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-
-        await plugin.restoreLoadedModel(allowDownloads: true)
-
-        XCTAssertFalse(plugin.isConfigured)
-        XCTAssertEqual(plugin.settingsModelState, .error(reason))
-        XCTAssertEqual(plugin.currentSettingsActivity?.message, reason)
-        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
-        XCTAssertNil(plugin.loadingModelIdForTesting)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: staleDownloadCache.path))
-        XCTAssertTrue(plugin.downloadedModels.isEmpty)
-    }
-
-    func testRefusedDownloadReportsReasonForDownloadedModelWithoutTokenizer() async throws {
-        let modelId = "openai_whisper-tiny"
-        let reason = "Your organization does not allow model downloads."
-        let host = try makeHost(defaults: ["loadedModel": modelId],
-                                shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        host.modelDownloadRefusal = reason
-        _ = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-
-        // WhisperKit would fetch the tokenizer while loading, so the load stops before it starts.
-        await plugin.restoreLoadedModel(allowDownloads: true)
-
-        XCTAssertFalse(plugin.isConfigured)
-        XCTAssertEqual(plugin.settingsModelState, .error(reason))
-        XCTAssertNil(plugin.loadingModelIdForTesting)
-    }
-
-    func testRefusedDownloadStillLoadsDownloadedModelWithLocalTokenizer() async throws {
+    func testDownloadedModelWithLocalTokenizerReachesNativeLoading() async throws {
         let modelId = "openai_whisper-large-v3_turbo"
-        let reason = "Your organization does not allow model downloads."
         let host = try makeHost(defaults: ["loadedModel": modelId],
                                 shouldRestoreLoadedModelsPassively: false)
         defer { TestSupport.remove(host.pluginDataDirectory) }
-        host.modelDownloadRefusal = reason
         _ = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
         // Where WhisperKit caches the tokenizer of every large-v3 variant on the first load.
         let tokenizerDirectory = host.pluginDataDirectory
@@ -882,11 +832,11 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
 
         await plugin.restoreLoadedModel(allowDownloads: true)
 
-        // The placeholder files reach Core ML, which rejects them; the refusal never applies.
+        // 本机文件直接进入 Core ML 的模型校验。
         guard case .error(let message) = plugin.settingsModelState else {
             return XCTFail("Expected Core ML to reject the placeholder model: \(plugin.settingsModelState)")
         }
-        XCTAssertNotEqual(message, reason)
+        XCTAssertFalse(message.isEmpty)
     }
 
     private func makeUsableWhisperModelDirectory(

@@ -509,13 +509,9 @@ struct MenuBarView: View {
                 recentTranscriptionsButton
                 copyLastTranscriptionButton
                 pasteLastTranscriptionButton
-                // Undo needs to read the target field through Accessibility,
-                // which the App Sandbox does not allow.
-                #if !APPSTORE
                 Divider()
                 undoLastDictationButton
                 restoreRawTranscriptButton
-                #endif
             } label: {
                 Label(
                     localizedAppText("Last Transcription", de: "Letzte Transkription"),

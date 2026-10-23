@@ -25,7 +25,6 @@ If keychain authorization needs the owner, stop the signing command and handle t
 
 Launch in Simplified Chinese with `scripts/dictum-verify.sh run -AppleLanguages '(zh-Hans)'`.
 
-`DICTUM_VERIFY_APPSTORE=1 scripts/dictum-verify.sh build` also compiles the App Store configuration without signing. This check requires `xcodegen` on `PATH`.
 
 Build products and verification logs are stored in `.build/`. Swift modules, targets, folders, schemes, and plugin identifiers retain their upstream names for compatibility.
 
@@ -47,6 +46,5 @@ dictum 是免费的 macOS 听写应用，支持本地与云端转录、文本工
 
 使用 `scripts/dictum-verify.sh run -AppleLanguages '(zh-Hans)'` 以简体中文启动应用。
 
-使用 `DICTUM_VERIFY_APPSTORE=1 scripts/dictum-verify.sh build` 同时检查 App Store 配置的无签名编译，需要在 `PATH` 中提供 `xcodegen`。
 
 构建产物与验证日志位于 `.build/`。Swift 模块、目标、文件夹、方案和插件标识保留上游名称，以维持兼容性。

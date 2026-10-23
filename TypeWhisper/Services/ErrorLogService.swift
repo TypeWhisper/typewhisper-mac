@@ -271,28 +271,13 @@ private struct DiagnosticsReport: Encodable {
 
     struct PermissionsInfo: Encodable {
         let microphoneGranted: Bool
-        /// In the App Store edition: PostEvent access, which System Settings lists under
-        /// Accessibility.
         let accessibilityGranted: Bool
-#if APPSTORE
-        let inputMonitoringGranted: Bool
-        let autoPasteEnabled: Bool
-#endif
 
         static func current(accessibilityGranted: Bool) -> PermissionsInfo {
-#if APPSTORE
-            PermissionsInfo(
-                microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,
-                accessibilityGranted: accessibilityGranted,
-                inputMonitoringGranted: AppStoreInputAccess.canListenToEvents,
-                autoPasteEnabled: AppStoreInputAccess.isAutoPasteEnabled
-            )
-#else
             PermissionsInfo(
                 microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,
                 accessibilityGranted: accessibilityGranted
             )
-#endif
         }
     }
 
@@ -434,7 +419,6 @@ private struct DiagnosticsReport: Encodable {
     let workflows: DiagnosticWorkflowSnapshot
     let correctionLearning: DiagnosticCorrectionLearningInfo
     let settings: SettingsSnapshot
-    let policy: ManagedPolicyDiagnostics
     let lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionDiagnostics?
     let counts: Counts
     let errors: [ErrorEntrySnapshot]
@@ -631,7 +615,6 @@ final class ErrorLogService: ObservableObject {
                 setupWizardCompleted: defaults.bool(forKey: UserDefaultsKeys.setupWizardCompleted),
                 preferredAppLanguage: defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage)
             ),
-            policy: ManagedPolicyDiagnostics(snapshot: container.managedPolicyService.current),
             lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionPolicy.lastSuppressionDiagnostics(),
             counts: .init(
                 historyRecords: container.historyService.recordCount(),

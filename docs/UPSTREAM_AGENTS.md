@@ -9,9 +9,3 @@ For visible UI changes, always capture screenshots of the final interface in Eng
 
 - include the screenshots in the user handoff, with PNG files ready to attach to a pull request
 - include the relevant screenshots in the pull request description when creating or updating the PR
-
-## Mac App Store Edition
-
-- `APPSTORE` code must keep the direct-distribution app unchanged; verify both builds when touching shared files.
-- Build and launch the sandboxed edition with `scripts/appstore/build-dev.sh --run`; run `scripts/appstore/release-audit.sh` before App Store releases.
-- See `docs/appstore/README.md` for decisions, the bundled plugin list and the release workflow.

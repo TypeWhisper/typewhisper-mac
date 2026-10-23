@@ -39,8 +39,6 @@ final class SettingsNavigationCoordinator: ObservableObject {
             navigate(to: .history)
         case .speakerWorkspace:
             navigate(to: .speakers)
-        case .pairedDevices:
-            navigate(to: .advanced)
         }
     }
 

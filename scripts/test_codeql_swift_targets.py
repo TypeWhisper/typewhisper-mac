@@ -67,7 +67,6 @@ class SelectTargetsTests(unittest.TestCase):
             "TypeWhisperPluginSDK/Tests/TypeWhisperPluginSDKTests/ManifestTests.swift",
             "TypeWhisperPluginSDK/Plugins/GroqPlugin/Tests/GroqPluginTests.swift",
             "TypeWhisper/Services/HTTPServer/APIHandlersTargetLanguageTests.swift",
-            "AppStore/Sources/AppStorePremiumService.swift",
             ".github/workflows/build.yml",
         ], PLUGINS), [])
 

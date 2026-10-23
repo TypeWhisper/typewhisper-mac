@@ -22,9 +22,6 @@ for test_script in scripts/test_*.py; do
   python3 "$test_script"
 done
 
-log "checking that both editions share the app version"
-python3 scripts/check_app_version_sync.py
-
 log "checking plugin release policy"
 python3 scripts/validate_plugin_release_manifest.py TypeWhisperPluginSDK/Plugins/*/manifest.json
 

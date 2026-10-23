@@ -68,7 +68,6 @@ class CoverageReportTests(unittest.TestCase):
         "TypeWhisperPluginSDK/Plugins/GroqPlugin/Tests/GroqPluginTests.swift",
         "TypeWhisperPluginSDK/Plugins/WebhookPlugin/WebhookPlugin.swift",
         "TypeWhisperTests/PluginManagerTests.swift",
-        "AppStore/Sources/AppStorePremiumService.swift",
     ]
 
     def test_plugin_tests_and_unlisted_directories_are_not_expected(self) -> None:
@@ -79,7 +78,6 @@ class CoverageReportTests(unittest.TestCase):
         expected = {path for files in areas.values() for path in files}
         self.assertNotIn("TypeWhisperTests/PluginManagerTests.swift", expected)
         self.assertNotIn("TypeWhisper/Services/HTTPServer/APIHandlersTargetLanguageTests.swift", expected)
-        self.assertNotIn("AppStore/Sources/AppStorePremiumService.swift", expected)
 
     def test_plugin_without_extracted_files_is_reported(self) -> None:
         areas = expected_areas(self.TRACKED, ["GroqPlugin", "WebhookPlugin"])

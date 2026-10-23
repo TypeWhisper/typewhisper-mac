@@ -356,12 +356,7 @@ struct HomeSettingsView: View {
     // MARK: - Permissions Banner
 
     private var needsPermissions: Bool {
-#if APPSTORE
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
-            || dictation.needsInputMonitoringPermission
-#else
-        dictation.needsMicPermission || dictation.needsAccessibilityPermission
-#endif
     }
 
     private var permissionsBanner: some View {
@@ -382,14 +377,6 @@ struct HomeSettingsView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(String(localized: "Microphone access required"))
             }
-#if APPSTORE
-            if dictation.needsAccessibilityPermission {
-                AppStorePermissionRow(dictation: dictation, kind: .accessibility)
-            }
-            if dictation.needsInputMonitoringPermission {
-                AppStorePermissionRow(dictation: dictation, kind: .inputMonitoring)
-            }
-#else
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
@@ -406,7 +393,6 @@ struct HomeSettingsView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(AccessibilityPermissionPane.accessRequiredText())
             }
-#endif
         }
         .foregroundStyle(.red)
         .padding(SettingsLayoutMetrics.cardPadding)

@@ -19,22 +19,8 @@ enum AppConstants {
         #endif
     }()
 
-    /// Preferences domain of screenshot runs, also for their managed preferences. The fastlane
-    /// screenshot lane uses it as the bundle identifier; see `ScreenshotPreferencesIsolation`.
+    /// 截图检查使用独立的偏好设置。
     static let screenshotPreferencesDomain = "com.schneidervvv.dictum.screenshots"
-
-    /// The domain whose managed preferences (configuration profiles) apply to this process.
-    static let managedPreferencesDomain = resolveManagedPreferencesDomain(
-        isScreenshotAutomation: isScreenshotAutomation,
-        bundleIdentifier: Bundle.main.bundleIdentifier
-    )
-
-    static func resolveManagedPreferencesDomain(isScreenshotAutomation: Bool, bundleIdentifier: String?) -> String {
-        if isScreenshotAutomation {
-            return screenshotPreferencesDomain
-        }
-        return bundleIdentifier ?? "com.schneidervvv.dictum"
-    }
 
     /// The persistent domain `UserDefaults.standard` writes to; the app's own domain unless a
     /// test or screenshot run replaced it.
@@ -153,11 +139,7 @@ enum AppConstants {
         if isRunningTests {
             return "com.schneidervvv.dictum.tests.apikey."
         }
-        #if APPSTORE && DEBUG
-        return "com.typewhisper.typewhisper-app.dev.apikey."
-        #elseif APPSTORE
-        return "com.typewhisper.typewhisper-app.apikey."
-        #elseif DEBUG
+        #if DEBUG
         return devKeychainServicePrefix
         #else
         return releaseKeychainServicePrefix

@@ -113,8 +113,6 @@ xcodebuild test -skipPackagePluginValidation -disableAutomaticPackageResolution 
   -only-testing:TypeWhisperTests/SpeechOnlyAudioTests \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
-scripts/appstore/build-dev.sh --check
-scripts/appstore/build-dev.sh --run --install-plugin com.typewhisper.whisperkit
 bash scripts/pr-preflight.sh
 ```
 

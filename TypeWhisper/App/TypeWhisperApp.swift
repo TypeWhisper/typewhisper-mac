@@ -928,7 +928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
         DictumNavigation.shared.open()
-        if ManagedLaunchGate.isSetupWizardRequired {
+        if HomeViewModel.shared.showSetupWizard {
             openSetupWindow()
         }
         return false
@@ -946,7 +946,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentInitialWindow() {
         LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
-            if ManagedLaunchGate.isSetupWizardRequired {
+            if HomeViewModel.shared.showSetupWizard {
                 openSetupWindow()
             } else if !launchedAtLogin {
                 DictumNavigation.shared.open()

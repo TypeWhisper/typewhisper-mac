@@ -13149,28 +13149,6 @@
         }
       }
     },
-    "Apple Intelligence" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence"
-          }
-        }
-      }
-    },
     "Apple Silicon only" : {
       "localizations" : {
         "ja" : {
@@ -25514,35 +25492,6 @@
         }
       }
     },
-    "noLLMProvider" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kein LLM-Anbieter konfiguriert. Richte Apple Intelligence oder einen API-Schlüssel in den Einstellungen ein."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No LLM provider configured. Set up Apple Intelligence or an API key in Settings."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LLMプロバイダーが設定されていません。設定でApple IntelligenceまたはAPIキーを設定してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚未配置 LLM 服务提供商。请在“设置”中启用 Apple Intelligence 或配置 API 密钥。"
-          }
-        }
-      }
-    },
     "Non-GPL terms, procurement, support, or proprietary distribution for one person." : {
       "localizations" : {
         "ja" : {
@@ -25599,28 +25548,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将口述数字转换为阿拉伯数字"
-          }
-        }
-      }
-    },
-    "Not available - Apple Intelligence must be enabled in System Settings" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht verfügbar - Apple Intelligence muss in den Systemeinstellungen aktiviert werden"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "利用不可 - Apple Intelligenceはシステム設定で有効にする必要があります"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不可用 - 必须在“系统设置”中启用 Apple Intelligence"
           }
         }
       }

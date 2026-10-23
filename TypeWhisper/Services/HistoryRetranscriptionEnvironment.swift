@@ -81,15 +81,6 @@ enum HistoryRetranscriptionEnvironment {
         dictionary: DictionaryService, workflows: [Workflow],
         promptProcessing: PromptProcessingService, translationService: AnyObject? = nil
     ) throws -> HistoryRetranscriptionService.Plan {
-        var request = request
-        // An enforced pair replaces the requested engine and model, so the plan checks, discloses
-        // and records the pair that runs.
-        let plannedEnforcement = PluginManager.shared?.enforcedTranscriptionResolution
-        if let enforced = plannedEnforcement {
-            guard let providerId = enforced.resolvedProviderId else { throw HistoryRetranscriptionError.unavailable }
-            request.engineID = providerId
-            request.modelID = nil
-        }
         guard let engine = PluginManager.shared?.transcriptionEngine(for: request.engineID),
               manager.canPrepareForTranscription(engine) else { throw HistoryRetranscriptionError.unavailable }
         let modelID = request.modelID ?? engine.selectedModelId
@@ -128,8 +119,7 @@ enum HistoryRetranscriptionEnvironment {
                 behavior.cloudModel = first.modelId
                 behavior.effortId = first.effortId
                 copy.behavior = behavior
-                if first.providerId != PromptProcessingService.appleIntelligenceId,
-                   let provider = PluginManager.shared?.llmProvider(for: first.providerId),
+                if let provider = PluginManager.shared?.llmProvider(for: first.providerId),
                    !PromptProcessingService.isLocalLLMProvider(provider) {
                     cloudProviders.append(String(format: String(localized: "history.retranscribe.textProvider"), provider.llmProviderDisplayName))
                 }
@@ -172,11 +162,6 @@ enum HistoryRetranscriptionEnvironment {
             run: { samples in
                 guard PluginManager.shared?.transcriptionEngine(for: request.engineID) === engine else {
                     throw HistoryRetranscriptionError.unavailable
-                }
-                // A profile that changed the enforced pair since planning would run an engine the
-                // plan did not check or disclose.
-                guard PluginManager.shared?.enforcedTranscriptionResolution == plannedEnforcement else {
-                    throw HistoryRetranscriptionError.changed
                 }
                 let result = try await transcribe(
                     samples: samples, request: request, modelID: modelID,

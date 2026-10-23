@@ -759,7 +759,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             if isUsableDownloadedModel(at: modelPath) {
                 // WhisperKit fetches a missing tokenizer from the Hub while loading the model.
                 if !hasLocalTokenizer(for: modelDef, modelFolder: modelPath) {
-                    try host?.requireModelDownloadAllowed()
                 }
                 modelState = .loading(phase: "loading")
                 downloadProgress = 0.80
@@ -770,7 +769,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                     modelState = .notLoaded
                     return
                 }
-                try host?.requireModelDownloadAllowed()
                 removeIncompleteModelIfNeeded(at: modelPath)
                 removeStaleDownloadCache(for: modelDef)
                 modelState = .downloading
@@ -802,7 +800,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
             // While downloads are refused, load the files as they are, as a passive restore does.
-            if allowDownloads, host?.modelDownloadRefusal == nil {
+            if allowDownloads {
                 repairSpaceReservation = try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
@@ -1380,11 +1378,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             ramRequirement: "8 GB+"
         ),
         ]
-        #if APPSTORE
-        return models.filter { $0.id != "openai_whisper-medium" }
-        #else
         return models
-        #endif
     }()
 }
 
