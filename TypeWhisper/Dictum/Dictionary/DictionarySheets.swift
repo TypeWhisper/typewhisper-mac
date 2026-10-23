@@ -1,6 +1,47 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct DictionaryEditSheet: View {
+    @ObservedObject var service: DictionaryService
+    let entry: DictionaryEntry
+    @State private var word: String
+    @State private var heard: String
+    @State private var failed = false
+    @Environment(\.dismiss) private var dismiss
+
+    init(service: DictionaryService, entry: DictionaryEntry) {
+        self.service = service
+        self.entry = entry
+        _word = State(initialValue: entry.replacement ?? entry.original)
+        _heard = State(initialValue: entry.original)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Edit Word", tableName: "DictumHistory").font(.headline)
+            TextField(String(localized: "Word or phrase", table: "DictumHistory"), text: $word)
+            if entry.type == .correction {
+                TextField(String(localized: "Heard as", table: "DictumHistory"), text: $heard)
+            }
+            if failed { Text("Could not save. Check for a duplicate word.", tableName: "DictumHistory").foregroundStyle(.red) }
+            HStack {
+                Spacer()
+                Button { dismiss() } label: { Text("Cancel", tableName: "DictumHistory") }.keyboardShortcut(.cancelAction)
+                Button {
+                    let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let original = entry.type == .correction ? heard.trimmingCharacters(in: .whitespacesAndNewlines) : word
+                    if service.updateEntry(entry, original: original, replacement: entry.type == .correction ? word : nil,
+                                           caseSensitive: entry.caseSensitive, ctcMinSimilarity: entry.ctcMinSimilarity) { dismiss() }
+                    else { failed = true }
+                } label: { Text("Save", tableName: "DictumHistory") }
+                .keyboardShortcut(.defaultAction)
+                .disabled(word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                          || (entry.type == .correction && heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+            }
+        }.padding(24).frame(width: 420)
+    }
+}
+
 struct DictionaryAddSheet: View {
     @ObservedObject var service: DictionaryService
     @State var word: String

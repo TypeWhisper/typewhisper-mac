@@ -66,11 +66,12 @@ struct DictumHistoryPage: View {
                                             }
                                             }.padding(.vertical, 8).tag(record.id)
                                             .listRowBackground(record.id == selected ? DictumTheme.accentSoft : Color.clear)
+                                            .listRowSeparator(.hidden)
                                             .onAppear { if record.id == visible.last?.id && hasMore { loadMore() } }
                                     }
                                 }
                             }
-                        }.listStyle(.plain)
+                        }.listStyle(.plain).scrollContentBackground(.hidden)
                         if sync.mode != .off {
                             Button { DictumNavigation.shared.open(.general) } label: {
                                 HStack(spacing: 6) {
@@ -161,7 +162,7 @@ struct DictumHistoryPage: View {
                     Button(role: .destructive) { requestDelete(record) } label: { Image(systemName: "trash") }
                         .accessibilityLabel(Text("Delete", tableName: "DictumHistory"))
                 }.buttonStyle(DictumControlStyle(kind: .smallButton))
-            }.padding(24)
+            }.padding(.horizontal, 30).padding(.top, 22).padding(.bottom, 30)
         }
     }
 

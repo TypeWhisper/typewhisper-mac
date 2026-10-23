@@ -10,6 +10,8 @@ struct DictionaryPage: View {
     @State private var importing = false
     @State private var confirmDelete = false
     @State private var error: String?
+    @State private var hovered: UUID?
+    @State private var editing: DictionaryEntry?
 
     private var visible: [DictionaryEntry] {
         service.entries.filter {
@@ -78,18 +80,43 @@ struct DictionaryPage: View {
                                 Toggle(isOn: Binding(get: { selection.contains(entry.id) }, set: { selected in
                                     if selected { selection.insert(entry.id) } else { selection.remove(entry.id) }
                                 })) { Text(entry.replacement ?? entry.original) }.labelsHidden().toggleStyle(.checkbox)
+                                    .opacity(hovered == entry.id || !selection.isEmpty ? 1 : 0)
+                                    .onHover { hovered = $0 ? entry.id : nil }
                             }.width(20)
-                            TableColumn(String(localized: "Word", table: "DictumHistory")) { Text($0.replacement ?? $0.original).fontWeight(.medium).frame(minHeight: 30) }
-                            TableColumn(String(localized: "Heard as", table: "DictumHistory")) { Text($0.type == .correction ? $0.original : "—").foregroundStyle(.secondary) }
-                            TableColumn(String(localized: "Source", table: "DictumHistory")) {
-                                Text($0.source == .autoLearned ? String(localized: "Learned", table: "DictumHistory") : String(localized: "Manual", table: "DictumHistory"))
+                            TableColumn(String(localized: "Word", table: "DictumHistory")) { entry in
+                                Text(entry.replacement ?? entry.original).fontWeight(.medium).frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                                    .contentShape(Rectangle()).onHover { hovered = $0 ? entry.id : nil }
+                            }
+                            TableColumn(String(localized: "Heard as", table: "DictumHistory")) { entry in
+                                Text(entry.type == .correction ? entry.original : "—").foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                                    .contentShape(Rectangle()).onHover { hovered = $0 ? entry.id : nil }
+                            }
+                            TableColumn(String(localized: "Source", table: "DictumHistory")) { entry in
+                                Text(entry.source == .autoLearned ? String(localized: "Learned", table: "DictumHistory") : String(localized: "Manual", table: "DictumHistory"))
                                     .font(.system(size: 11)).padding(.horizontal, 6).padding(.vertical, 2)
-                                    .foregroundStyle($0.source == .autoLearned ? DictumTheme.accent : DictumTheme.textSecondary)
-                                    .background($0.source == .autoLearned ? DictumTheme.accentSoft : DictumTheme.card, in: Capsule())
+                                    .foregroundStyle(entry.source == .autoLearned ? DictumTheme.accent : DictumTheme.textSecondary)
+                                    .background(entry.source == .autoLearned ? DictumTheme.accentSoft : DictumTheme.card, in: Capsule())
+                                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                                    .contentShape(Rectangle()).onHover { hovered = $0 ? entry.id : nil }
                             }.width(80)
-                            TableColumn(String(localized: "Uses", table: "DictumHistory")) { Text($0.usageCount.formatted()).frame(maxWidth: .infinity, alignment: .trailing) }.width(50)
-                            TableColumn(String(localized: "Added", table: "DictumHistory")) { Text($0.createdAt, format: .dateTime.month().day()).frame(maxWidth: .infinity, alignment: .trailing) }.width(75)
-                        }
+                            TableColumn(String(localized: "Uses", table: "DictumHistory")) { entry in
+                                Text(entry.usageCount.formatted()).frame(maxWidth: .infinity, minHeight: 30, alignment: .trailing)
+                                    .contentShape(Rectangle()).onHover { hovered = $0 ? entry.id : nil }
+                            }.width(50)
+                            TableColumn(String(localized: "Added", table: "DictumHistory")) { entry in
+                                ZStack(alignment: .trailing) {
+                                    Text(entry.createdAt, format: .dateTime.month().day()).opacity(hovered == entry.id ? 0 : 1)
+                                    HStack(spacing: 12) {
+                                        Button { editing = entry } label: { Image(systemName: "pencil") }
+                                            .accessibilityLabel(Text("Edit Word", tableName: "DictumHistory"))
+                                        Button(role: .destructive) { service.deleteEntry(entry); selection.remove(entry.id) } label: { Image(systemName: "trash") }
+                                            .accessibilityLabel(Text("Delete", tableName: "DictumHistory"))
+                                    }.buttonStyle(.plain).opacity(hovered == entry.id ? 1 : 0)
+                                }.frame(maxWidth: .infinity, minHeight: 30, alignment: .trailing)
+                                    .contentShape(Rectangle()).onHover { hovered = $0 ? entry.id : nil }
+                            }.width(75)
+                        }.padding(.horizontal, -8)
                     }
                 }
                 if !selection.isEmpty {
@@ -102,6 +129,7 @@ struct DictionaryPage: View {
             }.padding(.horizontal, 28).padding(.bottom, 28).padding(.top, 4)
         }
         .sheet(isPresented: $adding) { DictionaryAddSheet(service: service, word: search) }
+        .sheet(item: $editing) { DictionaryEditSheet(service: service, entry: $0) }
         .sheet(isPresented: $importing) { DictionaryImportSheet(service: service) }
         .alert(String(localized: "Delete selected words? This can't be undone.", table: "DictumHistory"), isPresented: $confirmDelete) {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
