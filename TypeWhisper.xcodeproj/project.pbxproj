@@ -2259,6 +2259,7 @@
 				FF00000000000000000058 /* Sources */,
 				FF00000000000000000059 /* Frameworks */,
 				FF00000000000000000060 /* Resources */,
+				D1C700000000000000000190 /* 固定 Qwen3 计算库位置 */,
 			);
 			buildRules = (
 			);
@@ -2737,6 +2738,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		D1C700000000000000000190 /* 固定 Qwen3 计算库位置 */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib",
+			);
+			name = "固定 Qwen3 计算库位置";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/mlx.metallib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n# MLX 优先读取可执行文件旁的库，避免全局 Bundle 查找选中其他应用的版本。\ncp \"${BUILT_PRODUCTS_DIR}/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib\" \"${TARGET_BUILD_DIR}/${EXECUTABLE_FOLDER_PATH}/mlx.metallib\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1C1000000000000000000031 /* Sources */ = {
