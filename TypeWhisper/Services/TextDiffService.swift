@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 struct CorrectionSuggestion: Identifiable {
     let id = UUID()
@@ -186,51 +187,69 @@ final class TextDiffService {
         let originalTokens = Self.wordTokens(in: original)
         let editedTokens = Self.wordTokens(in: edited)
 
-        guard maxSuggestions > 0,
-              !originalTokens.isEmpty,
-              originalTokens.count == editedTokens.count else {
+        guard maxSuggestions > 0, !originalTokens.isEmpty, !editedTokens.isEmpty else {
             return []
         }
 
-        var suggestion: CorrectionSuggestion?
-
-        for (originalToken, editedToken) in zip(originalTokens, editedTokens) where originalToken != editedToken {
-            guard suggestion == nil else {
-                return []
-            }
-
-            let originalStripped = Self.strippedWordToken(originalToken)
-            let editedStripped = Self.strippedWordToken(editedToken)
-
-            guard !originalStripped.isEmpty, !editedStripped.isEmpty else {
-                return []
-            }
-
-            guard originalStripped.lowercased() != editedStripped.lowercased() else {
-                return []
-            }
-
-            guard !Self.isPunctuationOnly(originalToken),
-                  !Self.isPunctuationOnly(editedToken) else {
-                return []
-            }
-
-            guard !(Self.isNumericValue(originalStripped) && Self.isNumericValue(editedStripped)) else {
-                return []
-            }
-
-            suggestion = CorrectionSuggestion(
-                original: originalStripped,
-                replacement: editedStripped
-            )
+        let sharedCount = min(originalTokens.count, editedTokens.count)
+        var prefix = 0
+        while prefix < sharedCount, originalTokens[prefix].text == editedTokens[prefix].text {
+            prefix += 1
+        }
+        var suffix = 0
+        while suffix < sharedCount - prefix,
+              originalTokens[originalTokens.count - 1 - suffix].text == editedTokens[editedTokens.count - 1 - suffix].text {
+            suffix += 1
         }
 
-        guard let suggestion else { return [] }
-        return [suggestion]
+        guard let originalSpan = Self.changedSpan(originalTokens[prefix..<(originalTokens.count - suffix)], in: original),
+              let editedSpan = Self.changedSpan(editedTokens[prefix..<(editedTokens.count - suffix)], in: edited) else {
+            return []
+        }
+
+        let originalStripped = Self.strippedWordToken(originalSpan)
+        let editedStripped = Self.strippedWordToken(editedSpan)
+
+        guard !originalStripped.isEmpty, !editedStripped.isEmpty,
+              originalStripped.lowercased() != editedStripped.lowercased(),
+              !(Self.isNumericValue(originalStripped) && Self.isNumericValue(editedStripped)) else {
+            return []
+        }
+
+        return [CorrectionSuggestion(original: originalStripped, replacement: editedStripped)]
     }
 
-    private static func wordTokens(in text: String) -> [String] {
-        text.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
+    private struct WordToken {
+        let text: String
+        let range: Range<String.Index>
+    }
+
+    private static let maximumSpanTokens = 4
+
+    /// 无空格的文字（中文）由系统分词器切成词，英文仍按单词比较。
+    private static func wordTokens(in text: String) -> [WordToken] {
+        var tokens: [WordToken] = []
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = text
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            tokens.append(WordToken(text: String(text[range]), range: range))
+            return true
+        }
+        return tokens
+    }
+
+    /// 改动区间只在相邻词紧挨（或只隔连字符、撇号）时才合并成一个词条，
+    /// 避免把带空格的多个词或跨标点的整句话学成一个词。
+    private static func changedSpan(_ tokens: ArraySlice<WordToken>, in text: String) -> String? {
+        guard let first = tokens.first, let last = tokens.last, tokens.count <= maximumSpanTokens else {
+            return nil
+        }
+        let connectors = CharacterSet(charactersIn: "-‐'’")
+        for (previous, next) in zip(tokens, tokens.dropFirst()) {
+            let gap = text[previous.range.upperBound..<next.range.lowerBound]
+            guard gap.unicodeScalars.allSatisfy(connectors.contains) else { return nil }
+        }
+        return String(text[first.range.lowerBound..<last.range.upperBound])
     }
 
     private static func strippedWordToken(_ token: String) -> String {
@@ -241,9 +260,5 @@ final class TextDiffService {
     /// not a misrecognized word worth replacing in every future dictation.
     private static func isNumericValue(_ token: String) -> Bool {
         token.contains(where: \.isNumber) && !token.contains(where: \.isLetter)
-    }
-
-    private static func isPunctuationOnly(_ token: String) -> Bool {
-        !token.isEmpty && token.unicodeScalars.allSatisfy { CharacterSet.punctuationCharacters.contains($0) }
     }
 }

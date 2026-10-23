@@ -212,4 +212,69 @@ final class TextDiffServiceTests: XCTestCase {
             edited: "1 2 3 4"
         ).isEmpty)
     }
+
+    func testHighConfidenceExtractionSegmentsChineseWithoutSpacesByWord() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，讨论星河项目，请准备会议记录。"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "新河")
+        XCTAssertEqual(suggestions.first?.replacement, "星河")
+    }
+
+    func testHighConfidenceExtractionLearnsAChineseMishearingSplitIntoSeveralTokens() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "我想用迪克腾做听写，请帮我打开设置",
+            edited: "我想用dictum做听写，请帮我打开设置"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "迪克腾")
+        XCTAssertEqual(suggestions.first?.replacement, "dictum")
+    }
+
+    func testHighConfidenceExtractionSkipsChineseEditsAcrossSeveralClauses() {
+        let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周五上午九点，讨论星河项目，请准备会议记录。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，请准备会议记录。"
+        ).isEmpty)
+    }
+
+    func testHighConfidenceExtractionHandlesMixedChineseAndEnglish() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "把 teh 项目发给星河团队",
+            edited: "把 the 项目发给星河团队"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "teh")
+        XCTAssertEqual(suggestions.first?.replacement, "the")
+    }
+
+    func testHighConfidenceExtractionKeepsEnglishBehaviour() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "please use teh word",
+            edited: "please use the word"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "teh")
+        XCTAssertEqual(suggestions.first?.replacement, "the")
+    }
 }
