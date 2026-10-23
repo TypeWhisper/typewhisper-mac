@@ -35,6 +35,21 @@ final class LocalAPITokenFileTests: XCTestCase {
         XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 
+    func testSaveReplacesReadableFileWithOwnerOnlyFile() throws {
+        let file = tokenFile
+        try FileManager.default.createDirectory(at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: file.url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.url.path)
+
+        try file.save("new-token")
+
+        XCTAssertEqual(file.load(), "new-token")
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.url.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        let names = try FileManager.default.contentsOfDirectory(atPath: file.url.deletingLastPathComponent().path)
+        XCTAssertEqual(names, ["local-api-token"])
+    }
+
     func testNextLaunchReusesSavedToken() async throws {
         let file = tokenFile
         let firstToken = try await makeAuthenticator(file).loadOrCreateToken()

@@ -159,10 +159,25 @@ struct LocalAPITokenFile: Sendable {
         return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 临时文件创建时就是 0600，之后才写入令牌，令牌从不出现在其他用户可读的文件里；
+    /// 写完再改名替换，读取方不会读到写了一半的令牌。
     func save(_ token: String) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(token.utf8).write(to: url, options: [.atomic])
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let temporaryURL = directory.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString)")
+        let descriptor = open(temporaryURL.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        do {
+            try handle.write(contentsOf: Data(token.utf8))
+            try handle.close()
+            guard rename(temporaryURL.path, url.path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryURL)
+            throw error
+        }
     }
 }
 
