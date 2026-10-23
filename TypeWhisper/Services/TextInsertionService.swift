@@ -1648,6 +1648,9 @@ final class TextInsertionService {
             return false
         }
         guard captureFocusedTextState(for: element)?.value == expectation.singleValue else {
+            if let selection = checkedState.selectedRange {
+                _ = setSelectedRange(selection, on: element)
+            }
             logger.notice("insertText duplicate insertion removal did not take effect: bundle=\(bundleId ?? "nil", privacy: .public)")
             return false
         }

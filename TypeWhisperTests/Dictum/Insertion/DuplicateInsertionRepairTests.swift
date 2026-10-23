@@ -129,6 +129,7 @@ final class DuplicateInsertionRepairTests: XCTestCase {
         XCTAssertEqual(result, .pasted(verification: .verified))
         XCTAssertEqual(field.value, "开始你好世界你好世界")
         XCTAssertEqual(field.removedRanges, [NSRange(location: 6, length: 4)])
+        XCTAssertEqual(field.selection, NSRange(location: 10, length: 0))
     }
 
     /// 选中第二份之后字段已被别的进程修改时，不删除任何内容，并把光标还原到检查时的位置。
