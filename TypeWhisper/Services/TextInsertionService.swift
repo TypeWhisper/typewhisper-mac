@@ -1721,11 +1721,17 @@ final class TextInsertionService {
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyDown?.flags = .maskCommand
+#if DEBUG
+        logger.notice("Paste event posted type=\(keyDown?.type.rawValue ?? 0, privacy: .public) key=\(vKeyCode, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public)")
+#endif
         keyDown?.post(tap: .cgSessionEventTap)
 
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: false)
         keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyUp?.flags = .maskCommand
+#if DEBUG
+        logger.notice("Paste event posted type=\(keyUp?.type.rawValue ?? 0, privacy: .public) key=\(vKeyCode, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public)")
+#endif
         keyUp?.post(tap: .cgSessionEventTap)
     }
 

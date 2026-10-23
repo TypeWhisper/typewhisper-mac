@@ -2,13 +2,24 @@
 import AppKit
 import Foundation
 import os
+import TypeWhisperPluginSDK
 
 @MainActor final class DictumDebugDictation {
     static let shared = DictumDebugDictation()
     private var task: Task<Void, Never>?
+    private var eventMonitor: Any?
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "DebugDictation")
 
     func handle(_ url: URL) {
+        if eventMonitor == nil, ProcessInfo.processInfo.arguments.contains("--audio-diagnostics") {
+            eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
+                guard let cgEvent = event.cgEvent,
+                      cgEvent.getIntegerValueField(.eventSourceUserData) == TextInsertionService.simulatedClipboardShortcutEventMarker else { return }
+                Logger(subsystem: AppConstants.loggerSubsystem, category: "DebugDictation").notice(
+                    "Clipboard event received type=\(cgEvent.type.rawValue, privacy: .public) key=\(event.keyCode, privacy: .public) pid=\(cgEvent.getIntegerValueField(.eventSourceUnixProcessID), privacy: .public) repeat=\(event.isARepeat, privacy: .public)"
+                )
+            }
+        }
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let path = components.queryItems?.first(where: { $0.name == "file" })?.value,
               let output = components.queryItems?.first(where: { $0.name == "result" })?.value else { return }
@@ -33,6 +44,28 @@ import os
                 guard FileManager.default.isReadableFile(atPath: path) else { throw CocoaError(.fileReadNoSuchFile) }
                 let dictation = DictationViewModel.shared
                 guard dictation.canStartAPIRecording else { throw CocoaError(.userCancelled) }
+                if let mode = components.queryItems?.first(where: { $0.name == "mode" })?.value {
+                    let services = ServiceContainer.shared
+                    let samples = try await services.audioFileService.loadAudioSamples(from: audioURL)
+                    let text: String
+                    switch mode {
+                    case "file":
+                        text = try await services.modelManagerService.transcribe(
+                            audioSamples: samples, language: nil, task: .transcribe, engineOverrideId: "qwen3"
+                        ).text
+                    case "plugin":
+                        guard let plugin = services.pluginManager.transcriptionEngine(for: "qwen3") else {
+                            throw CocoaError(.featureUnsupported)
+                        }
+                        text = try await plugin.transcribe(
+                            audio: AudioData(samples: samples, wavData: WavEncoder.encode(samples), duration: Double(samples.count) / 16_000),
+                            language: nil, translate: false, prompt: nil
+                        ).text
+                    default: throw CocoaError(.featureUnsupported)
+                    }
+                    try writeResult(status: "completed", text: text, error: nil, to: resultURL)
+                    return
+                }
                 DictumDebugAudioConfiguration.select(audioURL)
                 let sessionID = await dictation.apiStartRecordingAwaitingReadiness()
                 logger.notice("Debug dictation started session=\(sessionID.uuidString, privacy: .public)")

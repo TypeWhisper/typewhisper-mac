@@ -306,6 +306,19 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 throw PluginTranscriptionError.notConfigured
             }
             defer { Self.clearRuntimeCache() }
+#if DEBUG
+            let diagnosticID = UUID().uuidString
+            let arguments = ProcessInfo.processInfo.arguments
+            let diagnosticDirectory: URL? = arguments.firstIndex(of: "--audio-diagnostics").flatMap { index in
+                arguments.indices.contains(index + 1) ? URL(fileURLWithPath: arguments[index + 1]) : nil
+            }
+            if let diagnosticDirectory {
+                try FileManager.default.createDirectory(at: diagnosticDirectory, withIntermediateDirectories: true)
+                try audio.samples.withUnsafeBytes { Data($0) }.write(
+                    to: diagnosticDirectory.appendingPathComponent("\(diagnosticID).f32")
+                )
+            }
+#endif
 
             let audioArray = MLXArray(audio.samples)
             let languageName = Self.resolveLanguageName(language)
@@ -359,6 +372,17 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 languageName: resultLanguageName
             )
             let detectedLanguage = Self.languageCode(forQwenLanguageName: resultLanguageName) ?? language
+#if DEBUG
+            if let diagnosticDirectory {
+                let metadata: [String: Any] = [
+                    "samples": audio.samples.count, "sampleRate": 16_000, "channels": 1,
+                    "model": loadedModelId ?? "", "language": language ?? "auto", "text": cleanedText
+                ]
+                try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys]).write(
+                    to: diagnosticDirectory.appendingPathComponent("\(diagnosticID).json")
+                )
+            }
+#endif
 
             return PluginTranscriptionResult(text: cleanedText, detectedLanguage: detectedLanguage)
         }

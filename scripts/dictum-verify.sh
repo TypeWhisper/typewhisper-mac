@@ -213,7 +213,8 @@ print_lock_holder() {
 }
 
 dictate() {
-  local audio_file="${1:-}" result_file url attempt
+  local audio_file="${1:-}" mode="${2:-live}" result_file url attempt
+  [[ "$mode" == live || "$mode" == file || "$mode" == plugin ]] || return 2
   [[ -n "$audio_file" && -r "$audio_file" ]] || { printf '请提供可读取的音频文件。\n' >&2; return 2; }
   if [[ ! -d "$run_lock" ]]; then
     printf '请先运行 scripts/dictum-verify.sh run --audio-file <音频文件>，再将光标放进目标输入框。\n' >&2
@@ -224,12 +225,12 @@ dictate() {
     return 1
   }
   result_file="$(mktemp /tmp/dictum-dictate-XXXXXXXX)"
-  url="$(python3 -c 'import pathlib,sys,urllib.parse; print("dictum://dictate?" + urllib.parse.urlencode({"file":str(pathlib.Path(sys.argv[1]).resolve()),"result":sys.argv[2]}))' "$audio_file" "$result_file")"
+  url="$(python3 -c 'import pathlib,sys,urllib.parse; q={"file":str(pathlib.Path(sys.argv[1]).resolve()),"result":sys.argv[2]}; q.update({"mode":sys.argv[3]} if sys.argv[3]!="live" else {}); print("dictum://dictate?"+urllib.parse.urlencode(q))' "$audio_file" "$result_file" "$mode")"
   open -g -a "$installed_app" "$url"
   for ((attempt=0; attempt<1900; attempt++)); do
     if [[ -s "$result_file" ]]; then
       cp "$result_file" "$receipts/dictation-result.json"
-      python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(json.dumps(r,ensure_ascii=False,indent=2)); sys.exit(0 if r["status"]=="completed" and r.get("inserted") else 1)' "$result_file"
+      python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(json.dumps(r,ensure_ascii=False,indent=2)); sys.exit(0 if r["status"]=="completed" and (sys.argv[2]!="live" or r.get("inserted")) else 1)' "$result_file" "$mode"
       return $?
     fi
     [[ -n "$(running_pids)" ]] || { printf '听写过程中应用退出。\n' >&2; return 1; }
