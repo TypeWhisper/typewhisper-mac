@@ -1634,6 +1634,8 @@ final class TextInsertionService {
             returnSimulatorOverride()
             return
         }
+        // 测试宿主继承已安装应用的辅助功能授权，真实按键会进入用户正在操作的应用。
+        guard !AppConstants.isRunningTests else { return }
         let returnKeyCode: CGKeyCode = 0x24
         let eventSource = CGEventSource(stateID: .combinedSessionState)
         let tapLocation: CGEventTapLocation = .cghidEventTap
@@ -1653,6 +1655,7 @@ final class TextInsertionService {
             pasteSimulatorOverride()
             return
         }
+        guard !AppConstants.isRunningTests else { return }
         let vKeyCode = virtualKeyCode(for: "v") ?? 0x09 // Fallback to QWERTY
 #if DEBUG
         pasteEventSequence += 1
@@ -1681,6 +1684,7 @@ final class TextInsertionService {
             copySimulatorOverride()
             return
         }
+        guard !AppConstants.isRunningTests else { return }
         let cKeyCode = virtualKeyCode(for: "c") ?? 0x08 // Fallback to QWERTY
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)

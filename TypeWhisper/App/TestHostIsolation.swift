@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import ObjectiveC
+import os
 
 /// Keeps unit-test runs out of the app's own preferences.
 ///
@@ -11,7 +13,9 @@ import ObjectiveC
 /// When XCTest hosts the process, `UserDefaults.standard` returns the defaults of a preferences
 /// domain that belongs to this run alone and starts empty. The argument, global and registration
 /// domains are still searched, so launch arguments such as `-AppleLanguages` keep working. The
-/// test bundle removes the domain when it finishes.
+/// test bundle removes the domain, and the suites the tests created, when it finishes.
+/// `NSPasteboard.general` is replaced the same way, so tests never read or clear the clipboard
+/// of the person using the Mac.
 enum TestHostIsolation {
     /// Unique per process, so concurrent test runs on one Mac do not share preferences.
     static let defaultsSuiteName =
@@ -31,14 +35,80 @@ enum TestHostIsolation {
 
         // A reused process ID must not inherit values from a run that crashed.
         defaults.removePersistentDomain(forName: defaultsSuiteName)
+        removeDomainsOfEndedRuns(using: defaults)
 
         replaceStandardDefaults(with: defaults)
         isolatedDefaults = defaults
+        recordSuitesCreatedByTests()
+        isolateGeneralPasteboard()
     }
 
-    /// Deletes the run's preferences domain. Called when the test bundle finishes.
+    /// Deletes the run's preferences domain and every suite the tests created.
+    /// Called when the test bundle finishes.
     static func removeIsolatedDefaults() {
         isolatedDefaults?.removePersistentDomain(forName: defaultsSuiteName)
+        for name in createdSuiteNames.withLock({ $0 }) {
+            UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+        }
+        isolatedPasteboard?.releaseGlobally()
+    }
+
+    /// 测试用例创建的偏好设置套件只在运行结束时才能知道哪些需要删除，所以创建时记录下来。
+    static let createdSuiteNames = OSAllocatedUnfairLock(initialState: Set<String>())
+
+    /// 测试宿主的通用剪贴板，只属于这次运行。
+    nonisolated(unsafe) private static var isolatedPasteboard: NSPasteboard?
+
+    /// 记录测试创建的、运行前并不存在的偏好设置套件。应用自己的域和全局域不记录。
+    private static func recordSuitesCreatedByTests() {
+        let selector = NSSelectorFromString("initWithSuiteName:")
+        guard let method = class_getInstanceMethod(UserDefaults.self, selector) else { return }
+
+        typealias Initializer = @convention(c) (AnyObject, Selector, NSString?) -> AnyObject?
+        let original = unsafeBitCast(method_getImplementation(method), to: Initializer.self)
+        let appDomain = Bundle.main.bundleIdentifier
+        let replacement: @convention(block) (AnyObject, NSString?) -> AnyObject? = { object, name in
+            if let name = name as String?,
+               name != appDomain,
+               name != UserDefaults.globalDomain,
+               !name.hasPrefix("/"),
+               isolatedDefaults?.persistentDomain(forName: name) == nil {
+                createdSuiteNames.withLock { _ = $0.insert(name) }
+            }
+            return original(object, selector, name)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(replacement))
+    }
+
+    /// 测试宿主与已安装的应用共用剪贴板，写入或清空剪贴板会破坏正在进行的粘贴。
+    /// `NSPasteboard.general` 在测试宿主里返回只属于这次运行的剪贴板。
+    private static func isolateGeneralPasteboard() {
+        guard let generalGetter = class_getClassMethod(
+            NSPasteboard.self,
+            #selector(getter: NSPasteboard.general)
+        ) else {
+            fatalError("Could not replace NSPasteboard.general")
+        }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        let replacement: @convention(block) (AnyObject) -> NSPasteboard = { _ in pasteboard }
+        method_setImplementation(generalGetter, imp_implementationWithBlock(replacement))
+        isolatedPasteboard = pasteboard
+    }
+
+    /// 崩溃或被终止的测试运行来不及删除自己的偏好设置域，下一次启动时按进程号清理。
+    private static func removeDomainsOfEndedRuns(using defaults: UserDefaults) {
+        let prefix = defaultsSuiteName.split(separator: ".").dropLast().joined(separator: ".") + "."
+        let preferences = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences", isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: preferences.path)) ?? []
+        for fileName in names where fileName.hasPrefix(prefix) && fileName.hasSuffix(".plist") {
+            let domain = String(fileName.dropLast(".plist".count))
+            guard let processID = pid_t(domain.dropFirst(prefix.count)),
+                  processID != ProcessInfo.processInfo.processIdentifier,
+                  kill(processID, 0) != 0, errno == ESRCH else { continue }
+            defaults.removePersistentDomain(forName: domain)
+        }
     }
 }
 
