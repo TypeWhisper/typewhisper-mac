@@ -41,10 +41,13 @@ private struct SpeechSettingsForm: View {
     var body: some View {
         ScrollView {
             TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                let qwen = engines.first { $0.providerId == "qwen3" }
+                let qwenActivity = qwen?.speechActivity
+                let qwenModel = qwen?.modelCatalog.first { $0.id == qwen?.selectedModelId }
                 VStack(spacing: 26) {
                     GroupedFormSection(title: "On this Mac", tableName: "DictumSpeech") {
-                        if let qwen = engines.first(where: { $0.providerId == "qwen3" }) {
-                            localRow(qwen, title: "Qwen3-ASR 1.7B")
+                        if let qwen {
+                            localRow(qwen, title: "Qwen3-ASR 1.7B", activity: qwenActivity, model: qwenModel)
                             GroupedFormRow(separated: true) {
                                 Text("Precision", tableName: "DictumSpeech")
                                 Spacer()
@@ -52,12 +55,15 @@ private struct SpeechSettingsForm: View {
                                             value: Text(verbatim: qwen.modelCatalog.first { $0.id == qwen.selectedModelId }?.displayName ?? "")) {
                                     Text("8-bit · Faster", tableName: "DictumSpeech").tag("qwen3-asr-1.7b-8bit")
                                     Text("bf16 · More accurate", tableName: "DictumSpeech").tag("qwen3-asr-1.7b-bf16")
-                                    if let selected = qwen.modelCatalog.first(where: { $0.id == qwen.selectedModelId }),
-                                       !["qwen3-asr-1.7b-8bit", "qwen3-asr-1.7b-bf16"].contains(selected.id) {
-                                        Text(verbatim: selected.displayName).tag(selected.id)
+                                    ForEach(qwen.modelCatalog.filter {
+                                        ($0.downloaded == true || $0.id == qwen.selectedModelId)
+                                            && !["qwen3-asr-1.7b-8bit", "qwen3-asr-1.7b-bf16"].contains($0.id)
+                                    }, id: \.id) { model in
+                                        Text(verbatim: model.displayName).tag(model.id)
                                     }
                                 }
-                                .disabled(qwen.speechActivity != nil && qwen.speechActivity?.isError != true)
+                                .id(qwen.selectedModelId)
+                                .disabled(qwenActivity != nil && qwenActivity?.isError != true)
                             }.padding(.leading, 28)
                         }
                         if localEngines.contains(where: { $0.providerId != "qwen3" }) {
@@ -114,7 +120,8 @@ private struct SpeechSettingsForm: View {
         }.buttonStyle(.plain).accessibilityLabel(Text(verbatim: engine.providerDisplayName))
     }
 
-    private func localRow(_ engine: any TranscriptionEnginePlugin, title: String) -> some View {
+    private func localRow(_ engine: any TranscriptionEnginePlugin, title: String,
+                          activity: PluginSettingsActivity?, model: PluginModelInfo?) -> some View {
         GroupedFormRow {
             radio(engine) { models.selectProvider(engine.providerId) }
             VStack(alignment: .leading, spacing: 2) {
@@ -124,21 +131,20 @@ private struct SpeechSettingsForm: View {
                 }
                 if engine.providerId == "qwen3" {
                     Text(verbatim: String(localized: "Accurate for mixed Chinese and English, works offline", table: "DictumSpeech")
-                         + (engine.modelCatalog.first { $0.id == engine.selectedModelId }.map { " · " + $0.sizeDescription } ?? ""))
+                         + (model.map { " · " + $0.sizeDescription } ?? ""))
                         .font(.system(size: 12)).foregroundStyle(DictumTheme.textSecondary)
                 }
             }
             Spacer(minLength: 6)
-            localStatus(engine)
+            localStatus(engine, activity: activity, model: model)
         }.padding(.vertical, 7)
     }
 
-    @ViewBuilder private func localStatus(_ engine: any TranscriptionEnginePlugin) -> some View {
-        let activity = engine.speechActivity
-        let model = engine.modelCatalog.first { $0.id == engine.selectedModelId }
+    @ViewBuilder private func localStatus(_ engine: any TranscriptionEnginePlugin,
+                                          activity: PluginSettingsActivity?, model: PluginModelInfo?) -> some View {
         if let activity, !activity.isError {
             VStack(alignment: .leading, spacing: 4) {
-                ProgressView(value: activity.progress).progressViewStyle(.linear)
+                ProgressView(value: activity.progress).progressViewStyle(.linear).tint(DictumTheme.accent)
                 if let progress = activity.progress {
                     let details = SpeechDownloadProgress(engine: engine)
                     Text(verbatim: progress.formatted(.percent.precision(.fractionLength(0))) + (details.map { " · " + $0.byteCounts } ?? ""))
@@ -167,7 +173,7 @@ private struct SpeechSettingsForm: View {
             }
             Button { download(engine) } label: {
                 Text(activity?.isError == true ? "Resume" : "Download", tableName: "DictumSpeech")
-            }.buttonStyle(.borderedProminent).controlSize(.small)
+            }.buttonStyle(.borderedProminent).tint(DictumTheme.accent).controlSize(.small)
         }
     }
 

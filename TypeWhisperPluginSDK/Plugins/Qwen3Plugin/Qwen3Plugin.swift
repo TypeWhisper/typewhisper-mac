@@ -29,12 +29,27 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     // Observable state for settings UI
     fileprivate var modelState: Qwen3ModelState = .notLoaded
-    private struct DownloadStatus: Sendable {
+    struct DownloadStatus: Sendable {
         var progress: Double?
         var completed: Int64 = 0
         var total: Int64 = 0
-        var started: Date?
-        var initialCompleted: Int64 = 0
+        private var samples: [(date: Date, bytes: Int64)] = []
+
+        mutating func update(_ value: Progress, at date: Date = .now) {
+            progress = value.fractionCompleted
+            total = value.totalUnitCount
+            completed = Int64((Double(total) * value.fractionCompleted).rounded())
+            if let last = samples.last, date.timeIntervalSince(last.date) < 1 { return }
+            samples.append((date, completed))
+            samples.removeAll { date.timeIntervalSince($0.date) > 10 }
+        }
+
+        var remainingSeconds: Double? {
+            guard let first = samples.first, let last = samples.last,
+                  last.date.timeIntervalSince(first.date) >= 2,
+                  last.bytes > first.bytes, total > completed else { return nil }
+            return last.date.timeIntervalSince(first.date) * Double(total - completed) / Double(last.bytes - first.bytes)
+        }
     }
     private let downloadStatus = OSAllocatedUnfairLock(initialState: DownloadStatus())
     fileprivate var downloadProgress: Double? {
@@ -45,13 +60,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     @objc var speechDownloadDetails: NSDictionary {
         let status = downloadStatus.withLock { $0 }
         var details: [String: Any] = ["completedBytes": status.completed, "totalBytes": status.total]
-        if let started = status.started {
-            let elapsed = Date().timeIntervalSince(started)
-            let transferred = status.completed - status.initialCompleted
-            if elapsed >= 2, transferred > 0, status.total > status.completed {
-                details["remainingSeconds"] = elapsed * Double(status.total - status.completed) / Double(transferred)
-            }
-        }
+        if let remaining = status.remainingSeconds { details["remainingSeconds"] = remaining }
         return details as NSDictionary
     }
 
@@ -462,13 +471,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                         matching: Self.modelDownloadPatterns,
                         progressHandler: { [weak self] progress in
                             self?.downloadStatus.withLock { status in
-                                if status.started == nil {
-                                    status.started = Date()
-                                    status.initialCompleted = progress.completedUnitCount
-                                }
-                                status.progress = progress.fractionCompleted
-                                status.completed = progress.completedUnitCount
-                                status.total = progress.totalUnitCount
+                                status.update(progress)
                             }
                         }
                     )

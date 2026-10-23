@@ -7,6 +7,11 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence:
   - Fix:
 
+- Pass value snapshots through polled SwiftUI builders (Seen x1: 2026-10-23)
+  - What went wrong: The Speech page polled a plugin reference inside nested view builders. The sidebar updated while the model row and precision picker retained old values.
+  - Evidence: During a real Qwen3 download, the sidebar showed 63% while the page still showed Download. A precision change updated the model size while the picker retained 6-bit.
+  - Fix: Read the activity and selected model into value snapshots in the timeline closure, pass them into row builders, and identify the precision picker by the selected model. Verify progress and selection changes in the running app.
+
 - 使用版本输出确认 Metal 组件已安装 (Seen x1: 2026-10-22)
   - 问题：系统可以在 Metal 组件安装完成前返回工具路径，提前运行的 SwiftPM 构建还会保留安装前的失败状态。
   - 证据：工具路径可查询时，首次 SDK 构建仍报告 Metal 组件缺失；组件安装完成后，`xcrun metal --version` 正常输出 Apple Metal 版本，SDK 构建通过。
