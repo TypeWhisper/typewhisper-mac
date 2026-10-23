@@ -1,10 +1,11 @@
 # Confucius4-R2T2 Plugin
 
-Transcription engine plugin that streams microphone audio to a local
+Transcription engine plugin that streams microphone audio to an
 [audio.cpp](https://github.com/0xShug0/audio.cpp) `audiocpp_server` running the
-[Confucius4-R2T2](https://github.com/netease-youdao/Confucius4-R2T2) GGUF on Metal, and returns
-its append-only transcript. Supports batch transcription, progress streaming, and TypeWhisper
-live sessions. Runs fully on-device; no GPU server needed.
+[Confucius4-R2T2](https://github.com/netease-youdao/Confucius4-R2T2) GGUF, and returns its
+append-only transcript. Supports batch transcription, progress streaming, and TypeWhisper live
+sessions. On Apple silicon the built-in server runs fully on-device on Metal; no GPU server needed.
+With an own server, audio goes to the host you configure, which may be another machine.
 
 ## Built-in server (default)
 
@@ -25,10 +26,14 @@ stops with TypeWhisper (a small shell watchdog stops it even if TypeWhisper cras
 restarted after an unexpected exit, at most three times a minute. Pins are changed only by a new
 plugin release.
 
+The pinned audio.cpp build is arm64-only, so the built-in server needs Apple silicon. On Intel
+Macs the plugin hides it and uses only an own server.
+
 ## Own server
 
-Use audio.cpp v0.9.0 or newer, from the release archive (`chmod +x audiocpp_server` after
-unpacking, since the archive ships it without the executable bit) or built with Metal:
+On an Apple silicon Mac, use audio.cpp v0.9.0 or newer, from the macOS arm64 release archive
+(`chmod +x audiocpp_server` after unpacking, since the archive ships it without the executable bit)
+or built with Metal:
 
 ```sh
 git clone --recurse-submodules https://github.com/0xShug0/audio.cpp
@@ -59,6 +64,11 @@ Server config (`server.json`):
 ```sh
 build/macos-metal-release/bin/audiocpp_server --config server.json
 ```
+
+audio.cpp publishes no prebuilt server for Intel Macs. On an Intel Mac, run `audiocpp_server` on
+another machine, for example an Apple silicon Mac or a Windows or Linux x64 PC with the matching
+release archive. Set its `host` to an address the Intel Mac can reach, use a backend that machine
+supports (for example `metal` or `cpu`), and enter its URL as the plugin's Server URL.
 
 | Setting | Default | Notes |
 |---|---|---|

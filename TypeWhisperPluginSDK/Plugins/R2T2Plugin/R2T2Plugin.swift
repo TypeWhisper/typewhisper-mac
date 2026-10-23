@@ -618,6 +618,8 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     fileprivate var server: R2T2ManagedServer?
     fileprivate let download = OSAllocatedUnfairLock(initialState: R2T2DownloadSnapshot())
     fileprivate let installState = OSAllocatedUnfairLock(initialState: R2T2InstallState())
+    /// False on Intel Macs, where only an own audio.cpp server works. Tests set it before `activate`.
+    var supportsBuiltInServer = R2T2Runtime.runsOnThisMac
     /// Only touched on the main actor, where the settings view reads it.
     @MainActor private var downloadTask: Task<Void, Never>?
 
@@ -637,6 +639,8 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
         // Installs from before the built-in server keep using the server they configured.
         let storedMode = (host.userDefault(forKey: Self.serverModeKey) as? String).flatMap(R2T2ServerMode.init)
         _mode = storedMode ?? (storedURL?.isEmpty == false ? .custom : .builtIn)
+        // The stored choice stays, so settings synced from an Apple silicon Mac keep working there.
+        if !supportsBuiltInServer { _mode = .custom }
         _builtInModel = R2T2ModelDefinition.model(for: host.userDefault(forKey: Self.builtInModelKey) as? String)
             ?? R2T2ModelDefinition.recommended
         let assets = R2T2ManagedAssets(pluginDataDirectory: host.pluginDataDirectory)
@@ -809,6 +813,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     }
 
     fileprivate func setMode(_ mode: R2T2ServerMode) {
+        guard mode == .custom || supportsBuiltInServer else { return }
         _mode = mode
         host?.setUserDefault(mode.rawValue, forKey: Self.serverModeKey)
         if mode == .custom { server?.stop() }
@@ -822,7 +827,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     }
 
     @MainActor fileprivate func startDownload(_ model: R2T2ModelDefinition) {
-        guard let assets, downloadTask == nil else { return }
+        guard supportsBuiltInServer, let assets, downloadTask == nil else { return }
         let download = self.download
         download.withLock { $0 = R2T2DownloadSnapshot(modelId: model.id) }
         // Runs on the main actor; install() itself is nonisolated and does its work off the main thread.
@@ -911,15 +916,22 @@ private struct R2T2SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker(String(localized: "Server", bundle: bundle), selection: $mode) {
-                Text("Built-in", bundle: bundle).tag(R2T2ServerMode.builtIn)
-                Text("Own server", bundle: bundle).tag(R2T2ServerMode.custom)
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: mode) { _, newValue in
-                plugin.setMode(newValue)
-                testError = nil
-                testSucceeded = false
+            if plugin.supportsBuiltInServer {
+                Picker(String(localized: "Server", bundle: bundle), selection: $mode) {
+                    Text("Built-in", bundle: bundle).tag(R2T2ServerMode.builtIn)
+                    Text("Own server", bundle: bundle).tag(R2T2ServerMode.custom)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: mode) { _, newValue in
+                    plugin.setMode(newValue)
+                    testError = nil
+                    testSucceeded = false
+                }
+            } else {
+                Label(String(localized: "The built-in server needs a Mac with Apple silicon. On this Mac, connect to an audio.cpp server you run yourself.", bundle: bundle),
+                      systemImage: "info.circle")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             switch mode {
