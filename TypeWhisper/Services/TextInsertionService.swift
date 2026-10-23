@@ -302,11 +302,6 @@ final class TextInsertionService {
     enum InsertionResult: Equatable {
         case insertedViaAccessibility
         case pasted(verification: PasteVerification)
-#if APPSTORE
-        /// The text was left on the clipboard for a manual paste because the app may not post
-        /// keyboard events.
-        case copiedToClipboard
-#endif
 
         /// A readable native field stayed unchanged. Web input proxies may consume a paste
         /// without retaining its text, so their unchanged state does not prove a failure.
@@ -372,28 +367,16 @@ final class TextInsertionService {
     }
 
     var isAccessibilityGranted: Bool {
-#if APPSTORE
-        // The sandbox only grants PostEvent, which System Settings lists under Accessibility.
-        accessibilityGrantedOverride ?? AppStoreInputAccess.canPostEvents
-#else
         accessibilityGrantedOverride ?? AXIsProcessTrusted()
-#endif
     }
 
     /// Whether the Accessibility API of other apps may be used. The App Sandbox blocks it, and
     /// the calls would only fail or wait for their messaging timeout.
     private var canInspectOtherApplications: Bool {
-#if APPSTORE
-        false
-#else
         isAccessibilityGranted
-#endif
     }
 
     func requestAccessibilityPermission() {
-#if APPSTORE
-        AppStoreInputAccess.requestPostEventAccess()
-#else
         // Try the prompt first
         let options = ["AXTrustedCheckOptionPrompt" as CFString: true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
@@ -402,7 +385,6 @@ final class TextInsertionService {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
-#endif
     }
 
     func captureActiveApp() -> (name: String?, bundleId: String?, url: String?) {
@@ -1409,23 +1391,12 @@ final class TextInsertionService {
         awaitPasteVerification: Bool = false,
         detectMissedTextField: Bool = false
     ) async throws -> InsertionResult {
-#if !APPSTORE
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
-#endif
         lastInsertionTiming = nil
         // Covers direct AX insertion too, so it cannot land before an earlier queued paste.
         try await settlePendingPaste()
-#if APPSTORE
-        guard isAccessibilityGranted else {
-            return copyTextForManualPaste(
-                text,
-                outputFormat: outputFormat,
-                deferredClipboardRestore: deferredClipboardRestore
-            )
-        }
-#endif
 
         let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
         let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
@@ -1555,33 +1526,6 @@ final class TextInsertionService {
         return .pasted(verification: verification)
     }
 
-#if APPSTORE
-    /// Leaves the text on the clipboard for a manual paste. The user's clipboard is not restored:
-    /// the text has to stay there until it is pasted.
-    private func copyTextForManualPaste(
-        _ text: String,
-        outputFormat: String?,
-        deferredClipboardRestore: DeferredClipboardRestore?
-    ) -> InsertionResult {
-        let pasteboard = pasteboardProvider()
-        // Cancel restores that would overwrite the text with an older clipboard.
-        _ = takeOverPendingClipboardRestore(on: pasteboard)
-        _ = takeOverDeferredClipboardRestore(deferredClipboardRestore, on: pasteboard)
-        pasteboard.clearContents()
-        let payload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
-            ?? ClipboardContentPayload(plainText: text)
-        payload.write(to: pasteboard)
-        logger.info(
-            "insertText copied text for manual paste: autoPasteEnabled=\(AppStoreInputAccess.isAutoPasteEnabled, privacy: .public)"
-        )
-        lastInsertionTiming = InsertionTiming(
-            insertedUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds,
-            verifiedUptimeNanoseconds: nil
-        )
-        return .copiedToClipboard
-    }
-#endif
-
     private func waitForPasteVerification(using state: PasteVerificationState) async -> PasteVerification {
         guard state.focusedTextState != nil else {
             return .unverified(state.noTextElementFocused ? .noFocusedTextElement : .focusedTextStateUnavailable)
@@ -1691,15 +1635,8 @@ final class TextInsertionService {
             return
         }
         let returnKeyCode: CGKeyCode = 0x24
-#if APPSTORE
-        // PostEvent access covers session-level posting; match the paste below.
-        guard isAccessibilityGranted else { return }
-        let eventSource: CGEventSource? = nil
-        let tapLocation: CGEventTapLocation = .cgSessionEventTap
-#else
         let eventSource = CGEventSource(stateID: .combinedSessionState)
         let tapLocation: CGEventTapLocation = .cghidEventTap
-#endif
         let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: returnKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedReturnEventMarker)
         keyDown?.flags = []
@@ -1716,9 +1653,6 @@ final class TextInsertionService {
             pasteSimulatorOverride()
             return
         }
-#if APPSTORE
-        guard isAccessibilityGranted else { return }
-#endif
         let vKeyCode = virtualKeyCode(for: "v") ?? 0x09 // Fallback to QWERTY
 #if DEBUG
         pasteEventSequence += 1
@@ -1747,9 +1681,6 @@ final class TextInsertionService {
             copySimulatorOverride()
             return
         }
-#if APPSTORE
-        guard isAccessibilityGranted else { return }
-#endif
         let cKeyCode = virtualKeyCode(for: "c") ?? 0x08 // Fallback to QWERTY
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
@@ -1837,10 +1768,6 @@ final class TextInsertionService {
             }
             return CopiedTextSelection(text: text, deferredClipboardRestore: deferredRestore)
         }
-#if APPSTORE
-        // Without PostEvent access the copy never arrives; do not wait for it.
-        guard isAccessibilityGranted else { return nil }
-#endif
 
         let pasteboard = pasteboardProvider()
 
