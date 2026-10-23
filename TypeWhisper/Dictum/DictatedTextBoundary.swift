@@ -1,15 +1,21 @@
 import Foundation
 
+/// 判断供应商是否报告输入超过上下文窗口。
 enum LLMContextLimit {
     static func isExceeded(_ error: any Error) -> Bool {
-        if case LLMError.inputTooLong = error { return true }
+        if case LLMError.inputTooLong = error {
+            return true
+        }
         return false
     }
 }
 
 enum TypeWhisperDictatedTextBoundary {
     static func wrap(_ userText: String) -> String {
-        if isWrapped(userText) { return userText }
+        if isWrapped(userText) {
+            return userText
+        }
+
         return """
         BEGIN TYPEWHISPER DICTATED TEXT
         \(userText)
@@ -29,23 +35,33 @@ enum TypeWhisperDictatedTextBoundary {
         let containsTypeWhisperScaffold = lines.contains { line in
             isTypeWhisperScaffoldLine(line.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        guard containsTypeWhisperScaffold else { return text }
+
+        guard containsTypeWhisperScaffold else {
+            return text
+        }
+
         let strippedLines = lines.filter { line in
             !isTypeWhisperScaffoldLine(line.trimmingCharacters(in: .whitespacesAndNewlines))
         }
+
         let cleaned = collapseRepeatedBlocks(
             collapseBlankLines(strippedLines)
                 .joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         )
-        if !cleaned.isEmpty { return cleaned }
+
+        if !cleaned.isEmpty {
+            return cleaned
+        }
+
         guard fallbackToOriginalUserText else { return "" }
         return originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func isTypeWhisperScaffoldLine(_ line: String) -> Bool {
         let normalized = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return scaffoldLines.contains(normalized) || normalized.hasPrefix("input boundary:")
+        return scaffoldLines.contains(normalized)
+            || normalized.hasPrefix("input boundary:")
     }
 
     private static func isWrapped(_ text: String) -> Bool {
@@ -56,29 +72,48 @@ enum TypeWhisperDictatedTextBoundary {
 
     private static func collapseBlankLines(_ lines: [String]) -> [String] {
         var collapsed: [String] = []
+
         for line in lines {
             let isBlank = line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             if isBlank {
-                if !collapsed.isEmpty && collapsed.last != "" { collapsed.append("") }
+                if !collapsed.isEmpty && collapsed.last != "" {
+                    collapsed.append("")
+                }
                 continue
             }
+
             collapsed.append(line)
         }
-        if collapsed.last == "" { collapsed.removeLast() }
+
+        if collapsed.last == "" {
+            collapsed.removeLast()
+        }
+
         return collapsed
     }
 
     private static func collapseRepeatedBlocks(_ text: String) -> String {
         let blocks = text.components(separatedBy: "\n\n")
-        guard blocks.count > 1 else { return text }
+        guard blocks.count > 1 else {
+            return text
+        }
+
         var uniqueBlocks: [String] = []
         var previousBlock: String?
+
         for block in blocks {
             let trimmedBlock = block.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedBlock.isEmpty, trimmedBlock != previousBlock else { continue }
+            guard !trimmedBlock.isEmpty else {
+                continue
+            }
+            guard trimmedBlock != previousBlock else {
+                continue
+            }
+
             uniqueBlocks.append(trimmedBlock)
             previousBlock = trimmedBlock
         }
+
         return uniqueBlocks.joined(separator: "\n\n")
     }
 
