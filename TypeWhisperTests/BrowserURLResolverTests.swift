@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import os
 import XCTest
 @testable import TypeWhisper
@@ -21,6 +22,25 @@ private final class BrowserResolutionProbe: @unchecked Sendable {
     }
 
     var calls: [(String, Bool)] { state.withLock { $0.calls } }
+}
+
+final class InstalledAppsViewModelTests: XCTestCase {
+    @MainActor
+    func testScanningRealApplicationDoesNotRegisterItsBundle() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("dictum-installed-apps-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let application = directory.appendingPathComponent("TextEdit.app")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/System/Applications/TextEdit.app"), to: application)
+        let bundlesBefore = Set(Bundle.allBundles.map(\.bundleURL))
+
+        let viewModel = InstalledAppsViewModel(directories: [directory])
+
+        XCTAssertEqual(viewModel.installedApps.map(\.id), ["com.apple.TextEdit"])
+        XCTAssertFalse(viewModel.installedApps[0].name.isEmpty)
+        XCTAssertNotNil(viewModel.installedApps[0].icon)
+        XCTAssertEqual(Set(Bundle.allBundles.map(\.bundleURL)), bundlesBefore)
+    }
 }
 
 private final class SerializedBrowserResolutionProbe: @unchecked Sendable {

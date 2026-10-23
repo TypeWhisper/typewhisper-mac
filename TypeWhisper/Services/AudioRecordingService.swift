@@ -3496,6 +3496,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 self?.publishRecoveryError(.engineStartFailed(error.localizedDescription))
             }
             logger.notice("Debug audio input reached end of file")
+            if ProcessInfo.processInfo.arguments.contains("--audio-file-manual-stop") { return }
             DispatchQueue.main.async { self?.onAudioFileInputFinished?() }
         }
         guard commitStart() else { throw CancellationError() }
