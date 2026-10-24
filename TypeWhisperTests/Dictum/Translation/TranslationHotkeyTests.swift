@@ -51,6 +51,25 @@ final class TranslationHotkeyTests: XCTestCase {
         _ = service.processEventForTesting(try XCTUnwrap(NSEvent(cgEvent: event)), source: .monitor)
     }
 
+    private func keyUp(_ key: CGKeyCode, flags: CGEventFlags) throws {
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: false))
+        event.flags = flags
+        _ = service.processEventForTesting(try XCTUnwrap(NSEvent(cgEvent: event)), source: .monitor)
+    }
+
+    private func useToggleShortcutAsTheDictationShortcut() {
+        service.setHotkeysForTesting([], for: .hybrid)
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 63, modifierFlags: 0, isFn: true), for: .toggle)
+    }
+
+    /// 轻按 Fn + 左 Shift，进入轻按切换的翻译会话。
+    private func tapFnAndLeftShift() throws {
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+    }
+
     func testFnAloneStartsDictation() throws {
         try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
         XCTAssertEqual(dictationStarts, 1)
@@ -178,8 +197,8 @@ final class TranslationHotkeyTests: XCTestCase {
         XCTAssertEqual(upgrades, 1)
     }
 
-    func testHoldToTalkTranslationWithoutTheDictationShortcutStopsOnce() throws {
-        service.setHotkeysForTesting([], for: .hybrid)
+    func testHoldToTalkTranslationWithABackupOnlyDictationShortcutStopsOnce() throws {
+        service.setHotkeysForTesting([UnifiedHotkey(keyCode: 0x60, modifierFlags: 0, isFn: false)], for: .hybrid)
         try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
         try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
         XCTAssertEqual(translationStarts, 1)
@@ -216,6 +235,128 @@ final class TranslationHotkeyTests: XCTestCase {
         try flagsChanged(fnKey, down: false, flags: [])
         XCTAssertEqual(stops, 1, "按住说话松开即结束，快速按放也不进入轻按切换")
         XCTAssertNil(service.currentMode)
+    }
+
+    /// 没有会话在进行时，按一次 Fn（按下再松开）会开始新的听写。
+    private func assertNoSessionIsActive(file: StaticString = #filePath, line: UInt = #line) throws {
+        Thread.sleep(forTimeInterval: 0.15)
+        let startsBefore = dictationStarts
+        let stopsBefore = stops
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(dictationStarts, startsBefore + 1, "Fn 开始新的听写", file: file, line: line)
+        XCTAssertEqual(stops, stopsBefore, file: file, line: line)
+    }
+
+    func testSecondFnAndLeftShiftStopsTheToggleTranslationWithoutStartingAnother() throws {
+        try tapFnAndLeftShift()
+        XCTAssertEqual(service.currentMode, .toggle)
+        Thread.sleep(forTimeInterval: 0.15)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1)
+        XCTAssertEqual(translationStarts, 0)
+        XCTAssertEqual(dictationStarts, 1)
+        XCTAssertNil(service.currentMode)
+        try assertNoSessionIsActive()
+    }
+
+    func testSecondGestureWithLeftShiftBeforeFnStopsTheToggleTranslationWithoutStartingAnother() throws {
+        try tapFnAndLeftShift()
+        XCTAssertEqual(service.currentMode, .toggle)
+        Thread.sleep(forTimeInterval: 0.15)
+        try flagsChanged(leftShift, down: true, flags: .maskShift, device: deviceLeftShift)
+        try flagsChanged(fnKey, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1)
+        XCTAssertEqual(translationStarts, 0)
+        XCTAssertEqual(dictationStarts, 1)
+        XCTAssertNil(service.currentMode)
+        try assertNoSessionIsActive()
+    }
+
+    func testFnAndLeftShiftStartAfterAnEarlierFnStopHasBeenReleased() throws {
+        try tapFnAndLeftShift()
+        Thread.sleep(forTimeInterval: 0.15)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1, "单独的 Fn 结束翻译会话")
+        Thread.sleep(forTimeInterval: 0.15)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        XCTAssertEqual(dictationStarts, 2, "新的 Fn 按下开始听写")
+        XCTAssertEqual(upgrades, 2, "同一次按下里的左 Shift 升级为翻译")
+        XCTAssertEqual(stops, 1)
+    }
+
+    func testSecondFnAndLeftShiftWithTheToggleShortcutStopsOnceAndFnReleaseStartsNothing() throws {
+        useToggleShortcutAsTheDictationShortcut()
+        try tapFnAndLeftShift()
+        XCTAssertEqual(translationStarts, 1)
+        XCTAssertEqual(service.currentMode, .toggle)
+        Thread.sleep(forTimeInterval: 0.15)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1)
+        XCTAssertEqual(translationStarts, 1)
+        XCTAssertEqual(dictationStarts, 0, "仍按住的 Fn 松开时不开始听写")
+        XCTAssertNil(service.currentMode)
+        try assertNoSessionIsActive()
+    }
+
+    func testTranslationWithoutADictationSessionFollowsTheToggleShortcutWhenHeld() throws {
+        useToggleShortcutAsTheDictationShortcut()
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        XCTAssertEqual(translationStarts, 1)
+        XCTAssertEqual(service.currentMode, .toggle)
+        Thread.sleep(forTimeInterval: 0.4)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 0, "按住快捷键为不使用时，松开不结束翻译")
+        XCTAssertEqual(service.currentMode, .toggle)
+        Thread.sleep(forTimeInterval: 0.15)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        XCTAssertEqual(stops, 1, "再按 Fn + 左 Shift 结束")
+    }
+
+    func testFnAloneWithTheToggleShortcutKeepsToggleBehavior() throws {
+        useToggleShortcutAsTheDictationShortcut()
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        Thread.sleep(forTimeInterval: 0.4)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(dictationStarts, 1)
+        XCTAssertEqual(service.currentMode, .toggle)
+        XCTAssertEqual(stops, 0)
+        Thread.sleep(forTimeInterval: 0.15)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    func testBackupShortcutSessionUpgradedToTranslationStopsOnTheBackupShortcutRelease() throws {
+        let backupKey: CGKeyCode = 0x60
+        service.setHotkeysForTesting([UnifiedHotkey(keyCode: UInt16(backupKey), modifierFlags: 0, isFn: false)], for: .hybrid)
+        try keyDown(backupKey, flags: [])
+        XCTAssertEqual(dictationStarts, 1)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        XCTAssertEqual(upgrades, 1)
+        Thread.sleep(forTimeInterval: 0.4)
+        try keyUp(backupKey, flags: [.maskSecondaryFn, .maskShift])
+        XCTAssertEqual(stops, 1, "备用快捷键松开时按住说话结束")
+        XCTAssertNil(service.currentMode)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1)
+        XCTAssertEqual(translationStarts, 0)
     }
 
     func testDefaultTranslationShortcutIsFnPlusLeftShiftAndSurvivesClearing() throws {
