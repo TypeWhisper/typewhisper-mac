@@ -1139,6 +1139,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ServiceContainer.shared.calendarMeetingAutomationController.shutdown()
     }
 
+    /// TypeWhisper lives in the menu bar, so closing its last window must not quit it.
+    /// Without this, SwiftUI decides on its own and quits the app on macOS 15 (#1721).
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         WhatsNewCoordinator.shared?.handleWindowRequest()
         if ManagedAppReopenSuppression.shared.consumeIfActive() {
