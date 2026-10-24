@@ -12625,7 +12625,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     func testApiStartRecordingUSBInputReleasesItsContext() async throws {
         let probe = try await runUSBInputStartSoundScenario()
 
-        for _ in 0..<100 where probe.context != nil || probe.audioDeviceService != nil {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while (probe.context != nil || probe.audioDeviceService != nil) && ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
 
@@ -12739,8 +12740,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, usbDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, usbDeviceID)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedDeviceID, usbDeviceID)
         }
 
         _ = context.dictationViewModel.apiStartRecording()
@@ -12791,9 +12792,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, defaultInputDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, defaultInputDeviceID)
-            XCTAssertFalse(context.audioRecordingService.hasExplicitDeviceSelection)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedDeviceID, defaultInputDeviceID)
+            XCTAssertEqual(audioRecordingService?.hasExplicitDeviceSelection, false)
         }
 
         _ = await context.dictationViewModel.apiStartRecordingAwaitingReadiness()
