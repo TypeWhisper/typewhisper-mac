@@ -12680,8 +12680,31 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    private struct USBInputScenarioProbe {
+        weak var context: AnyObject?
+        weak var audioDeviceService: AudioDeviceService?
+    }
+
     @MainActor
     func testApiStartRecording_keepsStartSoundForUSBInputAfterInputIsReady() async throws {
+        _ = try await runUSBInputStartSoundScenario()
+    }
+
+    @MainActor
+    func testApiStartRecordingUSBInputReleasesItsContext() async throws {
+        let probe = try await runUSBInputStartSoundScenario()
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        while (probe.context != nil || probe.audioDeviceService != nil) && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertNil(probe.context)
+        XCTAssertNil(probe.audioDeviceService)
+    }
+
+    @MainActor
+    private func runUSBInputStartSoundScenario() async throws -> USBInputScenarioProbe {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
@@ -12727,8 +12750,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, usbDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertFalse(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedInputDeviceUsesBluetoothTransport, false)
             events.append("start_audio")
         }
 
@@ -12742,6 +12765,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(events, ["start_audio", "start_sound"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
+        return USBInputScenarioProbe(context: context, audioDeviceService: context.audioDeviceService)
     }
 
     @MainActor
@@ -12785,8 +12809,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, usbDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, usbDeviceID)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedDeviceID, usbDeviceID)
         }
 
         _ = context.dictationViewModel.apiStartRecording()
@@ -12837,9 +12861,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, defaultInputDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, defaultInputDeviceID)
-            XCTAssertFalse(context.audioRecordingService.hasExplicitDeviceSelection)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedDeviceID, defaultInputDeviceID)
+            XCTAssertEqual(audioRecordingService?.hasExplicitDeviceSelection, false)
         }
 
         _ = await context.dictationViewModel.apiStartRecordingAwaitingReadiness()
@@ -13372,7 +13396,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let soundService = SoundService()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
-        let audioDeviceService = AudioDeviceService()
+        let audioDeviceService = AudioDeviceService(monitorDeviceChanges: false)
         Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()
@@ -14097,7 +14121,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
         audioDeviceBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioDeviceSelectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
-        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
+        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil),
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         browserExtensionContext: BrowserExtensionContextStore = BrowserExtensionContextStore(frontmostBundleIdentifier: { nil })
     ) -> APIContext {
@@ -14143,6 +14167,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = SoundService()
         let audioDeviceService = AudioDeviceService(
+            monitorDeviceChanges: false,
             transportResolver: audioDeviceTransportResolver,
             bluetoothInputRouteStabilizer: audioDeviceBluetoothInputRouteStabilizer,
             selectionEngineValidator: audioDeviceSelectionEngineValidator,
@@ -14427,7 +14452,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
         audioDeviceBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioDeviceSelectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
-        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
+        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil),
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioRecordingInputActivator: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
@@ -14485,6 +14510,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = soundService ?? SoundService()
         let audioDeviceService = AudioDeviceService(
+            monitorDeviceChanges: false,
             transportResolver: audioDeviceTransportResolver,
             bluetoothInputRouteStabilizer: audioDeviceBluetoothInputRouteStabilizer,
             selectionEngineValidator: audioDeviceSelectionEngineValidator,
@@ -18950,7 +18976,7 @@ extension TypeWhisperIntegrationTests {
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = SoundService()
-        let audioDeviceService = AudioDeviceService()
+        let audioDeviceService = AudioDeviceService(monitorDeviceChanges: false)
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()
         let appFormatterService = AppFormatterService()
