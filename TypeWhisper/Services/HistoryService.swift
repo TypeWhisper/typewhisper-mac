@@ -589,7 +589,7 @@ final class HistoryService: ObservableObject {
             record.finalText = text
             record.renderedDocument = nil
             record.synchronizedStructuredDocument = nil
-            record.wordsCount = text.split(separator: " ").count
+            record.wordsCount = DictumWordCount.count(text)
             record.contentUpdatedAt = Date()
         }
         save()
@@ -754,7 +754,7 @@ final class HistoryService: ObservableObject {
         record.finalText = finalText
         record.renderedDocument = nil
         record.synchronizedStructuredDocument = nil
-        record.wordsCount = finalText.split(separator: " ").count
+        record.wordsCount = DictumWordCount.count(finalText)
         record.contentUpdatedAt = Date()
         save()
         refreshRecentRecords()
@@ -1426,7 +1426,7 @@ final class HistoryService: ObservableObject {
                 record.language = content.detectedLanguage
                 record.engineUsed = content.engineDisplayName
                 record.modelUsed = content.modelDisplayName
-                record.wordsCount = content.finalText.split(whereSeparator: \.isWhitespace).count
+                record.wordsCount = content.wordCount
                 record.originDeviceID = content.originDeviceID
                 record.originPlatformRaw = content.originPlatform
                 record.sourceRaw = content.source
@@ -1698,25 +1698,27 @@ final class HistoryService: ObservableObject {
     }
 
     private func migrateWordsCountIfNeeded() {
-        let descriptor = FetchDescriptor<TranscriptionRecord>(
-            predicate: #Predicate { $0.wordsCount == 0 && !$0.finalText.isEmpty }
-        )
-        let candidates: [TranscriptionRecord]
+        let marker = UserDefaults.standard.string(forKey: Self.wordCountRecountKey)
+        guard marker != Self.wordCountRecountVersion else { return }
+        var needsSave = false
         do {
-            candidates = try modelContext.fetch(descriptor)
+            for record in try allRecordsThrowing() {
+                record.wordsCount = DictumWordCount.count(record.finalText)
+                needsSave = true
+            }
         } catch {
             logger.error("Failed to fetch history word-count migration candidates: \(error.localizedDescription)")
             return
         }
-        var needsSave = false
-        for record in candidates {
-            record.wordsCount = record.finalText.split(separator: " ").count
-            needsSave = true
-        }
         if needsSave {
             save()
         }
+        UserDefaults.standard.set(Self.wordCountRecountVersion, forKey: Self.wordCountRecountKey)
     }
+
+    /// 一次性存量迁移：字数口径改为 CJK 感知后重算全部记录。
+    private static let wordCountRecountKey = "historyWordCountRecount-\(AppConstants.appSupportDirectory.path)"
+    private static let wordCountRecountVersion = "2026-10-24"
 
     nonisolated private static func fetchDescriptor(for query: HistoryQuery) -> FetchDescriptor<TranscriptionRecord> {
         let openInboxState = CaptureInboxState.open.rawValue
@@ -1928,7 +1930,7 @@ final class HistoryService: ObservableObject {
         record.transcriptionVersionsData = try JSONEncoder().encode(versions)
         version.apply(to: record)
         record.activeTranscriptionVersionID = id
-        record.wordsCount = version.finalText.split(whereSeparator: \.isWhitespace).count
+        record.wordsCount = DictumWordCount.count(version.finalText)
         let now = Date()
         record.contentUpdatedAt = now
         record.speakerTranscriptUpdatedAt = now

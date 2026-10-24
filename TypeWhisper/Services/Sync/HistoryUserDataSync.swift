@@ -51,6 +51,7 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         case processingFailureCategory
         case processingFailureMessage
         case alignmentResetAt
+        case wordCount
     }
 
     let recordID: UUID
@@ -73,6 +74,8 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
     let processingFailureMessage: String?
     /// A promoted run invalidates alignment from earlier runs, independently of text edits.
     let alignmentResetAt: Date?
+    /// 存量同步内容没有这个字段时按当前口径从 finalText 重算。
+    let wordCount: Int
 
     init(
         recordID: UUID,
@@ -93,7 +96,8 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         modelDisplayName: String? = nil,
         processingFailureCategory: String? = nil,
         processingFailureMessage: String? = nil,
-        alignmentResetAt: Date? = nil
+        alignmentResetAt: Date? = nil,
+        wordCount: Int? = nil
     ) {
         self.recordID = recordID
         self.createdAt = createdAt
@@ -116,6 +120,7 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         self.processingFailureCategory = processingFailureCategory
         self.processingFailureMessage = processingFailureMessage
         self.alignmentResetAt = alignmentResetAt
+        self.wordCount = wordCount ?? DictumWordCount.count(finalText)
     }
 
     init(from decoder: Decoder) throws {
@@ -151,6 +156,8 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
             forKey: .processingFailureMessage
         )
         alignmentResetAt = try container.decodeIfPresent(Date.self, forKey: .alignmentResetAt)
+        wordCount = try container.decodeIfPresent(Int.self, forKey: .wordCount)
+            ?? DictumWordCount.count(finalText)
     }
 }
 
