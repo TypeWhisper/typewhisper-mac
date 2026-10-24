@@ -26,6 +26,8 @@ final class VoiceBarPresentation: ObservableObject {
     private var lastActivity: DictationViewModel.State = .idle
     private var feedback: (state: VoiceBarState, deadline: Date)?
     private var feedbackCaptured = false
+    private var hadModelNotice = false
+    private var preparingDebounce = PreparingDebounce()
     static var enabled: Bool { UserDefaults.standard.object(forKey: "dictumVoiceBarEnabled") as? Bool ?? true }
 
 #if DEBUG
@@ -55,17 +57,21 @@ final class VoiceBarPresentation: ObservableObject {
             }
         }
 #endif
-        guard state.showsTranscript, !text.isEmpty else { return NSSize(width: state.collapsedWidth, height: 44) }
+        guard state.showsTranscript, hasTranscript else { return NSSize(width: state.collapsedWidth, height: 44) }
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = 22
         paragraph.maximumLineHeight = 22
-        let bounds = (text as NSString).boundingRect(
+        let bounds = (transcript as NSString).boundingRect(
             with: NSSize(width: 424, height: CGFloat.greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             attributes: [.font: NSFont.systemFont(ofSize: 15), .paragraphStyle: paragraph]
         )
         return NSSize(width: 460, height: 60 + min(3, max(1, ceil(bounds.height / 22))) * 22)
     }
+
+    /// 确认前缀与待确认尾段连在一起显示；首个部分结果的前缀为空，只有尾段。
+    var transcript: String { text + tentativeText }
+    var hasTranscript: Bool { !transcript.isEmpty }
 
     static func replacesLegacyIndicator(_ vm: DictationViewModel) -> Bool {
         guard enabled else { return false }
@@ -95,8 +101,16 @@ final class VoiceBarPresentation: ObservableObject {
                 feedbackCaptured = false
             }
             if vm.state == .inserting { feedbackCaptured = false }
+            if vm.state != .recording { preparingDebounce.reset() }
             lastActivity = vm.state
         }
+        // 每次发起听写时模型提示都重新出现一次，包括上一次提示已过期或已被关闭之后。
+        let hasModelNotice = vm.modelNotice != nil
+        if hasModelNotice && !hadModelNotice {
+            feedback = nil
+            feedbackCaptured = false
+        }
+        hadModelNotice = hasModelNotice
         var input = VoiceBarState.Input()
         input.confirmedText = vm.partialText
         input.tentativeText = vm.streamingPreview.tentativeTail
@@ -112,7 +126,13 @@ final class VoiceBarPresentation: ObservableObject {
             }
         }
         switch vm.state {
-        case .recording: input.activity = vm.isRecordingInputReady && !vm.isModelLoading ? .recording : .preparing
+        case .recording:
+            let preparing = !(vm.isRecordingInputReady && !vm.isModelLoading)
+            switch preparingDebounce.update(preparing: preparing, now: Date()) {
+            case .some(true): input.activity = .preparing
+            case .some(false): input.activity = .recording
+            case nil: input.activity = .idle
+            }
         case .processing: input.activity = .processing
         case .error(let message): input.outcome = .blockingError(message)
         case .inserting:
@@ -130,7 +150,7 @@ final class VoiceBarPresentation: ObservableObject {
                 } else if vm.cancelledRecordingDeadline == nil, let inserted = vm.voiceBarInsertedText {
                     let processing = ServiceContainer.shared.promptProcessingService
                     input.outcome = processing.fallbackPriorityList.contains(where: { processing.isProviderReady($0.providerId) })
-                        ? .inserted(Self.countWords(inserted)) : .noAI
+                        ? .inserted(DictumWordCount.count(inserted)) : .noAI
                 }
             }
         default: break
@@ -173,9 +193,7 @@ final class VoiceBarPresentation: ObservableObject {
         }
         isActive = nextState != .idle
         if isActive { state = nextState }
-        let parts = Self.transcriptParts(recording: vm.state == .recording, partialText: vm.partialText, preview: vm.streamingPreview)
-        if !vm.partialText.isEmpty || !state.showsTranscript { text = parts.confirmed }
-        tentativeText = parts.tentative
+        updateTranscript(recording: vm.state == .recording, partialText: vm.partialText, preview: vm.streamingPreview)
         duration = vm.recordingDuration
         levels.removeFirst()
         levels.append(vm.audioLevel)
@@ -190,19 +208,43 @@ final class VoiceBarPresentation: ObservableObject {
     }
 #endif
 
+    func updateTranscript(recording: Bool, partialText: String, preview: StreamingHandler.Preview) {
+        let parts = Self.transcriptParts(recording: recording, partialText: partialText, preview: preview)
+        if !partialText.isEmpty || !state.showsTranscript { text = parts.confirmed }
+        tentativeText = parts.tentative
+    }
+
     /// partialText 已包含待确认尾段，录音中按预览拆成确认前缀与尾段，其余状态整段显示。
     static func transcriptParts(recording: Bool, partialText: String, preview: StreamingHandler.Preview) -> (confirmed: String, tentative: String) {
         recording ? (preview.confirmedPrefix, preview.tentativeTail) : (partialText, "")
     }
+}
 
-    static func countWords(_ text: String) -> Int {
-        var count = 0
-        text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) { substring, _, _, _ in
-            guard let substring, substring.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else { return }
-            if substring.unicodeScalars.contains(where: { (0x3400...0x9FFF).contains(Int($0.value)) }) { count += substring.count }
-            else { count += 1 }
+/// 准备中状态只在准备条件连续成立 0.15 秒后显示，离开同样需要连续 0.15 秒，
+/// 引擎就绪与模型加载之间的瞬时切换不会让语音条在准备中与聆听之间闪烁。
+struct PreparingDebounce {
+    static let delay: TimeInterval = 0.15
+    private var shown: Bool?
+    private var changeSince: Date?
+
+    mutating func reset() {
+        shown = nil
+        changeSince = nil
+    }
+
+    /// 返回 nil 表示准备条件刚出现、尚未持续足够久，语音条暂不显示。
+    mutating func update(preparing: Bool, now: Date) -> Bool? {
+        if shown == nil, !preparing { shown = false }
+        if let current = shown, current == preparing {
+            changeSince = nil
+            return current
         }
-        return count
+        let since = changeSince ?? now
+        changeSince = since
+        guard now.timeIntervalSince(since) >= Self.delay else { return shown }
+        shown = preparing
+        changeSince = nil
+        return preparing
     }
 }
 
@@ -378,7 +420,7 @@ struct VoiceBarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if model.state.showsTranscript && !model.text.isEmpty {
+            if model.state.showsTranscript && model.hasTranscript {
                 transcript.padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 2)
             }
             HStack(spacing: 10) { controls }.padding(.leading, 15).padding(.trailing, 7).frame(height: 44)
@@ -417,7 +459,7 @@ struct VoiceBarView: View {
             .scrollIndicators(.hidden).scrollDisabled(true)
             .frame(height: model.contentSize.height - 60)
             .mask(LinearGradient(stops: [.init(color: model.contentSize.height >= 126 ? .clear : .white, location: 0), .init(color: .white, location: 0.27), .init(color: .white, location: 1)], startPoint: .top, endPoint: .bottom))
-            .onChange(of: model.text) { _, _ in proxy.scrollTo("transcript", anchor: .bottom) }
+            .onChange(of: model.transcript) { _, _ in proxy.scrollTo("transcript", anchor: .bottom) }
             .onAppear { proxy.scrollTo("transcript", anchor: .bottom) }
         }
     }

@@ -63,7 +63,58 @@ final class VoiceBarStateTests: XCTestCase {
 
     @MainActor
     func testInsertedCountIgnoresLineBreaksAndPunctuation() {
-        XCTAssertEqual(VoiceBarPresentation.countWords("明天下午三点，请准备。\n\n我们开会。"), 13)
-        XCTAssertEqual(VoiceBarPresentation.countWords("Hello, world.\nSecond line"), 4)
+        XCTAssertEqual(DictumWordCount.count("明天下午三点，请准备。\n\n我们开会。"), 13)
+        XCTAssertEqual(DictumWordCount.count("Hello, world.\nSecond line"), 4)
+    }
+
+    @MainActor
+    func testFirstPartialWithEmptyPrefixShowsTranscriptAndSizesFromCombinedText() {
+        let presentation = VoiceBarPresentation()
+        presentation.setStateForTesting(.listeningWithText)
+        let preview = StreamingHandler.Preview.comparing(previous: "", current: "明天下午三点")
+        presentation.updateTranscript(recording: true, partialText: "明天下午三点", preview: preview)
+        XCTAssertEqual(presentation.text, "")
+        XCTAssertEqual(presentation.tentativeText, "明天下午三点")
+        XCTAssertTrue(presentation.hasTranscript)
+        XCTAssertEqual(presentation.contentSize.width, 460)
+        XCTAssertEqual(presentation.contentSize.height, 82)
+    }
+
+    @MainActor
+    func testWrappedTentativeTailGrowsTheBar() {
+        let presentation = VoiceBarPresentation()
+        presentation.setStateForTesting(.listeningWithText)
+        presentation.text = "今天"
+        presentation.tentativeText = String(repeating: "明天下午三点开会地点不变。", count: 6)
+        XCTAssertEqual(presentation.contentSize.height, 126)
+    }
+
+    func testPreparingShowsOnlyAfterContinuousDelay() {
+        var debounce = PreparingDebounce()
+        let start = Date()
+        XCTAssertNil(debounce.update(preparing: true, now: start))
+        XCTAssertNil(debounce.update(preparing: true, now: start.addingTimeInterval(0.1)))
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.16)), true)
+    }
+
+    func testBriefReadyBlipDoesNotLeavePreparing() {
+        var debounce = PreparingDebounce()
+        let start = Date()
+        _ = debounce.update(preparing: true, now: start)
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.2)), true)
+        XCTAssertEqual(debounce.update(preparing: false, now: start.addingTimeInterval(0.25)), true)
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.3)), true)
+        XCTAssertEqual(debounce.update(preparing: false, now: start.addingTimeInterval(0.35)), true)
+        XCTAssertEqual(debounce.update(preparing: false, now: start.addingTimeInterval(0.52)), false)
+    }
+
+    func testBriefPreparingBlipDoesNotLeaveListening() {
+        var debounce = PreparingDebounce()
+        let start = Date()
+        XCTAssertEqual(debounce.update(preparing: false, now: start), false)
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.05)), false)
+        XCTAssertEqual(debounce.update(preparing: false, now: start.addingTimeInterval(0.1)), false)
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.2)), false)
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.4)), true)
     }
 }
