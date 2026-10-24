@@ -55,7 +55,7 @@ flowchart LR
 
 每个开发阶段的流程：开发代理在独立的 git worktree 中开发，自己构建并运行测试，提交 PR；Claude 审查；有问题就由新的开发代理修复，再审查，最多三轮；通过后合入 `main`，同步更新 Notion。
 
-阶段 0、5A 和阶段 0B 的开发代理是 gpt-6.1-sol；阶段 1、2、4、5B 由 gpt-6-astra（推理强度 low，不使用快速模式）开发；2026-10-23 起 Codex 额度不足，新的开发和修复由 Claude Sonnet 5.5 负责，尚未完成的 gpt-6-astra 任务交接给 Pi 的 DeepSeek 接续；2026-10-24 起，正在运行的 Pi 任务完成后，新的开发和修复交给 Codex 的“永不卡住”路由组（group/never-stuck，推理强度 high，不使用 priority）；某个单元中断时，先在同一对话里用该路由组接续，接续 2 次仍失败后改由 Claude Sonnet 5.5 接续；2026-10-24 下午起，该路由组持续返回 ZCode 405 错误，在负责人确认它恢复之前，新的开发和修复直接交给 Claude Sonnet 5.5。额度用完后使用重置卡：协调代理通知负责人使用重置卡，负责人确认前的开发由 Claude 接替。审查只由 Claude 负责，由一个与开发代理不同的新 Claude 代理审查，使用 Claude Fable 5.1 或 Claude Opus 5.5。
+阶段 0、5A 和阶段 0B 的开发代理是 gpt-6.1-sol；阶段 1、2、4、5B 由 gpt-6-astra（推理强度 low，不使用快速模式）开发；2026-10-23 起 Codex 额度不足，新的开发和修复由 Claude Sonnet 5.5 负责，尚未完成的 gpt-6-astra 任务交接给 Pi 的 DeepSeek 接续；2026-10-24 起，正在运行的 Pi 任务完成后，新的开发和修复交给 Codex 的“永不卡住”路由组（group/never-stuck，推理强度 high，不使用 priority）；某个单元中断时，先在同一对话里用该路由组接续，接续 2 次仍失败后改由 Claude Sonnet 5.5 接续；2026-10-24 下午起，该路由组持续返回 ZCode 405 错误，在负责人确认它恢复之前，新的开发和修复直接交给 Claude Sonnet 5.5。涉及软件根本功能的问题（听写、语音识别、文字插入、润色，例如应用本身崩溃）由 Claude Opus 5.5 调查和修复。额度用完后使用重置卡：协调代理通知负责人使用重置卡，负责人确认前的开发由 Claude 接替。审查只由 Claude 负责，由一个与开发代理不同的新 Claude 代理审查，使用 Claude Fable 5.1 或 Claude Opus 5.5。
 
 ## 关键决策
 
