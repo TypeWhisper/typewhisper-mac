@@ -10,7 +10,7 @@ import os
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -29,7 +29,40 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     // Observable state for settings UI
     fileprivate var modelState: Qwen3ModelState = .notLoaded
-    fileprivate var downloadProgress: Double?
+    struct DownloadStatus: Sendable {
+        var progress: Double?
+        var completed: Int64 = 0
+        var total: Int64 = 0
+        private var samples: [(date: Date, bytes: Int64)] = []
+
+        mutating func update(_ value: Progress, at date: Date = .now) {
+            progress = value.fractionCompleted
+            total = value.totalUnitCount
+            completed = Int64((Double(total) * value.fractionCompleted).rounded())
+            if let last = samples.last, date.timeIntervalSince(last.date) < 1 { return }
+            samples.append((date, completed))
+            samples.removeAll { date.timeIntervalSince($0.date) > 10 }
+        }
+
+        var remainingSeconds: Double? {
+            guard let first = samples.first, let last = samples.last,
+                  last.date.timeIntervalSince(first.date) >= 2,
+                  last.bytes > first.bytes, total > completed else { return nil }
+            return last.date.timeIntervalSince(first.date) * Double(total - completed) / Double(last.bytes - first.bytes)
+        }
+    }
+    private let downloadStatus = OSAllocatedUnfairLock(initialState: DownloadStatus())
+    fileprivate var downloadProgress: Double? {
+        get { downloadStatus.withLock { $0.progress } }
+        set { downloadStatus.withLock { $0.progress = newValue } }
+    }
+
+    @objc var speechDownloadDetails: NSDictionary {
+        let status = downloadStatus.withLock { $0 }
+        var details: [String: Any] = ["completedBytes": status.completed, "totalBytes": status.total]
+        if let remaining = status.remainingSeconds { details["remainingSeconds"] = remaining }
+        return details as NSDictionary
+    }
 
     private static let primaryParams = STTGenerateParameters(
         maxTokens: 2048,
@@ -293,7 +326,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     var supportsTranslation: Bool { false }
-    var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        Qwen3ContextBiasFormatter.budget
+    }
 
     func transcribe(
         audio: AudioData,
@@ -403,7 +439,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 guard !modelDef.id.hasPrefix("custom-") else {
                     throw PluginModelImportError.invalidModel("Imported files are missing. Remove and import the model again.")
                 }
-                removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
+                downloadStatus.withLock { $0 = DownloadStatus() }
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                     throw NSError(
                         domain: "Qwen3Plugin",
@@ -434,7 +470,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                         of: repoID,
                         matching: Self.modelDownloadPatterns,
                         progressHandler: { [weak self] progress in
-                            self?.downloadProgress = progress.fractionCompleted
+                            self?.downloadStatus.withLock { status in
+                                status.update(progress)
+                            }
                         }
                     )
                     guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
@@ -447,9 +485,6 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                             userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"]
                         )
                     }
-                } catch {
-                    removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
-                    throw error
                 }
             }
             // Release the previous runtime before constructing its replacement.
@@ -541,6 +576,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId, expectedGeneration: generation)
             }
         }
+    }
+
+    @objc func cancelModelDownload() {
+        unloadModel(clearPersistence: false)
     }
 
     func unloadModel(clearPersistence: Bool = true, clearRuntimeCache: Bool = true) {
@@ -680,16 +719,6 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             .appendingPathComponent(modelDef.repoId.replacingOccurrences(of: "/", with: "_"))
     }
 
-    private func removeIncompleteModelIfNeeded(_ modelDef: Qwen3ModelDef, modelsDirectory: URL) {
-        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
-        let legacyDirectories = [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)]
-        guard usableModelDirectory(for: modelDef, modelsDirectory: modelsDirectory) == nil,
-              store.hasCachedModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories) else {
-            return
-        }
-        try? store.deleteModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories)
-    }
-
     private func cleanupRedundantModelCopies() {
         guard let modelsDirectory = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
         let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
@@ -824,7 +853,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             repoId: "mlx-community/Qwen3-ASR-1.7B-5bit",
             sizeDescription: "~1.8 GB",
             ramRequirement: "16 GB+",
-            usageHint: "Middle ground if the default 6-bit model is tight on memory."
+            usageHint: "Middle ground if the default 8-bit model is tight on memory."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-6bit",
@@ -832,17 +861,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             repoId: "mlx-community/Qwen3-ASR-1.7B-6bit",
             sizeDescription: "~2.0 GB",
             ramRequirement: "16 GB+",
-            usageHint: "Best default for most 16 GB+ Macs.",
-            recommendation: .balanced
+            usageHint: "Lighter pick when memory is tight; MLX peak about 2.8 GiB."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-8bit",
             displayName: "Qwen3 1.7B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-8bit",
             sizeDescription: "~2.5 GB",
-            ramRequirement: "32 GB+",
-            usageHint: "Higher-quality pick for 32 GB+ Macs.",
-            recommendation: .highQuality
+            ramRequirement: "16 GB+",
+            usageHint: "Default precision; MLX peak about 3.2 GiB.",
+            recommendation: .balanced
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-bf16",
@@ -1607,7 +1635,7 @@ private struct Qwen3SettingsView: View {
         case .balanced:
             String(localized: "Recommended", bundle: bundle)
         case .highQuality:
-            String(localized: "32 GB quality", bundle: bundle)
+            String(localized: "Unquantized quality", bundle: bundle)
         }
     }
 
@@ -1618,7 +1646,7 @@ private struct Qwen3SettingsView: View {
         case .balanced:
             String(localized: "Best default", bundle: bundle)
         case .highQuality:
-            String(localized: "Quality / 32 GB", bundle: bundle)
+            String(localized: "Unquantized quality", bundle: bundle)
         }
     }
 
@@ -1637,11 +1665,11 @@ private struct Qwen3SettingsView: View {
         case "qwen3-asr-1.7b-4bit":
             String(localized: "Smallest 1.7B option; use when 6-bit is too heavy.", bundle: bundle)
         case "qwen3-asr-1.7b-5bit":
-            String(localized: "Middle ground if the default 6-bit model is tight on memory.", bundle: bundle)
+            String(localized: "Middle ground if the default 8-bit model is tight on memory.", bundle: bundle)
         case "qwen3-asr-1.7b-6bit":
-            String(localized: "Best default for most 16 GB+ Macs.", bundle: bundle)
+            String(localized: "Lighter pick when memory is tight; MLX peak about 2.8 GiB.", bundle: bundle)
         case "qwen3-asr-1.7b-8bit":
-            String(localized: "Higher-quality pick for 32 GB+ Macs.", bundle: bundle)
+            String(localized: "Default precision; MLX peak about 3.2 GiB.", bundle: bundle)
         case "qwen3-asr-1.7b-bf16":
             String(localized: "Largest unquantized model; use for max-fidelity validation.", bundle: bundle)
         default:

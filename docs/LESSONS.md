@@ -7,6 +7,16 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence:
   - Fix:
 
+- 轮询的 SwiftUI 构建器读取值快照 (Seen x1: 2026-10-23)
+  - 问题：语音识别页面在嵌套视图构建器里轮询插件引用。侧栏已更新时，模型行和精度选择仍显示旧值。
+  - 证据：真实的 Qwen3 下载进行中，侧栏显示 63%，页面仍显示“下载”。修改精度后模型大小已更新，选择器仍显示 6-bit。
+  - 方法：在时间线闭包内把活动状态和所选模型读入值快照，再传给行构建器，并用所选模型标识精度选择器。在运行的应用里确认进度和选择的刷新。
+
+- 未读日志就把失败归因给其他单元 (Seen x1: 2026-10-24)
+  - 问题：阶段 1 的报告写“插入读回为空”，并归因于文本插入单元。实际是测试驱动让 dictum Dev 自己处于最前，粘贴目标不是 TextEdit。
+  - 证据：12 次运行中 9 次精确插入一份；三次失败都是各档的第 0 次，日志为 `reason=no-focused-text-element`、`bundle=com.schneidervvv.dictum.dev`。
+  - 方法：报告失败原因前先读同一次运行的日志；确认目标应用在最前后再判断插入结果，不把未核实的原因写进文档。
+
 - 使用版本输出确认 Metal 组件已安装 (Seen x1: 2026-10-22)
   - 问题：系统可以在 Metal 组件安装完成前返回工具路径，提前运行的 SwiftPM 构建还会保留安装前的失败状态。
   - 证据：工具路径可查询时，首次 SDK 构建仍报告 Metal 组件缺失；组件安装完成后，`xcrun metal --version` 正常输出 Apple Metal 版本，SDK 构建通过。
