@@ -110,8 +110,8 @@ final class SoundServiceTests: XCTestCase {
 
         service.deleteCustomSound(filename)
 
-        XCTAssertEqual(service.choice(for: .recordingStarted), .bundled("recording_start"))
-        XCTAssertEqual(service.choice(for: .error), .bundled("error"))
+        XCTAssertEqual(service.choice(for: .recordingStarted), .system("Tink"))
+        XCTAssertEqual(service.choice(for: .error), .system("Funk"))
         XCTAssertEqual(service.choice(for: .transcriptionSuccess), .system("Ping"))
         XCTAssertEqual(SoundChoice.installedCustomSounds(), [])
     }
@@ -128,7 +128,7 @@ final class SoundServiceTests: XCTestCase {
 
         service.play(.recordingStarted, enabled: true)
 
-        XCTAssertEqual(oneShotPlayer.playedURLs.map(\.lastPathComponent), ["recording_start.wav"])
+        XCTAssertEqual(oneShotPlayer.playedURLs.map(\.lastPathComponent), ["Tink.aiff"])
         XCTAssertTrue(service.resolvedChoices.isEmpty)
     }
 
@@ -208,7 +208,7 @@ final class SoundServiceTests: XCTestCase {
 
         XCTAssertEqual(service.playbackDuration(for: .recordingStarted, enabled: true), 0.25)
         XCTAssertNil(service.playbackDuration(for: .recordingStarted, enabled: false))
-        XCTAssertEqual(oneShotPlayer.durationRequests.map(\.lastPathComponent), ["recording_start.wav"])
+        XCTAssertEqual(oneShotPlayer.durationRequests.map(\.lastPathComponent), ["Tink.aiff"])
         XCTAssertTrue(service.resolvedChoices.isEmpty)
     }
 
@@ -225,14 +225,14 @@ final class SoundServiceTests: XCTestCase {
 
         XCTAssertEqual(
             oneShotPlayer.preparedURLSets.last.map { Set($0.map(\.lastPathComponent)) },
-            ["recording_start.wav", "transcription_success.wav", "error.wav"]
+            ["Tink.aiff", "Pop.aiff", "Funk.aiff"]
         )
 
         service.updateChoice(for: .recordingStarted, choice: .none)
 
         XCTAssertEqual(
             oneShotPlayer.preparedURLSets.last.map { Set($0.map(\.lastPathComponent)) },
-            ["transcription_success.wav", "error.wav"]
+            ["Pop.aiff", "Funk.aiff"]
         )
     }
 
@@ -271,16 +271,37 @@ final class SoundServiceTests: XCTestCase {
         player.preparePlayback(for: [url])
         await player.waitForPendingPreparationsForTesting()
 
-        XCTAssertEqual(factory.players.count, 1)
+        XCTAssertEqual(Array(factory.players.map(\.url.lastPathComponent).prefix(1)), ["cue.wav"])
         XCTAssertEqual(factory.players.first?.createdOnMainThread, false)
         XCTAssertEqual(factory.players.first?.prepareCount, 1)
 
         XCTAssertEqual(player.duration(for: url), 0.4)
         XCTAssertTrue(player.play(url: url))
+        await player.waitForPendingPlaybackForTesting()
 
-        XCTAssertEqual(factory.players.count, 1)
-        XCTAssertEqual(factory.players.first?.prepareCount, 1)
-        XCTAssertEqual(factory.players.first?.playCount, 1)
+        XCTAssertEqual(Array(factory.players.map(\.prepareCount).prefix(1)), [1])
+        XCTAssertEqual(Array(factory.players.map(\.playCount).prefix(1)), [1])
+    }
+
+    @MainActor
+    func testOneShotPlayerStartsPreparedCueWithoutBlockingTheMainThread() async throws {
+        let factory = FakeSoundCuePlayerFactory(duration: 0.4)
+        let player = makeOneShotPlayer(factory: factory)
+        let url = URL(fileURLWithPath: "/tmp/blocking-cue.wav")
+
+        player.preparePlayback(for: [url])
+        await player.waitForPendingPreparationsForTesting()
+        let cue = try XCTUnwrap(factory.players.first)
+        cue.holdNextPlay = true
+
+        XCTAssertTrue(player.play(url: url))
+        XCTAssertEqual(cue.playCount, 0)
+        XCTAssertTrue(Thread.isMainThread)
+
+        cue.releaseNextPlay()
+        await player.waitForPendingPlaybackForTesting()
+        XCTAssertEqual(cue.playCount, 1)
+        XCTAssertEqual(cue.createdOnMainThread, false)
     }
 
     @MainActor
@@ -292,16 +313,17 @@ final class SoundServiceTests: XCTestCase {
         player.preparePlayback(for: [url])
         await player.waitForPendingPreparationsForTesting()
         XCTAssertTrue(player.play(url: url))
-        await player.waitForPendingPreparationsForTesting()
+        await player.waitForPendingPlaybackForTesting()
         XCTAssertTrue(player.play(url: url))
+        await player.waitForPendingPreparationsForTesting()
 
-        XCTAssertEqual(factory.players.map(\.playCount), [1, 1])
-        XCTAssertEqual(factory.players.map(\.createdOnMainThread), [false, false])
-        XCTAssertEqual(factory.players.map(\.prepareCount), [1, 1])
+        XCTAssertEqual(Array(factory.players.map(\.playCount).prefix(2)), [1, 1])
+        XCTAssertEqual(Array(factory.players.map(\.createdOnMainThread).prefix(2)), [false, false])
+        XCTAssertEqual(Array(factory.players.map(\.prepareCount).prefix(2)), [1, 1])
     }
 
     @MainActor
-    func testOneShotPlayerUsesDurationPlayerForPlaybackWhenCueIsNotPrepared() {
+    func testOneShotPlayerUsesDurationPlayerForPlaybackWhenCueIsNotPrepared() async {
         let factory = FakeSoundCuePlayerFactory(duration: 0.3)
         let player = makeOneShotPlayer(factory: factory)
         let url = URL(fileURLWithPath: "/tmp/untracked.wav")
@@ -309,10 +331,25 @@ final class SoundServiceTests: XCTestCase {
         XCTAssertEqual(player.duration(for: url), 0.3)
         XCTAssertEqual(player.duration(for: url), 0.3)
         XCTAssertTrue(player.play(url: url))
+        await player.waitForPendingPlaybackForTesting()
 
-        XCTAssertEqual(factory.players.count, 1)
+        XCTAssertEqual(Array(factory.players.map(\.url.lastPathComponent).prefix(1)), ["untracked.wav"])
         XCTAssertEqual(factory.players.first?.prepareCount, 1)
         XCTAssertEqual(factory.players.first?.playCount, 1)
+    }
+
+    @MainActor
+    func testOneShotPlayerReportsQueuedPlaybackFailureToTheResultHandler() async {
+        let player = makeOneShotPlayer(makePlayer: { _ in FailingSoundCuePlayer() })
+        let url = URL(fileURLWithPath: "/tmp/failing-cue.wav")
+
+        var reported: (url: URL, started: Bool)?
+        player.setPlaybackResultHandler { reported = ($0, $1) }
+
+        XCTAssertTrue(player.play(url: url))
+        await player.waitForPendingPlaybackForTesting()
+        XCTAssertEqual(reported?.url, url)
+        XCTAssertEqual(reported?.started, false)
     }
 
     @MainActor
@@ -331,7 +368,8 @@ final class SoundServiceTests: XCTestCase {
 
         XCTAssertEqual(player.duration(for: url), 0.9)
         XCTAssertTrue(player.play(url: url))
-        XCTAssertEqual(factory.players.map(\.playCount), [0, 1])
+        await player.waitForPendingPlaybackForTesting()
+        XCTAssertEqual(Array(factory.players.map(\.playCount).prefix(2)), [0, 1])
     }
 
     @MainActor
@@ -347,7 +385,8 @@ final class SoundServiceTests: XCTestCase {
         await player.waitForPendingPreparationsForTesting()
 
         XCTAssertTrue(player.play(url: url))
-        XCTAssertEqual(factory.players.map(\.playCount), [0, 1])
+        await player.waitForPendingPlaybackForTesting()
+        XCTAssertEqual(Array(factory.players.map(\.playCount).prefix(2)), [0, 1])
     }
 
     @MainActor
@@ -363,12 +402,12 @@ final class SoundServiceTests: XCTestCase {
         await player.waitForPendingPreparationsForTesting()
 
         XCTAssertTrue(player.play(url: firstURL))
-        await player.waitForPendingPreparationsForTesting()
+        await player.waitForPendingPlaybackForTesting()
 
         // The released first cue is created on demand and is not prepared again.
         XCTAssertEqual(factory.players.map(\.url.lastPathComponent), ["first.wav", "second.wav", "first.wav"])
         XCTAssertEqual(factory.players.map(\.playCount), [0, 0, 1])
-        XCTAssertEqual(factory.players.last?.createdOnMainThread, true)
+        XCTAssertEqual(factory.players.last?.createdOnMainThread, false)
     }
 
     @MainActor
@@ -383,8 +422,9 @@ final class SoundServiceTests: XCTestCase {
         await player.waitForPendingPreparationsForTesting()
 
         XCTAssertTrue(player.play(url: url))
-        XCTAssertEqual(factory.players.map(\.playCount), [0, 1])
-        XCTAssertEqual(factory.players.map(\.createdOnMainThread), [false, false])
+        await player.waitForPendingPlaybackForTesting()
+        XCTAssertEqual(Array(factory.players.map(\.playCount).prefix(2)), [0, 1])
+        XCTAssertEqual(Array(factory.players.map(\.createdOnMainThread).prefix(2)), [false, false])
     }
 
     @MainActor
@@ -399,7 +439,8 @@ final class SoundServiceTests: XCTestCase {
         await player.waitForPendingPreparationsForTesting()
 
         XCTAssertTrue(player.play(url: url))
-        XCTAssertEqual(factory.players.map(\.playCount), [0, 1])
+        await player.waitForPendingPlaybackForTesting()
+        XCTAssertEqual(Array(factory.players.map(\.playCount).prefix(2)), [0, 1])
     }
 
     @MainActor
@@ -412,9 +453,84 @@ final class SoundServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPlaybackFailureOfDefaultChoiceFallsBackToDefaultSound() throws {
+        let storedDefaults = captureSoundDefaults()
+        defer { restoreSoundDefaults(storedDefaults) }
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.soundRecordingStarted)
+        let oneShotPlayer = SpyOneShotSoundPlayer()
+        let service = PreviewSoundResolverSpy(oneShotPlayer: oneShotPlayer)
+
+        service.play(.recordingStarted, enabled: true)
+        let url = try XCTUnwrap(oneShotPlayer.playedURLs.first)
+        oneShotPlayer.playbackResultHandler?(url, false)
+
+        XCTAssertEqual(service.resolvedChoices, [.system("Tink")])
+    }
+
+    @MainActor
+    func testPlaybackFailureKeepsSavedChoice() throws {
+        let storedDefaults = captureSoundDefaults()
+        defer { restoreSoundDefaults(storedDefaults) }
+        let oneShotPlayer = SpyOneShotSoundPlayer()
+        let service = PreviewSoundResolverSpy(oneShotPlayer: oneShotPlayer)
+        service.updateChoice(for: .recordingStarted, choice: .system("Glass"))
+
+        service.play(.recordingStarted, enabled: true)
+        let url = try XCTUnwrap(oneShotPlayer.playedURLs.first)
+        XCTAssertEqual(url.lastPathComponent, "Glass.aiff")
+        oneShotPlayer.playbackResultHandler?(url, false)
+
+        XCTAssertEqual(service.resolvedChoices, [.system("Tink")])
+        XCTAssertEqual(service.choice(for: .recordingStarted), .system("Glass"))
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.soundRecordingStarted), "system:Glass")
+    }
+
+    @MainActor
+    func testCuePlaysWhileAnotherCuePreparationIsBlocked() async throws {
+        let gate = DispatchSemaphore(value: 0)
+        let blockedEntered = expectation(description: "blocked cue preparation entered the player factory")
+        let factory = FakeSoundCuePlayerFactory(duration: 0.4)
+        let blocked = URL(fileURLWithPath: "/tmp/blocked-cue.wav")
+        let stop = URL(fileURLWithPath: "/tmp/stop-cue.wav")
+        let player = AVAudioOneShotSoundPlayer(
+            makePlayer: { url in
+                if url == blocked {
+                    blockedEntered.fulfill()
+                    gate.wait()
+                }
+                return try factory.makePlayer(url: url)
+            },
+            preparationQueue: DispatchQueue(label: "SoundServiceTests.preparation"),
+            playbackQueue: DispatchQueue(label: "SoundServiceTests.playback"),
+            observesOutputDeviceChanges: false
+        )
+
+        player.preparePlayback(for: [blocked])
+        await fulfillment(of: [blockedEntered], timeout: 2)
+        XCTAssertTrue(player.play(url: stop))
+        for _ in 0..<100 where factory.players.first(where: { $0.url == stop })?.playCount != 1 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let played = factory.players.first(where: { $0.url == stop })?.playCount
+        gate.signal()
+        await player.waitForPendingPreparationsForTesting()
+
+        XCTAssertEqual(played, 1)
+    }
+
+    @MainActor
     private func makeOneShotPlayer(factory: FakeSoundCuePlayerFactory) -> AVAudioOneShotSoundPlayer {
         AVAudioOneShotSoundPlayer(
             makePlayer: { try factory.makePlayer(url: $0) },
+            preparationQueue: DispatchQueue(label: "SoundServiceTests.preparation"),
+            observesOutputDeviceChanges: false
+        )
+    }
+
+    @MainActor
+    private func makeOneShotPlayer(makePlayer: @escaping AVAudioOneShotSoundPlayer.PlayerFactory) -> AVAudioOneShotSoundPlayer {
+        AVAudioOneShotSoundPlayer(
+            makePlayer: makePlayer,
             preparationQueue: DispatchQueue(label: "SoundServiceTests.preparation"),
             observesOutputDeviceChanges: false
         )
@@ -455,6 +571,7 @@ final class SoundServiceTests: XCTestCase {
     @MainActor
     private final class SpyOneShotSoundPlayer: OneShotSoundPlaying {
         var durationToReturn: TimeInterval?
+        var playbackResultHandler: (@MainActor @Sendable (URL, Bool) -> Void)?
         private(set) var playedURLs: [URL] = []
         private(set) var durationRequests: [URL] = []
         private(set) var preparedURLSets: [Set<URL>] = []
@@ -462,6 +579,7 @@ final class SoundServiceTests: XCTestCase {
 
         func play(url: URL) -> Bool {
             playedURLs.append(url)
+            playbackResultHandler?(url, true)
             return true
         }
 
@@ -477,12 +595,19 @@ final class SoundServiceTests: XCTestCase {
         func invalidate(url: URL) {
             invalidatedURLs.append(url)
         }
+
+        func setPlaybackResultHandler(_ handler: (@MainActor @Sendable (URL, Bool) -> Void)?) {
+            playbackResultHandler = handler
+        }
     }
 
     private final class FakeSoundCuePlayer: SoundCuePlayback, @unchecked Sendable {
         let url: URL
         let duration: TimeInterval
         let createdOnMainThread = Thread.isMainThread
+        private let playGate = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var isNextPlayHeld = false
         private(set) var prepareCount = 0
         private(set) var playCount = 0
 
@@ -497,8 +622,21 @@ final class SoundServiceTests: XCTestCase {
         }
 
         func play() -> Bool {
+            if lock.withLock({ isNextPlayHeld }) {
+                lock.withLock { isNextPlayHeld = false }
+                playGate.wait()
+            }
             playCount += 1
             return true
+        }
+
+        var holdNextPlay: Bool {
+            get { lock.withLock { isNextPlayHeld } }
+            set { lock.withLock { isNextPlayHeld = newValue } }
+        }
+
+        func releaseNextPlay() {
+            playGate.signal()
         }
     }
 
@@ -527,6 +665,12 @@ final class SoundServiceTests: XCTestCase {
                 return player
             }
         }
+    }
+
+    private final class FailingSoundCuePlayer: SoundCuePlayback, @unchecked Sendable {
+        var duration: TimeInterval { 0.2 }
+        func prepareToPlay() -> Bool { true }
+        func play() -> Bool { false }
     }
 
 }

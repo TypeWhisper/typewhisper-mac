@@ -1,11 +1,31 @@
 # Lessons
 
+- Isolate system input in recording recovery tests (Seen x1: 2026-10-23)
+  - What went wrong: A new recovery test used the real text insertion service and pasted `transcribed` into the foreground application while another phase held the live-run lock.
+  - Evidence: `/tmp/dictum-p5b/restore-test-global-input-incident.log` records insertion at 15:33:17 in `testCancelledRecordingRestoresWithoutPersistedRecoveryAudio`.
+  - Fix: Use a uniquely named pasteboard and test callbacks for paste, copy, return, focus and application capture. Assert the captured inserted text. Global input requires ownership of `/tmp/dictum-run.lock`, including input originating in a test.
+
+- Decide visibility after refreshing the model (Seen x1: 2026-10-24)
+  - What went wrong: The voice bar timer stopped while the bar was hidden, and the wake-up handler ran on `objectWillChange` (before the value changed) and tested `isVisible` before refreshing, so a hidden bar never appeared again.
+  - Evidence: `/tmp/dictum-p5b-fix/fn-insert-1-listening.png` shows no bar during recording; `VoiceBarModelNoticeRenderingTests` fails on the old code and passes after the fix.
+  - Fix: Refresh first, then decide to show or hide; deliver wake-ups on the next main-queue turn. Check a live screenshot of every state, because in-process tests with a hidden panel pass.
+
+- Keep the target application frontmost for the whole live insertion (Seen x1: 2026-10-24)
+  - What went wrong: Another application took focus after the stop key, and the dictated text was pasted into its composer.
+  - Evidence: `/tmp/dictum-p5b-fix/fn-insert-1-feedback.png` (17:46) shows the text in the ChatGPT composer while the harness believed TextEdit was frontmost.
+  - Fix: Re-activate the target every 0.5 s from the key press until the readback, and fail the step when the readback target is not the test document.
+
 Agents write, review, merge and release this project's code. Each time an agent does something wrong, add a lesson below with what went wrong, the evidence, and the fix. "Seen" lists each distinct date the mistake occurred. When a lesson has been seen on 3 or more dates, move it into [CODE STANDARDS](CODE_STANDARDS.md) and delete it from this file.
 
 - [Lesson title] (Seen x2: YYYY-MM-DD, YYYY-MM-DD)
   - What went wrong:
   - Evidence:
   - Fix:
+
+- 允许停止在开始挂起期间执行，停止没有等待开始完成 (Seen x1: 2026-10-24)
+  - 问题：录音器视图模型在 `await recorderService.startRecording` 之前就把状态设为录音中，启动挂起期间点击停止会立即执行 `stopCapture`。`AudioRecorderService` 是 `@unchecked Sendable`，`startRecording` 恢复后与 `stopCapture` 在两个线程上同时给 `finalOutputURL`、`durationTimer` 等属性赋值，引用类型的赋值是读取旧值、写入新值、释放旧值三步，两个线程读到同一个旧值就会各释放一次。停止拆除的也只是开始到那一刻为止的部分，开始随后装好的音频引擎、屏幕录制流和计时器继续运行，界面显示空闲时麦克风仍在录音。
+  - 证据：该测试在完整验证中四次崩溃于 `AudioRecorderService.deinit` 的 `outlined destroy of URL?`，其他线程当时都空闲，崩溃发生在对象释放时，竞争发生在更早的赋值时。修复前定向运行 3000 次迭代，5 次全部在 50 到 846 次内崩溃；Thread Sanitizer 在 300 次迭代内报告 `startRecording` 与 `stopCapture` 对 `durationTimer` 的写入竞争，没有报告 `finalOutputURL`；只让 `finalOutputURL` 的赋值失去保护，崩溃在第 191 次迭代重现。在开始挂起时停止的测试显示，开始完成后服务仍处于录音状态，计时器继续计时。
+  - 方法：停止必须等待正在进行的开始完成后再拆除会话：开始、停止和回滚排成一条操作链，每个操作等前一个结束后才读写会话属性，第二次停止什么也不做。怀疑竞争时，用 Thread Sanitizer（`-enableThreadSanitizer YES`，环境变量 `TEST_RUNNER_TSAN_OPTIONS=halt_on_error=0`）运行单个测试，用 `-test-iterations` 重复运行；崩溃报告里的调用栈是释放现场，竞争现场要靠 Thread Sanitizer 找到。Thread Sanitizer 看不到 `URL` 等 Foundation 值类型的赋值（这类赋值由运行时的值见证函数完成，没有经过插桩），这类属性的竞争要用变异运行确认：临时让该属性的赋值失去保护，重复运行同一个测试，看崩溃是否重现。
 
 - 轮询的 SwiftUI 构建器读取值快照 (Seen x1: 2026-10-23)
   - 问题：语音识别页面在嵌套视图构建器里轮询插件引用。侧栏已更新时，模型行和精度选择仍显示旧值。

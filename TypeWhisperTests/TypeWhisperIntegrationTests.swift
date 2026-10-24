@@ -8572,7 +8572,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         let stopGate = RecorderStartGate()
         var pasteCount = 0
 
@@ -8602,9 +8602,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         await stopGate.waitForFirstEntry()
         context.dictationViewModel.handleCancelHotkey()
-        XCTAssertEqual(context.dictationViewModel.state, .idle)
-        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
         XCTAssertEqual(
             context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
@@ -8613,6 +8612,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         await stopGate.release()
 
+        try await Task.sleep(for: .milliseconds(3100))
         for _ in 0..<20 {
             if MockTranscriptionPlugin.transcribeCallCount > 0 || pasteCount > 0 {
                 break
@@ -10877,7 +10877,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let originalCancellation = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
         defer { Self.restoreUserDefault(originalCancellation, forKey: UserDefaultsKeys.cancellationBehavior) }
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         let trigger = scenario == "appSite"
             ? WorkflowTrigger(kind: .website, appBundleIdentifiers: ["com.apple.Notes"], websitePatterns: ["example.com"])
             : WorkflowTrigger.website("example.com")
@@ -10893,10 +10893,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
         if scenario == "cancel" {
             context.dictationViewModel.handleCancelHotkey()
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
         } else if scenario == "stop" {
             XCTAssertEqual(context.dictationViewModel.apiStopRecording(), sessionID)
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
         } else if scenario == "focus" {
             foregroundBundleID = "com.apple.TextEdit"
         }
@@ -10909,7 +10909,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             } else {
                 context.hotkeyService.onSubmitDictationPressed?(sessionID)
             }
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
             revalidationGate.signal()
         }
         await context.dictationViewModel.testingWaitForRecordingStart()
@@ -10924,6 +10924,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
         if ["cancel", "stop", "focus", "tab", "revalidateCancel", "revalidateEnter", "suppression", "secureInput", "secureInputTransition"].contains(scenario) {
             await context.dictationViewModel.testingWaitForRecordingCleanup()
+            for _ in 0..<200 where context.dictationViewModel.state == .inserting {
+                try await Task.sleep(for: .milliseconds(20))
+            }
             XCTAssertFalse(context.audioRecordingService.isRecording)
             XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
             XCTAssertEqual(returnCount, 0)
@@ -11229,6 +11232,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let element = AXUIElementCreateSystemWide()
         var isTextFieldFocused = false
         var pastedTexts: [String] = []
+        let copiedPasteboard = NSPasteboard.withUniqueName()
+        context.dictationViewModel.pasteboardProvider = { copiedPasteboard }
         context.textInsertionService.pasteboardProvider = { pasteboard }
         context.textInsertionService.captureActiveAppOverride = { ("Finder", "com.apple.finder", nil) }
         context.textInsertionService.accessibilityGrantedOverride = true
@@ -11271,6 +11276,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertTrue(viewModel.actionFeedbackMessage?.hasPrefix(noTextFieldMessage) == true)
         XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
         XCTAssertNil(viewModel.lastSuccessfulDictationInsertion)
+        // 语音条显示「已复制」时文字已在进入提示的那一刻复制，复制不依赖语音条刷新。
+        XCTAssertEqual(copiedPasteboard.string(forType: .string), "transcribed")
 
         // Clicking Insert without focusing a field misses again and keeps the offer.
         viewModel.performActionFeedbackAction()
@@ -12249,6 +12256,67 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testVoiceBarShowsPreparingWhileRecordingInputStaysNotReadyWithoutPublishedChanges() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        let audioStartEntered = expectation(description: "USB audio start entered")
+        let audioStartGate = DispatchSemaphore(value: 0)
+        defer { audioStartGate.signal() }
+        let usbDeviceID = AudioDeviceID(409)
+        var dictationContext: DictationContext?
+        var panel: VoiceBarPanel?
+        defer {
+            panel?.orderOut(nil)
+            panel = nil
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+            )
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        ]
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+        context.audioDeviceService.selectedDeviceUID = "usb-input"
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            audioStartEntered.fulfill()
+            audioStartGate.wait()
+        }
+
+        let voiceBar = VoiceBarPanel(dictation: context.dictationViewModel)
+        panel = voiceBar
+        voiceBar.startObserving()
+        _ = context.dictationViewModel.apiStartRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+        await fulfillment(of: [audioStartEntered], timeout: 1)
+
+        // 麦克风路由慢时听写模型没有发布任何变化，语音条自己的刷新要在约 0.2 秒内显示准备中。
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(voiceBar.presentation.state, .preparing)
+        XCTAssertTrue(voiceBar.presentation.isActive)
+
+        audioStartGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(voiceBar.presentation.state, .listening)
+    }
+
+    @MainActor
     func testUSBDictationStartIsNonBlockingAndDelaysTimerUntilAudioStartCompletes() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -12603,7 +12671,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
         )
         let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.startRecordingOverride = {
             audioStartEntered.fulfill()
@@ -12623,11 +12691,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
-        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
 
         audioStartGate.signal()
         await context.dictationViewModel.testingWaitForRecordingStart()
-        try await Task.sleep(for: .milliseconds(20))
+        try await Task.sleep(for: .milliseconds(3100))
 
         XCTAssertFalse(context.audioRecordingService.isRecording)
         XCTAssertTrue(context.audioRecordingService.recoveryRecordingURLs.isEmpty)
@@ -12638,8 +12707,31 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    private struct USBInputScenarioProbe {
+        weak var context: AnyObject?
+        weak var audioDeviceService: AudioDeviceService?
+    }
+
     @MainActor
     func testApiStartRecording_keepsStartSoundForUSBInputAfterInputIsReady() async throws {
+        _ = try await runUSBInputStartSoundScenario()
+    }
+
+    @MainActor
+    func testApiStartRecordingUSBInputReleasesItsContext() async throws {
+        let probe = try await runUSBInputStartSoundScenario()
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        while (probe.context != nil || probe.audioDeviceService != nil) && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertNil(probe.context)
+        XCTAssertNil(probe.audioDeviceService)
+    }
+
+    @MainActor
+    private func runUSBInputStartSoundScenario() async throws -> USBInputScenarioProbe {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
@@ -12685,8 +12777,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, usbDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertFalse(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedInputDeviceUsesBluetoothTransport, false)
             events.append("start_audio")
         }
 
@@ -12700,6 +12792,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(events, ["start_audio", "start_sound"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
+        return USBInputScenarioProbe(context: context, audioDeviceService: context.audioDeviceService)
     }
 
     @MainActor
@@ -12743,8 +12836,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, usbDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, usbDeviceID)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedDeviceID, usbDeviceID)
         }
 
         _ = context.dictationViewModel.apiStartRecording()
@@ -12795,9 +12888,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, defaultInputDeviceID)
             return true
         }
-        context.audioRecordingService.startRecordingOverride = {
-            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, defaultInputDeviceID)
-            XCTAssertFalse(context.audioRecordingService.hasExplicitDeviceSelection)
+        context.audioRecordingService.startRecordingOverride = { [weak audioRecordingService = context.audioRecordingService] in
+            XCTAssertEqual(audioRecordingService?.selectedDeviceID, defaultInputDeviceID)
+            XCTAssertEqual(audioRecordingService?.hasExplicitDeviceSelection, false)
         }
 
         _ = await context.dictationViewModel.apiStartRecordingAwaitingReadiness()
@@ -13330,7 +13423,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let soundService = SoundService()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
-        let audioDeviceService = AudioDeviceService()
+        let audioDeviceService = AudioDeviceService(monitorDeviceChanges: false)
         Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()
@@ -14114,7 +14207,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
         audioDeviceBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioDeviceSelectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
-        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
+        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil),
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         browserExtensionContext: BrowserExtensionContextStore = BrowserExtensionContextStore(frontmostBundleIdentifier: { nil })
     ) -> APIContext {
@@ -14160,6 +14253,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = SoundService()
         let audioDeviceService = AudioDeviceService(
+            monitorDeviceChanges: false,
             transportResolver: audioDeviceTransportResolver,
             bluetoothInputRouteStabilizer: audioDeviceBluetoothInputRouteStabilizer,
             selectionEngineValidator: audioDeviceSelectionEngineValidator,
@@ -14444,7 +14538,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
         audioDeviceBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioDeviceSelectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
-        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
+        audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil),
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioRecordingInputActivator: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
@@ -14502,6 +14596,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = soundService ?? SoundService()
         let audioDeviceService = AudioDeviceService(
+            monitorDeviceChanges: false,
             transportResolver: audioDeviceTransportResolver,
             bluetoothInputRouteStabilizer: audioDeviceBluetoothInputRouteStabilizer,
             selectionEngineValidator: audioDeviceSelectionEngineValidator,
@@ -18249,13 +18344,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 }
 
                 XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
-                if behavior == .instant {
-                    XCTAssertEqual(context.dictationViewModel.state, .idle)
-                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-                } else {
-                    XCTAssertEqual(context.dictationViewModel.state, .inserting)
-                    XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
-                }
+                XCTAssertEqual(context.dictationViewModel.state, .inserting)
+                XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
+                XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
                 XCTAssertFalse(context.hotkeyService.processEventForTesting(down, source: .eventTap))
                 XCTAssertFalse(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 await context.dictationViewModel.testingWaitForRecordingCleanup()
@@ -18361,14 +18452,63 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testInstantCancellationWaitsForOldRecorderBeforeStartingAgain() async throws {
+    func testCancelledRecordingRestoresWithoutPersistedRecoveryAudio() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory); MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.reset()
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "cancel-restore", withExtension: "wav"))
+        let samples = try await AudioFileService().loadAudioSamples(from: fixture)
+        XCTAssertGreaterThan(samples.count, 16_000)
+        let context = Self.makeDictationContext(
+            appSupportDirectory: directory,
+            audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore(
+                directory: directory.appendingPathComponent("recovery"), retentionPolicy: .immediately
+            )
+        )
+        context.dictationViewModel.cancellationBehavior = .singleEscape
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        var insertedText: String?
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.captureActiveAppOverride = { (nil, nil, nil) }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {
+            insertedText = pasteboard.string(forType: .string)
+        }
+        context.textInsertionService.copySimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {}
+        let session = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.apiWaitForRecordingReadiness()
+        context.dictationViewModel.cancelFromVoiceBar()
+        XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
+        context.dictationViewModel.restoreCancelledRecording()
+        for _ in 0..<200 {
+            if context.dictationViewModel.apiDictationSession(id: session)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertNil(context.dictationViewModel.cancelledRecordingDeadline)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: session)?.status, .completed)
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 1)
+        XCTAssertEqual(insertedText, "transcribed")
+        XCTAssertTrue(context.audioRecordingService.recoveryRecordingURLs.isEmpty)
+    }
+
+    @MainActor
+    func testSingleEscapeCancellationRetainsUndoWindowAndWaitsForOldRecorder() async throws {
         for cancelDuringProcessing in [false, true] {
             let directory = try TestSupport.makeTemporaryDirectory()
             defer { TestSupport.remove(directory) }
             let context = Self.makeDictationContext(appSupportDirectory: directory)
             let stopGate = RecorderStartGate()
             let newCaptureStarted = LockedFlag()
-            context.dictationViewModel.cancellationBehavior = .instant
+            context.dictationViewModel.cancellationBehavior = .singleEscape
             context.audioRecordingService.hasMicrophonePermissionOverride = true
             context.audioRecordingService.inputAvailabilityOverride = { _ in true }
             context.audioRecordingService.startRecordingOverride = {}
@@ -18385,15 +18525,22 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             }
             context.audioRecordingService.startRecordingOverride = { newCaptureStarted.set() }
             context.dictationViewModel.handleCancelHotkey()
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
-            XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
+            XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
             await stopGate.waitForFirstEntry()
 
-            let newSession = context.dictationViewModel.apiStartRecording()
-            // Give a mistakenly unguarded recorder start time to reach the override.
-            try await Task.sleep(for: .milliseconds(50))
+            _ = context.dictationViewModel.apiStartRecording()
             XCTAssertFalse(newCaptureStarted.value)
+            try await Task.sleep(for: .milliseconds(3100))
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
             await stopGate.release()
+            await context.dictationViewModel.testingWaitForRecordingCleanup()
+            for _ in 0..<100 where context.dictationViewModel.state != .idle {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertNil(context.dictationViewModel.cancelledRecordingDeadline)
+            let newSession = context.dictationViewModel.apiStartRecording()
             await context.dictationViewModel.apiWaitForRecordingReadiness()
             XCTAssertTrue(newCaptureStarted.value)
             XCTAssertEqual(context.dictationViewModel.state, .recording)
@@ -18404,14 +18551,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testInstantStopDuringRecordingPreparationClosesIndicator() async throws {
+    func testSingleEscapeStopDuringRecordingPreparationClosesIndicator() async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }
         let context = Self.makeDictationContext(appSupportDirectory: directory)
         let startEntered = expectation(description: "recorder start entered")
         let startGate = DispatchSemaphore(value: 0)
         defer { startGate.signal() }
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {
@@ -18422,8 +18569,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let session = context.dictationViewModel.apiStartRecording()
         await fulfillment(of: [startEntered], timeout: 1)
         _ = context.dictationViewModel.apiStopRecording()
-        XCTAssertEqual(context.dictationViewModel.state, .idle)
-        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
         startGate.signal()
         await context.dictationViewModel.testingWaitForRecordingCleanup()
         XCTAssertFalse(context.audioRecordingService.isRecording)
@@ -18915,7 +19062,7 @@ extension TypeWhisperIntegrationTests {
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = SoundService()
-        let audioDeviceService = AudioDeviceService()
+        let audioDeviceService = AudioDeviceService(monitorDeviceChanges: false)
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()
         let appFormatterService = AppFormatterService()
@@ -21605,7 +21752,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
         XCTAssertEqual(startCount, 1)
 
-        try await Task.sleep(nanoseconds: 1_150_000_000)
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
         XCTAssertEqual(stopCount, 1)

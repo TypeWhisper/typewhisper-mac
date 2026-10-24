@@ -239,6 +239,11 @@ class OverlayIndicatorPanel: NSPanel {
             previewActive: IndicatorPreviewSession.shared.isActive,
             isErrorFeedback: vm.actionFeedbackIsError && vm.actionFeedbackMessage != nil
         )
+        if VoiceBarPresentation.replacesLegacyIndicator(vm), presentation.source != .recorder,
+           !isMeetingCountdownPresented, !IndicatorPreviewSession.shared.isActive {
+            dismiss()
+            return
+        }
         let normallyVisible = IndicatorPresentationState.shouldShow(
             visibility: vm.notchIndicatorVisibility,
             presentation: presentation

@@ -346,6 +346,7 @@ final class IndicatorCoordinator {
     private let notchPanel: NotchIndicatorPanel
     private let overlayPanel: OverlayIndicatorPanel
     private let minimalPanel: MinimalIndicatorPanel
+    private let voiceBarPanel = VoiceBarPanel()
     private let countdownModel: CalendarMeetingCountdownModel
     private var cancellables = Set<AnyCancellable>()
     private var globalMouseMonitor: Any?
@@ -386,6 +387,7 @@ final class IndicatorCoordinator {
         notchPanel.startObserving()
         overlayPanel.startObserving()
         minimalPanel.startObserving()
+        voiceBarPanel.startObserving()
         startObservingActiveScreenContextChanges()
     }
 

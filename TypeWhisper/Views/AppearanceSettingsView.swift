@@ -12,6 +12,7 @@ struct AppearanceSettingsView: View {
     }
 
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
+    @AppStorage("dictumVoiceBarEnabled") private var voiceBarEnabled = true
     @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var dictation = DictationViewModel.shared
@@ -85,6 +86,7 @@ struct AppearanceSettingsView: View {
 
             Form {
                 Section(String(localized: "Indicator")) {
+                    Toggle(isOn: $voiceBarEnabled) { Text(verbatim: DictumHomeStrings.voiceBar) }
                     Label {
                         Text(String(localized: "While this page is open, the indicator runs as a live preview on your screen."))
                             .font(.caption)
