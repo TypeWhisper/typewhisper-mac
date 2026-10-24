@@ -101,6 +101,13 @@ final class VoiceBarPresentation: ObservableObject {
         input.cancellationRemaining = vm.state == .inserting ? vm.cancelledRecordingDeadline?.timeIntervalSinceNow : nil
         input.translation = SettingsViewModel.shared.translationEnabled
         input.targetMenuOpen = targetMenuOpen
+        if vm.state == .idle, let notice = vm.modelNotice {
+            switch notice {
+            case .downloading(let progress): input.model = .downloading(progress)
+            case .notDownloaded: input.model = .notDownloaded
+            case .failed(let message): input.model = .failed(message)
+            }
+        }
         switch vm.state {
         case .recording: input.activity = vm.isRecordingInputReady && !vm.isModelLoading ? .recording : .preparing
         case .processing: input.activity = .processing
