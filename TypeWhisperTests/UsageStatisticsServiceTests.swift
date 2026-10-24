@@ -47,7 +47,7 @@ final class UsageStatisticsServiceTests: XCTestCase {
             calendar.startOfDay(for: first): 9,
             calendar.startOfDay(for: second): -5,
             calendar.startOfDay(for: removedByRetention): 40
-        ]))
+        ], recountKey: "recount-test"))
 
         let daily = service.dailyWordCounts(days: 2, endingAt: second)
         XCTAssertEqual(daily.map(\.totalWords), [10, 0])
@@ -56,6 +56,79 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(service.summary(from: nil, to: second).transcriptionCount, 2)
         XCTAssertEqual(service.summary(from: removedByRetention, to: removedByRetention).words, 0)
         XCTAssertEqual(service.dailyWordCounts(days: nil, endingAt: second).count, 2)
+    }
+
+    @MainActor
+    func testAdjustWordsAppliesDeltasOnceForTheSameRecountKey() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsAdjustOnce")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        service.backfillFromHistoryIfNeeded([])
+        let day = Self.date(year: 2026, month: 7, day: 4, hour: 9, calendar: calendar)
+        service.recordTranscription(timestamp: day, wordsCount: 1, durationSeconds: 30, appBundleIdentifier: "com.example.editor")
+        let deltas = [calendar.startOfDay(for: day): 9]
+
+        XCTAssertTrue(service.adjustWords(byDay: deltas, recountKey: "recount-once"))
+        XCTAssertTrue(service.adjustWords(byDay: deltas, recountKey: "recount-once"))
+        XCTAssertEqual(service.dailyWordCounts(days: 1, endingAt: day).map(\.totalWords), [10])
+
+        let reopened = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        XCTAssertTrue(reopened.adjustWords(byDay: deltas, recountKey: "recount-once"))
+        XCTAssertEqual(reopened.dailyWordCounts(days: 1, endingAt: day).map(\.totalWords), [10])
+
+        XCTAssertTrue(reopened.adjustWords(byDay: deltas, recountKey: "recount-other"))
+        XCTAssertEqual(reopened.dailyWordCounts(days: 1, endingAt: day).map(\.totalWords), [19])
+    }
+
+    @MainActor
+    func testAdjustWordsKeepsStatisticsAndKeyUnchangedWhenSaveFails() throws {
+        struct SaveFailure: Error {}
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsAdjustFailure")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        var failNextSave = true
+        let service = UsageStatisticsService(
+            appSupportDirectory: directory,
+            calendar: calendar,
+            wordAdjustmentWriter: { context in
+                if failNextSave {
+                    failNextSave = false
+                    throw SaveFailure()
+                }
+                try context.save()
+            }
+        )
+        service.backfillFromHistoryIfNeeded([])
+        let day = Self.date(year: 2026, month: 7, day: 4, hour: 9, calendar: calendar)
+        service.recordTranscription(timestamp: day, wordsCount: 1, durationSeconds: 30, appBundleIdentifier: "com.example.editor")
+        let deltas = [calendar.startOfDay(for: day): 9]
+
+        XCTAssertFalse(service.adjustWords(byDay: deltas, recountKey: "recount-failure"))
+        XCTAssertEqual(service.dailyWordCounts(days: 1, endingAt: day).map(\.totalWords), [1])
+
+        XCTAssertTrue(service.adjustWords(byDay: deltas, recountKey: "recount-failure"))
+        XCTAssertEqual(service.dailyWordCounts(days: 1, endingAt: day).map(\.totalWords), [10])
+    }
+
+    @MainActor
+    func testAdjustWordsAppliesNothingBeforeHistoryBackfillCompletes() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsAdjustBeforeBackfill")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let day = Self.date(year: 2026, month: 7, day: 4, hour: 9, calendar: calendar)
+        service.recordTranscription(timestamp: day, wordsCount: 1, durationSeconds: 30, appBundleIdentifier: "com.example.editor")
+
+        XCTAssertTrue(service.adjustWords(byDay: [calendar.startOfDay(for: day): 9], recountKey: "recount-before-backfill"))
+        XCTAssertEqual(service.dailyWordCounts(days: 1, endingAt: day).map(\.totalWords), [1])
+
+        service.backfillFromHistoryIfNeeded([])
+        XCTAssertTrue(service.adjustWords(byDay: [calendar.startOfDay(for: day): 9], recountKey: "recount-before-backfill"))
+        XCTAssertEqual(service.dailyWordCounts(days: 1, endingAt: day).map(\.totalWords), [10])
     }
 
     @MainActor

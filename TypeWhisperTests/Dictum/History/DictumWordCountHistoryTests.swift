@@ -100,9 +100,12 @@ final class DictumWordCountHistoryTests: XCTestCase {
 
         let expectedCount = DictumWordCount.count(chineseText)
         XCTAssertEqual(expectedCount, 11)
-        XCTAssertEqual(try Self.storedWordsCount(inStoreAt: directory), expectedCount)
         XCTAssertEqual(try XCTUnwrap(history.record(withID: recordID)).wordsCount, expectedCount)
+        XCTAssertEqual(try Self.storedWordsCount(inStoreAt: directory), 1, "重算只修改内存，提交前磁盘上的字数不变")
         XCTAssertEqual(deltas, [calendar.startOfDay(for: timestamp): expectedCount - 1])
+
+        try history.commitWordCountRecount()
+        XCTAssertEqual(try Self.storedWordsCount(inStoreAt: directory), expectedCount)
 
         history.markWordCountRecountCompleted()
         XCTAssertFalse(history.wordCountRecountPending)
@@ -110,7 +113,51 @@ final class DictumWordCountHistoryTests: XCTestCase {
         XCTAssertEqual(try history.recountWords(calendar: calendar), [:])
     }
 
-    private static func setStoredWordsCount(_ count: Int, inStoreAt directory: URL) throws {
+    func testRecountSkipsRecordsSyncedFromAnotherMac() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "dictum-word-count-remote")
+        defer { TestSupport.remove(directory) }
+        let suiteName = "DictumWordCountHistoryTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = HistorySyncPreferences(defaults: defaults)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let timestamp = try XCTUnwrap(DateComponents(calendar: calendar, timeZone: calendar.timeZone, year: 2026, month: 10, day: 20, hour: 15).date)
+        let localText = "本机听写的一段中文"
+        let remoteText = "另一台电脑同步来的中文记录"
+        let localID = UUID()
+        let remoteID = UUID()
+
+        let history = HistoryService(appSupportDirectory: directory, historySyncPreferences: preferences, eventEmitter: { _ in })
+        XCTAssertTrue(history.addRecord(id: localID, timestamp: timestamp, rawText: localText, finalText: localText, appName: nil, appBundleIdentifier: nil, durationSeconds: 2, language: "zh", engineUsed: "Qwen3-ASR"))
+        try history.applyUserDataSyncMutations([
+            .upsertHistoryContent(UserDataSyncHistoryContentV1(
+                recordID: remoteID,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                originDeviceID: "another-mac",
+                originPlatform: "macOS",
+                source: "mac",
+                processingState: "ready",
+                rawTranscript: remoteText,
+                finalText: remoteText,
+                durationSeconds: 3,
+                engineDisplayName: "Qwen3-ASR"
+            ))
+        ])
+        XCTAssertEqual(try XCTUnwrap(history.record(withID: remoteID)).originDeviceID, "another-mac")
+        for record in try history.allRecordsThrowing() {
+            record.wordsCount = 1
+        }
+        try history.commitWordCountRecount()
+
+        let deltas = try history.recountWords(calendar: calendar)
+
+        XCTAssertEqual(deltas, [calendar.startOfDay(for: timestamp): DictumWordCount.count(localText) - 1])
+        XCTAssertEqual(try XCTUnwrap(history.record(withID: remoteID)).wordsCount, DictumWordCount.count(remoteText))
+    }
+
+    static func setStoredWordsCount(_ count: Int, inStoreAt directory: URL) throws {
         let (container, context) = try SwiftDataStoreFactory.create(for: [TranscriptionRecord.self], storeName: "history", in: directory)
         for record in try context.fetch(FetchDescriptor<TranscriptionRecord>()) {
             record.wordsCount = count
@@ -119,7 +166,7 @@ final class DictumWordCountHistoryTests: XCTestCase {
         withExtendedLifetime(container) {}
     }
 
-    private static func storedWordsCount(inStoreAt directory: URL) throws -> Int {
+    static func storedWordsCount(inStoreAt directory: URL) throws -> Int {
         let (container, context) = try SwiftDataStoreFactory.create(for: [TranscriptionRecord.self], storeName: "history", in: directory)
         defer { withExtendedLifetime(container) {} }
         return try XCTUnwrap(context.fetch(FetchDescriptor<TranscriptionRecord>()).first).wordsCount

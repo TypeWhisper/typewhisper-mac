@@ -98,15 +98,18 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private var calendar: Calendar
+    private let wordAdjustmentWriter: @MainActor (ModelContext) throws -> Void
     /// Set when the last full reload failed, so the next recorded transcription reloads every
     /// day instead of patching a snapshot that is missing the persisted days.
     private var needsFullReload = false
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        wordAdjustmentWriter: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
     ) {
         self.calendar = calendar
+        self.wordAdjustmentWriter = wordAdjustmentWriter
 
         do {
             let (container, context) = try SwiftDataStoreFactory.create(
@@ -206,16 +209,19 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
 
     /// 把字数重算产生的各天变化量加到对应日的总字数上（不低于 0），听写次数和时长不变。
     /// 没有统计日的天（历史记录已被保留期限清除）不产生新日；历史回填尚未完成时回填会直接使用新字数，所以也不套用。
-    /// 返回 true 表示已保存。
+    /// 变化量与 `recountKey` 的记录在同一次保存中写入，该记录已存在时说明变化量已套用，直接返回。
+    /// 返回 true 表示变化量已套用或无需套用。
     @discardableResult
-    func adjustWords(byDay deltas: [Date: Int]) -> Bool {
+    func adjustWords(byDay deltas: [Date: Int], recountKey: String) -> Bool {
         guard !deltas.isEmpty, historyBackfillCompleted else { return true }
         do {
+            guard try metadataValue(for: recountKey) == nil else { return true }
             for (day, delta) in deltas {
                 guard let statisticsDay = try findDay(calendar.startOfDay(for: day)) else { continue }
                 statisticsDay.totalWords = max(0, statisticsDay.totalWords + delta)
             }
-            try modelContext.save()
+            try setMetadataValue("applied", for: recountKey)
+            try wordAdjustmentWriter(modelContext)
             fetchDays()
             return true
         } catch {

@@ -1709,30 +1709,50 @@ final class HistoryService: ObservableObject {
         UserDefaults.standard.string(forKey: Self.wordCountRecountKey(for: storeDirectory)) != Self.wordCountRecountVersion
     }
 
-    /// 按 CJK 感知口径重算全部记录的字数并保存，返回各自然日字数的变化量（新值减旧值）。
-    /// 旧字数为 0 的记录从未进入用量统计，不产生变化量。
+    /// 用量统计里记录本次重算变化量的键，随重算版本更新。
+    var wordCountRecountStatisticsKey: String {
+        "\(Self.wordCountRecountKey(for: storeDirectory))-\(Self.wordCountRecountVersion)"
+    }
+
+    /// 按 CJK 感知口径重算全部记录的字数，只修改内存中的记录，返回各自然日字数的变化量（新值减旧值）。
+    /// 旧字数为 0 的记录没有被实时写入用量统计，历史回填用 `DictumWordCount` 为它们计数，所以不产生变化量；
+    /// 来自其他 Mac 的记录没有进入本机用量统计，同样不产生变化量。
+    /// 调用方套用变化量后再调用 `commitWordCountRecount()`，套用失败时调用 `discardWordCountRecount()`。
     func recountWords(calendar: Calendar = .current) throws -> [Date: Int] {
         var deltas: [Date: Int] = [:]
-        do {
-            for record in try allRecordsThrowing() {
-                let newCount = DictumWordCount.count(record.finalText)
-                let oldCount = record.wordsCount
-                guard newCount != oldCount else { continue }
-                record.wordsCount = newCount
-                if oldCount > 0 {
-                    deltas[calendar.startOfDay(for: record.timestamp), default: 0] += newCount - oldCount
-                }
+        for record in try allRecordsThrowing() {
+            let newCount = DictumWordCount.count(record.finalText)
+            let oldCount = record.wordsCount
+            guard newCount != oldCount else { continue }
+            record.wordsCount = newCount
+            if oldCount > 0, isRecordFromThisDevice(record) {
+                deltas[calendar.startOfDay(for: record.timestamp), default: 0] += newCount - oldCount
             }
+        }
+        return deltas.filter { $0.value != 0 }
+    }
+
+    func commitWordCountRecount() throws {
+        do {
             try modelContext.save()
         } catch {
             modelContext.rollback()
             throw error
         }
         refreshRecentRecords()
-        return deltas.filter { $0.value != 0 }
     }
 
-    /// 用量统计也套用变化量后调用，下次启动不再重算。
+    func discardWordCountRecount() {
+        modelContext.rollback()
+        refreshRecentRecords()
+    }
+
+    private func isRecordFromThisDevice(_ record: TranscriptionRecord) -> Bool {
+        let originDeviceID = record.originDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return originDeviceID.isEmpty || originDeviceID == historySyncPreferences?.deviceID
+    }
+
+    /// 历史库和用量统计都保存成功后调用，下次启动跳过重算。
     func markWordCountRecountCompleted() {
         UserDefaults.standard.set(Self.wordCountRecountVersion, forKey: Self.wordCountRecountKey(for: storeDirectory))
     }
