@@ -37,11 +37,11 @@ jobs:
         include:
           - language: actions
             build-mode: none
-            runner: ubuntu-latest
+            runner: ubuntu-26.04
             timeout-minutes: 10
           - language: python
             build-mode: none
-            runner: ubuntu-latest
+            runner: ubuntu-26.04
             timeout-minutes: 10
 
     steps:

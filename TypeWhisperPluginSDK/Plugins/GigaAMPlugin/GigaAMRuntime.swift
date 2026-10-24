@@ -66,7 +66,8 @@ final class GigaAMRuntime: @unchecked Sendable {
             runOptions: nil
         )
         guard let features = outputs["features"],
-              let length: Int64 = try outputs["features_lens"].flatMap({ try GigaAMTensor.values($0) })?.first else {
+              let lengthValue = outputs["features_lens"],
+              let length = (try GigaAMTensor.values(lengthValue) as [Int64]).first else {
             throw GigaAMRuntimeError.missingOutput("features")
         }
         return (features, length)
