@@ -340,8 +340,7 @@ final class SoundServiceTests: XCTestCase {
 
     @MainActor
     func testOneShotPlayerReportsQueuedPlaybackFailureToTheResultHandler() async {
-        let factory = FailingSoundCuePlayerFactory()
-        let player = makeOneShotPlayer(factory: factory)
+        let player = makeOneShotPlayer(makePlayer: { _ in FailingSoundCuePlayer() })
         let url = URL(fileURLWithPath: "/tmp/failing-cue.wav")
 
         var reported: (url: URL, started: Bool)?
@@ -457,6 +456,15 @@ final class SoundServiceTests: XCTestCase {
     private func makeOneShotPlayer(factory: FakeSoundCuePlayerFactory) -> AVAudioOneShotSoundPlayer {
         AVAudioOneShotSoundPlayer(
             makePlayer: { try factory.makePlayer(url: $0) },
+            preparationQueue: DispatchQueue(label: "SoundServiceTests.preparation"),
+            observesOutputDeviceChanges: false
+        )
+    }
+
+    @MainActor
+    private func makeOneShotPlayer(makePlayer: @escaping AVAudioOneShotSoundPlayer.PlayerFactory) -> AVAudioOneShotSoundPlayer {
+        AVAudioOneShotSoundPlayer(
+            makePlayer: makePlayer,
             preparationQueue: DispatchQueue(label: "SoundServiceTests.preparation"),
             observesOutputDeviceChanges: false
         )
@@ -590,14 +598,6 @@ final class SoundServiceTests: XCTestCase {
                 createdPlayers.append(player)
                 return player
             }
-        }
-    }
-
-    /// The play closure fails while creation succeeds; the result handler must
-    /// report the failure so callers can fall back to the system sound.
-    private final class FailingSoundCuePlayerFactory: @unchecked Sendable {
-        func makePlayer(url: URL) throws -> any SoundCuePlayback {
-            FailingSoundCuePlayer()
         }
     }
 
