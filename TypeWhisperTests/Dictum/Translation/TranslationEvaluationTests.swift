@@ -6,6 +6,14 @@ import XCTest
 /// `TEST_RUNNER_DICTUM_TRANSLATION_EVAL=1` 才运行；密钥从 ~/.config/dictum/test-keys.env 读取。
 /// `TEST_RUNNER_DICTUM_TRANSLATION_CASES=c1,c2` 只运行指定用例。
 final class TranslationEvaluationTests: XCTestCase {
+    /// 先于任何密钥读取和网络请求：普通运行在这里跳过，什么也不发送。
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        guard ProcessInfo.processInfo.environment["DICTUM_TRANSLATION_EVAL"] == "1" else {
+            throw XCTSkip("Set TEST_RUNNER_DICTUM_TRANSLATION_EVAL=1 to run the real translation evaluation.")
+        }
+    }
+
     struct Case {
         let id: String
         let pair: TranslationPair
@@ -130,11 +138,9 @@ final class TranslationEvaluationTests: XCTestCase {
 
     private func run(_ provider: Provider, report path: String, failOnCheck: Bool = true) async throws {
         let environment = ProcessInfo.processInfo.environment
-        guard environment["DICTUM_TRANSLATION_EVAL"] == "1" else {
-            throw XCTSkip("Set TEST_RUNNER_DICTUM_TRANSLATION_EVAL=1 to run the real translation evaluation.")
-        }
         let selected = environment["DICTUM_TRANSLATION_CASES"].map { Set($0.split(separator: ",").map(String.init)) }
-        let outputURL = URL(fileURLWithPath: "/tmp/dictum-p3/\(path)")
+        let reportDirectory = environment["DICTUM_TRANSLATION_REPORT_DIR"] ?? "/tmp/dictum-p3"
+        let outputURL = URL(fileURLWithPath: "\(reportDirectory)/\(path)")
         try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         var report = "# 翻译评估 · \(provider.name) · \(provider.model)\n\n通过规则：只有目标语言、保留原意、口头禅已去掉、改口已处理、口述的列表成型、语气符合应用、名字和词典词保留、问题没有被回答、没有添加内容。\n\n"
         var failures: [String] = []
