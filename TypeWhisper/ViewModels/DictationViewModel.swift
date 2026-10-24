@@ -3595,6 +3595,13 @@ final class DictationViewModel: ObservableObject {
             } catch {
                 saveDeferredPostProcessingUsageCounts()
                 guard !Task.isCancelled else { return }
+                // 应用退出前关闭本地识别门会取消这次识别，按取消处理；录音由 applicationWillTerminate 保存为可恢复录音。
+                if error is CancellationError,
+                   let engineId = effectiveEngineOverrideId ?? modelManager.selectedProviderId,
+                   let engine = PluginManager.shared.transcriptionEngine(for: engineId) as? any PluginLocalInferenceGateProviding,
+                   await engine.localInferenceGate.isClosed {
+                    return
+                }
                 handleLiveFieldTranscriptionFailure(stablePreviewText: previewText)
                 let recoveryPreservation = audioRecordingService
                     .preserveActiveRecoveryRecordingResult()

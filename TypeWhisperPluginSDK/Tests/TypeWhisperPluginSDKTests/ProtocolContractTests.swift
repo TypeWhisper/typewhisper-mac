@@ -470,6 +470,15 @@ private actor GateLockRelease {
     }
 }
 
+private actor GateChunkCounter {
+    private(set) var started = 0
+
+    func start() -> Int {
+        started += 1
+        return started
+    }
+}
+
 private actor GateOperationState {
     private(set) var didRun = false
 
@@ -644,6 +653,99 @@ final class ProtocolContractTests: XCTestCase {
 
         let followerRan = try await gate.withLock { true }
         XCTAssertTrue(followerRan)
+    }
+
+    func testLocalInferenceGateCloseWaitsForRunningOperationAndRejectsLaterOnes() async throws {
+        let gate = PluginLocalInferenceGate()
+        let release = GateLockRelease()
+        let holderFinished = GateOperationState()
+        let queuedOperation = GateOperationState()
+        let holderStarted = expectation(description: "holder acquired inference gate")
+
+        let holder = Task {
+            try await gate.withLock {
+                holderStarted.fulfill()
+                await release.wait()
+                await holderFinished.markRan()
+            }
+        }
+        await fulfillment(of: [holderStarted], timeout: 1.0)
+
+        let queued = Task {
+            try await gate.withLock {
+                await queuedOperation.markRan()
+            }
+        }
+        try await Task.sleep(for: .milliseconds(20))
+
+        let closed = expectation(description: "close returned")
+        Task {
+            await gate.close()
+            closed.fulfill()
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        let holderFinishedBeforeRelease = await holderFinished.value()
+        XCTAssertFalse(holderFinishedBeforeRelease)
+
+        await release.release()
+        await fulfillment(of: [closed], timeout: 2.0)
+        let holderFinishedWhenClosed = await holderFinished.value()
+        XCTAssertTrue(holderFinishedWhenClosed)
+        try await holder.value
+
+        do {
+            try await queued.value
+            XCTFail("Queued operation should not run after the gate closes")
+        } catch is CancellationError {
+            // Expected.
+        }
+        let queuedOperationRan = await queuedOperation.value()
+        XCTAssertFalse(queuedOperationRan)
+
+        do {
+            _ = try await gate.withLock { true }
+            XCTFail("Operations after close should throw")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        await gate.close()
+    }
+
+    func testLocalInferenceGateCloseCancelsRunningOperationAtNextChunk() async throws {
+        let gate = PluginLocalInferenceGate()
+        let release = GateLockRelease()
+        let chunks = GateChunkCounter()
+        let firstChunkStarted = expectation(description: "first chunk started")
+
+        let holder = Task {
+            try await gate.withLock {
+                for _ in 0..<3 {
+                    try Task.checkCancellation()
+                    if await chunks.start() == 1 { firstChunkStarted.fulfill() }
+                    await release.wait()
+                }
+            }
+        }
+        await fulfillment(of: [firstChunkStarted], timeout: 1.0)
+
+        let closed = expectation(description: "close returned")
+        Task {
+            await gate.close()
+            closed.fulfill()
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        await release.release()
+        await fulfillment(of: [closed], timeout: 2.0)
+
+        let startedChunks = await chunks.started
+        XCTAssertEqual(startedChunks, 1)
+        do {
+            try await holder.value
+            XCTFail("The running operation should stop at the next chunk after close")
+        } catch is CancellationError {
+            // Expected.
+        }
     }
 
     func testPluginAuthRolesExposeStableRawValues() {
