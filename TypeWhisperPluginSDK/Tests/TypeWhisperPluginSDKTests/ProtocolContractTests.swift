@@ -646,6 +646,59 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertTrue(followerRan)
     }
 
+    func testLocalInferenceGateCloseWaitsForRunningOperationAndRejectsLaterOnes() async throws {
+        let gate = PluginLocalInferenceGate()
+        let release = GateLockRelease()
+        let holderFinished = GateOperationState()
+        let queuedOperation = GateOperationState()
+        let holderStarted = expectation(description: "holder acquired inference gate")
+
+        let holder = Task {
+            try await gate.withLock {
+                holderStarted.fulfill()
+                await release.wait()
+                await holderFinished.markRan()
+            }
+        }
+        await fulfillment(of: [holderStarted], timeout: 1.0)
+
+        let queued = Task {
+            try await gate.withLock {
+                await queuedOperation.markRan()
+            }
+        }
+        try await Task.sleep(for: .milliseconds(20))
+
+        let closed = Task { await gate.close() }
+        try await Task.sleep(for: .milliseconds(20))
+        let holderFinishedBeforeRelease = await holderFinished.value()
+        XCTAssertFalse(holderFinishedBeforeRelease)
+
+        await release.release()
+        await closed.value
+        let holderFinishedWhenClosed = await holderFinished.value()
+        XCTAssertTrue(holderFinishedWhenClosed)
+        try await holder.value
+
+        do {
+            try await queued.value
+            XCTFail("Queued operation should not run after the gate closes")
+        } catch is CancellationError {
+            // Expected.
+        }
+        let queuedOperationRan = await queuedOperation.value()
+        XCTAssertFalse(queuedOperationRan)
+
+        do {
+            _ = try await gate.withLock { true }
+            XCTFail("Operations after close should throw")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        await gate.close()
+    }
+
     func testPluginAuthRolesExposeStableRawValues() {
         XCTAssertEqual(PluginAuthRole.transcription.rawValue, "transcription")
         XCTAssertEqual(PluginAuthRole.llm.rawValue, "llm")

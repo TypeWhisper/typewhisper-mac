@@ -34,7 +34,9 @@ public actor PluginLocalInferenceGate {
     }
 
     private var isLocked = false
+    private var isClosed = false
     private var waiters: [Waiter] = []
+    private var idleWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init() {}
 
@@ -48,7 +50,22 @@ public actor PluginLocalInferenceGate {
         return try await operation()
     }
 
+    /// 等正在运行的操作结束，并拒绝排队中和之后的操作。
+    public func close() async {
+        isClosed = true
+        let pending = waiters
+        waiters.removeAll()
+        for waiter in pending {
+            waiter.continuation.resume(returning: false)
+        }
+        guard isLocked else { return }
+        await withCheckedContinuation { continuation in
+            idleWaiters.append(continuation)
+        }
+    }
+
     private func acquire() async throws {
+        guard !isClosed else { throw CancellationError() }
         if !isLocked {
             isLocked = true
             return
@@ -57,7 +74,7 @@ public actor PluginLocalInferenceGate {
         let waiterID = UUID()
         let didAcquire = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                if Task.isCancelled {
+                if Task.isCancelled || isClosed {
                     continuation.resume(returning: false)
                 } else {
                     waiters.append(Waiter(id: waiterID, continuation: continuation))
@@ -84,7 +101,14 @@ public actor PluginLocalInferenceGate {
     }
 
     private func release() {
-        if waiters.isEmpty {
+        if isClosed {
+            isLocked = false
+            let idle = idleWaiters
+            idleWaiters.removeAll()
+            for continuation in idle {
+                continuation.resume()
+            }
+        } else if waiters.isEmpty {
             isLocked = false
         } else {
             waiters.removeFirst().continuation.resume(returning: true)
