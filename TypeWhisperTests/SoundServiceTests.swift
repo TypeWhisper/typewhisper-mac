@@ -488,12 +488,16 @@ final class SoundServiceTests: XCTestCase {
     @MainActor
     func testCuePlaysWhileAnotherCuePreparationIsBlocked() async throws {
         let gate = DispatchSemaphore(value: 0)
+        let blockedEntered = expectation(description: "blocked cue preparation entered the player factory")
         let factory = FakeSoundCuePlayerFactory(duration: 0.4)
         let blocked = URL(fileURLWithPath: "/tmp/blocked-cue.wav")
         let stop = URL(fileURLWithPath: "/tmp/stop-cue.wav")
         let player = AVAudioOneShotSoundPlayer(
             makePlayer: { url in
-                if url == blocked { gate.wait() }
+                if url == blocked {
+                    blockedEntered.fulfill()
+                    gate.wait()
+                }
                 return try factory.makePlayer(url: url)
             },
             preparationQueue: DispatchQueue(label: "SoundServiceTests.preparation"),
@@ -502,6 +506,7 @@ final class SoundServiceTests: XCTestCase {
         )
 
         player.preparePlayback(for: [blocked])
+        await fulfillment(of: [blockedEntered], timeout: 2)
         XCTAssertTrue(player.play(url: stop))
         for _ in 0..<100 where factory.players.first(where: { $0.url == stop })?.playCount != 1 {
             try await Task.sleep(for: .milliseconds(10))
