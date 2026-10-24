@@ -813,9 +813,14 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open.\nnew tab!"))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "今天下午开会"))
         XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "好的。"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "…"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "。"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "👍"))
 
         service.shortTranscriptionMinimumWords = 1
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "…"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "👍"))
 
         service.shortTranscriptionMinimumWords = 0
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
