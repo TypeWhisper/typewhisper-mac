@@ -115,6 +115,15 @@ final class TranslationPipelineTests: XCTestCase {
         XCTAssertEqual(VoiceBarState.derive(input), .inserted(count: 7))
     }
 
+    func testWarningOutcomeIsTranslationFailedOnlyForTranslationSessions() {
+        guard case .translationFailed = VoiceBarState.Input.Outcome.warning(translation: true) else {
+            return XCTFail("翻译会话的警告是翻译失败")
+        }
+        guard case .recoveredError = VoiceBarState.Input.Outcome.warning(translation: false) else {
+            return XCTFail("听写会话的警告是润色失败")
+        }
+    }
+
     func testInsertedTranslationIsCountedWithTheSharedWordCount() {
         XCTAssertEqual(DictumWordCount.count("下に着きました。"), 7)
         XCTAssertEqual(DictumWordCount.count("I'm downstairs."), 2)
