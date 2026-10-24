@@ -194,6 +194,7 @@ final class HistoryService: ObservableObject {
     private(set) var clearGeneration = 0
 
     private let audioDirectory: URL
+    private let storeDirectory: URL
     private let backgroundAudioWrites = BackgroundAudioWrites()
 
     init(
@@ -206,6 +207,7 @@ final class HistoryService: ObservableObject {
         versionWriter: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
     ) {
         let storeDir = appSupportDirectory
+        self.storeDirectory = storeDir
         self.eventEmitter = eventEmitter
         self.historySyncPreferences = historySyncPreferences
         self.speakerNameWriter = speakerNameWriter
@@ -227,7 +229,6 @@ final class HistoryService: ObservableObject {
             fatalError("Failed to initialize history store: \(error)")
         }
 
-        migrateWordsCountIfNeeded()
         refreshRecentRecords()
     }
 
@@ -1697,28 +1698,44 @@ final class HistoryService: ObservableObject {
         }
     }
 
-    private func migrateWordsCountIfNeeded() {
-        let marker = UserDefaults.standard.string(forKey: Self.wordCountRecountKey)
-        guard marker != Self.wordCountRecountVersion else { return }
-        var needsSave = false
-        do {
-            for record in try allRecordsThrowing() {
-                record.wordsCount = DictumWordCount.count(record.finalText)
-                needsSave = true
-            }
-        } catch {
-            logger.error("Failed to fetch history word-count migration candidates: \(error.localizedDescription)")
-            return
-        }
-        if needsSave {
-            save()
-        }
-        UserDefaults.standard.set(Self.wordCountRecountVersion, forKey: Self.wordCountRecountKey)
+    /// 标记按历史库所在文件夹区分，不同文件夹的库各自重算一次。
+    static func wordCountRecountKey(for storeDirectory: URL) -> String {
+        "historyWordCountRecount-\(storeDirectory.path)"
     }
 
-    /// 一次性存量迁移：字数口径改为 CJK 感知后重算全部记录。
-    private static let wordCountRecountKey = "historyWordCountRecount-\(AppConstants.appSupportDirectory.path)"
     private static let wordCountRecountVersion = "2026-10-24"
+
+    var wordCountRecountPending: Bool {
+        UserDefaults.standard.string(forKey: Self.wordCountRecountKey(for: storeDirectory)) != Self.wordCountRecountVersion
+    }
+
+    /// 按 CJK 感知口径重算全部记录的字数并保存，返回各自然日字数的变化量（新值减旧值）。
+    /// 旧字数为 0 的记录从未进入用量统计，不产生变化量。
+    func recountWords(calendar: Calendar = .current) throws -> [Date: Int] {
+        var deltas: [Date: Int] = [:]
+        do {
+            for record in try allRecordsThrowing() {
+                let newCount = DictumWordCount.count(record.finalText)
+                let oldCount = record.wordsCount
+                guard newCount != oldCount else { continue }
+                record.wordsCount = newCount
+                if oldCount > 0 {
+                    deltas[calendar.startOfDay(for: record.timestamp), default: 0] += newCount - oldCount
+                }
+            }
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+        refreshRecentRecords()
+        return deltas.filter { $0.value != 0 }
+    }
+
+    /// 用量统计也套用变化量后调用，下次启动不再重算。
+    func markWordCountRecountCompleted() {
+        UserDefaults.standard.set(Self.wordCountRecountVersion, forKey: Self.wordCountRecountKey(for: storeDirectory))
+    }
 
     nonisolated private static func fetchDescriptor(for query: HistoryQuery) -> FetchDescriptor<TranscriptionRecord> {
         let openInboxState = CaptureInboxState.open.rawValue

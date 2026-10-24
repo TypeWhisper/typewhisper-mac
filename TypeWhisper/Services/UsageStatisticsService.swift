@@ -204,6 +204,27 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         }
     }
 
+    /// 把字数重算产生的各天变化量加到对应日的总字数上（不低于 0），听写次数和时长不变。
+    /// 没有统计日的天（历史记录已被保留期限清除）不产生新日；历史回填尚未完成时回填会直接使用新字数，所以也不套用。
+    /// 返回 true 表示已保存。
+    @discardableResult
+    func adjustWords(byDay deltas: [Date: Int]) -> Bool {
+        guard !deltas.isEmpty, historyBackfillCompleted else { return true }
+        do {
+            for (day, delta) in deltas {
+                guard let statisticsDay = try findDay(calendar.startOfDay(for: day)) else { continue }
+                statisticsDay.totalWords = max(0, statisticsDay.totalWords + delta)
+            }
+            try modelContext.save()
+            fetchDays()
+            return true
+        } catch {
+            modelContext.rollback()
+            usageStatisticsLogger.error("Failed to adjust usage statistics words: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     /// Defers loading History until a migration actually needs it. Normal launches with
     /// completed aggregate migrations therefore never materialize the complete history.
     func backfillFromHistoryIfNeeded(recordsProvider: () throws -> [TranscriptionRecord]) {

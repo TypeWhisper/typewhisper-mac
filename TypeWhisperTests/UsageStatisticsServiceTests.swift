@@ -29,6 +29,36 @@ final class UsageStatisticsServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testAdjustWordsAppliesDayDeltasAndKeepsCountsAndDurations() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsAdjustWords")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        service.backfillFromHistoryIfNeeded([])
+        let first = Self.date(year: 2026, month: 7, day: 4, hour: 9, calendar: calendar)
+        let second = Self.date(year: 2026, month: 7, day: 5, hour: 12, calendar: calendar)
+        let removedByRetention = Self.date(year: 2026, month: 6, day: 1, hour: 12, calendar: calendar)
+
+        service.recordTranscription(timestamp: first, wordsCount: 1, durationSeconds: 30, appBundleIdentifier: "com.example.editor")
+        service.recordTranscription(timestamp: second, wordsCount: 3, durationSeconds: 60, appBundleIdentifier: "com.example.editor")
+
+        XCTAssertTrue(service.adjustWords(byDay: [
+            calendar.startOfDay(for: first): 9,
+            calendar.startOfDay(for: second): -5,
+            calendar.startOfDay(for: removedByRetention): 40
+        ]))
+
+        let daily = service.dailyWordCounts(days: 2, endingAt: second)
+        XCTAssertEqual(daily.map(\.totalWords), [10, 0])
+        XCTAssertEqual(daily.map(\.transcriptionCount), [1, 1])
+        XCTAssertEqual(daily.map(\.totalDurationSeconds), [30, 60])
+        XCTAssertEqual(service.summary(from: nil, to: second).transcriptionCount, 2)
+        XCTAssertEqual(service.summary(from: removedByRetention, to: removedByRetention).words, 0)
+        XCTAssertEqual(service.dailyWordCounts(days: nil, endingAt: second).count, 2)
+    }
+
+    @MainActor
     func testHistoryBackfillIsIdempotentAndClearDoesNotRebackfill() throws {
         let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsBackfill")
         defer { TestSupport.remove(directory) }

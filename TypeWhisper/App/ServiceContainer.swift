@@ -446,6 +446,17 @@ final class ServiceContainer: ObservableObject {
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()
+        if historyService.wordCountRecountPending {
+            do {
+                let deltas = try historyService.recountWords()
+                if usageStatisticsService.adjustWords(byDay: deltas) {
+                    historyService.markWordCountRecountCompleted()
+                }
+            } catch {
+                Logger(subsystem: AppConstants.loggerSubsystem, category: "ServiceContainer")
+                    .error("History word recount failed: \(error.localizedDescription)")
+            }
+        }
         usageStatisticsService.backfillFromHistoryIfNeeded {
             try historyService.allRecordsThrowing()
         }
