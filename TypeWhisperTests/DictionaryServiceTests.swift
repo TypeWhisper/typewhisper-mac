@@ -1123,6 +1123,19 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testKatakanaMiddleDotKeepsChineseCorrectionRules() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "新河", replacement: "星河")
+
+        XCTAssertEqual(service.previewCorrections(to: "列夫・托尔斯泰和新河项目"), "列夫・托尔斯泰和星河项目")
+        XCTAssertEqual(service.applyCorrections(to: "列夫・托尔斯泰和新河项目"), "列夫・托尔斯泰和星河项目")
+        XCTAssertEqual(service.applyCorrections(to: "列夫･托尔斯泰和新河项目"), "列夫･托尔斯泰和星河项目")
+    }
+
+    @MainActor
     func testAPITermHelpersDeleteSingleTermWithoutClearingOthers() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

@@ -1840,11 +1840,14 @@ private extension String {
         }
     }
 
+    /// 中文音译人名用 `・`（U+30FB）分隔（列夫・托尔斯泰），它和半角的 `･`（U+FF65）都不说明文本是日文。
     var containsKana: Bool {
         unicodeScalars.contains { scalar in
-            (0x3040...0x30FF).contains(Int(scalar.value)) ||
-            (0x31F0...0x31FF).contains(Int(scalar.value)) ||
-            (0xFF66...0xFF9D).contains(Int(scalar.value))
+            scalar.value != 0x30FB && (
+                (0x3040...0x30FF).contains(Int(scalar.value)) ||
+                (0x31F0...0x31FF).contains(Int(scalar.value)) ||
+                (0xFF66...0xFF9D).contains(Int(scalar.value))
+            )
         }
     }
 }
