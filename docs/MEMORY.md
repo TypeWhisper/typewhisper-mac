@@ -6,6 +6,7 @@
 
 ## 已交付
 
+* 2026-10-23 Raycast 扩展位于 [schneidervvv/dictum-raycast](https://github.com/schneidervvv/dictum-raycast)：名称和图标为 dictum，作者为 Raycast 用户 `schneider_vaughn`，保留上游 11 个命令并新增 Open dictum。扩展读取 `dictum` 和 `dictum-Dev` 的 Application Support 文件夹里的 `api-discovery.json`，先连接最近写入的实例，它返回 401 时连接另一个实例，命令的后续请求继续使用该实例（按端口加令牌区分，正式版和开发版端口相同也能区分）。Transcribe File 的 Translate to 和 Show Last Recording 的 Transcribe and Translate to 通过 API 的 `target_language` 用 macOS 翻译，请求超时时提示下载 macOS 翻译语言。从 Raycast 开始听写前扩展用 `open` 切换回之前的应用，文字插入该应用；之前的应用没有窗口时，Finder 会新开窗口，TextEdit 会显示“打开”面板，README 对此有说明（改用 AppleScript 的 activate 可能触发自动化授权提示，所以没有采用）；历史搜索词中的空格编码为 `%20`。高级设置的 Raycast 一行检查 `~/.config/raycast/extensions/dictum` 是否为 schneider_vaughn 的 dictum 扩展：已安装时 Open in Raycast 打开 `raycast://extensions/schneider_vaughn/dictum/search-history`，未安装时 Learn More 打开扩展仓库。超过 5 分钟的请求（加载模型最多 15 分钟，转写录音最多 30 分钟）使用依赖 undici 自带的 fetch 按命令设定的时间等待，只有连接失败时提示 “Cannot connect to dictum”。扩展 `npm run build` 和 `npm run lint`（含 `ray lint` 作者检查）通过，Raycast 只显示一组 dictum 命令。应用完整验证返回 0，本地化调用 2235 个、缺失 0，Xcode 测试 2994 通过、0 失败、2 跳过，SDK 测试 695 通过、0 失败、2 跳过，Raycast API 合约测试通过。实机检查：dictum Dev 打开 API 服务时没有密码提示，应用重启后 `api-discovery.json` 的令牌不变，扩展的请求返回 200；Open in Raycast 打开 Search History；在 Raycast 里 Start Dictation 把文字插入 TextEdit，Search History 列出历史；正式版和开发版发现文件端口相同、令牌错误的更新，用本机桩服务器验证听写状态和听写开始两个请求依次返回 401 后 200、200；Dictate with Workflow 用临时工作流经扩展代码从 Raycast 开始听写，文字插入 TextEdit 文档，工作流随后删除，该工作流的翻译步骤在中文录音上的语言对为 en_US 到 en_US，返回原文；Transcribe File 和 Show Last Recording 翻译成简体中文返回译文；用扩展代码执行的 Open dictum、Show Last Transcription、Add Dictionary Term、Manage Dictionary、Switch Model（加载已下载的模型）、Toggle Recording、Show Last Recording 和停用再启用工作流返回成功；在 Raycast 内置的 Node 22.23.4 和 Node 26.12 上，310 秒后才回答的请求都返回 200。证据位于 `/tmp/dictum-raycast/`。
 * 2026-10-23 一次听写在目标文稿里出现两份相同文本的外部触发原因没有确认（dictum 只投递一对 Cmd+V）；粘贴验证在约 0.5 秒的验证窗口内发现字段内容恰好是本次插入文本的两份时，删除多出的一份并确认字段只剩一份，其他内容不改动；文本编辑和真实 NSTextView 中删除生效，Chrome 文本域中删除不生效，记录日志后保持原有验证结果；在文本编辑里这次删除是单独一步撤销，按第一次 Cmd+Z 会放回重复份，再按一次才删除。
 * 2026-10-23 供应商 API 密钥与本机接口令牌改存应用支持文件夹中的 `secrets.json`（文件夹权限 0700，文件权限 0600，原子写入，未加密），不再使用钥匙串，重新构建后不再弹出登录密码提示；不迁移旧钥匙串条目，需要在设置中重新填写一次密钥。损坏的文件会以毫秒时间和随机后缀命名后改名保留并按空处理，改名失败时读取报错、保存拒绝覆盖；密钥文件排除时间机器备份，数据导出排除该文件；“删除所有数据”同时清除旧钥匙串中本应用前缀的条目；供应商设置页文案已改为“保存在这台 Mac 上的私有文件中”。完整验证返回 0，Xcode 测试 2991 通过、0 失败、2 跳过，SDK 测试 695 通过、0 失败、2 跳过。
 * 2026-10-24 阶段 4 交付历史页面（双栏、按天分组、搜索高亮、重试、Markdown 导出、删除撤销）、词典页面（CSV 导入默认词在前、导入预览、5 MB 与 3000 词上限）、六级保留期限与本地录音开关、iCloud Drive 文本同步，以及中文按词自动学习（NLTokenizer 分词，修正一个词只学最小的改动片段）。实机从空数据库恢复 5 条历史和 5 个词条，TextEdit 中修正一个词学到 `纪要 ← 记录` 词级词条，单元测试覆盖 `星河 ← 新河`；删除全部历史的确认写明记录数和同步影响，旧历史设置页不再提供保留期限；两台 Mac 冲突编辑同步收敛有测试；翻译筛选等待阶段 3 的类型字段。完整验证返回 0，Xcode 测试 3041 通过、0 失败、3 跳过，SDK 测试 696 通过、0 失败、2 跳过，格式依据见 [DATA FORMATS](research/DATA_FORMATS.md)。
@@ -24,7 +25,7 @@
 
 | 事项 | 当前结论与状态 | 文档链接 |
 | -- | ------- | ---- |
-| V0.1.0 阶段 0 到阶段 7 | 阶段 0、5A、听写输出修复和 0B 已完成；阶段 1、2、4、5B 和 Raycast 扩展下一步并行开发，阶段 3 在阶段 2 和 5B 之后。 | [ROADMAP](ROADMAP.md) |
+| V0.1.0 阶段 0 到阶段 7 | 阶段 0、5A、听写输出修复、0B 和 Raycast 扩展已完成；阶段 1、2、4、5B 下一步并行开发，阶段 3 在阶段 2 和 5B 之后。 | [ROADMAP](ROADMAP.md) |
 
 ## 关键决策
 

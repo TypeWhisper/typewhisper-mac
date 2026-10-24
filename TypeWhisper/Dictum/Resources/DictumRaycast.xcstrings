@@ -1,0 +1,7 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Start dictation, search history, manage the dictionary and dictate with a workflow directly from Raycast. Requires the API server to be running." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Start dictation, search history, manage the dictionary and dictate with a workflow directly from Raycast. Requires the API server to be running." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Raycast 中直接开始听写、搜索历史、管理词典，或用指定的工作流听写。需要先启用 API 服务器。" } } } }
+  },
+  "version" : "1.0"
+}
