@@ -47,6 +47,35 @@ final class DictumWordCountHistoryTests: XCTestCase {
         XCTAssertEqual(record.wordsCount, 5)
     }
 
+    func testSyncedChineseRecordStoresCharacterCount() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "dictum-word-count-sync")
+        defer { TestSupport.remove(directory) }
+        let history = HistoryService(appSupportDirectory: directory, eventEmitter: { _ in })
+        let chineseText = "两台电脑之间同步的听写记录"
+        let recordID = UUID()
+        let now = Date()
+
+        try history.applyUserDataSyncMutations([
+            .upsertHistoryContent(UserDataSyncHistoryContentV1(
+                recordID: recordID,
+                createdAt: now,
+                updatedAt: now,
+                originDeviceID: "remote",
+                originPlatform: "macOS",
+                source: "mac",
+                processingState: "ready",
+                rawTranscript: chineseText,
+                finalText: chineseText,
+                durationSeconds: 3,
+                engineDisplayName: "Qwen3-ASR"
+            ))
+        ])
+
+        let record = try XCTUnwrap(history.record(withID: recordID))
+        XCTAssertEqual(record.wordsCount, DictumWordCount.count(chineseText))
+        XCTAssertGreaterThan(record.wordsCount, 1)
+    }
+
     func testRecountRewritesStaleStoredCountAndReturnsDayDelta() throws {
         let directory = try TestSupport.makeTemporaryDirectory(prefix: "dictum-word-count-recount")
         defer {

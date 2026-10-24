@@ -1427,7 +1427,7 @@ final class HistoryService: ObservableObject {
                 record.language = content.detectedLanguage
                 record.engineUsed = content.engineDisplayName
                 record.modelUsed = content.modelDisplayName
-                record.wordsCount = content.wordCount
+                record.wordsCount = DictumWordCount.count(content.finalText)
                 record.originDeviceID = content.originDeviceID
                 record.originPlatformRaw = content.originPlatform
                 record.sourceRaw = content.source
