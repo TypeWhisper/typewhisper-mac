@@ -397,7 +397,7 @@ struct VoiceBarView: View {
             ScrollView(.vertical) {
                 TimelineView(.animation(minimumInterval: 0.055, paused: !isPolishing || reduceMotion)) { timeline in
                     let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
-                    Text(verbatim: "\(confirmedText(phase: phase))\(tentativeText)")
+                    Text(transcriptText(phase: phase))
                         .font(.system(size: 15)).lineSpacing(4)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -416,8 +416,13 @@ struct VoiceBarView: View {
         return false
     }
 
-    private func confirmedText(phase: Double) -> Text {
-        Text(verbatim: model.text).foregroundColor(shimmerColor(phase: phase))
+    private func transcriptText(phase: Double) -> AttributedString {
+        var transcript = AttributedString(model.text)
+        transcript.foregroundColor = shimmerColor(phase: phase)
+        var tentative = AttributedString(model.tentativeText)
+        tentative.foregroundColor = Color.white.opacity(0.34)
+        transcript.append(tentative)
+        return transcript
     }
 
     private func shimmerColor(phase: Double) -> Color {
@@ -427,10 +432,6 @@ struct VoiceBarView: View {
             return Color.white.opacity(0.55 + 0.45 * wave)
         }
         return .white
-    }
-
-    private var tentativeText: Text {
-        Text(verbatim: model.tentativeText).foregroundColor(Color.white.opacity(0.34))
     }
 
     @ViewBuilder private var controls: some View {
