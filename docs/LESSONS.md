@@ -64,10 +64,15 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence: The shared log contained sparse bytes and an xcresult reader error, while the later invocation returned zero and its independent Xcode result reported 2,980 passing tests.
   - Fix: Wait for the complete shell invocation to exit before starting another verification in that worktree. Use a distinct redirected log for each attempt and retain the final exit status together with the result bundle summary.
 
-- 其他单元持有运行锁时运行 Xcode 测试 (Seen x1: 2026-10-24)
-  - 问题：字数统计修复第 1 轮在 `/tmp/dictum-run.lock` 存在期间运行了 Xcode 测试，测试宿主的事件监听和按键事件会干扰持锁单元的实机检查。
-  - 证据：`/tmp/dictum-word-count-fix1/t3.log` 记录这次运行从 16:42:03 到 16:42:11，共 1 个测试，运行时运行锁存在。
-  - 方法：运行 `scripts/dictum-verify.sh test` 或 `all` 前先确认 `/tmp/dictum-run.lock` 和 `/tmp/dictum-live-next` 不存在；锁存在时只做不需要测试宿主的工作，每 5 分钟检查一次。
+- 其他单元持有运行锁时运行测试 (Seen x2: 2026-10-24, 2026-10-24)
+  - 问题：字数统计修复第 1 轮在 `/tmp/dictum-run.lock` 存在期间运行了 Xcode 测试，测试宿主的事件监听和按键事件会干扰持锁单元的实机检查。Qwen3 退出崩溃修复在 p5b 持锁期间两次直接运行了 `swift test --filter ProtocolContractTests`，检查锁的 `ls` 和测试写在同一条命令里，锁存在时测试照常运行。
+  - 证据：`/tmp/dictum-word-count-fix1/t3.log` 记录这次运行从 16:42:03 到 16:42:11，共 1 个测试，运行时运行锁存在。19:58 的 SDK 测试命令输出先列出了 `/tmp/dictum-run.lock` 的内容，随后执行了 32 个 SDK 测试。
+  - 方法：运行 `scripts/dictum-verify.sh test` 或 `all` 前先确认 `/tmp/dictum-run.lock` 和 `/tmp/dictum-live-next` 不存在，用 `[ ! -e ... ] && ... && 测试命令` 把检查作为测试的前提条件；锁存在时只做不需要测试宿主的工作，每 5 分钟检查一次。
+
+- 只看崩溃线程就推断为多线程竞争 (Seen x1: 2026-10-24)
+  - 问题：Qwen3 的 MLX 编译缓存崩溃最初被推断为两个编译函数在不同线程上同时访问缓存。崩溃报告的主线程实际正在 `exit()` 中析构 MLX 的 C++ 全局对象，原因是应用在识别运行时退出。
+  - 证据：`/tmp/dictum-qwen3-crash/FINDINGS.md` 中 3 份报告的主线程都是 `_handleAEQuit` → `exit` → `__cxa_finalize_ranges` → MLX 析构函数，没有第二个线程在执行 MLX 代码；mlx-swift 0.31.6 用进程级 `evalLock` 保护编译缓存。17:01 的崩溃发生在 `dictum-verify.sh stop` 退出仍在录音的应用时。
+  - 方法：读崩溃报告时先读主线程和其他所有线程。主线程出现 `exit`、`__cxa_finalize` 或 `terminate:` 时，先检查退出时还有哪些工作在运行，再考虑线程竞争。
 
 - 真实字段测试依赖辅助功能授权，宿主没有授权时整个测试类会被静默跳过 (Seen x1: 2026-10-24)
   - 问题：`DuplicateInsertionRealFieldTests` 在测试宿主没有辅助功能授权时用 `XCTSkip` 跳过，换一台 Mac 运行时这组覆盖会无声消失，容易误以为修复仍被测试覆盖。
