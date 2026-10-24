@@ -833,7 +833,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @objc(APIRouterMockTranscriptionPlugin)
-    private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
+    private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, PluginLocalInferenceGateProviding, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.transcription" }
         static var pluginName: String { "Mock Transcription" }
         private static let promptLock = NSLock()
@@ -843,6 +843,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         nonisolated(unsafe) private static var _failureMessage: String?
         nonisolated(unsafe) private static var _hangSeconds: TimeInterval?
         nonisolated(unsafe) private static var _transcribeCallCount = 0
+        nonisolated(unsafe) private static var _localInferenceGate = PluginLocalInferenceGate()
+        nonisolated(unsafe) private static var _runsUntilLocalInferenceGateCloses = false
+
+        static var sharedLocalInferenceGate: PluginLocalInferenceGate {
+            promptLock.withLock { _localInferenceGate }
+        }
+
+        var localInferenceGate: PluginLocalInferenceGate { Self.sharedLocalInferenceGate }
 
         static var lastPrompt: String? {
             promptLock.withLock { _lastPrompt }
@@ -864,6 +872,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 _failureMessage = nil
                 _hangSeconds = nil
                 _transcribeCallCount = 0
+                _localInferenceGate = PluginLocalInferenceGate()
+                _runsUntilLocalInferenceGateCloses = false
+            }
+        }
+
+        /// 每次转写都在本地识别门内运行，直到关闭识别门取消它，与应用退出时的 Qwen3 识别相同。
+        static func runUntilLocalInferenceGateCloses() {
+            promptLock.withLock {
+                _runsUntilLocalInferenceGateCloses = true
+            }
+        }
+
+        private static func runUntilLocalInferenceGateClosesIfRequested() async throws {
+            let gate = promptLock.withLock { _runsUntilLocalInferenceGateCloses ? _localInferenceGate : nil }
+            guard let gate else { return }
+            try await gate.withLock {
+                try await Task.sleep(for: .seconds(60))
             }
         }
 
@@ -919,6 +944,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 return (text: Self._responseText, failureMessage: Self._failureMessage)
             }
             await Self.hangIfRequested()
+            try await Self.runUntilLocalInferenceGateClosesIfRequested()
             if let failureMessage = result.failureMessage {
                 throw PluginTranscriptionError.apiError(failureMessage)
             }
@@ -938,6 +964,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 return (text: Self._responseText, failureMessage: Self._failureMessage)
             }
             await Self.hangIfRequested()
+            try await Self.runUntilLocalInferenceGateClosesIfRequested()
             if let failureMessage = result.failureMessage {
                 throw PluginTranscriptionError.apiError(failureMessage)
             }
@@ -13634,6 +13661,65 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.dictationViewModel.performActionFeedbackAction(openRecoverySettingsWindow: false)
 
         XCTAssertEqual(navigationCoordinator.request?.tab, .dictationRecovery)
+    }
+
+    @MainActor
+    func testClosingLocalInferenceGateForQuitDoesNotFailDictation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .never
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.runUntilLocalInferenceGateCloses()
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 where MockTranscriptionPlugin.transcribeCallCount == 0 {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 1)
+
+        await MockTranscriptionPlugin.sharedLocalInferenceGate.close()
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertNotEqual(session.status, .failed)
+        XCTAssertNil(session.error)
+        XCTAssertNil(context.dictationViewModel.lastDictationError)
+        XCTAssertFalse(context.dictationViewModel.actionFeedbackIsError)
+        XCTAssertTrue(ErrorLogService(appSupportDirectory: appSupportDirectory).entries.isEmpty)
+
+        // applicationWillTerminate 用同一个调用把这次听写保存为可恢复录音。
+        XCTAssertNotNil(context.audioRecordingService.preserveActiveRecoveryRecording())
+        XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
     }
 
     @MainActor
