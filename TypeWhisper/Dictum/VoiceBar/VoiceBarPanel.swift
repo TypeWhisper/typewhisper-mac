@@ -280,10 +280,12 @@ private extension VoiceBarState {
         case .blockingError: .infinity
         default: nil
         }
-        guard let debugLifetime = VoiceBarPresentation.debugFeedbackLifetime, let lifetime, lifetime.isFinite else {
-            return lifetime
+#if DEBUG
+        if let debugLifetime = VoiceBarPresentation.debugFeedbackLifetime, let lifetime, lifetime.isFinite {
+            return debugLifetime
         }
-        return debugLifetime
+#endif
+        return lifetime
     }
     var collapsedWidth: CGFloat {
         switch self {
