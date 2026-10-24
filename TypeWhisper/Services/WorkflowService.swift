@@ -93,10 +93,7 @@ final class WorkflowService: ObservableObject {
     func shouldSkipAIProcessingForShortDictation(text: String) -> Bool {
         guard shortTranscriptionMinimumWords > 0 else { return false }
 
-        let wordCount = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: \.isWhitespace)
-            .count
+        let wordCount = DictumWordCount.count(text)
         return wordCount > 0 && wordCount < shortTranscriptionMinimumWords
     }
 
