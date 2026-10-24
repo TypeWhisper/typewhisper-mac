@@ -277,7 +277,13 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     /// 会话开始的按键时间，不随录音就绪而重置，用来判断升级窗口。
     private var activePressDate: Date?
     private var isActive = false
-    private var activeSlotType: HotkeySlotType?
+    private var activeSlotType: HotkeySlotType? {
+        didSet {
+            if activeSlotType != .translation { translationUpgradeOrigin = nil }
+        }
+    }
+    /// 听写会话升级为翻译前的槽位，升级后沿用它的轻按、按住和打断规则。
+    private var translationUpgradeOrigin: HotkeySlotType?
     private var activeGlobalHotkey: UnifiedHotkey?
     private(set) var activeProfileId: UUID?
     private(set) var activeWorkflowId: UUID? {
@@ -2002,7 +2008,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     fnTriggerMode: fnTriggerMode
                 )
                 states[index] = state
-                if slotType == .translation, keyDown { markHeldFnSlotsAsCombo() }
                 if shouldSuppressGlobalMatch(
                     slotType: slotType,
                     hotkey: hotkey,
@@ -2407,7 +2412,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         guard discardPushToTalkRecordingOnExtraKeyPress,
               !pushToTalkInterruptionSignaled,
               isActive,
-              activeSlotType == .pushToTalk,
+              activeSlotType == .pushToTalk || translationUpgradeOrigin == .pushToTalk,
               activeProfileId == nil,
               activeWorkflowId == nil,
               event.type == .keyDown,
@@ -3034,8 +3039,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         if isActive {
             if slotType == .translation, activeSlotType != .translation {
-                // 左 Shift 只在窗口内把听写升级为翻译；之后的误触不能停止录音。
-                upgradeActiveDictationToTranslation(hotkey: hotkey)
+                // 左 Shift 只在窗口内把听写升级为翻译；之后的误触不能停止录音，也不改变 Fn 的松开处理。
+                if upgradeActiveDictationToTranslation(hotkey: hotkey) { markHeldFnSlotsAsCombo() }
                 return
             }
             // Any hotkey stops active recording
@@ -3062,6 +3067,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             activeDelayedHybridModifierHold = false
             currentMode = slotType == .toggle ? .toggle : .pushToTalk
             if slotType == .translation {
+                markHeldFnSlotsAsCombo()
                 onTranslationDictationStart?(requestTimestamp)
             } else {
                 onDictationStart?(requestTimestamp)
@@ -3069,17 +3075,19 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func upgradeActiveDictationToTranslation(hotkey: UnifiedHotkey) {
+    private func upgradeActiveDictationToTranslation(hotkey: UnifiedHotkey) -> Bool {
         guard activeProfileId == nil, activeWorkflowId == nil,
               let slotType = activeSlotType, slotType == .hybrid || slotType == .pushToTalk || slotType == .toggle,
               let pressed = activePressDate,
-              Date().timeIntervalSince(pressed) < Self.translationUpgradeWindow else { return }
+              Date().timeIntervalSince(pressed) < Self.translationUpgradeWindow else { return false }
         activeSlotType = .translation
+        translationUpgradeOrigin = slotType
         activeGlobalHotkey = hotkey
         onDictationModeUpgrade?()
+        return true
     }
 
-    /// 左 Shift 加入后，Fn 的松开属于组合键，不再单独触发听写槽位的松开或开始。
+    /// 翻译会话开始或升级成功后，仍按住的 Fn 属于组合键，松开时不再触发听写槽位的松开或开始。
     private func markHeldFnSlotsAsCombo() {
         for slotType in HotkeySlotType.allCases where slotType != .translation {
             guard var states = slots[slotType] else { continue }
@@ -3098,7 +3106,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         guard isActive, slotType == activeSlotType, activeProfileId == nil, activeWorkflowId == nil else { return }
 
-        switch slotType {
+        switch slotType == .translation ? (translationUpgradeOrigin ?? .hybrid) : slotType {
         case .hybrid, .translation:
             guard let downTime = keyDownTime else { return }
             if Self.isHybridTap(heldFor: Date().timeIntervalSince(downTime)) {

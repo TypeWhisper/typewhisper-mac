@@ -135,6 +135,89 @@ final class TranslationHotkeyTests: XCTestCase {
         XCTAssertEqual(dictationStarts, 1)
     }
 
+    func testLateLeftShiftDuringHoldToTalkKeepsTheDictationAndFnReleaseStopsIt() throws {
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        Thread.sleep(forTimeInterval: HotkeyService.translationUpgradeWindow + 0.1)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        XCTAssertEqual(stops, 0, "左 Shift 不能停止录音")
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1, "Fn 松开按听写结束")
+        XCTAssertEqual(upgrades, 0)
+        XCTAssertEqual(translationStarts, 0)
+        XCTAssertEqual(dictationStarts, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    func testLateLeftShiftDuringTapModeKeepsTheDictationAndFnStopsIt() throws {
+        service.setHotkeysForTesting([], for: .hybrid)
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 63, modifierFlags: 0, isFn: true), for: .toggle)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(dictationStarts, 1, "Fn 松开后开始听写")
+        Thread.sleep(forTimeInterval: HotkeyService.translationUpgradeWindow + 0.1)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        XCTAssertEqual(stops, 0)
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1, "Fn 松开结束轻按开始的听写")
+        XCTAssertEqual(upgrades, 0)
+        XCTAssertEqual(translationStarts, 0)
+    }
+
+    func testHoldToTalkTranslationStopsOnceWhenFnIsReleasedBeforeShift() throws {
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        service.resetKeyDownTime()
+        Thread.sleep(forTimeInterval: 0.4)
+        try flagsChanged(fnKey, down: false, flags: .maskShift, device: deviceLeftShift)
+        XCTAssertEqual(stops, 0, "组合键两个键都松开后才结束")
+        try flagsChanged(leftShift, down: false, flags: [])
+        XCTAssertEqual(stops, 1)
+        XCTAssertEqual(upgrades, 1)
+    }
+
+    func testHoldToTalkTranslationWithoutTheDictationShortcutStopsOnce() throws {
+        service.setHotkeysForTesting([], for: .hybrid)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        XCTAssertEqual(translationStarts, 1)
+        service.resetKeyDownTime()
+        Thread.sleep(forTimeInterval: 0.4)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        XCTAssertEqual(stops, 0, "组合键两个键都松开后才结束")
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1)
+    }
+
+    func testSessionUpgradedFromPushToTalkKeepsPushToTalkInterruption() throws {
+        service.setHotkeysForTesting([], for: .hybrid)
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 63, modifierFlags: 0, isFn: true), for: .pushToTalk)
+        service.discardPushToTalkRecordingOnExtraKeyPress = true
+        var interruptions = 0
+        service.onPushToTalkInterruption = { interruptions += 1 }
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        XCTAssertEqual(upgrades, 1)
+        XCTAssertEqual(interruptions, 0, "修饰键按下不算额外按键")
+        try keyDown(0, flags: [.maskSecondaryFn, .maskShift])
+        XCTAssertEqual(interruptions, 1)
+    }
+
+    func testSessionUpgradedFromPushToTalkStopsOnReleaseEvenAfterAQuickPress() throws {
+        service.setHotkeysForTesting([], for: .hybrid)
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 63, modifierFlags: 0, isFn: true), for: .pushToTalk)
+        try flagsChanged(fnKey, down: true, flags: .maskSecondaryFn)
+        try flagsChanged(leftShift, down: true, flags: [.maskSecondaryFn, .maskShift], device: deviceLeftShift)
+        XCTAssertEqual(upgrades, 1)
+        try flagsChanged(leftShift, down: false, flags: .maskSecondaryFn)
+        XCTAssertEqual(stops, 0, "组合键两个键都松开后才结束")
+        try flagsChanged(fnKey, down: false, flags: [])
+        XCTAssertEqual(stops, 1, "按住说话松开即结束，快速按放也不进入轻按切换")
+        XCTAssertNil(service.currentMode)
+    }
+
     func testDefaultTranslationShortcutIsFnPlusLeftShiftAndSurvivesClearing() throws {
         let defaults = UserDefaults.standard
         let slot = HotkeySlotType.translation
