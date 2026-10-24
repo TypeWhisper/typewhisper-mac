@@ -453,6 +453,67 @@ final class SoundServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPlaybackFailureOfDefaultChoiceFallsBackToDefaultSound() throws {
+        let storedDefaults = captureSoundDefaults()
+        defer { restoreSoundDefaults(storedDefaults) }
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.soundRecordingStarted)
+        let oneShotPlayer = SpyOneShotSoundPlayer()
+        let service = PreviewSoundResolverSpy(oneShotPlayer: oneShotPlayer)
+
+        service.play(.recordingStarted, enabled: true)
+        let url = try XCTUnwrap(oneShotPlayer.playedURLs.first)
+        oneShotPlayer.playbackResultHandler?(url, false)
+
+        XCTAssertEqual(service.resolvedChoices, [.system("Tink")])
+    }
+
+    @MainActor
+    func testPlaybackFailureKeepsSavedChoice() throws {
+        let storedDefaults = captureSoundDefaults()
+        defer { restoreSoundDefaults(storedDefaults) }
+        let oneShotPlayer = SpyOneShotSoundPlayer()
+        let service = PreviewSoundResolverSpy(oneShotPlayer: oneShotPlayer)
+        service.updateChoice(for: .recordingStarted, choice: .system("Glass"))
+
+        service.play(.recordingStarted, enabled: true)
+        let url = try XCTUnwrap(oneShotPlayer.playedURLs.first)
+        XCTAssertEqual(url.lastPathComponent, "Glass.aiff")
+        oneShotPlayer.playbackResultHandler?(url, false)
+
+        XCTAssertEqual(service.resolvedChoices, [.system("Tink")])
+        XCTAssertEqual(service.choice(for: .recordingStarted), .system("Glass"))
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.soundRecordingStarted), "system:Glass")
+    }
+
+    @MainActor
+    func testCuePlaysWhileAnotherCuePreparationIsBlocked() async throws {
+        let gate = DispatchSemaphore(value: 0)
+        let factory = FakeSoundCuePlayerFactory(duration: 0.4)
+        let blocked = URL(fileURLWithPath: "/tmp/blocked-cue.wav")
+        let stop = URL(fileURLWithPath: "/tmp/stop-cue.wav")
+        let player = AVAudioOneShotSoundPlayer(
+            makePlayer: { url in
+                if url == blocked { gate.wait() }
+                return try factory.makePlayer(url: url)
+            },
+            preparationQueue: DispatchQueue(label: "SoundServiceTests.preparation"),
+            playbackQueue: DispatchQueue(label: "SoundServiceTests.playback"),
+            observesOutputDeviceChanges: false
+        )
+
+        player.preparePlayback(for: [blocked])
+        XCTAssertTrue(player.play(url: stop))
+        for _ in 0..<100 where factory.players.first(where: { $0.url == stop })?.playCount != 1 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let played = factory.players.first(where: { $0.url == stop })?.playCount
+        gate.signal()
+        await player.waitForPendingPreparationsForTesting()
+
+        XCTAssertEqual(played, 1)
+    }
+
+    @MainActor
     private func makeOneShotPlayer(factory: FakeSoundCuePlayerFactory) -> AVAudioOneShotSoundPlayer {
         AVAudioOneShotSoundPlayer(
             makePlayer: { try factory.makePlayer(url: $0) },

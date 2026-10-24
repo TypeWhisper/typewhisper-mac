@@ -290,6 +290,8 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
 
     private let makePlayer: PlayerFactory
     private let preparationQueue: DispatchQueue
+    /// 播放不排在准备任务之后，停止提示音在准备其他提示音时也立即开始。
+    private let playbackQueue: DispatchQueue
     private var outputDeviceObserver: OutputDeviceConfigurationObserver?
     private var playbackURLs: Set<URL> = []
     private var cachedPlayers: [URL: CachedPlayer] = [:]
@@ -307,10 +309,12 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
             return player
         },
         preparationQueue: DispatchQueue = DispatchQueue(label: "com.typewhisper.sound-cue-preparation", qos: .utility),
+        playbackQueue: DispatchQueue = DispatchQueue(label: "com.typewhisper.sound-cue-playback", qos: .userInteractive),
         observesOutputDeviceChanges: Bool = true
     ) {
         self.makePlayer = makePlayer
         self.preparationQueue = preparationQueue
+        self.playbackQueue = playbackQueue
         if observesOutputDeviceChanges {
             outputDeviceObserver = OutputDeviceConfigurationObserver { [weak self] in
                 self?.handleOutputDeviceConfigurationChange()
@@ -322,10 +326,9 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
     func play(url: URL) -> Bool {
         let cached = cachedPlayers.removeValue(forKey: url)
         let makePlayer = makePlayer
-        let preparationQueue = preparationQueue
         let resultHandler = playbackResultHandler
         pendingOperations.begin()
-        preparationQueue.async { [weak self] in
+        playbackQueue.async { [weak self] in
             let cue = cached.map { PreparedSoundCue(player: $0.player) }
                 ?? (try? makePlayer(url)).map { PreparedSoundCue(player: $0) }
             var started = false
@@ -501,13 +504,9 @@ class SoundService {
 
     private func handleOneShotPlaybackResult(url: URL, started: Bool) {
         guard !started else { return }
-        // 音频文件播放失败时回落到同一事件的系统提示音，压低音量逻辑
-        // 不能误以为播放已开始。
-        guard let event = choices.first(where: { filePlaybackURL(for: $0.value) == url })?.key else { return }
-        let fallbackChoice = event.defaultChoice
-        guard fallbackChoice != .none, let sound = sound(for: fallbackChoice) else { return }
-        choices[event] = fallbackChoice
-        defer { choices[event] = event.defaultChoice }
+        // 音频文件播放失败时回落到同一事件的默认提示音；已保存的选择保持不变。
+        guard let event = SoundEvent.allCases.first(where: { filePlaybackURL(for: choice(for: $0)) == url }),
+              let sound = sound(for: event.defaultChoice) else { return }
         sound.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
         sound.stop()
         sound.play()
