@@ -70,6 +70,7 @@
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */; };
+		A17210000000000000000001 /* AppDelegateLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A17210000000000000000002 /* AppDelegateLifecycleTests.swift */; };
 		A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001308 /* ManagedPolicyTests.swift */; };
 		A1C0DE000000000000001323 /* ManagedSelectionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001324 /* ManagedSelectionPolicyTests.swift */; };
 		A1C0DE000000000000001319 /* ManagedProviderPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001320 /* ManagedProviderPolicyTests.swift */; };
@@ -900,6 +901,7 @@
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
 		A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewCoordinatorTests.swift; sourceTree = "<group>"; };
+		A17210000000000000000002 /* AppDelegateLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegateLifecycleTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
 		B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowSegmentedPostProcessingTests.swift; sourceTree = "<group>"; };
@@ -3283,6 +3285,7 @@
 				C50700000000000000000002 /* MemoryServiceTests.swift */,
 				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
 				A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */,
+				A17210000000000000000002 /* AppDelegateLifecycleTests.swift */,
 				A1C0DE000000000000001308 /* ManagedPolicyTests.swift */,
 				A1C0DE000000000000001324 /* ManagedSelectionPolicyTests.swift */,
 				A1C0DE000000000000001320 /* ManagedProviderPolicyTests.swift */,
@@ -5313,6 +5316,7 @@
 				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
 				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
 				A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */,
+				A17210000000000000000001 /* AppDelegateLifecycleTests.swift in Sources */,
 				A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */,
 				A1C0DE000000000000001323 /* ManagedSelectionPolicyTests.swift in Sources */,
 				A1C0DE000000000000001319 /* ManagedProviderPolicyTests.swift in Sources */,
