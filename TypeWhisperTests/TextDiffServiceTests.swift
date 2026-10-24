@@ -252,6 +252,83 @@ final class TextDiffServiceTests: XCTestCase {
         ).isEmpty)
     }
 
+    func testChineseAutoLearningKeepsOnlyTheEditedWord() {
+        let service = TextDiffService()
+
+        let word = service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，讨论星河项目，请准备会议记录。"
+        )
+        XCTAssertEqual(word.map(\.original), ["新河"])
+        XCTAssertEqual(word.map(\.replacement), ["星河"])
+
+        let extended = service.extractHighConfidenceCorrections(
+            original: "请准备会议记录",
+            edited: "请准备会议纪要和议程"
+        )
+        XCTAssertFalse(extended.contains { $0.replacement == "纪要和议程" })
+        XCTAssertTrue(extended.isEmpty || (extended.map(\.original) == ["记录"] && extended.map(\.replacement) == ["纪要"]))
+    }
+
+    func testChineseAutoLearningRejectsPhrasesAndSharedTokens() {
+        let service = TextDiffService()
+
+        let phrase = service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，讨论星河方案，请准备会议记录。"
+        )
+        XCTAssertFalse(phrase.contains { $0.replacement == "星河方案" || $0.original == "新河项目" })
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "讨论新河项目的进度安排",
+            edited: "讨论星河计划的时间安排"
+        ).isEmpty)
+    }
+
+    func testChineseAutoLearningStillLearnsAMishearingSplitIntoManyTokens() {
+        let suggestions = TextDiffService().extractHighConfidenceCorrections(
+            original: "我们把服务部署到酷伯尼特斯。",
+            edited: "我们把服务部署到Kubernetes。"
+        )
+
+        XCTAssertEqual(suggestions.map(\.original), ["酷伯尼特斯"])
+        XCTAssertEqual(suggestions.map(\.replacement), ["Kubernetes"])
+    }
+
+    func testChineseAutoLearningRejectsOtherEditShapes() {
+        let service = TextDiffService()
+        let original = "周四下午三点，讨论新河项目，请准备会议记录。"
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周五下午三点，讨论星河项目，请准备会议纪要。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周四下午三点，讨论新河项目，请准备会议记录！"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周四下午三点，讨论项目，请准备会议记录。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周四下午三点，讨论新河大项目，请准备会议记录。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "please open Github today",
+            edited: "please open GitHub today"
+        ).isEmpty)
+    }
+
+    func testChineseNumeralToNumeralEditsAreNeverLearned() {
+        let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(original: "订三份", edited: "订四份").isEmpty)
+        XCTAssertTrue(service.extractCorrections(original: "订 三 份", edited: "订 四 份").isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(original: "共计二十三人", edited: "共计二十四人").isEmpty)
+    }
+
     func testHighConfidenceExtractionHandlesMixedChineseAndEnglish() {
         let service = TextDiffService()
 
