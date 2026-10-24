@@ -8545,7 +8545,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         let stopGate = RecorderStartGate()
         var pasteCount = 0
 
@@ -8577,8 +8577,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.dictationViewModel.handleCancelHotkey()
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
         XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
-        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .processing)
-        XCTAssertNil(context.dictationViewModel.apiDictationSession(id: sessionID)?.error)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.error, "Cancelled")
 
         await stopGate.release()
 
@@ -10847,7 +10847,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let originalCancellation = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
         defer { Self.restoreUserDefault(originalCancellation, forKey: UserDefaultsKeys.cancellationBehavior) }
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         let trigger = scenario == "appSite"
             ? WorkflowTrigger(kind: .website, appBundleIdentifiers: ["com.apple.Notes"], websitePatterns: ["example.com"])
             : WorkflowTrigger.website("example.com")
@@ -12576,7 +12576,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
         )
         let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.startRecordingOverride = {
             audioStartEntered.fulfill()
@@ -18285,7 +18285,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 directory: directory.appendingPathComponent("recovery"), retentionPolicy: .immediately
             )
         )
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {}
@@ -18321,14 +18321,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testInstantCancellationRetainsUndoWindowAndWaitsForOldRecorder() async throws {
+    func testSingleEscapeCancellationRetainsUndoWindowAndWaitsForOldRecorder() async throws {
         for cancelDuringProcessing in [false, true] {
             let directory = try TestSupport.makeTemporaryDirectory()
             defer { TestSupport.remove(directory) }
             let context = Self.makeDictationContext(appSupportDirectory: directory)
             let stopGate = RecorderStartGate()
             let newCaptureStarted = LockedFlag()
-            context.dictationViewModel.cancellationBehavior = .instant
+            context.dictationViewModel.cancellationBehavior = .singleEscape
             context.audioRecordingService.hasMicrophonePermissionOverride = true
             context.audioRecordingService.inputAvailabilityOverride = { _ in true }
             context.audioRecordingService.startRecordingOverride = {}
@@ -18371,14 +18371,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testInstantStopDuringRecordingPreparationClosesIndicator() async throws {
+    func testSingleEscapeStopDuringRecordingPreparationClosesIndicator() async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }
         let context = Self.makeDictationContext(appSupportDirectory: directory)
         let startEntered = expectation(description: "recorder start entered")
         let startGate = DispatchSemaphore(value: 0)
         defer { startGate.signal() }
-        context.dictationViewModel.cancellationBehavior = .instant
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {
