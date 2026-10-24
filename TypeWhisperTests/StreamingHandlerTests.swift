@@ -630,7 +630,7 @@ final class StreamingHandlerTests: XCTestCase {
             stateCheck: { true }
         )
 
-        try await Task.sleep(for: .milliseconds(3400))
+        try await Task.sleep(for: .milliseconds(1900))
         handler.stop()
 
         XCTAssertEqual(plugin.transcribeCallCount, 1)
@@ -685,7 +685,7 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(plugin.transcribeCallCount, 0)
     }
 
-    func testStreamingFallbackDoesNotPreviewBeforeThreeSeconds() async throws {
+    func testStreamingFallbackDoesNotPreviewBeforeThePreviewInterval() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -731,13 +731,13 @@ final class StreamingHandlerTests: XCTestCase {
             stateCheck: { true }
         )
 
-        try await Task.sleep(for: .milliseconds(2500))
+        try await Task.sleep(for: .milliseconds(1000))
         handler.stop()
 
         XCTAssertEqual(plugin.transcribeCallCount, 0)
     }
 
-    func testStreamingFallbackCallsPreviewAfterThreeSecondsEvenWithoutLiveSession() async throws {
+    func testStreamingFallbackCallsPreviewAfterThePreviewIntervalWithoutLiveSession() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -783,7 +783,7 @@ final class StreamingHandlerTests: XCTestCase {
             stateCheck: { true }
         )
 
-        try await Task.sleep(for: .milliseconds(3400))
+        try await Task.sleep(for: .milliseconds(1900))
         handler.stop()
 
         XCTAssertEqual(plugin.transcribeCallCount, 1)
@@ -843,7 +843,7 @@ final class StreamingHandlerTests: XCTestCase {
             stateCheck: { true }
         )
 
-        try await Task.sleep(for: .milliseconds(3400))
+        try await Task.sleep(for: .milliseconds(1900))
         handler.stop()
 
         let finalRequestedWindow = requestedWindowLock.withLock { $0 }

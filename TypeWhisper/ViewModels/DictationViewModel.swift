@@ -319,6 +319,8 @@ final class DictationViewModel: ObservableObject {
     }
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""
+    @Published private(set) var modelNotice: DictationModelNotice?
+    private var modelNoticeTask: Task<Void, Never>?
     @Published var isStreaming: Bool = false
     @Published private(set) var externalStreamingDisplayCount: Int = 0
     @Published var audioDuckingEnabled: Bool {
@@ -2036,7 +2038,28 @@ final class DictationViewModel: ObservableObject {
         beginDictationSession(id: sessionID)
         dictationLatencyTraces[sessionID] = DictationLatencyTrace(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
-        guard canDictate else {
+        let notice = DictationModelNotice.current(providerId: modelManager.selectedProviderId)
+        guard canDictate, notice == nil else {
+            if let notice {
+                modelNotice = notice
+                failDictationSession(id: sessionID, error: notice.errorMessage)
+                hotkeyService.cancelDictation()
+                modelNoticeTask?.cancel()
+                modelNoticeTask = Task { @MainActor [weak self] in
+                    let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+                    while let self, !Task.isCancelled {
+                        let current = DictationModelNotice.current(providerId: self.modelManager.selectedProviderId)
+                        guard ContinuousClock.now < deadline, let current else {
+                            self.modelNotice = nil
+                            return
+                        }
+                        self.modelNotice = current
+                        try? await Task.sleep(for: .milliseconds(100))
+                    }
+                }
+                return
+            }
+            modelNotice = nil
             let readinessError = modelManager.transcriptionReadinessError(providerId: modelManager.selectedProviderId)
                 ?? .noEngineSelected
             let errorMessage = readinessError.localizedDescription

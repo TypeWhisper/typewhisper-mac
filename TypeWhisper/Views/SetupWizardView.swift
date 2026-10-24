@@ -1838,7 +1838,7 @@ enum SetupWizardQwen3Recommendation {
     }
 
     static func preferredModelId(from models: [PluginModelInfo]) -> String? {
-        models.first { $0.id == "qwen3-asr-1.7b-6bit" }?.id
+        models.first { $0.id == "qwen3-asr-1.7b-8bit" }?.id
             ?? models.first?.id
     }
 
