@@ -135,6 +135,7 @@ final class VoiceBarPresentation: ObservableObject {
             switch parts.first {
             case "downloading": input.model = .downloading(parts.count > 1 ? Double(parts[1]) : nil)
             case "loading": input.model = .loading
+            case "not-downloaded": input.model = .notDownloaded
             case "failed": input.model = .failed(parts.count > 1 ? String(parts[1]) : "")
             case "recovered-error": input.outcome = .recoveredError
             case "blocking-error": input.outcome = .blockingError(parts.count > 1 ? String(parts[1]) : "")
