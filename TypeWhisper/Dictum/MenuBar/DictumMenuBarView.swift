@@ -1,6 +1,7 @@
-import SwiftUI
 import ApplicationServices
 import Combine
+import SwiftUI
+import TypeWhisperPluginSDK
 
 @MainActor
 enum MenuBarActionDispatcher {
@@ -113,23 +114,199 @@ struct DictumMenuBarView: View {
 }
 
 struct DictumMenuBarGlyph: View {
-    @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var models = ServiceContainer.shared.modelManagerService
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @StateObject private var glyph = MenuBarGlyphModel(
+        downloadProgressProvider: MenuBarGlyphModel.downloadProgress
+    )
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.1, paused: dictation.state != .processing || reduceMotion)) { timeline in
-            ZStack(alignment: .topTrailing) {
-                if case .downloading(let progress) = SidebarStatus.current() {
-                    if let progress { Circle().trim(from: 0, to: progress).stroke(lineWidth: 2).rotationEffect(.degrees(-90)).frame(width: 16, height: 16) }
-                    else { ProgressView().controlSize(.mini) }
-                } else {
-                    Image("MenuBarGlyph").renderingMode(.template).resizable().frame(width: 18, height: 18)
-                        .opacity(dictation.state == .processing && !reduceMotion ? 0.675 + 0.325 * cos(timeline.date.timeIntervalSinceReferenceDate * 2 * .pi) : 1)
-                    if dictation.state == .recording { Circle().fill(DictumTheme.live).frame(width: 6, height: 6) }
-                    else if !AXIsProcessTrusted() || !models.isModelReady { Circle().fill(DictumTheme.warning).frame(width: 6, height: 6) }
-                }
-            }.frame(width: 18, height: 18)
+        if glyph.status.downloadProgress != nil {
+            let progress = glyph.status.downloadProgress
+            MenuBarProgressRing(progress: progress)
+        } else {
+            Image(nsImage: MenuBarGlyphImages.cachedImage(for: glyph.appearance))
+                .resizable().frame(width: 18, height: 18)
+        }
+    }
+}
+
+@MainActor
+enum MenuBarGlyphImages {
+    static let pulseInterval: TimeInterval = 0.25
+
+    static func image(appearance: MenuBarGlyphModel.Appearance, pulseOn: Bool = false) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+            let rect = NSRect(x: 0, y: 0, width: 18, height: 18)
+            NSImage(named: "MenuBarGlyph")?.draw(in: rect)
+            if pulseOn {
+                NSColor.white.withAlphaComponent(0.35).setFill()
+                rect.fill(using: .sourceAtop)
+            }
+            var dotColor: NSColor?
+            switch appearance {
+            case .recording: dotColor = NSColor(DictumTheme.live)
+            case .attention: dotColor = NSColor(DictumTheme.warning)
+            case .idle, .polishing, .downloading: break
+            }
+            if let dotColor {
+                dotColor.setFill()
+                NSBezierPath(ovalIn: NSRect(x: 13, y: 13, width: 6, height: 6)).fill()
+            }
+            return true
+        }
+        // 录音和警示态带彩色圆点，其余状态保持模板渲染跟随菜单栏配色。
+        image.isTemplate = appearance != .recording && appearance != .attention
+        return image
+    }
+
+    static func cachedImage(for appearance: MenuBarGlyphModel.Appearance) -> NSImage {
+        switch appearance {
+        case .idle: idleImage
+        case .recording: recordingImage
+        case .polishing: polishingOffImage
+        case .attention: attentionImage
+        case .downloading: idleImage
+        }
+    }
+
+    private static let idleImage = image(appearance: .idle)
+    private static let recordingImage = image(appearance: .recording)
+    private static let polishingOffImage = image(appearance: .polishing, pulseOn: false)
+    private static let polishingOnImage = image(appearance: .polishing, pulseOn: true)
+    private static let attentionImage = image(appearance: .attention)
+
+    /// 润色脉冲通过整图预渲染的明暗两态交替呈现，避免在状态项上逐帧重绘。
+    static func polishingImage(isPulseOn: Bool) -> NSImage {
+        isPulseOn ? polishingOnImage : polishingOffImage
+    }
+}
+
+extension MenuBarGlyphModel {
+    /// 下载进度只在下载状态变化时读取一次；插件活动不进入图标重绘路径。
+    static var downloadProgress: () -> Double? {
+        {
+            guard let providerId = ServiceContainer.shared.modelManagerService.selectedProviderId,
+                  let engine = PluginManager.shared?.transcriptionEngine(for: providerId),
+                  let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity,
+                  !activity.isError else { return nil }
+            return activity.progress
+        }
+    }
+}
+
+private struct MenuBarProgressRing: View {
+    let progress: Double?
+
+    var body: some View {
+        ZStack {
+            if let progress {
+                Circle().trim(from: 0, to: progress).stroke(lineWidth: 2)
+                    .rotationEffect(.degrees(-90))
+            } else {
+                ProgressView().controlSize(.mini)
+            }
+        }
+        .frame(width: 16, height: 16)
+        // 下载进度只跟随窄模型的去重更新，不再按录音电平重绘。
+        .accessibilityHidden(true)
+    }
+}
+
+/// 只把去重后的状态变化送进菜单栏图标；录音电平和下载进度细节不进入图标重绘。
+@MainActor
+final class MenuBarGlyphModel: ObservableObject {
+    enum Appearance: Equatable {
+        case idle
+        case recording
+        case polishing
+        case attention
+        case downloading
+    }
+
+    struct Status: Equatable {
+        var appearance: Appearance
+        var downloadProgress: Double?
+    }
+
+    @Published private(set) var status: Status
+    private var cancellable: AnyCancellable?
+    private var pulseTimer: Timer?
+    private var pulseOn = false
+    private let accessibilityChecker: () -> Bool
+
+    init(
+        dictation: DictationViewModel = .shared,
+        models: ModelManagerService = ServiceContainer.shared.modelManagerService,
+        recorder: AudioRecorderViewModel = .shared,
+        downloadProgressProvider: @escaping () -> Double? = { nil },
+        accessibilityChecker: @escaping () -> Bool = { AXIsProcessTrusted() }
+    ) {
+        self.accessibilityChecker = accessibilityChecker
+        status = Self.resolve(
+            dictationState: dictation.state,
+            isModelReady: models.isModelReady,
+            accessibility: accessibilityChecker(),
+            downloadProgress: downloadProgressProvider()
+        )
+        cancellable = Publishers.CombineLatest3(dictation.$state, recorder.$state, models.objectWillChange)
+            .map { [accessibilityChecker, downloadProgressProvider, models] state, recorderState, _ in
+                Self.resolve(
+                    dictationState: state == .recording || recorderState == .recording ? .recording : state,
+                    isModelReady: models.isModelReady,
+                    accessibility: accessibilityChecker(),
+                    downloadProgress: downloadProgressProvider()
+                )
+            }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] resolved in
+                self?.apply(resolved)
+            }
+    }
+
+    var appearance: Appearance { status.appearance }
+
+    private func apply(_ resolved: Status) {
+        let pulseChanged = resolved.appearance != status.appearance
+        status = resolved
+        if pulseChanged {
+            if resolved.appearance == .polishing {
+                startPulse()
+            } else {
+                stopPulse()
+            }
+        }
+    }
+
+    private func startPulse() {
+        guard pulseTimer == nil else { return }
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: MenuBarGlyphImages.pulseInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.pulseOn.toggle()
+                self.status = Status(appearance: .polishing, downloadProgress: self.status.downloadProgress)
+            }
+        }
+    }
+
+    private func stopPulse() {
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        pulseOn = false
+    }
+
+    static func resolve(
+        dictationState: DictationViewModel.State,
+        isModelReady: Bool,
+        accessibility: Bool,
+        downloadProgress: Double?
+    ) -> Status {
+        if !accessibility || !isModelReady {
+            return Status(appearance: .attention, downloadProgress: downloadProgress)
+        }
+        switch dictationState {
+        case .recording: return Status(appearance: .recording, downloadProgress: nil)
+        case .processing: return Status(appearance: .polishing, downloadProgress: nil)
+        default: return Status(appearance: .idle, downloadProgress: downloadProgress)
         }
     }
 }
