@@ -6,6 +6,13 @@ struct DictumShortcutControl: View {
     var tableName: String = "DictumShell"
     let action: () -> Void
 
+    /// 键帽按设计稿显示：fn 小写，Shift 用 ⇧，例如 [fn][左 ⇧]。
+    private var keys: [String] {
+        label.components(separatedBy: " + ").map {
+            $0.replacingOccurrences(of: "Fn", with: "fn").replacingOccurrences(of: "Shift", with: "⇧")
+        }
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
@@ -15,8 +22,11 @@ struct DictumShortcutControl: View {
                         .background(DictumTheme.control, in: RoundedRectangle(cornerRadius: 5))
                         .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(DictumTheme.separatorStrong, lineWidth: 0.5))
                 } else {
-                    KeyCapView(key: label.replacingOccurrences(of: "Fn", with: "fn"), tableName: tableName)
-                        .opacity(isRecording ? 0.35 : 1)
+                    // 组合键的每个键一个键帽，例如 [fn][左 ⇧]。
+                    ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                        KeyCapView(key: key, tableName: tableName)
+                    }
+                    .opacity(isRecording ? 0.35 : 1)
                 }
                 if isRecording {
                     Text("Press new shortcut", tableName: tableName)

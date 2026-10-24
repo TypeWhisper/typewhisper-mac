@@ -49,6 +49,10 @@ enum HistoryExporter {
         if let lang = record.language {
             lines.append("- **Language:** \(lang.uppercased())")
         }
+        if record.mode == .translation {
+            let spoken = record.spokenLanguage ?? "auto"
+            lines.append("- **Mode:** Translation (\(spoken) → \(record.targetLanguage ?? ""))")
+        }
 
         let engine = record.modelUsed ?? record.engineUsed
         lines.append("- **Engine:** \(engine)")
@@ -100,6 +104,11 @@ enum HistoryExporter {
 
         if let lang = record.language {
             dict["language"] = lang
+        }
+        if record.mode == .translation {
+            dict["mode"] = record.mode.rawValue
+            if let spoken = record.spokenLanguage { dict["spokenLanguage"] = spoken }
+            if let target = record.targetLanguage { dict["targetLanguage"] = target }
         }
         if let model = record.modelUsed {
             dict["model"] = model

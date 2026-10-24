@@ -246,7 +246,8 @@ final class HistoryService: ObservableObject {
         engineUsed: String,
         modelUsed: String? = nil,
         audioSamples: [Float]? = nil,
-        pipelineSteps: [String]? = nil
+        pipelineSteps: [String]? = nil,
+        translation: HistoryTranslationInfo? = nil
     ) -> Bool {
         guard let texts = Self.validatedRecordTexts(
             rawText: rawText,
@@ -269,7 +270,8 @@ final class HistoryService: ObservableObject {
             engineUsed: engineUsed,
             modelUsed: modelUsed,
             audioFileName: audioSamples.flatMap { writeAudioFile($0, forRecordID: id) },
-            pipelineSteps: pipelineSteps
+            pipelineSteps: pipelineSteps,
+            translation: translation
         )
         return true
     }
@@ -293,6 +295,7 @@ final class HistoryService: ObservableObject {
         modelUsed: String? = nil,
         audioFileName: String?,
         pipelineSteps: [String]? = nil,
+        translation: HistoryTranslationInfo? = nil,
         capturedInClearGeneration: Int? = nil
     ) -> Bool {
         let wasCleared = capturedInClearGeneration.map { $0 != clearGeneration } ?? false
@@ -323,7 +326,8 @@ final class HistoryService: ObservableObject {
             engineUsed: engineUsed,
             modelUsed: modelUsed,
             audioFileName: audioFileName,
-            pipelineSteps: pipelineSteps
+            pipelineSteps: pipelineSteps,
+            translation: translation
         )
         return true
     }
@@ -408,7 +412,8 @@ final class HistoryService: ObservableObject {
         engineUsed: String,
         modelUsed: String?,
         audioFileName: String?,
-        pipelineSteps: [String]?
+        pipelineSteps: [String]?,
+        translation: HistoryTranslationInfo? = nil
     ) {
         let record = TranscriptionRecord(
             id: id,
@@ -425,6 +430,12 @@ final class HistoryService: ObservableObject {
             audioFileName: audioFileName
         )
         record.pipelineStepList = pipelineSteps ?? []
+        if let translation {
+            record.mode = .translation
+            record.spokenLanguage = translation.spokenLanguage
+            record.targetLanguage = translation.targetLanguage
+            record.processingFailureMessage = translation.failureMessage
+        }
         record.originDeviceID = historySyncPreferences?.deviceID ?? ""
         record.originPlatformRaw = "macOS"
         record.source = .mac
@@ -1320,7 +1331,10 @@ final class HistoryService: ObservableObject {
                 modelDisplayName: record.modelUsed,
                 processingFailureCategory: record.processingFailureCategory,
                 processingFailureMessage: record.processingFailureMessage,
-                alignmentResetAt: record.transcriptionAlignmentResetAt
+                alignmentResetAt: record.transcriptionAlignmentResetAt,
+                mode: record.modeRaw,
+                spokenLanguage: record.spokenLanguage,
+                targetLanguage: record.targetLanguage
             )
             let inbox = UserDataSyncHistoryInboxV1(
                 recordID: record.id,
@@ -1434,6 +1448,9 @@ final class HistoryService: ObservableObject {
                 record.processingStateRaw = content.processingState
                 record.processingFailureCategory = content.processingFailureCategory
                 record.processingFailureMessage = content.processingFailureMessage
+                record.modeRaw = content.mode
+                record.spokenLanguage = content.spokenLanguage
+                record.targetLanguage = content.targetLanguage
                 record.contentUpdatedAt = content.updatedAt
                 if !previousContent.matchesContent(of: record) {
                     // A remote replacement has no known local version provenance.

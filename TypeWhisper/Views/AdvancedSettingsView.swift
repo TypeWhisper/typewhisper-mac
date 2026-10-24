@@ -745,6 +745,9 @@ struct AdvancedSettingsView: View {
             },
             hotkeysDidChange: {
                 dictation.reloadHotkeysFromDefaults()
+            },
+            translationLanguagesDidChange: {
+                TranslationLanguageStore.shared.reload()
             }
         )
 

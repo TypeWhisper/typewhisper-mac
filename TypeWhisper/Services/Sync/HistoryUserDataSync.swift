@@ -51,6 +51,9 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         case processingFailureCategory
         case processingFailureMessage
         case alignmentResetAt
+        case mode
+        case spokenLanguage
+        case targetLanguage
     }
 
     let recordID: UUID
@@ -73,6 +76,10 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
     let processingFailureMessage: String?
     /// A promoted run invalidates alignment from earlier runs, independently of text edits.
     let alignmentResetAt: Date?
+    /// 新增的可选字段，其他工具忽略它们；缺少时按听写记录读取。
+    let mode: String?
+    let spokenLanguage: String?
+    let targetLanguage: String?
 
     init(
         recordID: UUID,
@@ -93,8 +100,14 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         modelDisplayName: String? = nil,
         processingFailureCategory: String? = nil,
         processingFailureMessage: String? = nil,
-        alignmentResetAt: Date? = nil
+        alignmentResetAt: Date? = nil,
+        mode: String? = nil,
+        spokenLanguage: String? = nil,
+        targetLanguage: String? = nil
     ) {
+        self.mode = mode
+        self.spokenLanguage = spokenLanguage
+        self.targetLanguage = targetLanguage
         self.recordID = recordID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -151,6 +164,9 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
             forKey: .processingFailureMessage
         )
         alignmentResetAt = try container.decodeIfPresent(Date.self, forKey: .alignmentResetAt)
+        mode = try container.decodeIfPresent(String.self, forKey: .mode)
+        spokenLanguage = try container.decodeIfPresent(String.self, forKey: .spokenLanguage)
+        targetLanguage = try container.decodeIfPresent(String.self, forKey: .targetLanguage)
     }
 }
 

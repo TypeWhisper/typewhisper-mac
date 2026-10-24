@@ -5,8 +5,9 @@ enum HistoryRecordFilter: Int, CaseIterable {
 
     func includes(_ record: TranscriptionRecord) -> Bool {
         switch self {
-        case .all, .dictation: true
-        case .translation: false
+        case .all: true
+        case .dictation: record.mode == .dictation
+        case .translation: record.mode == .translation
         }
     }
 }

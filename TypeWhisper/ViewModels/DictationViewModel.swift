@@ -283,6 +283,7 @@ final class DictationViewModel: ObservableObject {
     private struct PendingHotkeyDictationStart {
         let forcedWorkflowId: UUID?
         let requestUptimeNanoseconds: UInt64
+        var mode: DictationMode = .dictation
     }
 
     @Published var state: State = .idle {
@@ -402,13 +403,20 @@ final class DictationViewModel: ObservableObject {
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
     var undoLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .undoLastDictation) }
     var restoreRawTranscriptHotkeyLabel: String { Self.loadHotkeyLabel(for: .restoreRawTranscript) }
+    var translationHotkeyLabel: String { Self.loadHotkeyLabel(for: .translation) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
     @Published var processingPhase: String?
     @Published private(set) var polishFailure: String?
+    /// 当前会话的模式，开始时确定；刚开始的窗口内按下左 Shift 时听写升级为翻译。
+    @Published private(set) var sessionMode: DictationMode = .dictation
+    /// 翻译会话的语言对；语音条上选择新目标时更新。
+    @Published private(set) var sessionPair: TranslationPair?
+    /// 翻译会话没有得到译文、插入了原话时的原因；会话开始时清除。
+    @Published private(set) var translationFailure: String?
     private var polishRetry: (id: UUID, text: String, handler: (String) async throws -> String,
-                              snapshot: DictationUndoService.InsertionSnapshot?)?
+                              snapshot: DictationUndoService.InsertionSnapshot?, translation: Bool)?
     private var polishRetryTask: Task<Void, Never>?
     @Published private(set) var isModelLoading = false
     @Published private(set) var isRecordingInputReady = false
@@ -1088,7 +1096,7 @@ final class DictationViewModel: ObservableObject {
         )
     }
 
-    func apiStartRecording(forcedWorkflowId: UUID? = nil) -> UUID {
+    func apiStartRecording(forcedWorkflowId: UUID? = nil, mode: DictationMode = .dictation) -> UUID {
         if canReplaceUndeliveredTranscriptOffer {
             indicatorFeedbackLifetime.finishImmediately()
         }
@@ -1096,13 +1104,14 @@ final class DictationViewModel: ObservableObject {
         startRecording(
             forcedWorkflowId: forcedWorkflowId,
             sessionID: sessionID,
-            requestUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds
+            requestUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds,
+            mode: mode
         )
         return sessionID
     }
 
-    func apiStartRecordingAwaitingReadiness(forcedWorkflowId: UUID? = nil) async -> UUID {
-        let sessionID = apiStartRecording(forcedWorkflowId: forcedWorkflowId)
+    func apiStartRecordingAwaitingReadiness(forcedWorkflowId: UUID? = nil, mode: DictationMode = .dictation) async -> UUID {
+        let sessionID = apiStartRecording(forcedWorkflowId: forcedWorkflowId, mode: mode)
         await apiWaitForRecordingReadiness()
         return sessionID
     }
@@ -1226,6 +1235,7 @@ final class DictationViewModel: ObservableObject {
         let historyClearGeneration: Int
         let audioSamples: [Float]?
         let pipelineSteps: [String]?
+        var translation: HistoryTranslationInfo?
         /// Set when `.transcriptionCompleted` went out before persistence, so it is emitted once.
         var completionEventEmitted = false
     }
@@ -1354,6 +1364,7 @@ final class DictationViewModel: ObservableObject {
                 modelUsed: dictation.modelUsed,
                 audioFileName: keepAudio ? historyAudioFileName : nil,
                 pipelineSteps: dictation.pipelineSteps,
+                translation: dictation.translation,
                 capturedInClearGeneration: dictation.historyClearGeneration
             )
             historyService.applyRetention(retention)
@@ -1656,6 +1667,16 @@ final class DictationViewModel: ObservableObject {
             guard let self else { return }
             logger.info("hotkey→onDictationStart (state=\(String(describing: self.state), privacy: .public))")
             self.handleHotkeyDictationStart(requestUptimeNanoseconds: requestTimestamp)
+        }
+
+        hotkeyService.onTranslationDictationStart = { [weak self] requestTimestamp in
+            guard let self else { return }
+            logger.info("hotkey→onTranslationDictationStart (state=\(String(describing: self.state), privacy: .public))")
+            self.handleHotkeyDictationStart(requestUptimeNanoseconds: requestTimestamp, mode: .translation)
+        }
+
+        hotkeyService.onDictationModeUpgrade = { [weak self] in
+            self?.upgradeSessionToTranslation()
         }
 
         hotkeyService.onDictationStop = { [weak self] in
@@ -2017,7 +2038,8 @@ final class DictationViewModel: ObservableObject {
     private func startRecording(
         forcedWorkflowId: UUID? = nil,
         sessionID: UUID = UUID(),
-        requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
+        requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds,
+        mode: DictationMode = .dictation
     ) {
         guard HistoryRetranscriptionActivity.recordID == nil else {
             hotkeyService.cancelDictation()
@@ -2058,7 +2080,10 @@ final class DictationViewModel: ObservableObject {
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
 
-        self.forcedWorkflowId = forcedWorkflowId
+        self.forcedWorkflowId = mode == .translation ? nil : forcedWorkflowId
+        sessionMode = mode
+        sessionPair = mode == .translation ? TranslationLanguageStore.shared.settings.pair : nil
+        translationFailure = nil
         beginDictationSession(id: sessionID)
         dictationLatencyTraces[sessionID] = DictationLatencyTrace(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
@@ -2135,7 +2160,7 @@ final class DictationViewModel: ObservableObject {
 
         // Only the physical-submit mode needs context before microphone startup.
         // Preserve audio-first startup for existing workflows.
-        let needsEarlyWorkflowMatch = WorkflowAutoEnterMode.duringDictation.isAvailable
+        let needsEarlyWorkflowMatch = mode == .dictation && WorkflowAutoEnterMode.duringDictation.isAvailable
             && (initialForcedWorkflow.map { $0.output.autoEnterMode == .duringDictation }
                 ?? workflowService.workflows.contains { $0.isEnabled && $0.output.autoEnterMode == .duringDictation })
         let initialActiveApp: (name: String?, bundleId: String?, url: String?) = needsEarlyWorkflowMatch
@@ -2147,7 +2172,7 @@ final class DictationViewModel: ObservableObject {
             applyWorkflowMatch(initialWorkflowMatch, activeApp: initialActiveApp)
         }
 
-        let resolveWebsiteBeforeRecording = WorkflowAutoEnterMode.duringDictation.isAvailable
+        let resolveWebsiteBeforeRecording = mode == .dictation && WorkflowAutoEnterMode.duringDictation.isAvailable
             && initialForcedWorkflow == nil && workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   workflow.output.autoEnterMode == .duringDictation || effectiveAutoEnterMode == .duringDictation,
@@ -2273,12 +2298,14 @@ final class DictationViewModel: ObservableObject {
 
     private func handleHotkeyDictationStart(
         forcedWorkflowId: UUID? = nil,
-        requestUptimeNanoseconds: UInt64
+        requestUptimeNanoseconds: UInt64,
+        mode: DictationMode = .dictation
     ) {
         guard state == .processing || state == .inserting else {
             startRecording(
                 forcedWorkflowId: forcedWorkflowId,
-                requestUptimeNanoseconds: requestUptimeNanoseconds
+                requestUptimeNanoseconds: requestUptimeNanoseconds,
+                mode: mode
             )
             return
         }
@@ -2286,7 +2313,8 @@ final class DictationViewModel: ObservableObject {
         if pendingHotkeyDictationStart == nil {
             pendingHotkeyDictationStart = PendingHotkeyDictationStart(
                 forcedWorkflowId: forcedWorkflowId,
-                requestUptimeNanoseconds: requestUptimeNanoseconds
+                requestUptimeNanoseconds: requestUptimeNanoseconds,
+                mode: mode
             )
             logger.info(
                 "Queued dictation start while state=\(String(describing: self.state), privacy: .public)"
@@ -2393,7 +2421,9 @@ final class DictationViewModel: ObservableObject {
         capturedSelectedText = nil
         activeAppIcon = nil
 
-        if let forcedWorkflow = initialForcedWorkflow {
+        if sessionMode == .translation {
+            clearActiveRuleState()
+        } else if let forcedWorkflow = initialForcedWorkflow {
             applyWorkflowMatch(workflowService.forcedWorkflowMatch(for: forcedWorkflow), activeApp: activeApp)
         } else if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: activeApp.bundleId, url: activeApp.url) {
             applyWorkflowMatch(workflowMatch, activeApp: activeApp)
@@ -2551,7 +2581,8 @@ final class DictationViewModel: ObservableObject {
                 return nil
             }
 
-            if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
+            if sessionMode == .dictation,
+               let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
                 logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
                 applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
                 prewarmDictationModel()
@@ -2571,7 +2602,14 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var effectiveLanguageSelection: LanguageSelection {
-        DictationLanguageResolver.resolve(
+        if sessionMode == .translation {
+            guard let spoken = sessionPair?.spoken else { return .auto }
+            let engineCodes = (effectiveEngineOverrideId
+                .flatMap { PluginManager.shared?.transcriptionEngine(for: $0) }
+                ?? settingsViewModel.activeTranscriptionEngine)?.supportedLanguages ?? []
+            return .exact(TranslationLanguageCatalog.engineHint(for: spoken, engineCodes: engineCodes))
+        }
+        return DictationLanguageResolver.resolve(
             workflow: matchedWorkflow,
             globalLanguageSelection: settingsViewModel.languageSelection
         )
@@ -2585,11 +2623,9 @@ final class DictationViewModel: ObservableObject {
         return settingsViewModel.selectedTask
     }
 
-    private var effectiveTranslationTarget: String? {
-        if settingsViewModel.translationEnabled {
-            return settingsViewModel.translationTargetLanguage
-        }
-        return nil
+    /// 工作流的翻译模板没有自己的目标语言时使用当前语言对的目标。
+    private var workflowFallbackTranslationTarget: String? {
+        TranslationLanguageStore.shared.settings.currentTarget
     }
 
     private var effectiveEngineOverrideId: String? {
@@ -2730,7 +2766,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var requiresVisiblePostProcessingPhase: Bool {
-        effectiveTranslationTarget != nil
+        sessionMode == .translation
             || (matchedWorkflow == nil && promptProcessingService.hasConfiguredPolishProvider)
             || matchedWorkflow?.isManuallyRunnable == true
             || effectiveOutputFormat != nil
@@ -3085,7 +3121,9 @@ final class DictationViewModel: ObservableObject {
                 let task = effectiveTask
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
-                let translationTarget = effectiveTranslationTarget
+                let translationTarget = workflowFallbackTranslationTarget
+                let sessionMode = self.sessionMode
+                let sessionPair = self.sessionPair
                 let primaryEngineId = engineOverride ?? modelManager.selectedProviderId
                 let dictionaryProviderId = primaryEngineId
                 let termsPrompt = dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId)
@@ -3165,26 +3203,30 @@ final class DictationViewModel: ObservableObject {
                 // A workflow can skip its model for short dictations, so the trace reports
                 // whether the model ran rather than whether a handler exists.
                 let modelPostProcessingRan = OSAllocatedUnfairLock(initialState: false)
-                let llmHandler = buildLLMHandler(
-                    translationTarget: translationTarget,
-                    detectedLanguage: result.detectedLanguage,
-                    configuredLanguage: language,
-                    resolvedOutputFormat: resolvedOutputFormat,
-                    incrementalPostProcessing: incrementalPostProcessing,
-                    stopTimingStart: stopStart,
-                    modelPostProcessingRan: modelPostProcessingRan
-                )
+                let llmHandler: ((String) async throws -> String)? = if sessionMode == .translation {
+                    buildTranslationHandler(pair: sessionPair, modelPostProcessingRan: modelPostProcessingRan)
+                } else {
+                    buildLLMHandler(
+                        translationTarget: translationTarget,
+                        detectedLanguage: result.detectedLanguage,
+                        configuredLanguage: language,
+                        resolvedOutputFormat: resolvedOutputFormat,
+                        incrementalPostProcessing: incrementalPostProcessing,
+                        stopTimingStart: stopStart,
+                        modelPostProcessingRan: modelPostProcessingRan
+                    )
+                }
 
                 guard !Task.isCancelled else { return }
 
                 // Post-processing pipeline (priority-based)
                 let llmStepName: String? = if llmHandler != nil {
-                    if self.matchedWorkflow != nil {
-                        "Workflow"
-                    } else if translationTarget == nil {
-                        "Polish"
-                    } else {
+                    if sessionMode == .translation {
                         "Translation"
+                    } else if self.matchedWorkflow != nil {
+                        "Workflow"
+                    } else {
+                        "Polish"
                     }
                 } else {
                     nil
@@ -3220,6 +3262,13 @@ final class DictationViewModel: ObservableObject {
                 )
                 text = ppResult.text
                 let postProcessingFallback = ppResult.fallback
+                // 没有可用模型或全部失败时插入的是原话，历史和上手引导都不把它当作译文。
+                let translationFailure: String? = sessionMode == .translation
+                    ? (llmHandler == nil
+                        ? TranslationStrings.noModel
+                        : (postProcessingFallback == nil ? nil : TranslationStrings.failedInserted))
+                    : nil
+                self.translationFailure = translationFailure
                 if let postProcessingFallback {
                     errorLogService.addEntry(
                         message: localizedAppText(
@@ -3465,10 +3514,12 @@ final class DictationViewModel: ObservableObject {
                                 transcriptionID: transcriptionID
                             )
                         }
-                        if llmStepName == "Polish", let failure = postProcessingFallback, let llmHandler {
+                        if llmStepName == "Polish" || llmStepName == "Translation",
+                           let failure = postProcessingFallback, let llmHandler {
                             recordPolishFailure(reason: failure.reason, text: polishInput, handler: llmHandler,
                                                 snapshot: insertionIsVerifiable && dictationUndoService.snapshot?.transcriptionID == transcriptionID
-                                                    ? dictationUndoService.snapshot : nil)
+                                                    ? dictationUndoService.snapshot : nil,
+                                                translation: llmStepName == "Translation")
                         }
                     }
                 }
@@ -3495,11 +3546,13 @@ final class DictationViewModel: ObservableObject {
                 }
 
                 if postProcessingFallback != nil {
-                    let fallbackMessage = localizedAppText(
-                        "AI post-processing failed — raw transcription inserted",
-                        de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
-                        ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
-                    )
+                    let fallbackMessage = sessionMode == .translation
+                        ? TranslationStrings.failedInserted
+                        : localizedAppText(
+                            "AI post-processing failed — raw transcription inserted",
+                            de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
+                            ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
+                        )
                     showNotchFeedback(
                         message: fallbackMessage,
                         icon: "exclamationmark.triangle.fill",
@@ -3535,7 +3588,14 @@ final class DictationViewModel: ObservableObject {
                         historyEnabled: UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true,
                         historyClearGeneration: historyService.clearGeneration,
                         audioSamples: audioSamplesForHistory,
-                        pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps
+                        pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps,
+                        translation: sessionMode == .translation
+                            ? sessionPair.map {
+                                HistoryTranslationInfo(
+                                    spokenLanguage: $0.spoken ?? result.detectedLanguage, targetLanguage: $0.target,
+                                    failureMessage: translationFailure)
+                            }
+                            : nil
                     ),
                     pendingURLResolution: activeApp.url == nil ? pendingURLResolution : nil
                 )
@@ -4180,7 +4240,8 @@ final class DictationViewModel: ObservableObject {
             logger.info("Starting queued dictation")
             self.startRecording(
                 forcedWorkflowId: pendingHotkeyStart.forcedWorkflowId,
-                requestUptimeNanoseconds: pendingHotkeyStart.requestUptimeNanoseconds
+                requestUptimeNanoseconds: pendingHotkeyStart.requestUptimeNanoseconds,
+                mode: pendingHotkeyStart.mode
             )
         }
     }
@@ -4665,10 +4726,10 @@ final class DictationViewModel: ObservableObject {
     // MARK: - Shared Helpers
 
     func recordPolishFailure(reason: String, text: String, handler: @escaping (String) async throws -> String,
-                             snapshot: DictationUndoService.InsertionSnapshot?) {
+                             snapshot: DictationUndoService.InsertionSnapshot?, translation: Bool = false) {
         clearPolishFailure()
         polishFailure = reason
-        polishRetry = (UUID(), text, handler, snapshot)
+        polishRetry = (UUID(), text, handler, snapshot, translation)
     }
 
     private func clearPolishFailure() {
@@ -4707,8 +4768,10 @@ final class DictationViewModel: ObservableObject {
                 polishFailure = nil
                 polishRetry = nil
                 polishRetryTask = nil
-                showNotchFeedback(message: String(localized: replaced ? "polish.retry.replaced" : "polish.retry.copied", table: "DictumStyle"),
-                                  icon: replaced ? "checkmark" : "doc.on.clipboard")
+                let message = retry.translation
+                    ? (replaced ? TranslationStrings.retryReplaced : TranslationStrings.retryCopied)
+                    : String(localized: replaced ? "polish.retry.replaced" : "polish.retry.copied", table: "DictumStyle")
+                showNotchFeedback(message: message, icon: replaced ? "checkmark" : "doc.on.clipboard")
             } catch {
                 guard !Task.isCancelled, polishRetry?.id == retry.id else { return }
                 polishFailure = error.localizedDescription
@@ -4738,39 +4801,7 @@ final class DictationViewModel: ObservableObject {
             return workflowHandler
         }
 
-        #if canImport(Translation)
-        if let targetCode = translationTarget {
-            if #available(macOS 15, *), let ts = translationService as? TranslationService {
-                let sourceRaw = detectedLanguage ?? configuredLanguage
-                let sourceNormalized = TranslationService.normalizedLanguageIdentifier(from: sourceRaw)
-                if let sourceRaw {
-                    if let sourceNormalized {
-                        if sourceRaw.caseInsensitiveCompare(sourceNormalized) != .orderedSame {
-                            logger.info("Translation source normalized \(sourceRaw, privacy: .public) -> \(sourceNormalized, privacy: .public)")
-                        }
-                    } else {
-                        logger.warning("Translation source language \(sourceRaw, privacy: .public) invalid, using auto source")
-                    }
-                }
-                let sourceLanguage = sourceNormalized.map { Locale.Language(identifier: $0) }
-                return { text in
-                    guard let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) else {
-                        logger.error("Translation target language invalid: \(targetCode, privacy: .public)")
-                        return text
-                    }
-                    modelPostProcessingRan?.withLock { $0 = true }
-                    if targetCode.caseInsensitiveCompare(targetNormalized) != .orderedSame {
-                        logger.info("Translation target normalized \(targetCode, privacy: .public) -> \(targetNormalized, privacy: .public)")
-                    }
-                    let target = Locale.Language(identifier: targetNormalized)
-                    return try await ts.translate(text: text, to: target, source: sourceLanguage)
-                }
-            }
-        }
-        #endif
-
-        if matchedWorkflow == nil, translationTarget == nil,
-           promptProcessingService.hasConfiguredPolishProvider {
+        if matchedWorkflow == nil, promptProcessingService.hasConfiguredPolishProvider {
             let app = capturedActiveApp
             let store = StyleStore.shared
             let style = store.resolve(bundleID: app?.bundleId, browserURL: app?.url)
@@ -4788,6 +4819,47 @@ final class DictationViewModel: ObservableObject {
             }
         }
         return nil
+    }
+
+    /// 翻译会话直接走 AI 模型链，不经过用户工作流；没有可用模型时返回 nil，原话照常插入。
+    private func buildTranslationHandler(
+        pair: TranslationPair?,
+        modelPostProcessingRan: OSAllocatedUnfairLock<Bool>?
+    ) -> ((String) async throws -> String)? {
+        let app = capturedActiveApp
+        let store = StyleStore.shared
+        return TranslationHandler.make(
+            pair: pair,
+            processor: promptProcessingService,
+            style: store.resolve(bundleID: app?.bundleId, browserURL: app?.url),
+            level: store.level,
+            vocabulary: dictionaryService.vocabularyForPrompt(),
+            app: .init(appName: app?.name, bundleID: app?.bundleId, browserURL: app?.url),
+            onModelRun: { modelPostProcessingRan?.withLock { $0 = true } }
+        )
+    }
+
+    /// 刚开始的窗口内按下左 Shift：把已经开始的听写会话升级为翻译会话。
+    private func upgradeSessionToTranslation() {
+        if pendingHotkeyDictationStart != nil {
+            pendingHotkeyDictationStart?.mode = .translation
+            return
+        }
+        guard sessionMode == .dictation, activeDictationSessionID != nil, !isStopInFlight,
+              state == .recording || state == .processing else { return }
+        sessionMode = .translation
+        sessionPair = TranslationLanguageStore.shared.settings.pair
+        forcedWorkflowId = nil
+        clearActiveRuleState()
+        cancelIncrementalWorkflowPostProcessing()
+        _ = refreshLiveStreamingIfParamsChanged()
+    }
+
+    /// 录音中在语音条或菜单栏选择新的目标，只改变本次会话，并成为当前目标。
+    func selectSessionTarget(_ code: String) {
+        TranslationLanguageStore.shared.selectCurrentTarget(code)
+        guard sessionMode == .translation, state == .recording || state == .processing else { return }
+        sessionPair = TranslationLanguageStore.shared.settings.pair
     }
 
     private func buildWorkflowTextProcessingHandler(
@@ -4936,7 +5008,7 @@ final class DictationViewModel: ObservableObject {
         let configuredLanguage = languageSelection.requestedLanguage
         guard let request = workflowTextProcessingService.segmentedPromptRequest(
             workflow: workflow,
-            fallbackTranslationTarget: effectiveTranslationTarget,
+            fallbackTranslationTarget: workflowFallbackTranslationTarget,
             detectedLanguage: nil,
             configuredLanguage: configuredLanguage,
             resolvedOutputFormat: outputFormat

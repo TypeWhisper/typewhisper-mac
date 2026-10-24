@@ -97,7 +97,7 @@
     "This deletes %lld records.": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"将删除 %lld 条记录。"}}}},
     "This deletes history on every synced device.": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"这会删除每台同步设备上的历史。"}}}},
     "No translation records yet": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"还没有翻译记录"}}}},
-    "Translation records appear here once translation is available.": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"等翻译功能可用后，翻译记录会显示在这里。"}}}},
+    "Translations show up here after you press fn + Left ⇧ and talk.": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"按 fn + 左 ⇧ 说话后，翻译记录会显示在这里。"}}}},
     "Dictation": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"听写"}}}},
     "Translation": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"翻译"}}}},
     "History": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"历史"}}}},

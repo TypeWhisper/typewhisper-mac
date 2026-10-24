@@ -37,6 +37,7 @@ enum UserDefaultsKeys {
     static let recorderToggleHotkey = "recorderToggleHotkey"
     static let undoLastDictationHotkey = "undoLastDictationHotkey"
     static let restoreRawTranscriptHotkey = "restoreRawTranscriptHotkey"
+    static let translationHotkey = "translationHotkey"
 
     // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
     static let hybridHotkeys = "hybridHotkeys"
@@ -49,6 +50,7 @@ enum UserDefaultsKeys {
     static let recorderToggleHotkeys = "recorderToggleHotkeys"
     static let undoLastDictationHotkeys = "undoLastDictationHotkeys"
     static let restoreRawTranscriptHotkeys = "restoreRawTranscriptHotkeys"
+    static let translationHotkeys = "translationHotkeys"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -59,7 +61,6 @@ enum UserDefaultsKeys {
     // MARK: - Settings
     static let selectedLanguage = "selectedLanguage"
     static let selectedTask = "selectedTask"
-    static let translationEnabled = "translationEnabled"
     static let translationTargetLanguage = "translationTargetLanguage"
     static let preferredAppLanguage = "preferredAppLanguage"
 

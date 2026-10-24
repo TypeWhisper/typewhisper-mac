@@ -229,16 +229,6 @@ final class SettingsViewModel: ObservableObject {
             UserDefaults.standard.set(selectedTask.rawValue, forKey: UserDefaultsKeys.selectedTask)
         }
     }
-    @Published var translationEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(translationEnabled, forKey: UserDefaultsKeys.translationEnabled)
-        }
-    }
-    @Published var translationTargetLanguage: String {
-        didSet {
-            UserDefaults.standard.set(translationTargetLanguage, forKey: UserDefaultsKeys.translationTargetLanguage)
-        }
-    }
     private let modelManager: ModelManagerService
     private var cancellables = Set<AnyCancellable>()
 
@@ -250,8 +240,6 @@ final class SettingsViewModel: ObservableObject {
         )
         self.selectedTask = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedTask)
             .flatMap { TranscriptionTask(rawValue: $0) } ?? .transcribe
-        self.translationEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.translationEnabled)
-        self.translationTargetLanguage = UserDefaults.standard.string(forKey: UserDefaultsKeys.translationTargetLanguage) ?? "en"
     }
 
     var selectedLanguage: String? {

@@ -103,6 +103,8 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case recorderToggle
     case undoLastDictation
     case restoreRawTranscript
+    /// 翻译会话；必须保持在最后，同一次事件里先处理听写的 Fn，再由它升级为翻译。
+    case translation
 
     var defaultsKey: String {
         switch self {
@@ -116,6 +118,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkey
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkey
+        case .translation: return UserDefaultsKeys.translationHotkey
         }
     }
 
@@ -131,6 +134,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkeys
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkeys
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkeys
+        case .translation: return UserDefaultsKeys.translationHotkeys
         }
     }
 }
@@ -140,7 +144,7 @@ extension HotkeySlotType {
     /// Undo/restore must stay false: those hotkeys are keyDown-only actions.
     var startsDictation: Bool {
         switch self {
-        case .hybrid, .pushToTalk, .toggle:
+        case .hybrid, .pushToTalk, .toggle, .translation:
             true
         case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle,
              .undoLastDictation, .restoreRawTranscript:
@@ -215,6 +219,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     var onDictationStart: ((UInt64) -> Void)?
+    var onTranslationDictationStart: ((UInt64) -> Void)?
+    /// 听写会话在刚开始的窗口内收到 Fn + 左 Shift 时升级为翻译会话。
+    var onDictationModeUpgrade: (() -> Void)?
     /// A Control-only hold is still ambiguous with ordinary keyboard shortcuts.
     /// Startup UI must not appear during this interval, but existing UI stays open.
     var isDictationStartPending: Bool { pendingHybridModifierHoldHotkey != nil }
@@ -267,8 +274,19 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var hybridModifierHoldActivationDelay: TimeInterval = 0.35
 
     private var keyDownTime: Date?
+    /// 会话开始的按键时间，不随录音就绪而重置，用来判断升级窗口。
+    private var activePressDate: Date?
     private var isActive = false
-    private var activeSlotType: HotkeySlotType?
+    private var activeSlotType: HotkeySlotType? {
+        didSet {
+            if activeSlotType != .translation { translationBaseSlot = nil }
+        }
+    }
+    /// 翻译会话沿用的听写槽位：由听写升级时是升级前的槽位，直接开始时是设置里配置的听写槽位。
+    /// 轻按、按住和打断都按这个槽位的规则处理。
+    private var translationBaseSlot: HotkeySlotType?
+    /// 停止会话的按键包含仍按住的 Fn 时为真，同一次 Fn 按下里随后到达的左 Shift 不开始翻译；Fn 松开后清除。
+    private var fnPressStoppedSession = false
     private var activeGlobalHotkey: UnifiedHotkey?
     private(set) var activeProfileId: UUID?
     private(set) var activeWorkflowId: UUID? {
@@ -286,6 +304,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     nonisolated static func isHybridTap(heldFor duration: TimeInterval) -> Bool {
         duration < 0.35
     }
+    /// 两个键不会严格同时按下，Fn 先按时听写已经开始，窗口内再按左 Shift 仍算翻译。
+    nonisolated static let translationUpgradeWindow: TimeInterval = 0.5
+    nonisolated static let defaultTranslationHotkey = UnifiedHotkey(
+        keyCode: UnifiedHotkey.modifierComboKeyCode,
+        modifierFlags: NSEvent.ModifierFlags([.function, .shift]).rawValue,
+        isFn: false,
+        modifierKeyCodes: [0x38]
+    )
     private static let doubleTapThreshold: TimeInterval = 0.4
     private static let monitorDedupWindow: TimeInterval = 0.12
     private static let escapeKeyCode: UInt16 = 0x35
@@ -968,6 +994,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         activeWorkflowId = nil
         currentMode = nil
         keyDownTime = nil
+        activePressDate = nil
         pushToTalkInterruptionSignaled = false
         activeDelayedHybridModifierHold = false
     }
@@ -1059,6 +1086,22 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
             slots[slotType] = []
         }
+        installDefaultTranslationHotkeyIfNeverConfigured()
+    }
+
+    /// 翻译快捷键从未设置过时使用 Fn + 左 Shift；已被其他槽位占用时不抢占。
+    private func installDefaultTranslationHotkeyIfNeverConfigured() {
+        let defaults = UserDefaults.standard
+        let slot = HotkeySlotType.translation
+        guard defaults.object(forKey: slot.hotkeysDefaultsKey) == nil,
+              defaults.object(forKey: slot.defaultsKey) == nil else { return }
+        let hotkey = Self.defaultTranslationHotkey
+        let taken = HotkeySlotType.allCases.contains { other in
+            (slots[other] ?? []).contains { $0.hotkey.map(hotkey.conflicts(with:)) == true }
+        }
+        guard !taken else { return }
+        slots[slot] = [SlotState(hotkey: hotkey)]
+        persistHotkeys([hotkey], for: slot)
     }
 
     private func setHotkeys(_ hotkeys: [UnifiedHotkey], for slotType: HotkeySlotType) {
@@ -1074,8 +1117,13 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private func persistHotkeys(_ hotkeys: [UnifiedHotkey], for slotType: HotkeySlotType) {
         let defaults = UserDefaults.standard
         guard !hotkeys.isEmpty else {
-            defaults.removeObject(forKey: slotType.hotkeysDefaultsKey)
             defaults.removeObject(forKey: slotType.defaultsKey)
+            // 翻译快捷键被清除后保留空列表，下次启动才不会装回默认值。
+            if slotType == .translation, let data = try? JSONEncoder().encode([UnifiedHotkey]()) {
+                defaults.set(data, forKey: slotType.hotkeysDefaultsKey)
+            } else {
+                defaults.removeObject(forKey: slotType.hotkeysDefaultsKey)
+            }
             return
         }
 
@@ -1983,6 +2031,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             slots[slotType] = states
         }
 
+        if event.type == .flagsChanged, !event.modifierFlags.contains(.function) {
+            // 与按键处理走同一个派发队列，排在本次事件触发的开始和停止之后。
+            performHotkeyAction(source: source) { [weak self] in self?.fnPressStoppedSession = false }
+        }
+
         // Profile slots
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
@@ -2367,7 +2420,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         guard discardPushToTalkRecordingOnExtraKeyPress,
               !pushToTalkInterruptionSignaled,
               isActive,
-              activeSlotType == .pushToTalk,
+              activeSlotType == .pushToTalk || translationBaseSlot == .pushToTalk,
               activeProfileId == nil,
               activeWorkflowId == nil,
               event.type == .keyDown,
@@ -2993,6 +3046,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
 
         if isActive {
+            if slotType == .translation, activeSlotType != .translation {
+                // 左 Shift 只在窗口内把听写升级为翻译；之后的误触不能停止录音，也不改变 Fn 的松开处理。
+                if upgradeActiveDictationToTranslation(hotkey: hotkey) { markHeldFnSlotsAsCombo() }
+                return
+            }
             // Any hotkey stops active recording
             isActive = false
             activeSlotType = nil
@@ -3001,20 +3059,63 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             activeWorkflowId = nil
             currentMode = nil
             keyDownTime = nil
+            activePressDate = nil
             pushToTalkInterruptionSignaled = false
             activeDelayedHybridModifierHold = false
+            if hotkey.kind == .fn { fnPressStoppedSession = true }
+            if slotType == .translation { markHeldFnSlotsAsCombo() }
             onDictationStop?()
         } else {
+            if slotType == .translation, fnPressStoppedSession {
+                markHeldFnSlotsAsCombo()
+                return
+            }
+            let baseSlot = slotType == .translation ? configuredDictationSlot : slotType
             activeSlotType = slotType
             activeGlobalHotkey = hotkey
             activeProfileId = nil
             activeWorkflowId = nil
             keyDownTime = Date()
+            activePressDate = keyDownTime
             isActive = true
             pushToTalkInterruptionSignaled = false
             activeDelayedHybridModifierHold = false
-            currentMode = slotType == .toggle ? .toggle : .pushToTalk
-            onDictationStart?(requestTimestamp)
+            currentMode = baseSlot == .toggle ? .toggle : .pushToTalk
+            if slotType == .translation {
+                translationBaseSlot = baseSlot
+                markHeldFnSlotsAsCombo()
+                onTranslationDictationStart?(requestTimestamp)
+            } else {
+                onDictationStart?(requestTimestamp)
+            }
+        }
+    }
+
+    private func upgradeActiveDictationToTranslation(hotkey: UnifiedHotkey) -> Bool {
+        guard activeProfileId == nil, activeWorkflowId == nil,
+              let slotType = activeSlotType, slotType == .hybrid || slotType == .pushToTalk || slotType == .toggle,
+              let pressed = activePressDate,
+              Date().timeIntervalSince(pressed) < Self.translationUpgradeWindow else { return false }
+        activeSlotType = .translation
+        translationBaseSlot = slotType
+        activeGlobalHotkey = hotkey
+        onDictationModeUpgrade?()
+        return true
+    }
+
+    /// 直接开始的翻译会话按设置里的主听写槽位处理轻按和按住：按住快捷键为不使用时是轻按切换，否则是按住说话。
+    private var configuredDictationSlot: HotkeySlotType {
+        (slots[.hybrid] ?? []).contains { $0.hotkey != nil } ? .hybrid : .toggle
+    }
+
+    /// 翻译会话开始或升级成功后，仍按住的 Fn 属于组合键，松开时由翻译槽位处理，听写槽位的松开和开始都不触发。
+    private func markHeldFnSlotsAsCombo() {
+        for slotType in HotkeySlotType.allCases where slotType != .translation {
+            guard var states = slots[slotType] else { continue }
+            for index in states.indices where states[index].hotkey?.kind == .fn && states[index].fnWasDown {
+                states[index].fnComboKeyPressed = true
+            }
+            slots[slotType] = states
         }
     }
 
@@ -3024,10 +3125,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        guard isActive, slotType == activeSlotType, activeProfileId == nil, activeWorkflowId == nil else { return }
+        // 升级为翻译的会话仍由原槽位的快捷键松开结束，例如外接键盘的备用快捷键。
+        let releasesUpgradedBaseSlot = activeSlotType == .translation && slotType == translationBaseSlot
+        guard isActive, slotType == activeSlotType || releasesUpgradedBaseSlot,
+              activeProfileId == nil, activeWorkflowId == nil,
+              let ruleSlot = slotType == .translation ? translationBaseSlot : slotType else { return }
 
-        switch slotType {
-        case .hybrid:
+        switch ruleSlot {
+        case .hybrid, .translation:
             guard let downTime = keyDownTime else { return }
             if Self.isHybridTap(heldFor: Date().timeIntervalSince(downTime)) {
                 currentMode = .toggle
