@@ -49,4 +49,10 @@ final class VoiceBarStateTests: XCTestCase {
         input.activity = .idle
         XCTAssertEqual(VoiceBarState.derive(input), .idle)
     }
+
+    @MainActor
+    func testInsertedCountIgnoresLineBreaksAndPunctuation() {
+        XCTAssertEqual(VoiceBarPresentation.countWords("明天下午三点，请准备。\n\n我们开会。"), 13)
+        XCTAssertEqual(VoiceBarPresentation.countWords("Hello, world.\nSecond line"), 4)
+    }
 }

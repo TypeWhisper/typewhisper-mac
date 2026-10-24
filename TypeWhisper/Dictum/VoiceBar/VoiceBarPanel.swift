@@ -130,7 +130,7 @@ final class VoiceBarPresentation: ObservableObject {
                 } else if vm.cancelledRecordingDeadline == nil, let inserted = vm.voiceBarInsertedText {
                     let processing = ServiceContainer.shared.promptProcessingService
                     input.outcome = processing.fallbackPriorityList.contains(where: { processing.isProviderReady($0.providerId) })
-                        ? .inserted(countWords(inserted)) : .noAI
+                        ? .inserted(Self.countWords(inserted)) : .noAI
                 }
             }
         default: break
@@ -189,10 +189,10 @@ final class VoiceBarPresentation: ObservableObject {
     }
 #endif
 
-    private func countWords(_ text: String) -> Int {
+    static func countWords(_ text: String) -> Int {
         var count = 0
         text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) { substring, _, _, _ in
-            guard let substring else { return }
+            guard let substring, substring.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else { return }
             if substring.unicodeScalars.contains(where: { (0x3400...0x9FFF).contains(Int($0.value)) }) { count += substring.count }
             else { count += 1 }
         }
