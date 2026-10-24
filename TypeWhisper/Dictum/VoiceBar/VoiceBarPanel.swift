@@ -80,7 +80,7 @@ final class VoiceBarPresentation: ObservableObject {
         case .inserting:
             return vm.cancelledRecordingDeadline != nil || vm.voiceBarInsertedText != nil
                 || vm.voiceBarUndeliveredText != nil
-                || ["mic.slash", "waveform.badge.exclamationmark", "exclamationmark.triangle.fill", "doc.on.clipboard", "doc.on.doc"].contains(vm.actionFeedbackIcon ?? "")
+                || ["mic.slash", "waveform.badge.exclamationmark", "exclamationmark.triangle.fill", "exclamationmark.triangle", "xmark.circle.fill", "doc.on.clipboard", "doc.on.doc"].contains(vm.actionFeedbackIcon ?? "")
         default: return false
         }
     }
@@ -133,24 +133,24 @@ final class VoiceBarPresentation: ObservableObject {
             case nil: input.activity = .idle
             }
         case .processing: input.activity = .processing
-        case .error(let message): input.outcome = .blockingError(message)
+        case .error(let message): input.outcome = .failure(message, nil)
         case .inserting:
             if vm.voiceBarUndeliveredText != nil {
                 input.outcome = .copied
                 break
             }
-            switch vm.actionFeedbackIcon {
-            case "mic.slash", "waveform.badge.exclamationmark": input.outcome = vm.actionFeedbackIsError ? .blockingError(vm.actionFeedbackMessage ?? "") : .noSpeech
-            case "exclamationmark.triangle.fill": input.outcome = .warning(translation: vm.sessionMode == .translation)
-            case "doc.on.clipboard", "doc.on.doc": input.outcome = .copied
-            default:
-                if vm.actionFeedbackIsError {
-                    input.outcome = .blockingError(vm.actionFeedbackMessage ?? "")
-                } else if vm.cancelledRecordingDeadline == nil, let inserted = vm.voiceBarInsertedText {
-                    let processing = ServiceContainer.shared.promptProcessingService
-                    input.outcome = processing.fallbackPriorityList.contains(where: { processing.isProviderReady($0.providerId) })
-                        ? .inserted(DictumWordCount.count(inserted)) : .noAI
-                }
+            if let outcome = VoiceBarState.Input.Outcome.feedback(
+                icon: vm.actionFeedbackIcon,
+                message: vm.actionFeedbackMessage ?? "",
+                isError: vm.actionFeedbackIsError,
+                settingsTab: vm.lastDictationError?.settingsTab,
+                translation: vm.sessionMode == .translation
+            ) {
+                input.outcome = outcome
+            } else if vm.cancelledRecordingDeadline == nil, let inserted = vm.voiceBarInsertedText {
+                let processing = ServiceContainer.shared.promptProcessingService
+                input.outcome = processing.fallbackPriorityList.contains(where: { processing.isProviderReady($0.providerId) })
+                    ? .inserted(DictumWordCount.count(inserted)) : .noAI
             }
         default: break
         }
@@ -164,7 +164,7 @@ final class VoiceBarPresentation: ObservableObject {
             case "failed": input.model = .failed(parts.count > 1 ? String(parts[1]) : "")
             case "recovered-error": input.outcome = .recoveredError
             case "translation-failed": input.outcome = .translationFailed
-            case "blocking-error": input.outcome = .blockingError(parts.count > 1 ? String(parts[1]) : "")
+            case "blocking-error": input.outcome = .blockingError(parts.count > 1 ? String(parts[1]) : "", page: .general)
             case "no-ai": input.outcome = .noAI
             case "no-speech": input.outcome = .noSpeech
             default: break
@@ -182,6 +182,9 @@ final class VoiceBarPresentation: ObservableObject {
             return
         }
 #endif
+        // 限时错误的时长由听写模型的反馈计时决定（actionDisplayDuration），反馈结束后听写模型回到空闲；
+        // 先清除之前的反馈，旧的截止时间才不会盖掉这条错误。
+        if case .failure = nextState { feedback = nil }
         if let lifetime = nextState.feedbackLifetime, !feedbackCaptured {
             feedback = (nextState, Date().addingTimeInterval(lifetime))
             feedbackCaptured = true
@@ -400,7 +403,7 @@ private extension VoiceBarState {
         switch self {
         case .inserted, .cancelled, .noSpeech: 220
         case .listening: 300
-        case .translating, .targetMenu: 460
+        case .translating, .targetMenu, .failure: 460
         default: 390
         }
     }
@@ -547,11 +550,15 @@ struct VoiceBarView: View {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DictumTheme.warning)
             Text("Translation failed. What you said was inserted.", tableName: "DictumTranslation").font(.system(size: 12.5))
             action("Retry") { retryPolish?() }.disabled(retryPolish == nil)
-        case .blockingError(let message):
+        case .blockingError(let message, let page):
             Image(systemName: "mic.slash.fill").foregroundStyle(DictumTheme.danger)
             if message.isEmpty { label("Microphone unavailable") } else { Text(verbatim: message).lineLimit(1) }
-            action("Open Settings") { model.dismissFeedback(); DictumNavigation.shared.open(.general) }
+            action("Open Settings") { model.dismissFeedback(); DictumNavigation.shared.open(page) }
             Button { model.dismissFeedback() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel(Text("Close", tableName: "DictumHome"))
+        case .failure(let message, let destination):
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DictumTheme.warning)
+            Text(verbatim: message).font(.system(size: 12.5)).lineLimit(1)
+            if let destination { action("Open Settings") { open(destination) } }
         case .noSpeech:
             Image(systemName: "mic.slash")
             label("Didn't hear anything")
@@ -610,6 +617,13 @@ struct VoiceBarView: View {
         Button { DictationViewModel.shared.cancelFromVoiceBar() } label: {
             Image(systemName: "xmark").frame(width: 30, height: 30)
         }.buttonStyle(.plain).accessibilityLabel(Text("Cancel", tableName: "DictumHome")).help("esc")
+    }
+    private func open(_ destination: VoiceBarState.Destination) {
+        switch destination {
+        case .page(let page): DictumNavigation.shared.open(page)
+        case .advancedSettings: DictationViewModel.shared.performActionFeedbackAction()
+        }
+        DictationViewModel.shared.dismissActionFeedback()
     }
     private func label(_ key: LocalizedStringKey) -> some View { Text(key, tableName: "DictumHome").font(.system(size: 12.5)) }
     private func action(_ key: LocalizedStringKey, perform: @escaping () -> Void) -> some View {
