@@ -295,6 +295,27 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertEqual(suggestions.map(\.replacement), ["Kubernetes"])
     }
 
+    func testChineseAutoLearningRejectsMultiTokenContentRewrites() {
+        let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "把会议记录和议程安排整理好",
+            edited: "把材料整理好"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "生产环境的集群已经扩容",
+            edited: "线已经扩容"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "市场部的同事会参加评审",
+            edited: "小王会参加评审"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "我们开会讨论了这个方案",
+            edited: "我们聊了这个方案"
+        ).isEmpty)
+    }
+
     func testChineseAutoLearningRejectsOtherEditShapes() {
         let service = TextDiffService()
         let original = "周四下午三点，讨论新河项目，请准备会议记录。"

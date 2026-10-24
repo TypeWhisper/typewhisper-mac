@@ -205,8 +205,10 @@ final class TextDiffService {
         let originalChanged = originalTokens[prefix..<(originalTokens.count - suffix)]
         let editedChanged = editedTokens[prefix..<(editedTokens.count - suffix)]
 
-        // 两边都由多个词组成是改写一段话，两边共有的词（项目、的）说明改动区间切得过宽。
+        // 两边都由多个词组成是改写一段话，两边共有的词（项目、的）说明改动区间切得过宽；
+        // 多 token 原文只在每个 token 都是单字（分词器不认识的词，例如酷|伯|尼|特|斯）时学习。
         guard originalChanged.count == 1 || editedChanged.count == 1,
+              originalChanged.count == 1 || originalChanged.allSatisfy({ $0.text.count == 1 }),
               Set(originalChanged.map(\.text)).isDisjoint(with: editedChanged.map(\.text)),
               let originalSpan = Self.changedSpan(originalChanged, in: original, maximumTokens: Self.maximumOriginalSpanTokens),
               let editedSpan = Self.changedSpan(editedChanged, in: edited, maximumTokens: Self.maximumEditedSpanTokens) else {
