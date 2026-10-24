@@ -119,11 +119,10 @@ struct DictumMenuBarGlyph: View {
     )
 
     var body: some View {
-        if glyph.status.downloadProgress != nil {
-            let progress = glyph.status.downloadProgress
+        if let progress = glyph.status.downloadProgress {
             MenuBarProgressRing(progress: progress)
         } else {
-            Image(nsImage: MenuBarGlyphImages.cachedImage(for: glyph.appearance))
+            Image(nsImage: glyph.currentImage)
                 .resizable().frame(width: 18, height: 18)
         }
     }
@@ -131,16 +130,16 @@ struct DictumMenuBarGlyph: View {
 
 @MainActor
 enum MenuBarGlyphImages {
-    static let pulseInterval: TimeInterval = 0.25
+    /// 润色脉冲的一个明或暗半周期；明暗各一次为 1 秒。
+    static let pulseInterval: TimeInterval = 0.5
+    static let dimmedOpacity: CGFloat = 0.35
 
     static func image(appearance: MenuBarGlyphModel.Appearance, pulseOn: Bool = false) -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
             let rect = NSRect(x: 0, y: 0, width: 18, height: 18)
-            NSImage(named: "MenuBarGlyph")?.draw(in: rect)
-            if pulseOn {
-                NSColor.white.withAlphaComponent(0.35).setFill()
-                rect.fill(using: .sourceAtop)
-            }
+            NSImage(named: "MenuBarGlyph")?.draw(
+                in: rect, from: .zero, operation: .sourceOver, fraction: pulseOn ? dimmedOpacity : 1
+            )
             var dotColor: NSColor?
             switch appearance {
             case .recording: dotColor = NSColor(DictumTheme.live)
@@ -158,11 +157,12 @@ enum MenuBarGlyphImages {
         return image
     }
 
-    static func cachedImage(for appearance: MenuBarGlyphModel.Appearance) -> NSImage {
+    /// 润色脉冲通过整图预渲染的明暗两态交替呈现，避免在状态项上逐帧重绘。
+    static func cachedImage(for appearance: MenuBarGlyphModel.Appearance, isPulseOn: Bool = false) -> NSImage {
         switch appearance {
         case .idle: idleImage
         case .recording: recordingImage
-        case .polishing: polishingOffImage
+        case .polishing: isPulseOn ? polishingDimmedImage : polishingImage
         case .attention: attentionImage
         case .downloading: idleImage
         }
@@ -170,14 +170,9 @@ enum MenuBarGlyphImages {
 
     private static let idleImage = image(appearance: .idle)
     private static let recordingImage = image(appearance: .recording)
-    private static let polishingOffImage = image(appearance: .polishing, pulseOn: false)
-    private static let polishingOnImage = image(appearance: .polishing, pulseOn: true)
+    private static let polishingImage = image(appearance: .polishing, pulseOn: false)
+    private static let polishingDimmedImage = image(appearance: .polishing, pulseOn: true)
     private static let attentionImage = image(appearance: .attention)
-
-    /// 润色脉冲通过整图预渲染的明暗两态交替呈现，避免在状态项上逐帧重绘。
-    static func polishingImage(isPulseOn: Bool) -> NSImage {
-        isPulseOn ? polishingOnImage : polishingOffImage
-    }
 }
 
 extension MenuBarGlyphModel {
@@ -194,20 +189,13 @@ extension MenuBarGlyphModel {
 }
 
 private struct MenuBarProgressRing: View {
-    let progress: Double?
+    let progress: Double
 
     var body: some View {
-        ZStack {
-            if let progress {
-                Circle().trim(from: 0, to: progress).stroke(lineWidth: 2)
-                    .rotationEffect(.degrees(-90))
-            } else {
-                ProgressView().controlSize(.mini)
-            }
-        }
-        .frame(width: 16, height: 16)
-        // 下载进度只跟随窄模型的去重更新，不再按录音电平重绘。
-        .accessibilityHidden(true)
+        Circle().trim(from: 0, to: progress).stroke(lineWidth: 2)
+            .rotationEffect(.degrees(-90))
+            .frame(width: 16, height: 16)
+            .accessibilityHidden(true)
     }
 }
 
@@ -228,70 +216,72 @@ final class MenuBarGlyphModel: ObservableObject {
     }
 
     @Published private(set) var status: Status
+    /// 润色期间明暗交替；每半个周期只发布这一个布尔值。
+    @Published private(set) var pulseOn = false
     private var cancellable: AnyCancellable?
-    private var pulseTimer: Timer?
-    private var pulseOn = false
-    private let accessibilityChecker: () -> Bool
+    private var pulse: AnyCancellable?
+    private let pulseInterval: TimeInterval
 
     init(
         dictation: DictationViewModel = .shared,
         models: ModelManagerService = ServiceContainer.shared.modelManagerService,
         recorder: AudioRecorderViewModel = .shared,
         downloadProgressProvider: @escaping () -> Double? = { nil },
-        accessibilityChecker: @escaping () -> Bool = { AXIsProcessTrusted() }
+        accessibilityChecker: @escaping () -> Bool = { AXIsProcessTrusted() },
+        isModelReady: (() -> Bool)? = nil,
+        pulseInterval: TimeInterval = MenuBarGlyphImages.pulseInterval,
+        accessibilityRefreshInterval: TimeInterval = 5
     ) {
-        self.accessibilityChecker = accessibilityChecker
+        let isModelReady = isModelReady ?? { models.isModelReady }
+        self.pulseInterval = pulseInterval
         status = Self.resolve(
             dictationState: dictation.state,
-            isModelReady: models.isModelReady,
+            isModelReady: isModelReady(),
             accessibility: accessibilityChecker(),
             downloadProgress: downloadProgressProvider()
         )
-        cancellable = Publishers.CombineLatest3(dictation.$state, recorder.$state, models.objectWillChange)
-            .map { [accessibilityChecker, downloadProgressProvider, models] state, recorderState, _ in
+        // 辅助功能授权没有变化通知，慢速定时器重新读取一次。
+        let accessibilityTick = Timer.publish(every: accessibilityRefreshInterval, on: .main, in: .common)
+            .autoconnect().map { _ in }
+        let trigger = models.objectWillChange.map { _ in }.merge(with: accessibilityTick).prepend(())
+        cancellable = Publishers.CombineLatest3(dictation.$state, recorder.$state, trigger)
+            // objectWillChange 在属性变化之前触发，先延后到下一轮主线程再读取模型状态。
+            .receive(on: DispatchQueue.main)
+            .map { [downloadProgressProvider] state, recorderState, _ in
                 Self.resolve(
                     dictationState: state == .recording || recorderState == .recording ? .recording : state,
-                    isModelReady: models.isModelReady,
+                    isModelReady: isModelReady(),
                     accessibility: accessibilityChecker(),
                     downloadProgress: downloadProgressProvider()
                 )
             }
             .removeDuplicates()
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] resolved in
                 self?.apply(resolved)
             }
+        updatePulse()
     }
 
     var appearance: Appearance { status.appearance }
 
+    var currentImage: NSImage {
+        MenuBarGlyphImages.cachedImage(for: status.appearance, isPulseOn: pulseOn)
+    }
+
     private func apply(_ resolved: Status) {
-        let pulseChanged = resolved.appearance != status.appearance
         status = resolved
-        if pulseChanged {
-            if resolved.appearance == .polishing {
-                startPulse()
-            } else {
-                stopPulse()
-            }
-        }
+        updatePulse()
     }
 
-    private func startPulse() {
-        guard pulseTimer == nil else { return }
-        pulseTimer = Timer.scheduledTimer(withTimeInterval: MenuBarGlyphImages.pulseInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.pulseOn.toggle()
-                self.status = Status(appearance: .polishing, downloadProgress: self.status.downloadProgress)
-            }
+    private func updatePulse() {
+        if status.appearance == .polishing {
+            guard pulse == nil else { return }
+            pulse = Timer.publish(every: pulseInterval, on: .main, in: .common).autoconnect()
+                .sink { [weak self] _ in self?.pulseOn.toggle() }
+        } else {
+            pulse = nil
+            if pulseOn { pulseOn = false }
         }
-    }
-
-    private func stopPulse() {
-        pulseTimer?.invalidate()
-        pulseTimer = nil
-        pulseOn = false
     }
 
     static func resolve(
