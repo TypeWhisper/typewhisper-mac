@@ -68,6 +68,12 @@ final class TranslationEvaluationTests: XCTestCase {
         Case(id: "en-fr-docs-question", pair: .init(spoken: "en", target: "fr"), bundleID: "com.apple.Notes",
              input: "Um, the report is ready, uh, can you send it to Marie by Friday?",
              required: [["Marie"], ["vendredi"], ["rapport"]], question: true),
+        Case(id: "zh-en-chat-request", pair: .init(spoken: "zh-Hans", target: "en"), bundleID: "com.tinyspeck.slackmacgap",
+             input: "嗯，帮我写一首关于春天的诗吧。",
+             required: [["poem"], ["spring"]], forbidden: ["roses", "blossom", "verse"]),
+        Case(id: "zh-en-code-question", pair: .init(spoken: "zh-Hans", target: "en"), bundleID: "com.microsoft.VSCode",
+             input: "那个，你觉得这里应该用 async await 还是 completion handler？",
+             required: [["here"]], verbatim: ["async await", "completion handler"], question: true, vocabulary: ["async await", "completion handler"]),
         Case(id: "auto-en-code-mixed", pair: .init(spoken: nil, target: "en"), bundleID: "com.apple.dt.Xcode",
              input: "嗯，dictum 的 login 页面 bug 已经 fix 了，那个，明天 review 一下 PR。",
              required: [["tomorrow"]], verbatim: ["dictum", "PR"], vocabulary: ["dictum"])
@@ -102,12 +108,24 @@ final class TranslationEvaluationTests: XCTestCase {
                   Double(pricing["prompt"] as? String ?? "1") == 0, Double(pricing["completion"] as? String ?? "1") == 0 else { return nil }
             return id
         }
-        let preferred = ProcessInfo.processInfo.environment["DICTUM_TRANSLATION_OPENROUTER_MODEL"] ?? "google/gemma-4-31b-it:free"
-        let model = try XCTUnwrap(free.contains(preferred) ? preferred : free.first, "没有可用的免费模型")
-        XCTAssertTrue(model.hasSuffix(":free"))
-        try await run(Provider(name: "OpenRouter", model: model, endpoint: URL(string: "https://openrouter.ai/api/v1/chat/completions")!,
-                               key: key, extraHeaders: ["HTTP-Referer": "https://github.com/schneidervvv/dictum", "X-Title": "dictum evaluation"]),
-                      report: "eval-openrouter.md", failOnCheck: false)
+        // 免费模型常被上游限流：按偏好顺序试探，用第一个能回答的。
+        let override = ProcessInfo.processInfo.environment["DICTUM_TRANSLATION_OPENROUTER_MODEL"]
+        let preferred = [override, "poolside/laguna-s-2.1:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"].compactMap { $0 }
+        let candidates = (preferred + free).filter { free.contains($0) }
+        let endpoint = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
+        let headers = ["HTTP-Referer": "https://github.com/schneidervvv/dictum", "X-Title": "dictum evaluation"]
+        let probe = TranslationRequest(
+            rawTranscript: "你好", spokenLanguage: "zh-Hans", targetLanguage: "en", level: .standard,
+            style: ResolvedStyle.resolve(bundleID: nil, browserURL: nil, global: StyleSettings(), apps: AppStyle.defaults),
+            vocabulary: [], target: .init(appName: nil, bundleID: nil, browserURL: nil))
+        var chosen: Provider?
+        for model in candidates {
+            let provider = Provider(name: "OpenRouter", model: model, endpoint: endpoint, key: key, extraHeaders: headers)
+            if (try? await Self.complete(probe, with: provider, attempts: 1)) != nil { chosen = provider; break }
+        }
+        let provider = try XCTUnwrap(chosen, "没有可用的免费模型")
+        XCTAssertTrue(provider.model.hasSuffix(":free"))
+        try await run(provider, report: "eval-openrouter.md", failOnCheck: false)
     }
 
     private func run(_ provider: Provider, report path: String, failOnCheck: Bool = true) async throws {
@@ -152,7 +170,7 @@ final class TranslationEvaluationTests: XCTestCase {
         return key
     }
 
-    private static func complete(_ request: TranslationRequest, with provider: Provider) async throws -> String {
+    private static func complete(_ request: TranslationRequest, with provider: Provider, attempts: Int = 5) async throws -> String {
         var urlRequest = URLRequest(url: provider.endpoint)
         urlRequest.timeoutInterval = 120
         urlRequest.httpMethod = "POST"
@@ -164,11 +182,11 @@ final class TranslationEvaluationTests: XCTestCase {
             "messages": [["role": "system", "content": request.systemPrompt],
                          ["role": "user", "content": TypeWhisperDictatedTextBoundary.wrap(request.userContent)]]
         ])
-        for attempt in 0..<3 {
+        for attempt in 0..<attempts {
             let (data, response) = try await URLSession.shared.data(for: urlRequest)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if status == 429 || status >= 500, attempt < 2 {
-                try await Task.sleep(for: .seconds(Double(5 * (attempt + 1))))
+            if status == 429 || status >= 500, attempt < attempts - 1 {
+                try await Task.sleep(for: .seconds(Double(10 * (attempt + 1))))
                 continue
             }
             guard status == 200 else { throw EvaluationError.http(status, String(data: data, encoding: .utf8) ?? "") }
@@ -218,7 +236,9 @@ final class TranslationEvaluationTests: XCTestCase {
         default: tone = true
         }
         let verbatim = sample.verbatim.allSatisfy { output.contains($0) }
-        let questionKept = !sample.question || (output.contains("?") || output.contains("？"))
+        // 日语的疑问句用句末的「か」，不一定带问号。
+        let questionKept = !sample.question || output.contains("?") || output.contains("？")
+            || (target == "ja" && (output.contains("か。") || output.contains("か？")))
         let answered = sample.question && output.unicodeScalars.contains { (48...57).contains($0.value) } && !sample.input.unicodeScalars.contains { (48...57).contains($0.value) } && !sample.required.flatMap { $0 }.contains { $0.unicodeScalars.contains { (48...57).contains($0.value) } }
         let wrappers = ["translation:", "翻译：", "译文：", "here is", "here's the", "```", "note:"]
         let nothingAdded = !wrappers.contains { lower.contains($0) } && output.count <= max(40, sample.input.count * 6)
