@@ -25,6 +25,11 @@ public protocol PluginRuntimeMemoryDiagnosticsReporting: TypeWhisperPlugin {
     var runtimeMemorySnapshot: PluginRuntimeMemorySnapshot? { get }
 }
 
+/// 本地识别经过的识别门。宿主据此判断一次取消是否来自应用退出前关闭识别门。
+public protocol PluginLocalInferenceGateProviding: TypeWhisperPlugin {
+    var localInferenceGate: PluginLocalInferenceGate { get }
+}
+
 public actor PluginLocalInferenceGate {
     public static let shared = PluginLocalInferenceGate()
 
@@ -34,7 +39,7 @@ public actor PluginLocalInferenceGate {
     }
 
     private var isLocked = false
-    private var isClosed = false
+    public private(set) var isClosed = false
     private var waiters: [Waiter] = []
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private var cancelRunningOperation: (@Sendable () -> Void)?

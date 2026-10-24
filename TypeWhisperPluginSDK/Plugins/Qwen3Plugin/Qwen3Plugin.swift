@@ -10,7 +10,7 @@ import os
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PluginLocalInferenceGateProviding, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -95,6 +95,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
+    let localInferenceGate: PluginLocalInferenceGate
     private var _explicitModelLoadTask: Task<Void, Never>?
     private(set) var explicitModelLoadTask: Task<Void, Never>? {
         get { activationLock.withLock { _explicitModelLoadTask } }
@@ -114,6 +115,12 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     required override init() {
+        localInferenceGate = .shared
+        super.init()
+    }
+
+    init(localInferenceGate: PluginLocalInferenceGate) {
+        self.localInferenceGate = localInferenceGate
         super.init()
     }
 
@@ -339,7 +346,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        try await PluginLocalInferenceGate.shared.withLock { [self] in
+        try await localInferenceGate.withLock { [self] in
             guard let model else {
                 throw PluginTranscriptionError.notConfigured
             }
@@ -490,7 +497,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 }
             }
             // 释放旧模型和构建新模型都使用 MLX 的全局对象，应用退出前关闭识别门时要等它们结束。
-            try await PluginLocalInferenceGate.shared.withLock { [self] in
+            try await localInferenceGate.withLock { [self] in
                 // Release the previous runtime before constructing its replacement.
                 // Keep its files and selection so a failed import can be retried.
                 try activationLock.withLock {
@@ -763,17 +770,18 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         Memory.clearCache()
     }
 
-    private static func clearRuntimeCacheWhenInferenceIsIdle() async {
+    private static func clearRuntimeCacheWhenInferenceIsIdle(gate: PluginLocalInferenceGate) async {
         guard hasUsedRuntime else { return }
-        try? await PluginLocalInferenceGate.shared.withLock {
+        try? await gate.withLock {
             Memory.clearCache()
         }
     }
 
     private func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
         guard Self.hasUsedRuntime else { return }
+        let gate = localInferenceGate
         runtimeCacheClearTask = Task {
-            await Self.clearRuntimeCacheWhenInferenceIsIdle()
+            await Self.clearRuntimeCacheWhenInferenceIsIdle(gate: gate)
         }
     }
 
