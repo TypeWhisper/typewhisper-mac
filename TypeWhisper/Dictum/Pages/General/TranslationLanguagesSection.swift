@@ -71,6 +71,7 @@ struct TranslationLanguagesSection: View {
                 Spacer()
             }
         }
+        .onAppear { TranslationLanguageCatalog.warmUp() }
     }
 
     private func targetRow(_ code: String, isDefault: Bool, canRemove: Bool) -> some View {
@@ -94,19 +95,16 @@ struct TranslationLanguagesSection: View {
     private var addLanguagePicker: some View {
         let settings = languages.settings
         let excluded = settings.targets + (settings.isAutomatic ? [] : [settings.spokenLanguage])
-        let candidates = TranslationLanguageCatalog.targetCandidates(excluding: excluded).filter { code in
-            query.isEmpty || TranslationLanguageNames.name(for: code, style: .interface).localizedCaseInsensitiveContains(query)
-                || TranslationLanguageNames.name(for: code).localizedCaseInsensitiveContains(query)
-        }
+        let candidates = TranslationLanguageCatalog.targetCandidates(excluding: excluded, matching: query)
         return VStack(spacing: 8) {
             TextField(text: $query) { Text("Search", tableName: "DictumTranslation") }.textFieldStyle(.roundedBorder)
-            List(candidates, id: \.self) { code in
+            List(candidates, id: \.code) { candidate in
                 Button {
-                    languages.addTarget(code)
+                    languages.addTarget(candidate.code)
                     addingLanguage = false
                     query = ""
                 } label: {
-                    Text(verbatim: TranslationLanguageNames.name(for: code, style: .interface)).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(verbatim: candidate.name).frame(maxWidth: .infinity, alignment: .leading)
                 }.buttonStyle(.plain)
             }
         }

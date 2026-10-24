@@ -42,7 +42,8 @@ enum TranslationLanguageCatalog {
     /// 系统同时有简体和繁体数据的语言拆成两个变体。
     private static let splitScripts: Set<String> = ["Hans", "Hant"]
 
-    private static var scriptsByLanguage: [String: Set<String>] {
+    /// 遍历全部系统语言标识符要 1 秒以上，只算一次。
+    private static let scriptsByLanguage: [String: Set<String>] = {
         var result: [String: Set<String>] = [:]
         for identifier in Locale.availableIdentifiers {
             let language = Locale.Language(identifier: identifier)
@@ -50,6 +51,32 @@ enum TranslationLanguageCatalog {
             result[code, default: []].insert(script)
         }
         return result
+    }()
+
+    struct Candidate: Equatable, Sendable {
+        let code: String
+        /// 界面语言里的名字，列表显示并按它排序。
+        let name: String
+        /// 该语言自己的写法，搜索时同样匹配。
+        let nativeName: String
+    }
+
+    /// 全部可作为目标的语言，按界面语言的名字排好序，只算一次。
+    private static let allCandidates: [Candidate] = {
+        var codes: [String] = []
+        for identifier in Locale.availableIdentifiers {
+            guard let code = Locale.Language(identifier: identifier).languageCode?.identifier, code.count == 2 else { continue }
+            for variant in expandedVariants(of: code) where !codes.contains(variant) { codes.append(variant) }
+        }
+        return codes
+            .map { Candidate(code: $0, name: TranslationLanguageNames.name(for: $0, style: .interface),
+                             nativeName: TranslationLanguageNames.name(for: $0)) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }()
+
+    /// 在后台提前算好候选列表，添加语言的浮层第一次打开时不卡顿。
+    static func warmUp() {
+        Task.detached(priority: .utility) { _ = allCandidates }
     }
 
     /// 把引擎报告的语言代码展开为带文字变体的选项。
@@ -72,18 +99,12 @@ enum TranslationLanguageCatalog {
     }
 
     /// 翻译走大模型，任何有系统语言数据的语言都可以作为目标。
-    static func targetCandidates(excluding existing: [String]) -> [String] {
-        var codes: [String] = []
-        for identifier in Locale.availableIdentifiers {
-            guard let code = Locale.Language(identifier: identifier).languageCode?.identifier, code.count == 2 else { continue }
-            for variant in expandedVariants(of: code) where !codes.contains(variant) { codes.append(variant) }
+    static func targetCandidates(excluding existing: [String], matching query: String = "") -> [Candidate] {
+        allCandidates.filter { candidate in
+            !existing.contains { TranslationLanguageCode.isSame($0, candidate.code) }
+                && (query.isEmpty || candidate.name.localizedCaseInsensitiveContains(query)
+                    || candidate.nativeName.localizedCaseInsensitiveContains(query))
         }
-        return codes
-            .filter { candidate in !existing.contains { TranslationLanguageCode.isSame($0, candidate) } }
-            .sorted {
-                TranslationLanguageNames.name(for: $0, style: .interface)
-                    .localizedCaseInsensitiveCompare(TranslationLanguageNames.name(for: $1, style: .interface)) == .orderedAscending
-            }
     }
 
     /// 引擎能接受的语言提示：引擎列表里有该代码就直接用，否则用主语言。
