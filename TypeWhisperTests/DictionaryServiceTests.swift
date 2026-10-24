@@ -1136,6 +1136,34 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testHanCorrectionContainedInItsReplacementAppliesOnce() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "新河", replacement: "新河项目")
+
+        let preview = service.previewCorrections(to: "讨论新河进度和新河项目")
+        XCTAssertEqual(preview, "讨论新河项目进度和新河项目")
+        XCTAssertEqual(service.applyCorrections(to: preview), preview)
+    }
+
+    @MainActor
+    func testLongerHanCorrectionWinsOverATermInsideIt() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "新河", replacement: "星河")
+        service.addEntry(type: .correction, original: "新河项目", replacement: "银河计划")
+
+        let preview = service.previewCorrections(to: "讨论新河项目和新河")
+        XCTAssertEqual(preview, "讨论银河计划和星河")
+        XCTAssertEqual(service.applyCorrections(to: preview), preview)
+        XCTAssertEqual(service.applyCorrections(to: "讨论新河项目和新河"), "讨论银河计划和星河")
+    }
+
+    @MainActor
     func testAPITermHelpersDeleteSingleTermWithoutClearingOthers() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
