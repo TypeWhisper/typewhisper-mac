@@ -837,6 +837,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     private func stopRecording(apiSessionID: UUID?) {
+        guard state == .recording else { return }
         activeCalendarMeetingHandle = nil
         let calendarEvent = activeCalendarMeetingTranscriptMetadata
         activeCalendarMeetingTranscriptMetadata = nil
@@ -1038,7 +1039,6 @@ final class AudioRecorderViewModel: ObservableObject {
         if let currentOutputURL {
             markRecorderAPISessionFinalizing(id: sessionID, outputURL: currentOutputURL)
         }
-        state = .finalizing
         stopRecording(apiSessionID: sessionID)
         return sessionID
     }
