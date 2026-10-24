@@ -194,6 +194,7 @@ final class HistoryService: ObservableObject {
     private(set) var clearGeneration = 0
 
     private let audioDirectory: URL
+    private let storeDirectory: URL
     private let backgroundAudioWrites = BackgroundAudioWrites()
 
     init(
@@ -206,6 +207,7 @@ final class HistoryService: ObservableObject {
         versionWriter: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
     ) {
         let storeDir = appSupportDirectory
+        self.storeDirectory = storeDir
         self.eventEmitter = eventEmitter
         self.historySyncPreferences = historySyncPreferences
         self.speakerNameWriter = speakerNameWriter
@@ -227,7 +229,6 @@ final class HistoryService: ObservableObject {
             fatalError("Failed to initialize history store: \(error)")
         }
 
-        migrateWordsCountIfNeeded()
         refreshRecentRecords()
     }
 
@@ -589,7 +590,7 @@ final class HistoryService: ObservableObject {
             record.finalText = text
             record.renderedDocument = nil
             record.synchronizedStructuredDocument = nil
-            record.wordsCount = text.split(separator: " ").count
+            record.wordsCount = DictumWordCount.count(text)
             record.contentUpdatedAt = Date()
         }
         save()
@@ -754,7 +755,7 @@ final class HistoryService: ObservableObject {
         record.finalText = finalText
         record.renderedDocument = nil
         record.synchronizedStructuredDocument = nil
-        record.wordsCount = finalText.split(separator: " ").count
+        record.wordsCount = DictumWordCount.count(finalText)
         record.contentUpdatedAt = Date()
         save()
         refreshRecentRecords()
@@ -1426,7 +1427,7 @@ final class HistoryService: ObservableObject {
                 record.language = content.detectedLanguage
                 record.engineUsed = content.engineDisplayName
                 record.modelUsed = content.modelDisplayName
-                record.wordsCount = content.finalText.split(whereSeparator: \.isWhitespace).count
+                record.wordsCount = DictumWordCount.count(content.finalText)
                 record.originDeviceID = content.originDeviceID
                 record.originPlatformRaw = content.originPlatform
                 record.sourceRaw = content.source
@@ -1697,25 +1698,63 @@ final class HistoryService: ObservableObject {
         }
     }
 
-    private func migrateWordsCountIfNeeded() {
-        let descriptor = FetchDescriptor<TranscriptionRecord>(
-            predicate: #Predicate { $0.wordsCount == 0 && !$0.finalText.isEmpty }
-        )
-        let candidates: [TranscriptionRecord]
+    /// 标记按历史库所在文件夹区分，不同文件夹的库各自重算一次。
+    static func wordCountRecountKey(for storeDirectory: URL) -> String {
+        "historyWordCountRecount-\(storeDirectory.path)"
+    }
+
+    private static let wordCountRecountVersion = "2026-10-24"
+
+    var wordCountRecountPending: Bool {
+        UserDefaults.standard.string(forKey: Self.wordCountRecountKey(for: storeDirectory)) != Self.wordCountRecountVersion
+    }
+
+    /// 用量统计里记录本次重算变化量的键，随重算版本更新。
+    var wordCountRecountStatisticsKey: String {
+        "\(Self.wordCountRecountKey(for: storeDirectory))-\(Self.wordCountRecountVersion)"
+    }
+
+    /// 按 CJK 感知口径重算全部记录的字数，只修改内存中的记录，返回各自然日字数的变化量（新值减旧值）。
+    /// 旧字数为 0 的记录没有被实时写入用量统计，历史回填用 `DictumWordCount` 为它们计数，所以不产生变化量；
+    /// 来自其他 Mac 的记录没有进入本机用量统计，同样不产生变化量。
+    /// 调用方套用变化量后再调用 `commitWordCountRecount()`，套用失败时调用 `discardWordCountRecount()`。
+    func recountWords(calendar: Calendar = .current) throws -> [Date: Int] {
+        var deltas: [Date: Int] = [:]
+        for record in try allRecordsThrowing() {
+            let newCount = DictumWordCount.count(record.finalText)
+            let oldCount = record.wordsCount
+            guard newCount != oldCount else { continue }
+            record.wordsCount = newCount
+            if oldCount > 0, isRecordFromThisDevice(record) {
+                deltas[calendar.startOfDay(for: record.timestamp), default: 0] += newCount - oldCount
+            }
+        }
+        return deltas.filter { $0.value != 0 }
+    }
+
+    func commitWordCountRecount() throws {
         do {
-            candidates = try modelContext.fetch(descriptor)
+            try modelContext.save()
         } catch {
-            logger.error("Failed to fetch history word-count migration candidates: \(error.localizedDescription)")
-            return
+            modelContext.rollback()
+            throw error
         }
-        var needsSave = false
-        for record in candidates {
-            record.wordsCount = record.finalText.split(separator: " ").count
-            needsSave = true
-        }
-        if needsSave {
-            save()
-        }
+        refreshRecentRecords()
+    }
+
+    func discardWordCountRecount() {
+        modelContext.rollback()
+        refreshRecentRecords()
+    }
+
+    private func isRecordFromThisDevice(_ record: TranscriptionRecord) -> Bool {
+        let originDeviceID = record.originDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return originDeviceID.isEmpty || originDeviceID == historySyncPreferences?.deviceID
+    }
+
+    /// 历史库和用量统计都保存成功后调用，下次启动跳过重算。
+    func markWordCountRecountCompleted() {
+        UserDefaults.standard.set(Self.wordCountRecountVersion, forKey: Self.wordCountRecountKey(for: storeDirectory))
     }
 
     nonisolated private static func fetchDescriptor(for query: HistoryQuery) -> FetchDescriptor<TranscriptionRecord> {
@@ -1928,7 +1967,7 @@ final class HistoryService: ObservableObject {
         record.transcriptionVersionsData = try JSONEncoder().encode(versions)
         version.apply(to: record)
         record.activeTranscriptionVersionID = id
-        record.wordsCount = version.finalText.split(whereSeparator: \.isWhitespace).count
+        record.wordsCount = DictumWordCount.count(version.finalText)
         let now = Date()
         record.contentUpdatedAt = now
         record.speakerTranscriptUpdatedAt = now

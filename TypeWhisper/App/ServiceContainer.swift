@@ -446,6 +446,7 @@ final class ServiceContainer: ObservableObject {
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()
+        DictumWordCountRecount.runIfPending(history: historyService, usageStatistics: usageStatisticsService)
         usageStatisticsService.backfillFromHistoryIfNeeded {
             try historyService.allRecordsThrowing()
         }

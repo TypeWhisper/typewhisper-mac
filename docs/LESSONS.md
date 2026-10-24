@@ -79,15 +79,20 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence: The shared log contained sparse bytes and an xcresult reader error, while the later invocation returned zero and its independent Xcode result reported 2,980 passing tests.
   - Fix: Wait for the complete shell invocation to exit before starting another verification in that worktree. Use a distinct redirected log for each attempt and retain the final exit status together with the result bundle summary.
 
+- 其他单元持有运行锁时运行 Xcode 测试 (Seen x1: 2026-10-24)
+  - 问题：字数统计修复第 1 轮在 `/tmp/dictum-run.lock` 存在期间运行了 Xcode 测试，测试宿主的事件监听和按键事件会干扰持锁单元的实机检查。
+  - 证据：`/tmp/dictum-word-count-fix1/t3.log` 记录这次运行从 16:42:03 到 16:42:11，共 1 个测试，运行时运行锁存在。
+  - 方法：运行 `scripts/dictum-verify.sh test` 或 `all` 前先确认 `/tmp/dictum-run.lock` 和 `/tmp/dictum-live-next` 不存在；锁存在时只做不需要测试宿主的工作，每 5 分钟检查一次。
+
 - 真实字段测试依赖辅助功能授权，宿主没有授权时整个测试类会被静默跳过 (Seen x1: 2026-10-24)
   - 问题：`DuplicateInsertionRealFieldTests` 在测试宿主没有辅助功能授权时用 `XCTSkip` 跳过，换一台 Mac 运行时这组覆盖会无声消失，容易误以为修复仍被测试覆盖。
   - 证据：测试文件 `setUp` 中的 `throw XCTSkip("测试宿主没有辅助功能授权，无法通过 AX 操作本进程的文本字段")` 是唯一的授权门槛，跳过只出现在跳过计数里，不产生任何失败。
   - 方法：在新环境运行验证时，检查跳过数量并确认这 3 个真实字段测试是执行还是跳过；需要覆盖时先给测试宿主授予辅助功能权限，再单独运行 `scripts/dictum-verify.sh test -only-testing:"TypeWhisperTests/DuplicateInsertionRealFieldTests"`。
   - 锁屏：屏幕锁定时测试窗口无法获得焦点，这 3 个测试不会跳过，而是都返回 `.notAwaited` 并失败；只在屏幕解锁时运行这组测试和 `all`。
 
-- 用 Python 和 sed 脚本改写源代码与文档 (Seen x1: 2026-10-24)
-  - 问题：阶段 4 的修复过程中，源代码和文档被 Python、sed 脚本批量改写，违反代码标准“所有源代码修改都通过编辑工具逐处完成”。
-  - 证据：阶段 4 审查第 1 轮的修复由 Python 和 sed 脚本完成，协调者在第 2 轮交接时指出这违反代码标准。
+- 用 Python 和 sed 脚本改写源代码与文档 (Seen x2: 2026-10-24, 2026-10-24)
+  - 问题：阶段 4 的修复过程中，源代码和文档被 Python、sed 脚本批量改写，违反代码标准“所有源代码修改都通过编辑工具逐处完成”。中文字数统计的修复第 1 轮又用 `sed` 修改了测试文件。
+  - 证据：阶段 4 审查第 1 轮的修复由 Python 和 sed 脚本完成，协调者在第 2 轮交接时指出这违反代码标准。字数统计修复第 1 轮用一次 `sed` 编辑给测试文件加入了 `import SwiftData`。
   - 方法：每处源代码和文档修改都用编辑工具完成，每次只改一处并确认上下文。需要批量修改时，使用格式化工具、官方脚手架或代码生成器；没有合适的工具时，列出全部位置后逐处编辑。
 
 - 没有持有运行锁时产生了全局按键事件 (Seen x1: 2026-10-24)
