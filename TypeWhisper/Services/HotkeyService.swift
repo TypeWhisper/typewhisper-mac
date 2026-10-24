@@ -3087,7 +3087,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         return true
     }
 
-    /// 翻译会话开始或升级成功后，仍按住的 Fn 属于组合键，松开时不再触发听写槽位的松开或开始。
+    /// 翻译会话开始或升级成功后，仍按住的 Fn 属于组合键，松开时由翻译槽位处理，听写槽位的松开和开始都不触发。
     private func markHeldFnSlotsAsCombo() {
         for slotType in HotkeySlotType.allCases where slotType != .translation {
             guard var states = slots[slotType] else { continue }

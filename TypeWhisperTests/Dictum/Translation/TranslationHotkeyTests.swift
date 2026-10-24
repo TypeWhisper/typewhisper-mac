@@ -231,7 +231,7 @@ final class TranslationHotkeyTests: XCTestCase {
         let reopened = HotkeyService()
         reopened.suspendMonitoring()
         reopened.loadHotkeysForTesting()
-        XCTAssertEqual(reopened.hotkeys(for: .translation), [], "清除后不再装回默认值")
+        XCTAssertEqual(reopened.hotkeys(for: .translation), [], "清除后的空列表保持为空")
         defaults.removeObject(forKey: slot.hotkeysDefaultsKey)
         defaults.removeObject(forKey: slot.defaultsKey)
     }
