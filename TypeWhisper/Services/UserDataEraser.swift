@@ -1,6 +1,7 @@
 import Foundation
 import os
 import ServiceManagement
+import TypeWhisperPluginSDK
 import UserNotifications
 import WidgetKit
 
@@ -34,6 +35,9 @@ enum UserDataEraser {
         // from its own XPC process; let a running sync finish first.
         await waitUntil { !container.cloudFolderSyncController.isSyncing }
         container.cloudFolderSyncController.deactivate()
+
+        // exit() 会析构 MLX 的 C++ 全局对象，本地识别必须先在当前分段结束。
+        await PluginLocalInferenceGate.shared.close()
 
         return failures
     }

@@ -465,6 +465,26 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testClosedLocalInferenceGateStopsQwen3ModelLoadBeforeTheNativeLoader() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = try fixture.writeInvalidImportedModel()
+        let host = MockHostServices(pluginDataDirectory: fixture.root, defaults: ["loadedModel": id])
+        let gate = PluginLocalInferenceGate()
+        await gate.close()
+        let qwen = Qwen3Plugin(localInferenceGate: gate)
+        qwen.activate(host: host)
+        defer { qwen.deactivate() }
+
+        await qwen.restoreLoadedModel()
+
+        XCTAssertFalse(qwen.isConfigured)
+        // 原生加载器读取这个模型会失败并进入 .error；没有任何活动说明加载停在 .notLoaded，加载器没有运行。
+        XCTAssertNil(qwen.currentSettingsActivity, "The native loader must not run while the gate is closed")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, id)
+    }
+
+    @MainActor
     func testMLXCleanupStaysColdUntilAModelLoadEntersTheRuntime() async throws {
         let usages = [Qwen3Plugin.runtimeUsage]
         let previousUsages = usages.map { usage in usage.withLock { $0 } }
