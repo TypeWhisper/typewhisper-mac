@@ -32,7 +32,7 @@ struct HistorySyncSection: View {
             GroupedFormRow(separated: true) {
                 Text("Sync folder", tableName: "DictumHistory")
                 Spacer()
-                Text(controller.selectedFolderURL?.path ?? "iCloud Drive › dictum").font(.caption).lineLimit(1).truncationMode(.middle)
+                Text(HistorySyncPresentation.folderDisplay(controller.selectedFolderURL)).font(.caption).lineLimit(1).truncationMode(.middle)
                 Button { controller.chooseFolder() } label: { Text("Change…", tableName: "DictumHistory") }
                     .disabled(controller.isSyncing)
             }

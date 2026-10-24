@@ -251,7 +251,9 @@ struct DictionaryPage: View {
 
     private func addedColumn(_ entry: DictionaryEntry, hovered: Bool) -> some View {
         ZStack(alignment: .trailing) {
-            Text(entry.createdAt, format: .dateTime.month().day())
+            Text(Calendar.current.isDateInToday(entry.createdAt)
+                 ? String(localized: "Today", table: "DictumHistory")
+                 : entry.createdAt.formatted(.dateTime.month().day()))
                 .font(.system(size: 12)).foregroundStyle(DictumTheme.textTertiary)
                 .opacity(hovered ? 0 : 1)
             HStack(spacing: 2) {

@@ -105,6 +105,8 @@
     "Export as Markdown…": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"导出为 Markdown…"}}}},
     "Show Sync Folder in Finder": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"在 Finder 中显示同步文件夹"}}}},
     "Delete All History…": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"删除全部历史…"}}}},
+    "Delete All History?": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"删除全部历史？"}}}},
+    "iCloud Drive": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"iCloud Drive"}}}},
     "No dictations yet": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"还没有听写记录"}}}},
     "Press fn and start talking. Your dictations show up here.": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"按一下 fn 开始说话，记录会出现在这里。"}}}},
     "Not polished": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"未润色"}}}},

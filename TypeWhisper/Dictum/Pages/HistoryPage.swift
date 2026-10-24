@@ -114,7 +114,7 @@ struct DictumHistoryPage: View {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
             Button(role: .destructive) { if let deleting { scheduleDeletion(deleting) }; deleting = nil } label: { Text("Delete", tableName: "DictumHistory") }
         } message: { Text(deleting?.finalText ?? "") }
-        .alert(String(localized: "Delete All History…", table: "DictumHistory"), isPresented: $clearAll) {
+        .alert(String(localized: "Delete All History?", table: "DictumHistory"), isPresented: $clearAll) {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
             Button(role: .destructive) { _ = history.clearAll(); reload() } label: { Text("Delete", tableName: "DictumHistory") }
         } message: {
