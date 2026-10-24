@@ -556,8 +556,6 @@ enum SettingsBackupExporter {
             preferences: PreferencesDTO(
                 selectedLanguage: userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage),
                 selectedTask: userDefaults.string(forKey: UserDefaultsKeys.selectedTask),
-                translationEnabled: userDefaults.object(forKey: UserDefaultsKeys.translationEnabled) as? Bool,
-                translationTargetLanguage: userDefaults.string(forKey: UserDefaultsKeys.translationTargetLanguage),
                 translationSpokenLanguage: userDefaults.string(forKey: TranslationLanguageStore.Keys.spoken),
                 translationTargets: userDefaults.stringArray(forKey: TranslationLanguageStore.Keys.targets),
                 translationCurrentTarget: userDefaults.string(forKey: TranslationLanguageStore.Keys.current),
@@ -644,7 +642,8 @@ enum SettingsBackupExporter {
         indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
         dictationRecoveryPreferencesDidChange: (() -> Void)? = nil,
-        hotkeysDidChange: (() -> Void)? = nil
+        hotkeysDidChange: (() -> Void)? = nil,
+        translationLanguagesDidChange: (() -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
 
@@ -984,11 +983,21 @@ enum SettingsBackupExporter {
         }
         apply(preferences.selectedLanguage, forKey: UserDefaultsKeys.selectedLanguage)
         apply(preferences.selectedTask, forKey: UserDefaultsKeys.selectedTask)
-        apply(preferences.translationEnabled, forKey: UserDefaultsKeys.translationEnabled)
-        apply(preferences.translationTargetLanguage, forKey: UserDefaultsKeys.translationTargetLanguage)
+        let appliedBeforeTranslation = result.preferencesApplied
         apply(preferences.translationSpokenLanguage, forKey: TranslationLanguageStore.Keys.spoken)
         apply(preferences.translationTargets, forKey: TranslationLanguageStore.Keys.targets)
         apply(preferences.translationCurrentTarget, forKey: TranslationLanguageStore.Keys.current)
+        // 旧备份只有单个目标语言：备份里没有新键时并入新键。
+        if preferences.translationSpokenLanguage == nil, preferences.translationTargets == nil,
+           preferences.translationCurrentTarget == nil,
+           let legacyTarget = preferences.translationTargetLanguage.map(TranslationLanguageCode.normalized),
+           !legacyTarget.isEmpty {
+            apply([legacyTarget], forKey: TranslationLanguageStore.Keys.targets)
+            apply(legacyTarget, forKey: TranslationLanguageStore.Keys.current)
+        }
+        if result.preferencesApplied > appliedBeforeTranslation {
+            translationLanguagesDidChange?()
+        }
         apply(preferences.showMenuBarIcon, forKey: UserDefaultsKeys.showMenuBarIcon)
         apply(preferences.dockIconBehaviorWhenMenuBarHidden, forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden)
         apply(preferences.audioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
@@ -1349,6 +1358,7 @@ final class SettingsBackupAutomationService {
     private let indicatorThemeDidChange: ((IndicatorTheme) -> Void)?
     private let dictationRecoveryPreferencesDidChange: (() -> Void)?
     private let hotkeysDidChange: (() -> Void)?
+    private let translationLanguagesDidChange: (() -> Void)?
 
     init(
         workflowService: WorkflowService,
@@ -1365,7 +1375,8 @@ final class SettingsBackupAutomationService {
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
         indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
         dictationRecoveryPreferencesDidChange: (() -> Void)? = nil,
-        hotkeysDidChange: (() -> Void)? = nil
+        hotkeysDidChange: (() -> Void)? = nil,
+        translationLanguagesDidChange: (() -> Void)? = nil
     ) {
         self.workflowService = workflowService
         self.dictionaryService = dictionaryService
@@ -1382,6 +1393,7 @@ final class SettingsBackupAutomationService {
         self.indicatorThemeDidChange = indicatorThemeDidChange
         self.dictationRecoveryPreferencesDidChange = dictationRecoveryPreferencesDidChange
         self.hotkeysDidChange = hotkeysDidChange
+        self.translationLanguagesDidChange = translationLanguagesDidChange
     }
 
     func exportData() throws -> Data {
@@ -1420,7 +1432,8 @@ final class SettingsBackupAutomationService {
             indicatorThemeDidChange: indicatorThemeDidChange,
             recoveryRetentionPolicyDidChange: recoveryRetentionPolicyDidChange,
             dictationRecoveryPreferencesDidChange: dictationRecoveryPreferencesDidChange,
-            hotkeysDidChange: hotkeysDidChange
+            hotkeysDidChange: hotkeysDidChange,
+            translationLanguagesDidChange: translationLanguagesDidChange
         )
     }
 }

@@ -703,7 +703,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         defer { teardown(source) }
 
         source.userDefaults.set("de", forKey: UserDefaultsKeys.selectedLanguage)
-        source.userDefaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.showMenuBarIcon)
         source.userDefaults.set(0.35, forKey: UserDefaultsKeys.audioDuckingLevel)
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
@@ -729,7 +728,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
 
         XCTAssertEqual(backup.preferences.selectedLanguage, "de")
-        XCTAssertEqual(backup.preferences.translationEnabled, true)
         XCTAssertEqual(backup.preferences.showMenuBarIcon, false)
         XCTAssertEqual(backup.preferences.audioDuckingLevel, 0.35)
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
@@ -767,7 +765,6 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(result.preferencesApplied, 8)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage), "de")
-        XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.showMenuBarIcon), false)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle), "overlay")
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorTheme), "glass")
@@ -783,6 +780,112 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
+    }
+
+    private func emptyBackup(preferences: SettingsBackupExporter.PreferencesDTO) -> SettingsBackupExporter.SettingsBackup {
+        SettingsBackupExporter.SettingsBackup(
+            schemaVersion: SettingsBackupExporter.schemaVersion,
+            exportedAt: Date(), appVersion: "1.0",
+            workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+            hotkeys: [:], plugins: [], history: [], preferences: preferences
+        )
+    }
+
+    private func importPreferences(
+        _ preferences: SettingsBackupExporter.PreferencesDTO,
+        into destination: Fixture,
+        translationLanguagesDidChange: (() -> Void)? = nil
+    ) async {
+        _ = await SettingsBackupExporter.importBackup(
+            emptyBackup(preferences: preferences),
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults,
+            translationLanguagesDidChange: translationLanguagesDidChange
+        )
+    }
+
+    @MainActor
+    func testTranslationLanguagesRoundTripAndTheStoreReloadsAfterImport() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        source.userDefaults.set("en", forKey: TranslationLanguageStore.Keys.spoken)
+        source.userDefaults.set(["ja", "ko"], forKey: TranslationLanguageStore.Keys.targets)
+        source.userDefaults.set("ko", forKey: TranslationLanguageStore.Keys.current)
+        source.userDefaults.set("fr", forKey: UserDefaultsKeys.translationTargetLanguage)
+        source.userDefaults.set(true, forKey: "translationEnabled")
+
+        let backup = try SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+        XCTAssertEqual(backup.preferences.translationSpokenLanguage, "en")
+        XCTAssertEqual(backup.preferences.translationTargets, ["ja", "ko"])
+        XCTAssertEqual(backup.preferences.translationCurrentTarget, "ko")
+        XCTAssertNil(backup.preferences.translationTargetLanguage, "备份只写新的翻译语言键，没有旧的单个目标")
+        XCTAssertNil(backup.preferences.translationEnabled, "备份里没有全局翻译开关")
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        let store = TranslationLanguageStore(defaults: destination.userDefaults)
+        XCTAssertEqual(store.settings.pair, TranslationPair(spoken: "zh-Hans", target: "en"))
+        var reloaded = 0
+        await importPreferences(backup.preferences, into: destination) {
+            reloaded += 1
+            store.reload()
+        }
+        XCTAssertEqual(reloaded, 1)
+        XCTAssertEqual(store.settings.pair, TranslationPair(spoken: "en", target: "ko"))
+        store.selectCurrentTarget("ja")
+        XCTAssertEqual(destination.userDefaults.string(forKey: TranslationLanguageStore.Keys.spoken), "en")
+        XCTAssertEqual(destination.userDefaults.stringArray(forKey: TranslationLanguageStore.Keys.targets), ["ja", "ko"])
+        XCTAssertEqual(destination.userDefaults.string(forKey: TranslationLanguageStore.Keys.current), "ja")
+    }
+
+    @MainActor
+    func testLegacyTargetInOldBackupMapsToNewKeysOnlyWhenTheyAreMissing() async throws {
+        var legacy = SettingsBackupExporter.PreferencesDTO.empty
+        legacy.translationTargetLanguage = "de"
+        legacy.translationEnabled = true
+
+        let plain = try makeFixture()
+        defer { teardown(plain) }
+        await importPreferences(legacy, into: plain)
+        let plainStore = TranslationLanguageStore(defaults: plain.userDefaults)
+        XCTAssertEqual(plainStore.settings.pair, TranslationPair(spoken: "zh-Hans", target: "de"))
+        XCTAssertNil(plain.userDefaults.object(forKey: "translationEnabled"))
+
+        var current = legacy
+        current.translationTargets = ["ja"]
+        let withNewKeys = try makeFixture()
+        defer { teardown(withNewKeys) }
+        await importPreferences(current, into: withNewKeys)
+        XCTAssertEqual(withNewKeys.userDefaults.stringArray(forKey: TranslationLanguageStore.Keys.targets), ["ja"])
+        XCTAssertNil(withNewKeys.userDefaults.string(forKey: TranslationLanguageStore.Keys.current))
+    }
+
+    @MainActor
+    func testImportedTargetsEqualToTheSpokenLanguageFallBackToTheDefaultTarget() async throws {
+        var preferences = SettingsBackupExporter.PreferencesDTO.empty
+        preferences.translationSpokenLanguage = "ja"
+        preferences.translationTargets = ["ja"]
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        let store = TranslationLanguageStore(defaults: destination.userDefaults)
+        await importPreferences(preferences, into: destination) { store.reload() }
+        XCTAssertEqual(store.settings.pair, TranslationPair(spoken: "ja", target: "en"))
     }
 
     func testUnknownIndicatorThemeInBackupPreservesDestinationTheme() async throws {

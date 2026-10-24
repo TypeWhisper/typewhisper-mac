@@ -36,8 +36,8 @@ struct TranslationLanguageSettings: Equatable, Sendable {
 
     var isAutomatic: Bool { spokenLanguage == Self.automatic }
 
-    /// 与说话语言相同的目标不提供；自动识别时不排除。
-    var offeredTargets: [String] {
+    /// 列表里与说话语言不冲突的目标；自动识别时不排除。
+    var listedTargets: [String] {
         var seen: [String] = []
         for code in targets.map(TranslationLanguageCode.normalized) where !code.isEmpty {
             guard !seen.contains(code) else { continue }
@@ -45,6 +45,15 @@ struct TranslationLanguageSettings: Equatable, Sendable {
             seen.append(code)
         }
         return seen
+    }
+
+    /// 与说话语言相同的目标不提供；列表里没有可用目标时，用默认目标，
+    /// 默认目标也与说话语言相同时，用默认说话语言，保证翻译快捷键总有目标。
+    var offeredTargets: [String] {
+        let listed = listedTargets
+        if !listed.isEmpty { return listed }
+        let fallbacks = Self.defaultTargets + [Self.defaultSpokenLanguage]
+        return [fallbacks.first { !TranslationLanguageCode.isSame(spokenLanguage, $0) } ?? Self.defaultTargets[0]]
     }
 
     /// 当前目标被移除后回到列表中的第一个。
@@ -82,7 +91,7 @@ final class TranslationLanguageStore: ObservableObject {
         settings = Self.load(from: defaults)
     }
 
-    /// 旧版本的单个目标与语音条目标列表一次性并入新键，之后不再读取旧键。
+    /// 旧版本的单个目标与语音条目标列表一次性并入新键，之后只读取新键。
     nonisolated static func migrateLegacyKeys(in defaults: UserDefaults) {
         guard !defaults.bool(forKey: Keys.migrated) else { return }
         defer { defaults.set(true, forKey: Keys.migrated) }
@@ -108,6 +117,11 @@ final class TranslationLanguageStore: ObservableObject {
         return settings
     }
 
+    /// 设置备份导入直接写了 UserDefaults，重新读取后界面和听写流程才使用导入的值。
+    func reload() {
+        settings = Self.load(from: defaults)
+    }
+
     private func persist() {
         defaults.set(settings.spokenLanguage, forKey: Keys.spoken)
         defaults.set(settings.targets, forKey: Keys.targets)
@@ -119,7 +133,7 @@ final class TranslationLanguageStore: ObservableObject {
     func setSpokenLanguage(_ code: String) {
         let previous = settings.spokenLanguage
         settings.spokenLanguage = code
-        if settings.offeredTargets.isEmpty, previous != code, previous != TranslationLanguageSettings.automatic {
+        if settings.listedTargets.isEmpty, previous != code, previous != TranslationLanguageSettings.automatic {
             settings.targets = [previous]
             settings.current = previous
         }
@@ -129,6 +143,8 @@ final class TranslationLanguageStore: ObservableObject {
     func addTarget(_ code: String) {
         let normalized = TranslationLanguageCode.normalized(code)
         guard !normalized.isEmpty, !settings.targets.contains(normalized) else { return }
+        // 列表里没有可用目标时显示的是后备目标，添加后它仍留在列表里。
+        if settings.listedTargets.isEmpty { settings.targets = settings.offeredTargets }
         settings.targets.append(normalized)
         persist()
     }

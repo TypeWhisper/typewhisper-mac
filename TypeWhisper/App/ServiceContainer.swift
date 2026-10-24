@@ -346,6 +346,9 @@ final class ServiceContainer: ObservableObject {
             },
             hotkeysDidChange: { [dictationViewModel] in
                 dictationViewModel.reloadHotkeysFromDefaults()
+            },
+            translationLanguagesDidChange: {
+                TranslationLanguageStore.shared.reload()
             }
         )
         let handlers = APIHandlers(

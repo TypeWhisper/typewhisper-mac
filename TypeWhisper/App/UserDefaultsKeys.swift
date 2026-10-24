@@ -61,7 +61,6 @@ enum UserDefaultsKeys {
     // MARK: - Settings
     static let selectedLanguage = "selectedLanguage"
     static let selectedTask = "selectedTask"
-    static let translationEnabled = "translationEnabled"
     static let translationTargetLanguage = "translationTargetLanguage"
     static let preferredAppLanguage = "preferredAppLanguage"
 

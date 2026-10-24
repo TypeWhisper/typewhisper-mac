@@ -46,6 +46,46 @@ final class TranslationLanguageSettingsTests: XCTestCase {
         XCTAssertEqual(store.settings.pair?.target, "de")
     }
 
+    func testLegacyTargetEqualToSpokenLanguageFallsBackToTheDefaultTarget() {
+        defaults.set("zh-Hans", forKey: TranslationLanguageStore.Keys.legacyTarget)
+        let store = TranslationLanguageStore(defaults: defaults)
+        XCTAssertEqual(store.settings.offeredTargets, ["en"])
+        XCTAssertEqual(store.settings.pair, TranslationPair(spoken: "zh-Hans", target: "en"))
+    }
+
+    func testTargetsEqualToSpokenLanguageFallBackToTheDefaultSpokenLanguageWhenTheDefaultTargetConflicts() {
+        defaults.set("en", forKey: TranslationLanguageStore.Keys.spoken)
+        defaults.set(["en"], forKey: TranslationLanguageStore.Keys.targets)
+        let store = TranslationLanguageStore(defaults: defaults)
+        XCTAssertEqual(store.settings.offeredTargets, ["zh-Hans"])
+        XCTAssertEqual(store.settings.pair, TranslationPair(spoken: "en", target: "zh-Hans"))
+        defaults.set("zh-Hans", forKey: TranslationLanguageStore.Keys.spoken)
+        defaults.set(["zh-Hant-TW", "zh-Hans"], forKey: TranslationLanguageStore.Keys.targets)
+        store.reload()
+        XCTAssertEqual(store.settings.offeredTargets, ["zh-Hant-TW"])
+    }
+
+    func testAddingATargetKeepsTheFallbackTarget() {
+        defaults.set(["zh-Hans"], forKey: TranslationLanguageStore.Keys.targets)
+        let store = TranslationLanguageStore(defaults: defaults)
+        XCTAssertEqual(store.settings.offeredTargets, ["en"])
+        store.addTarget("ja")
+        XCTAssertEqual(store.settings.offeredTargets, ["en", "ja"])
+    }
+
+    func testReloadReadsValuesWrittenToDefaultsAndLaterChangesKeepThem() {
+        let store = TranslationLanguageStore(defaults: defaults)
+        defaults.set("en", forKey: TranslationLanguageStore.Keys.spoken)
+        defaults.set(["ja", "ko"], forKey: TranslationLanguageStore.Keys.targets)
+        defaults.set("ko", forKey: TranslationLanguageStore.Keys.current)
+        store.reload()
+        XCTAssertEqual(store.settings.pair, TranslationPair(spoken: "en", target: "ko"))
+        store.selectCurrentTarget("ja")
+        XCTAssertEqual(defaults.string(forKey: TranslationLanguageStore.Keys.spoken), "en")
+        XCTAssertEqual(defaults.stringArray(forKey: TranslationLanguageStore.Keys.targets), ["ja", "ko"])
+        XCTAssertEqual(defaults.string(forKey: TranslationLanguageStore.Keys.current), "ja")
+    }
+
     func testCurrentTargetFallsBackToFirstWhenRemoved() {
         let store = TranslationLanguageStore(defaults: defaults)
         store.addTarget("ja")
@@ -139,10 +179,18 @@ final class TranslationLanguageSettingsTests: XCTestCase {
     }
 
     func testTargetCandidatesExcludeExistingLanguages() {
-        let candidates = TranslationLanguageCatalog.targetCandidates(excluding: ["en", "zh-Hans"])
+        let candidates = TranslationLanguageCatalog.targetCandidates(excluding: ["en", "zh-Hans"]).map(\.code)
         XCTAssertFalse(candidates.contains("en"))
         XCTAssertFalse(candidates.contains("zh-Hans"))
         XCTAssertTrue(candidates.contains("zh-Hant"))
         XCTAssertTrue(candidates.contains("ja"))
+    }
+
+    func testTargetCandidatesFilterByInterfaceAndNativeName() {
+        let japanese = TranslationLanguageCatalog.targetCandidates(excluding: [], matching: "日本語").map(\.code)
+        XCTAssertTrue(japanese.contains("ja"))
+        let french = TranslationLanguageCatalog.targetCandidates(excluding: [], matching: "fran").map(\.code)
+        XCTAssertTrue(french.contains("fr"))
+        XCTAssertFalse(french.contains("ja"))
     }
 }
