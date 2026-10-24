@@ -12232,8 +12232,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     func testVoiceBarShowsPreparingWhileRecordingInputStaysNotReadyWithoutPublishedChanges() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
-        let originalSoundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled)
-        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        let audioStartEntered = expectation(description: "USB audio start entered")
+        let audioStartGate = DispatchSemaphore(value: 0)
+        defer { audioStartGate.signal() }
+        let usbDeviceID = AudioDeviceID(409)
         var dictationContext: DictationContext?
         var panel: VoiceBarPanel?
         defer {
@@ -12242,29 +12245,45 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
-            Self.restoreUserDefault(originalSoundFeedbackEnabled, forKey: UserDefaultsKeys.soundFeedbackEnabled)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
         }
 
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+            )
+        )
         let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.soundFeedbackEnabled = false
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        ]
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+        context.audioDeviceService.selectedDeviceUID = "usb-input"
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.startRecordingOverride = {
+            audioStartEntered.fulfill()
+            audioStartGate.wait()
+        }
 
         let voiceBar = VoiceBarPanel(dictation: context.dictationViewModel)
         panel = voiceBar
         voiceBar.startObserving()
         _ = context.dictationViewModel.apiStartRecording()
-        await context.dictationViewModel.testingWaitForRecordingStart()
         XCTAssertEqual(context.dictationViewModel.state, .recording)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+        await fulfillment(of: [audioStartEntered], timeout: 1)
 
-        // 此后听写模型没有发布任何变化，语音条自己的刷新要在约 0.2 秒内显示准备中。
+        // 麦克风路由慢时听写模型没有发布任何变化，语音条自己的刷新要在约 0.2 秒内显示准备中。
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(voiceBar.presentation.state, .preparing)
         XCTAssertTrue(voiceBar.presentation.isActive)
 
+        audioStartGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingStart()
         context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(voiceBar.presentation.state, .listening)
