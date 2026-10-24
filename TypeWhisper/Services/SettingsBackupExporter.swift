@@ -947,7 +947,7 @@ enum SettingsBackupExporter {
                 result.historyImported += 1
                 usageStatisticsService.recordTranscription(
                     timestamp: entry.timestamp,
-                    wordsCount: entry.finalText.split(separator: " ").count,
+                    wordsCount: DictumWordCount.count(entry.finalText),
                     durationSeconds: entry.durationSeconds,
                     appBundleIdentifier: entry.appBundleIdentifier,
                     appName: entry.appName,

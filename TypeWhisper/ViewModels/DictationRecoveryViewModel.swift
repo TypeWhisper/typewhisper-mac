@@ -343,7 +343,7 @@ final class DictationRecoveryViewModel: ObservableObject {
 
                 usageStatisticsRecorder?.recordTranscription(
                     timestamp: Date(),
-                    wordsCount: text.split(separator: " ").count,
+                    wordsCount: DictumWordCount.count(text),
                     durationSeconds: result.duration,
                     appBundleIdentifier: Bundle.main.bundleIdentifier,
                     appName: localizedAppText("Dictation Recovery", de: "Dictation-Recovery"),
