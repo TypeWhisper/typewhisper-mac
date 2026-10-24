@@ -213,7 +213,12 @@ private final class VoiceBarHostingView<Content: View>: NSHostingView<Content> {
 @MainActor
 final class VoiceBarPanel: NSPanel {
     private let presentation = VoiceBarPresentation()
-    private let resolver = IndicatorScreenResolver()
+    // 焦点元素与焦点窗口都要跨进程查询辅助功能接口，首次显示时会让主线程停顿约 200 毫秒；
+    // 语音条只需要最前应用的窗口所在的屏幕。
+    private let resolver = IndicatorScreenResolver(
+        focusedElementPositionProvider: { nil },
+        focusedWindowFrameProvider: { nil }
+    )
     private var screenChangeObservers: [NSObjectProtocol] = []
     private var timer: AnyCancellable?
     private var hideTask: Task<Void, Never>?
