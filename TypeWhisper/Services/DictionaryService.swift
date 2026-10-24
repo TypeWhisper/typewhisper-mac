@@ -1739,6 +1739,16 @@ final class DictionaryService: ObservableObject {
 
 }
 
+extension Character {
+    var isHan: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
+            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
+            (0x20000...0x323AF).contains(Int(scalar.value))
+        }
+    }
+}
+
 private extension Character {
     var isKatakana: Bool {
         unicodeScalars.allSatisfy { scalar in
@@ -1752,21 +1762,10 @@ private extension Character {
         unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) && $0.value < 0x3000 }
     }
 
-    var isHan: Bool {
-        unicodeScalars.allSatisfy { scalar in
-            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
-            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
-            (0x20000...0x323AF).contains(Int(scalar.value))
-        }
-    }
-
     var isWordLike: Bool {
-        unicodeScalars.contains { scalar in
+        isHan || unicodeScalars.contains { scalar in
             CharacterSet.alphanumerics.contains(scalar) ||
             (0x3040...0x30FF).contains(Int(scalar.value)) ||
-            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
-            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
-            (0x20000...0x323AF).contains(Int(scalar.value)) ||
             (0xFF66...0xFF9D).contains(Int(scalar.value))
         }
     }
