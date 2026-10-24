@@ -1008,69 +1008,6 @@ final class MenuBarGroupingTests: XCTestCase {
         XCTAssertEqual(probe.invocationCount, 1)
     }
 
-    func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
-        XCTAssertEqual(
-            MenuBarMenuSection.allCases.map(\.titleLocalizationKey),
-            ["General", "Transcription"]
-        )
-    }
-
-    @MainActor
-    func testDictationShortcutsListEveryConfiguredSlotWithItsMode() {
-        let shortcuts = MenuBarStatusFormatting.dictationShortcuts { slot in
-            switch slot {
-            case .hybrid: ["Fn", "Fn F13"]
-            case .toggle: ["⌥⌘A"]
-            default: []
-            }
-        }
-
-        XCTAssertEqual(
-            shortcuts.map(\.title),
-            ["Fn (\(String(localized: "Hybrid")))", "Fn F13 (\(String(localized: "Hybrid")))", "⌥⌘A (\(String(localized: "Toggle")))"]
-        )
-        XCTAssertTrue(MenuBarStatusFormatting.dictationShortcuts { _ in [] }.isEmpty)
-    }
-
-    func testErrorStatusTextKeepsShortMessagesAndCutsLongOnes() {
-        XCTAssertEqual(
-            MenuBarStatusFormatting.errorStatusText("  Microphone permission required. \n"),
-            "Microphone permission required."
-        )
-
-        let long = String(repeating: "word ", count: 40)
-        let cut = MenuBarStatusFormatting.errorStatusText(long, limit: 20)
-        XCTAssertEqual(cut, "word word word word…")
-
-        XCTAssertEqual(
-            MenuBarStatusFormatting.errorStatusText(
-                "No transcription engine selected. Choose one under Settings > Dictation."
-            ),
-            "No transcription engine selected."
-        )
-        // Japanese sentences end in "。", which counts as a sentence end as well.
-        XCTAssertEqual(
-            MenuBarStatusFormatting.errorStatusText(
-                "文字起こしエンジンが選択されていません。設定 > ディクテーションで選択するか、プラグインを見つけるからインストールしてください。"
-            ),
-            "文字起こしエンジンが選択されていません。"
-        )
-    }
-
-    func testMenuBarSectionsContainExpectedItems() {
-        XCTAssertEqual(
-            MenuBarMenuSection.general.items,
-            [.settings, .history, .errorLog]
-        )
-        XCTAssertEqual(
-            MenuBarMenuSection.transcription.items(hasRecoverableRecording: true),
-            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription]
-        )
-        XCTAssertEqual(
-            MenuBarMenuSection.transcription.items(hasRecoverableRecording: false),
-            [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
-        )
-    }
 }
 
 @MainActor

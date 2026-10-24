@@ -318,7 +318,6 @@ private final class MenuBarIconModel: ObservableObject {
 
 private struct MenuBarExtraLabel: View {
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @StateObject private var icon = MenuBarIconModel()
 
     private var title: String {
@@ -330,12 +329,7 @@ private struct MenuBarExtraLabel: View {
     }
 
     var body: some View {
-        Image(nsImage: MenuBarLogoMarkImage.cachedImage(
-            isRecordingActive: isRecordingActive,
-            increaseContrast: colorSchemeContrast == .increased
-        ))
-            .resizable()
-            .renderingMode(isRecordingActive ? .original : .template)
+        DictumMenuBarGlyph()
             .frame(width: 18, height: 18)
             .accessibilityLabel(Text(verbatim: title))
             .accessibilityValue(
@@ -512,7 +506,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         if AppConstants.isRunningTests {
             EmptyView()
         } else {
-            SetupWizardView()
+            DictumOnboardingView()
         }
     }
 

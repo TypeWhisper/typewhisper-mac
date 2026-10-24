@@ -7,7 +7,7 @@ dictum 是一款 macOS 语音输入应用，对标 Typeless，基于 [TypeWhispe
 以下每一项都在本机构建出的 dictum.app 上实际运行通过，并有截图或日志作为证据：
 
 1. 按一下 Fn 开始说一段零散的话，再按一下 Fn 结束，当前输入框得到去掉口头禅、处理过改口、分好段落或列表的文字。
-2. 按 Fn + 左 Shift 说中文，当前输入框得到语气贴合当前应用、可以直接发送的英文（目标语言可切换）。
+2. 按 Fn + 左 Shift 说话，当前输入框得到译成目标语言、语气贴合当前应用、可以直接发送的译文；输入语言和目标语言都可以设置，默认中文译成英文。
 3. 说话过程中，语音条实时显示识别出的文字。
 4. 每条听写都存进本机历史，并同步到 iCloud Drive 中的 dictum 文件夹；另一台设备或清空本机数据后可以从云端恢复。
 5. 个人词库里的词能纠正识别结果，也能传给润色模型；手动改正一个词后自动学进词库；支持 CSV 导入。
@@ -47,7 +47,7 @@ flowchart LR
 | 4 历史与词库 | 云同步默认指向 iCloud Drive 文件夹；历史、词库同步；词库自动学习和 CSV 导入；历史页面、词典页面、通用页的历史与同步 | gpt-6-astra（low） | Claude |
 | 5B 首页与语音条 | 首页仪表盘、语音条全部状态（含流式文字）、上手引导、菜单栏 | gpt-6-astra（low） | Claude（含视觉比对） |
 | Raycast 扩展 | 基于 TypeWhisper 的 Raycast 扩展做 dictum 扩展：开始和结束听写、搜索和复制历史、添加词典词条；在负责人的 Raycast 里本地安装 | gpt-6-astra（low） | Claude |
-| 3 翻译 | Fn + 左 Shift 翻译模式；语音条上切换目标语言；按应用调整译文语气；历史区分听写和翻译；通用页的翻译目标语言 | gpt-6-astra（low） | Claude |
+| 3 翻译 | Fn + 左 Shift 翻译模式；输入语言和目标语言都可设置，默认中译英；语音条上切换目标语言；按应用调整译文语气；历史区分听写和翻译；通用页的翻译语言对 | gpt-6-astra（low） | Claude |
 | 6 审查与实机测试 | 全部合入后整体代码审查；gpt-6-astra 在本机逐项验证完成标准 | Claude、gpt-6-astra | Claude |
 | 7 人工测试与发布 | 负责人人工测试；修复反馈；打包 dictum 0.1.0 并发布到 GitHub Releases | gpt-6-astra（low） | 负责人 |
 
@@ -55,7 +55,7 @@ flowchart LR
 
 每个开发阶段的流程：开发代理在独立的 git worktree 中开发，自己构建并运行测试，提交 PR；Claude 审查；有问题就由新的开发代理修复，再审查，最多三轮；通过后合入 `main`，同步更新 Notion。
 
-阶段 0、5A 和阶段 0B 的开发代理是 gpt-6.1-sol；阶段 1、2、4、5B 由 gpt-6-astra（推理强度 low，不使用快速模式）开发；2026-10-23 起 Codex 额度不足，新的开发和修复由 Claude Sonnet 5.5 负责，尚未完成的 gpt-6-astra 任务交接给 Pi 的 DeepSeek 接续；2026-10-24 起，正在运行的 Pi 任务完成后，新的开发和修复交给 Codex 的“永不卡住”路由组（group/never-stuck，推理强度 high，不使用 priority）；某个单元中断时，先在同一对话里用该路由组接续，接续 2 次仍失败后改由 Claude Sonnet 5.5 接续；2026-10-24 下午起，该路由组持续返回 ZCode 405 错误，在负责人确认它恢复之前，新的开发和修复直接交给 Claude Sonnet 5.5。额度用完后使用重置卡：协调代理通知负责人使用重置卡，负责人确认前的开发由 Claude 接替。审查只由 Claude 负责，由一个与开发代理不同的新 Claude 代理审查，使用 Claude Fable 5.1 或 Claude Opus 5.5。
+阶段 0、5A 和阶段 0B 的开发代理是 gpt-6.1-sol；阶段 1、2、4、5B 由 gpt-6-astra（推理强度 low，不使用快速模式）开发；2026-10-23 起 Codex 额度不足，新的开发和修复由 Claude Sonnet 5.5 负责，尚未完成的 gpt-6-astra 任务交接给 Pi 的 DeepSeek 接续；2026-10-24 起，正在运行的 Pi 任务完成后，新的开发和修复交给 Codex 的“永不卡住”路由组（group/never-stuck，推理强度 high，不使用 priority）；某个单元中断时，先在同一对话里用该路由组接续，接续 2 次仍失败后改由 Claude Sonnet 5.5 接续；2026-10-24 下午起，该路由组持续返回 ZCode 405 错误，在负责人确认它恢复之前，新的开发和修复直接交给 Claude Sonnet 5.5。涉及软件根本功能的问题（听写、语音识别、文字插入、润色，例如应用本身崩溃）由 Claude Opus 5.5 调查和修复。阶段 3 的开发和阶段 6 的实机测试由 gpt-6-astra（推理强度 low）负责，出现报错时改由 Claude 接续。额度用完后使用重置卡：协调代理通知负责人使用重置卡，负责人确认前的开发由 Claude 接替。审查只由 Claude 负责，由一个与开发代理不同的新 Claude 代理审查，使用 Claude Fable 5.1 或 Claude Opus 5.5。
 
 ## 关键决策
 

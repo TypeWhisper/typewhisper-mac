@@ -360,7 +360,7 @@ Apps not covered use the global style. A per-app row wins over a group that cont
 
 1. **快捷键 Shortcuts.** `听写` [fn] · `翻译` [fn][左 ⇧] · `取消` [esc] (fixed) · `按住快捷键` popup (`按住说话，松开结束` / `不使用`) · `外接键盘` [右 ⌥] with a remove button, or an `添加备用快捷键` button when empty. Footer: `外接键盘没有 fn 键时，用这个备用快捷键听写。` Clicking a key cap enters recording: accent ring, caps dim, caption `按下新快捷键`; Esc or 3 s without input restores the old value. Conflicts show inline `这个快捷键已被“{app}”使用` in `danger`.
 2. **润色强度 Polish strength.** Three selectable option cards in a row: `轻度` (`去掉口头禅和重复，其余保留原话`), `标准` (`再处理改口、分段和列表`, default), `重写` (`按风格设置重新组织措辞`). Below, a well with `你说：…` and `写出：…` for the selected level.
-3. **翻译目标语言 Translation languages.** Reorderable list with drag grips; the first row carries a `默认` badge; hover shows a remove button; last row `添加语言`. Footer: `第一个是默认目标语言。拖动可以调整顺序，语音条上按这个顺序显示。`
+3. **翻译语言 Translation languages.** First row `说话语言` popup: `自动识别` plus every language the speech engine supports, default `中文（简体）`. Below it, `翻译成`: a reorderable target list with drag grips; the first row carries a `默认` badge; hover shows a remove button; last row `添加语言` (the spoken language is not offered as a target). Default list: `English`. Footer: `第一个是默认目标语言。拖动可以调整顺序，语音条上按这个顺序显示。`
 4. **声音 Sound.** `麦克风` with a 12-segment live level meter and device popup (`自动（{device}）`); `提示音` switch; `听写时暂停其他声音` switch.
 5. **历史与同步 History & Sync.** `同步到 iCloud Drive` switch with status underneath (`2 分钟前已同步 · 1,286 条`, or `已关闭`); `同步文件夹` path (`iCloud Drive › dictum`) with `更改…`; `保留历史` popup (永久 / 1 年 / 1 个月 / 1 周 / 24 小时 / 不保留, default 1 年); `保存录音` switch. Footer: `同步文件夹里只有文字，录音只保存在这台 Mac 上。` Turning sync off asks: `关闭同步后，这台 Mac 上的历史会保留，同步文件夹里的文件不会删除。` Shortening retention asks `将删除 {n} 条早于 {date} 的记录。`
 6. **应用 App.** `开机时启动`, `在 Dock 中显示`, `界面语言` popup (跟随系统 / 简体中文 / English), `高级设置` with an `打开 ↗` button that opens the TypeWhisper settings window.
@@ -380,7 +380,8 @@ Apps not covered use the global style. A per-app row wins over a group that cont
 | 去掉口头禅和重复，其余保留原话 | Removes fillers and repeats, keeps your words |
 | 再处理改口、分段和列表 | Also fixes self-corrections, paragraphs, and lists |
 | 按风格设置重新组织措辞 | Rewrites in your style |
-| 翻译目标语言 / 默认 / 添加语言 | Translation languages / Default / Add Language |
+| 翻译语言 / 说话语言 / 自动识别 | Translation languages / Spoken language / Detect automatically |
+| 翻译成 / 默认 / 添加语言 | Translate to / Default / Add Language |
 | 第一个是默认目标语言…… | The first language is the default. Drag to reorder; the voice bar uses this order. |
 | 声音 / 麦克风 / 自动（{device}） | Sound / Microphone / Automatic ({device}) |
 | 提示音 | Interaction sounds |
@@ -561,7 +562,7 @@ The bar is always dark (HUD material, forced dark appearance) in both system app
 | Cancel | 30pt circle button, `xmark`, white @ 58%; hover white @ 10% fill; tooltip `esc` |
 | Done | 30pt circle, white fill, black `checkmark`; tooltip `fn` |
 | Streaming text | 15 / 22, padding 14 18 2, max 3 lines, older lines scroll up under a 18pt top fade mask |
-| Language chip | 26pt capsule, `translate` @ 24% fill, `#E6D6FF` text, `中文 → English ⌄` |
+| Language chip | 26pt capsule, `translate` @ 24% fill, `#E6D6FF` text, `{spoken} → {target} ⌄` from the Settings pair (`自动` when the spoken language is set to detect), for example `中文 → English ⌄` |
 | Action pill | 26pt capsule, white @ 14% fill, 12.5 text (`重试`, `恢复`, `设置`) |
 
 ### 6.4 States
@@ -579,7 +580,7 @@ All states are in `voice-bar.html` ("全部状态"). The live demo at the top ru
 | 7 | Polishing 润色中 / 翻译中 | Fn pressed to stop | three bouncing dots + `润色中` (or `翻译中`), the final transcript with a left-to-right shimmer, cancel only | text inserted → Inserted |
 | 8 | Inserted 已插入 | text pasted into the field | collapses to a pill: green check (pop), `已插入` + `32 字` / `18 words` | fades out after 1.2 s |
 | 9 | Copied 已复制 | no focused text field | copy symbol, `已复制，没有找到输入框`, key cap `⌘V` | 3 s |
-| 10 | Error, recovered | polish or translation failed | warning triangle (amber), `润色失败，已插入原文`, `重试` (re-runs polishing and replaces the inserted text when the field still holds it; otherwise copies) | 4 s |
+| 10 | Error, recovered | polish or translation failed | warning triangle (amber), `润色失败，已插入原文` (translation: `翻译失败，已插入原话`), `重试` (re-runs polishing or translation and replaces the inserted text when the field still holds it; otherwise copies) | 4 s |
 | 11 | Error, blocking | mic unavailable or permission missing | red mic symbol, `无法使用麦克风`, `打开设置`, close button | user closes or acts |
 | 12 | No speech 没有声音 | stopped with only silence | dim mic symbol, `没有听到声音`; no history record | 2 s |
 | 13 | Model downloading | Fn pressed before the local model is ready and no cloud engine is set | progress ring, `语音模型下载中 62%`, `查看` opens Speech | 3 s; recording does not start |
@@ -598,6 +599,7 @@ Transitions between states animate the container size with `spring` and cross-fa
 | 已插入 · {n} 字 / {n} 词 | Inserted · {n} characters / {n} words |
 | 已复制，没有找到输入框 | Copied. No text field found. |
 | 润色失败，已插入原文 · 重试 | Polishing failed. Original inserted. · Retry |
+| 翻译失败，已插入原话 · 重试 | Translation failed. What you said was inserted. · Retry |
 | 无法使用麦克风 · 打开设置 | Microphone unavailable · Open Settings |
 | 没有听到声音 | Didn't hear anything |
 | 语音模型下载中 {p}% · 查看 | Downloading speech model {p}% · View |
@@ -607,7 +609,7 @@ Transitions between states animate the container size with `spring` and cross-fa
 
 ### 6.6 Data
 
-`DictationViewModel` state (`idle`, `recording`, `processing`, `inserting`, `error`) drives states 1–4, 7, 8, 10, 11. Partial text: `StreamingHandler`. Levels: `AudioRecordingService` meter. Insertion and the copy fallback: `TextInsertionService`. Cancel and restore: `DictationRecoveryAudioStore`, `DictationRecoveryViewModel`. Timer limits: new constants (warn at 480 s, stop at 540 s). Translation target: `TranslationService` plus the Settings language order.
+`DictationViewModel` state (`idle`, `recording`, `processing`, `inserting`, `error`) drives states 1–4, 7, 8, 10, 11. Partial text: `StreamingHandler`. Levels: `AudioRecordingService` meter. Insertion and the copy fallback: `TextInsertionService`. Cancel and restore: `DictationRecoveryAudioStore`, `DictationRecoveryViewModel`. Timer limits: new constants (warn at 480 s, stop at 540 s). Translation pair: the spoken language and the ordered target list from General → Translation languages; translation runs through the AI model chain with the resolved app style.
 
 ## 7. Menu bar 菜单栏 (`menu-bar.html`)
 

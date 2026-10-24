@@ -80,24 +80,32 @@ enum SoundChoice: Hashable, Sendable {
 
 enum SoundEvent: CaseIterable {
     case recordingStarted
+    case recordingStopped
     case transcriptionSuccess
     case error
 
     var fileName: String {
         switch self {
         case .recordingStarted: return "recording_start"
+        case .recordingStopped: return "recording_stop"
         case .transcriptionSuccess: return "transcription_success"
         case .error: return "error"
         }
     }
 
     var defaultChoice: SoundChoice {
-        .bundled(fileName)
+        switch self {
+        case .recordingStarted: .system("Tink")
+        case .recordingStopped: .system("Pop")
+        case .transcriptionSuccess: .none
+        case .error: .system("Funk")
+        }
     }
 
     var userDefaultsKey: String {
         switch self {
         case .recordingStarted: return UserDefaultsKeys.soundRecordingStarted
+        case .recordingStopped: return "soundRecordingStopped"
         case .transcriptionSuccess: return UserDefaultsKeys.soundTranscriptionSuccess
         case .error: return UserDefaultsKeys.soundError
         }
@@ -106,6 +114,7 @@ enum SoundEvent: CaseIterable {
     var displayName: String {
         switch self {
         case .recordingStarted: return String(localized: "Recording started")
+        case .recordingStopped: return DictumHomeStrings.recordingStopped
         case .transcriptionSuccess: return String(localized: "Transcription success")
         case .error: return String(localized: "Error")
         }
@@ -127,6 +136,9 @@ extension AVAudioPlayer: SoundCuePlayback {}
 protocol OneShotSoundPlaying: AnyObject {
     @discardableResult
     func play(url: URL) -> Bool
+    /// Reports whether the queued playback actually started; runs on the main actor
+    /// after `play(url:)` has already returned.
+    func setPlaybackResultHandler(_ handler: (@MainActor @Sendable (URL, Bool) -> Void)?)
     func duration(for url: URL) -> TimeInterval?
     /// Keeps a prepared player ready for each URL and releases players for URLs no longer listed.
     func preparePlayback(for urls: Set<URL>)
@@ -141,6 +153,30 @@ private final class PreparedSoundCue: @unchecked Sendable {
 
     init(player: any SoundCuePlayback) {
         self.player = player
+    }
+}
+
+private final class PlaybackOperationCounter: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var count = 0
+
+    func begin() {
+        condition.lock()
+        count += 1
+        condition.unlock()
+    }
+
+    func end() {
+        condition.lock()
+        count = max(0, count - 1)
+        if count == 0 { condition.broadcast() }
+        condition.unlock()
+    }
+
+    var isIdle: Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        return count == 0
     }
 }
 
@@ -254,6 +290,8 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
 
     private let makePlayer: PlayerFactory
     private let preparationQueue: DispatchQueue
+    /// 播放不排在准备任务之后，停止提示音在准备其他提示音时也立即开始。
+    private let playbackQueue: DispatchQueue
     private var outputDeviceObserver: OutputDeviceConfigurationObserver?
     private var playbackURLs: Set<URL> = []
     private var cachedPlayers: [URL: CachedPlayer] = [:]
@@ -261,14 +299,22 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
     private var preparations: [URL: Task<Void, Never>] = [:]
     private var preparationGenerations: [URL: Int] = [:]
     private var activePlayers: [any SoundCuePlayback] = []
+    private let pendingOperations = PlaybackOperationCounter()
+    private var playbackResultHandler: (@MainActor @Sendable (URL, Bool) -> Void)?
 
     init(
-        makePlayer: @escaping PlayerFactory = { try AVAudioPlayer(contentsOf: $0) },
+        makePlayer: @escaping PlayerFactory = {
+            let player = try AVAudioPlayer(contentsOf: $0)
+            player.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
+            return player
+        },
         preparationQueue: DispatchQueue = DispatchQueue(label: "com.typewhisper.sound-cue-preparation", qos: .utility),
+        playbackQueue: DispatchQueue = DispatchQueue(label: "com.typewhisper.sound-cue-playback", qos: .userInteractive),
         observesOutputDeviceChanges: Bool = true
     ) {
         self.makePlayer = makePlayer
         self.preparationQueue = preparationQueue
+        self.playbackQueue = playbackQueue
         if observesOutputDeviceChanges {
             outputDeviceObserver = OutputDeviceConfigurationObserver { [weak self] in
                 self?.handleOutputDeviceConfigurationChange()
@@ -278,15 +324,36 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
 
     @discardableResult
     func play(url: URL) -> Bool {
-        defer { preparePlayer(for: url) }
-        if let cached = cachedPlayers.removeValue(forKey: url),
-           start(cached.player, needsPreparation: !cached.isPrepared) {
-            return true
+        let cached = cachedPlayers.removeValue(forKey: url)
+        let makePlayer = makePlayer
+        let resultHandler = playbackResultHandler
+        pendingOperations.begin()
+        playbackQueue.async { [weak self] in
+            let cue = cached.map { PreparedSoundCue(player: $0.player) }
+                ?? (try? makePlayer(url)).map { PreparedSoundCue(player: $0) }
+            var started = false
+            if let cue {
+                started = Self.start(cue.player, needsPreparation: cached?.isPrepared != true)
+                if started {
+                    let duration = cue.player.duration
+                    Task { @MainActor [weak self] in
+                        self?.durations[url] = duration
+                        self?.activePlayers.append(cue.player)
+                        self?.release(cue.player, after: duration)
+                    }
+                }
+            }
+            if let resultHandler {
+                Task { @MainActor in resultHandler(url, started) }
+            }
+            self?.pendingOperations.end()
         }
+        preparePlayer(for: url)
+        return true
+    }
 
-        guard let player = try? makePlayer(url) else { return false }
-        durations[url] = player.duration
-        return start(player, needsPreparation: true)
+    func setPlaybackResultHandler(_ handler: (@MainActor @Sendable (URL, Bool) -> Void)?) {
+        playbackResultHandler = handler
     }
 
     func duration(for url: URL) -> TimeInterval? {
@@ -329,19 +396,26 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
     }
 
     func waitForPendingPreparationsForTesting() async {
-        while let preparation = preparations.values.first {
-            await preparation.value
+        while !preparations.isEmpty {
+            if let preparation = preparations.values.first {
+                await preparation.value
+            } else {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
         }
     }
 
-    private func start(_ player: any SoundCuePlayback, needsPreparation: Bool) -> Bool {
+    func waitForPendingPlaybackForTesting() async {
+        while !pendingOperations.isIdle {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    private nonisolated static func start(_ player: any SoundCuePlayback, needsPreparation: Bool) -> Bool {
         if needsPreparation {
             player.prepareToPlay()
         }
-        guard player.play() else { return false }
-        activePlayers.append(player)
-        release(player, after: player.duration)
-        return true
+        return player.play()
     }
 
     private func preparePlayer(for url: URL) {
@@ -406,6 +480,9 @@ class SoundService {
 
     init(oneShotPlayer: OneShotSoundPlaying = AVAudioOneShotSoundPlayer()) {
         self.oneShotPlayer = oneShotPlayer
+        oneShotPlayer.setPlaybackResultHandler { [weak self] url, started in
+            self?.handleOneShotPlaybackResult(url: url, started: started)
+        }
         preloadSounds()
         loadChoices()
         prepareFilePlayback()
@@ -415,13 +492,24 @@ class SoundService {
     func play(_ event: SoundEvent, enabled: Bool) -> Bool {
         guard enabled else { return false }
         let choice = choices[event] ?? event.defaultChoice
-        if let playbackURL = filePlaybackURL(for: choice),
-           oneShotPlayer.play(url: playbackURL) {
+        if let playbackURL = filePlaybackURL(for: choice) {
+            oneShotPlayer.play(url: playbackURL)
             return true
         }
         guard let sound = sound(for: choice) else { return false }
+        sound.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
         sound.stop()
         return sound.play()
+    }
+
+    private func handleOneShotPlaybackResult(url: URL, started: Bool) {
+        guard !started else { return }
+        // 音频文件播放失败时回落到同一事件的默认提示音；已保存的选择保持不变。
+        guard let event = SoundEvent.allCases.first(where: { filePlaybackURL(for: choice(for: $0)) == url }),
+              let sound = sound(for: event.defaultChoice) else { return }
+        sound.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
+        sound.stop()
+        sound.play()
     }
 
     func playbackDuration(for event: SoundEvent, enabled: Bool) -> TimeInterval? {

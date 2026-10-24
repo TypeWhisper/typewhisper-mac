@@ -152,6 +152,8 @@ struct NotchIndicatorView: View {
     }
 
     private var expandedBodyHeight: CGFloat {
+        // 面板隐藏后不再为不可见内容计算布局高度。
+        guard geometry.isPresented else { return 0 }
         if countdownPresentation != nil {
             return feedbackBodyHeight
         }

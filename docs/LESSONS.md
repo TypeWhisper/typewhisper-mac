@@ -1,5 +1,20 @@
 # Lessons
 
+- Isolate system input in recording recovery tests (Seen x1: 2026-10-23)
+  - What went wrong: A new recovery test used the real text insertion service and pasted `transcribed` into the foreground application while another phase held the live-run lock.
+  - Evidence: `/tmp/dictum-p5b/restore-test-global-input-incident.log` records insertion at 15:33:17 in `testCancelledRecordingRestoresWithoutPersistedRecoveryAudio`.
+  - Fix: Use a uniquely named pasteboard and test callbacks for paste, copy, return, focus and application capture. Assert the captured inserted text. Global input requires ownership of `/tmp/dictum-run.lock`, including input originating in a test.
+
+- Decide visibility after refreshing the model (Seen x1: 2026-10-24)
+  - What went wrong: The voice bar timer stopped while the bar was hidden, and the wake-up handler ran on `objectWillChange` (before the value changed) and tested `isVisible` before refreshing, so a hidden bar never appeared again.
+  - Evidence: `/tmp/dictum-p5b-fix/fn-insert-1-listening.png` shows no bar during recording; `VoiceBarModelNoticeRenderingTests` fails on the old code and passes after the fix.
+  - Fix: Refresh first, then decide to show or hide; deliver wake-ups on the next main-queue turn. Check a live screenshot of every state, because in-process tests with a hidden panel pass.
+
+- Keep the target application frontmost for the whole live insertion (Seen x1: 2026-10-24)
+  - What went wrong: Another application took focus after the stop key, and the dictated text was pasted into its composer.
+  - Evidence: `/tmp/dictum-p5b-fix/fn-insert-1-feedback.png` (17:46) shows the text in the ChatGPT composer while the harness believed TextEdit was frontmost.
+  - Fix: Re-activate the target every 0.5 s from the key press until the readback, and fail the step when the readback target is not the test document.
+
 Agents write, review, merge and release this project's code. Each time an agent does something wrong, add a lesson below with what went wrong, the evidence, and the fix. "Seen" lists each distinct date the mistake occurred. When a lesson has been seen on 3 or more dates, move it into [CODE STANDARDS](CODE_STANDARDS.md) and delete it from this file.
 
 - [Lesson title] (Seen x2: YYYY-MM-DD, YYYY-MM-DD)

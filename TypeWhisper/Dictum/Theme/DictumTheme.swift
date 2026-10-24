@@ -10,6 +10,7 @@ enum DictumTheme {
     static let success = color(0x23A55A, 0x3CCF72)
     static let warning = color(0xD98A00, 0xFFB340)
     static let danger = color(0xE0434B, 0xFF6369)
+    static let flame = color(0xF07A2A, 0xFF8A3D)
     static let windowBackground = color(0xFFFFFF, 0x1E1E20)
     static let card = color(0xF6F6F8, 0x262629)
     static let raised = color(0xFFFFFF, 0x2C2C2F)
