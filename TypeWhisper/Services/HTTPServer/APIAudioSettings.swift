@@ -92,7 +92,7 @@ enum APIAudioSettings {
                 throw PatchError(message: "'\(key)' is read-only")
             }
             throw PatchError(
-                message: "Unknown field '\(key)'. TypeWhisper for macOS accepts: \(writableFields.joined(separator: ", "))"
+                message: "Unknown field '\(key)'. dictum accepts: \(writableFields.joined(separator: ", "))"
             )
         }
 
