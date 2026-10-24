@@ -22,21 +22,39 @@ enum VoiceBarState: Equatable {
     case countdown(seconds: Int)
     case cancelled(remaining: Double)
 
-    /// 限时错误状态里「打开设置」按钮的去向：dictum 的页面，或听写模型记录的高级设置页面。
+    /// 限时错误状态里按钮的去向：dictum 的页面，或听写模型记录的高级设置页面和听写恢复。
     enum Destination: Equatable {
         case page(DictumPage)
         case advancedSettings
+        case dictationRecovery
 
         init?(tab: SettingsTab?) {
             switch tab {
             case nil: return nil
-            case .home?: self = .page(.home)
             case .general?: self = .page(.general)
             case .dictation?, .installedPlugin?: self = .page(.speech)
+            case .dictationRecovery?: self = .dictationRecovery
             default: self = .advancedSettings
             }
         }
+
+        /// 按钮文案在 DictumHome 表里的键。
+        var buttonTitleKey: String {
+            switch self {
+            case .dictationRecovery: "Open Dictation Recovery"
+            case .page, .advancedSettings: "Open Settings"
+            }
+        }
     }
+
+    /// 限时错误的文字行：消息按换行拆开，最多两行（转写失败附带的听写恢复说明在第二行）。
+    var failureLines: [String] {
+        guard case .failure(let message, _) = self else { return [] }
+        return Array(message.split(separator: "\n", omittingEmptySubsequences: true).prefix(2).map(String.init))
+    }
+
+    /// 按钮行的高度：两行文字的限时错误比单行高 16pt，其余状态 44pt。
+    var rowHeight: CGFloat { failureLines.count > 1 ? 60 : 44 }
 
     struct Input {
         enum Activity { case idle, preparing, recording, processing }

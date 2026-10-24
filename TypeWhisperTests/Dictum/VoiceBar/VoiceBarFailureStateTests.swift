@@ -11,7 +11,8 @@ final class VoiceBarFailureStateTests: XCTestCase {
             ("xmark.circle.fill", true, .dictation, .failure("m", destination: .page(.speech))),
             ("xmark.circle.fill", true, .installedPlugin(pluginId: "com.example.engine"), .failure("m", destination: .page(.speech))),
             ("xmark.circle.fill", true, .general, .failure("m", destination: .page(.general))),
-            ("xmark.circle.fill", true, .dictationRecovery, .failure("m", destination: .advancedSettings)),
+            ("xmark.circle.fill", true, .dictationRecovery, .failure("m", destination: .dictationRecovery)),
+            ("xmark.circle.fill", true, .workflows, .failure("m", destination: .advancedSettings)),
             ("exclamationmark.triangle", true, nil, .failure("m", destination: nil)),
             ("xmark.circle.fill", true, .home, .blockingError("m", page: .home)),
             ("mic.slash", true, nil, .blockingError("m", page: .general)),
@@ -27,6 +28,39 @@ final class VoiceBarFailureStateTests: XCTestCase {
             let state = outcome == nil ? nil : VoiceBarState.derive(input)
             XCTAssertEqual(state, expected, "\(icon ?? "nil") isError=\(isError) tab=\(String(describing: tab))")
         }
+    }
+
+    func testRecoveryAwareFailureShowsBothLinesAndNamesItsButton() throws {
+        let message = "Transcription failed\nThe recording was saved to Dictation Recovery."
+        var input = VoiceBarState.Input()
+        input.outcome = Outcome.feedback(icon: "xmark.circle.fill", message: message, isError: true, settingsTab: .dictationRecovery, translation: false)
+        let state = VoiceBarState.derive(input)
+        XCTAssertEqual(state, .failure(message, destination: .dictationRecovery))
+        XCTAssertEqual(state.failureLines, ["Transcription failed", "The recording was saved to Dictation Recovery."])
+        XCTAssertEqual(state.rowHeight, 60)
+
+        XCTAssertEqual(try localized("Open Dictation Recovery", language: "en"), "Open Dictation Recovery")
+        XCTAssertEqual(try localized("Open Dictation Recovery", language: "zh-Hans"), "打开听写恢复")
+        let key = try XCTUnwrap(VoiceBarState.Destination(tab: .dictationRecovery)?.buttonTitleKey)
+        XCTAssertEqual(key, "Open Dictation Recovery")
+    }
+
+    func testSingleLineFailuresKeepTheOrdinaryRowAndSettingsButton() throws {
+        XCTAssertEqual(VoiceBarState.failure("m", destination: nil).failureLines, ["m"])
+        XCTAssertEqual(VoiceBarState.failure("m", destination: nil).rowHeight, 44)
+        XCTAssertEqual(VoiceBarState.failure("a\nb\nc", destination: nil).failureLines, ["a", "b"])
+        XCTAssertEqual(VoiceBarState.idle.failureLines, [])
+        XCTAssertEqual(VoiceBarState.blockingError("a\nb", page: .general).rowHeight, 44)
+        for destination in [VoiceBarState.Destination.page(.speech), .advancedSettings] {
+            XCTAssertEqual(destination.buttonTitleKey, "Open Settings")
+        }
+        XCTAssertEqual(try localized("Open Settings", language: "zh-Hans"), "打开设置")
+    }
+
+    private func localized(_ key: String, language: String) throws -> String {
+        let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+        let bundle = try XCTUnwrap(Bundle(path: path))
+        return bundle.localizedString(forKey: key, value: "MISSING", table: "DictumHome")
     }
 
     func testTranslationWarningKeepsItsOwnState() {

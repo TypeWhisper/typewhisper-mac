@@ -57,7 +57,7 @@ final class VoiceBarPresentation: ObservableObject {
             }
         }
 #endif
-        guard state.showsTranscript, hasTranscript else { return NSSize(width: state.collapsedWidth, height: 44) }
+        guard state.showsTranscript, hasTranscript else { return NSSize(width: state.collapsedWidth, height: state.rowHeight) }
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = 22
         paragraph.maximumLineHeight = 22
@@ -382,6 +382,21 @@ final class VoiceBarPanel: NSPanel {
     }
 }
 
+extension VoiceBarState.Destination {
+    /// 用户点了按钮：去对应页面，菜单栏上同一条错误随之清除，语音条反馈结束。
+    @MainActor
+    func open(dictation: DictationViewModel = .shared, openPage: (DictumPage) -> Void = { DictumNavigation.shared.open($0) }) {
+        switch self {
+        case .page(let page):
+            openPage(page)
+            dictation.clearLastDictationError()
+        case .advancedSettings, .dictationRecovery:
+            dictation.performActionFeedbackAction()
+        }
+        dictation.dismissActionFeedback()
+    }
+}
+
 private extension VoiceBarState {
     var feedbackLifetime: TimeInterval? {
         let lifetime: TimeInterval? = switch self {
@@ -436,7 +451,7 @@ struct VoiceBarView: View {
             if model.state.showsTranscript && model.hasTranscript {
                 transcript.padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 2)
             }
-            HStack(spacing: 10) { controls }.padding(.leading, 15).padding(.trailing, 7).frame(height: 44)
+            HStack(spacing: 10) { controls }.padding(.leading, 15).padding(.trailing, 7).frame(height: model.state.rowHeight)
         }
         .frame(width: model.contentSize.width, height: model.contentSize.height, alignment: .bottom)
         .foregroundStyle(.white)
@@ -553,12 +568,20 @@ struct VoiceBarView: View {
         case .blockingError(let message, let page):
             Image(systemName: "mic.slash.fill").foregroundStyle(DictumTheme.danger)
             if message.isEmpty { label("Microphone unavailable") } else { Text(verbatim: message).lineLimit(1) }
-            action("Open Settings") { model.dismissFeedback(); DictumNavigation.shared.open(page) }
+            action("Open Settings") { model.dismissFeedback(); VoiceBarState.Destination.page(page).open() }
             Button { model.dismissFeedback() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel(Text("Close", tableName: "DictumHome"))
         case .failure(let message, let destination):
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DictumTheme.warning)
-            Text(verbatim: message).font(.system(size: 12.5)).lineLimit(1)
-            if let destination { action("Open Settings") { open(destination) } }
+            let lines = model.state.failureLines
+            if lines.count > 1 {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: lines[0]).font(.system(size: 12.5)).lineLimit(1)
+                    Text(verbatim: lines[1]).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.7)).lineLimit(1).minimumScaleFactor(0.85)
+                }
+            } else {
+                Text(verbatim: message).font(.system(size: 12.5)).lineLimit(1)
+            }
+            if let destination { action(LocalizedStringKey(destination.buttonTitleKey)) { destination.open() } }
         case .noSpeech:
             Image(systemName: "mic.slash")
             label("Didn't hear anything")
@@ -617,13 +640,6 @@ struct VoiceBarView: View {
         Button { DictationViewModel.shared.cancelFromVoiceBar() } label: {
             Image(systemName: "xmark").frame(width: 30, height: 30)
         }.buttonStyle(.plain).accessibilityLabel(Text("Cancel", tableName: "DictumHome")).help("esc")
-    }
-    private func open(_ destination: VoiceBarState.Destination) {
-        switch destination {
-        case .page(let page): DictumNavigation.shared.open(page)
-        case .advancedSettings: DictationViewModel.shared.performActionFeedbackAction()
-        }
-        DictationViewModel.shared.dismissActionFeedback()
     }
     private func label(_ key: LocalizedStringKey) -> some View { Text(key, tableName: "DictumHome").font(.system(size: 12.5)) }
     private func action(_ key: LocalizedStringKey, perform: @escaping () -> Void) -> some View {
