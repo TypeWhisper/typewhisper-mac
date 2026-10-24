@@ -320,6 +320,7 @@ final class DictationViewModel: ObservableObject {
     }
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""
+    @Published private(set) var streamingPreview: StreamingHandler.Preview = .init(confirmedPrefix: "", tentativeTail: "")
     @Published private(set) var modelNotice: DictationModelNotice?
     private var modelNoticeTask: Task<Void, Never>?
     @Published var isStreaming: Bool = false
@@ -835,6 +836,9 @@ final class DictationViewModel: ObservableObject {
         }
         streamingHandler.onStreamingStateChange = { [weak self] streaming in
             self?.isStreaming = streaming
+        }
+        streamingHandler.onPreviewUpdate = { [weak self] preview in
+            self?.streamingPreview = preview
         }
         audioRecordingService.onFirstRecordingAudioBuffer = { [weak self] uptimeNanoseconds in
             self?.handleFirstRecordingAudioBuffer(at: uptimeNanoseconds)
@@ -1876,6 +1880,7 @@ final class DictationViewModel: ObservableObject {
         clearCancelWarning()
 
         guard state == .recording || state == .processing else { return }
+        cancelActiveDictationSessionIfNeeded()
         cancelledRecordingTask?.cancel()
         discardCancelledRecording()
         let cancelledSessionID = activeDictationSessionID
@@ -1948,6 +1953,9 @@ final class DictationViewModel: ObservableObject {
     func restoreCancelledRecording() {
         guard let deadline = cancelledRecordingDeadline, Date() < deadline,
               state == .inserting, activeDictationSessionID == cancelledSessionID else { return }
+        if let cancelledSessionID {
+            beginDictationSession(id: cancelledSessionID)
+        }
         cancelledRecordingTask?.cancel()
         cancelledRecordingDeadline = nil
         indicatorFeedbackLifetime.cancel()
@@ -2293,6 +2301,7 @@ final class DictationViewModel: ObservableObject {
         modelManager.cancelAutoUnloadTimer()
         state = .recording
         partialText = ""
+        streamingPreview = .init(confirmedPrefix: "", tentativeTail: "")
         isStopInFlight = false
         recordingStartTime = nil
         stopRecordingTimer()
@@ -2343,6 +2352,7 @@ final class DictationViewModel: ObservableObject {
         // not from the key press or Bluetooth route preparation.
         hotkeyService.resetKeyDownTime()
         partialText = ""
+        streamingPreview = .init(confirmedPrefix: "", tentativeTail: "")
         isStopInFlight = false
         recordingStartTime = Date()
         startRecordingTimer()
@@ -4122,6 +4132,7 @@ final class DictationViewModel: ObservableObject {
         clearCancelWarning()
         state = .idle
         partialText = ""
+        streamingPreview = .init(confirmedPrefix: "", tentativeTail: "")
         recordingStartTime = nil
         clearActiveRuleState()
         capturedActiveApp = nil

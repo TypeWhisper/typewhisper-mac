@@ -97,6 +97,7 @@ final class VoiceBarPresentation: ObservableObject {
         }
         var input = VoiceBarState.Input()
         input.confirmedText = vm.partialText
+        input.tentativeText = vm.streamingPreview.tentativeTail
         input.duration = vm.recordingDuration
         input.cancellationRemaining = vm.state == .inserting ? vm.cancelledRecordingDeadline?.timeIntervalSinceNow : nil
         input.translation = SettingsViewModel.shared.translationEnabled
@@ -290,7 +291,7 @@ private extension VoiceBarState {
     var collapsedWidth: CGFloat {
         switch self {
         case .inserted, .cancelled, .noSpeech: 220
-        case .listening: 284
+        case .listening: 300
         case .translating, .targetMenu: 460
         default: 390
         }
@@ -355,7 +356,8 @@ struct VoiceBarView: View {
                         .foregroundStyle(LinearGradient(
                             colors: isPolishing && !reduceMotion ? [.white.opacity(0.55), .white, .white.opacity(0.55)] : [.white, .white],
                             startPoint: UnitPoint(x: phase * 2 - 1, y: 0), endPoint: UnitPoint(x: phase * 2, y: 0)
-                        ))
+                        )) + Text(verbatim: model.tentativeText).font(.system(size: 15)).lineSpacing(4)
+                            .foregroundStyle(Color.white.opacity(0.34))
                         .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                 }.id("transcript")
             }
@@ -379,7 +381,7 @@ struct VoiceBarView: View {
             ProgressView().controlSize(.small)
             label("Getting ready")
             waveform
-            Text(verbatim: timerText).font(.system(size: 13, design: .rounded)).foregroundStyle(.white.opacity(0.58))
+            Text(verbatim: timerText).font(.system(size: 13, design: .rounded)).lineLimit(1).fixedSize().foregroundStyle(.white.opacity(0.58))
             cancel
         case .listening, .listeningWithText, .translating, .targetMenu, .countdown:
             if model.state == .translating || model.state == .targetMenu { VoiceBarLanguageMenu(isOpen: $model.targetMenuOpen) }
@@ -387,7 +389,7 @@ struct VoiceBarView: View {
                 Circle().trim(from: 0, to: Double(seconds) / 60).stroke(DictumTheme.warning, lineWidth: 2).rotationEffect(.degrees(-90)).frame(width: 18, height: 18)
             } else { liveDot }
             waveform
-            Text(verbatim: timerText).font(.system(size: 13, design: .rounded)).monospacedDigit().foregroundStyle(timerColor)
+            Text(verbatim: timerText).font(.system(size: 13, design: .rounded)).monospacedDigit().lineLimit(1).fixedSize().foregroundStyle(timerColor)
             cancel
             Button { _ = DictationViewModel.shared.apiStopRecording() } label: {
                 Image(systemName: "checkmark").foregroundStyle(.black).frame(width: 30, height: 30).background(.white, in: Circle())
