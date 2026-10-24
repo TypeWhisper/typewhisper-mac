@@ -1061,6 +1061,57 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testHanCorrectionsApplyInsideChineseSentencesExceptSingleCharacters() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "新河", replacement: "星河")
+        service.addEntry(type: .correction, original: "迪克腾", replacement: "dictum")
+        service.addEntry(type: .correction, original: "河", replacement: "何")
+
+        XCTAssertEqual(service.previewCorrections(to: "我们讨论新河项目。"), "我们讨论星河项目。")
+        XCTAssertEqual(service.applyCorrections(to: "我们讨论新河项目。"), "我们讨论星河项目。")
+        XCTAssertEqual(service.applyCorrections(to: "我想用迪克腾做听写"), "我想用dictum做听写")
+        XCTAssertEqual(service.applyCorrections(to: "新河旁边的河流很长。"), "星河旁边的河流很长。")
+        XCTAssertEqual(service.applyCorrections(to: "河"), "何")
+    }
+
+    @MainActor
+    func testMixedScriptCorrectionsInChineseText() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "新河", replacement: "星河")
+        service.addEntry(type: .correction, original: "clawed code", replacement: "Claude Code")
+
+        XCTAssertEqual(service.previewCorrections(to: "打开新河app看看"), "打开星河app看看")
+        XCTAssertEqual(service.applyCorrections(to: "打开新河app看看"), "打开星河app看看")
+        XCTAssertEqual(service.applyCorrections(to: "第2新河3号楼"), "第2星河3号楼")
+        XCTAssertEqual(service.previewCorrections(to: "我用clawed code写"), "我用Claude Code写")
+        XCTAssertEqual(service.applyCorrections(to: "我用clawed code写"), "我用Claude Code写")
+        XCTAssertEqual(service.applyCorrections(to: "我用clawed codes写"), "我用clawed codes写")
+    }
+
+    @MainActor
+    func testAutoLearnedChineseCorrectionAppliesToTheSentenceItWasLearnedFrom() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let original = "周四下午三点，讨论新河项目，请准备会议记录。"
+        let edited = "周四下午三点，讨论星河项目，请准备会议记录。"
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let learned = service.learnCorrections(
+            TextDiffService().extractHighConfidenceCorrections(original: original, edited: edited)
+        )
+
+        XCTAssertEqual(learned.map(\.original), ["新河"])
+        XCTAssertEqual(service.previewCorrections(to: original), edited)
+        XCTAssertEqual(service.applyCorrections(to: original), edited)
+    }
+
+    @MainActor
     func testAPITermHelpersDeleteSingleTermWithoutClearingOthers() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

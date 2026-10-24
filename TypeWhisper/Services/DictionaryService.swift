@@ -1281,6 +1281,12 @@ final class DictionaryService: ObservableObject {
             return previous?.isLatinOrNumber != true && next?.isLatinOrNumber != true
         }
 
+        // 中文词与词之间没有分隔，两个字以上的汉字词在不含假名的文本中直接匹配；
+        // 单字词和日文文本仍按词边界判断，避免改动更长的词。
+        if original.isAllHan, original.count > 1, !text.containsKana {
+            return true
+        }
+
         let startsAtBoundary = previous?.isWordLike != true || previous?.isJapaneseParticleBoundary == true
         let endsAtBoundary = next?.isWordLike != true ||
             next?.isJapaneseParticleBoundary == true ||
@@ -1746,6 +1752,14 @@ private extension Character {
         unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) && $0.value < 0x3000 }
     }
 
+    var isHan: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
+            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
+            (0x20000...0x323AF).contains(Int(scalar.value))
+        }
+    }
+
     var isWordLike: Bool {
         unicodeScalars.contains { scalar in
             CharacterSet.alphanumerics.contains(scalar) ||
@@ -1818,6 +1832,20 @@ private extension String {
     var isAllLatinOrNumber: Bool {
         !isEmpty && allSatisfy { character in
             character.isLatinOrNumber || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+        }
+    }
+
+    var isAllHan: Bool {
+        !isEmpty && allSatisfy { character in
+            character.isHan || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+        }
+    }
+
+    var containsKana: Bool {
+        unicodeScalars.contains { scalar in
+            (0x3040...0x30FF).contains(Int(scalar.value)) ||
+            (0x31F0...0x31FF).contains(Int(scalar.value)) ||
+            (0xFF66...0xFF9D).contains(Int(scalar.value))
         }
     }
 }
