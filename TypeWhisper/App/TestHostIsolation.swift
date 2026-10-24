@@ -119,6 +119,12 @@ enum TestHostIsolation {
         kill(processID, 0) != 0 && errno == ESRCH
     }
 
+    /// 真实焦点元素属于正在使用这台 Mac 的人，测试宿主读取它会把那个应用的字段
+    /// 内容带进测试结果。测试只接受本进程的元素，其余一律拒绝。
+    static func focusedElementBelongsToTestHost(_ processIdentifier: pid_t) -> Bool {
+        processIdentifier == ProcessInfo.processInfo.processIdentifier
+    }
+
     /// 测试用例创建的偏好设置套件只在运行结束时才能知道哪些需要删除，所以创建时记录下来。
     static let createdSuiteNames = OSAllocatedUnfairLock(initialState: Set<String>())
 

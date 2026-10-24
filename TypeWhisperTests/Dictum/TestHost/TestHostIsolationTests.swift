@@ -232,6 +232,36 @@ final class TestHostIsolationTests: XCTestCase {
         XCTAssertTrue(taps.allSatisfy { $0.options == .listenOnly }, "The test host must not hold an active tap")
     }
 
+    func testFocusedElementIsOnlyReadableWhenTheTestHostOwnsIt() {
+        let ownProcessID = ProcessInfo.processInfo.processIdentifier
+        XCTAssertTrue(TestHostIsolation.focusedElementBelongsToTestHost(ownProcessID))
+        XCTAssertFalse(TestHostIsolation.focusedElementBelongsToTestHost(1))
+
+        let service = TextInsertionService()
+        XCTAssertTrue(service.systemFocusedElementIsReadable(AXUIElementCreateApplication(ownProcessID)))
+        XCTAssertFalse(service.systemFocusedElementIsReadable(AXUIElementCreateApplication(1)))
+    }
+
+    func testRealFocusedElementReadsNeverReturnAnotherProcessesField() {
+        let ownProcessID = ProcessInfo.processInfo.processIdentifier
+        let service = TextInsertionService()
+        service.accessibilityGrantedOverride = true
+
+        if let element = service.getFocusedTextElement() {
+            var owner: pid_t = 0
+            AXUIElementGetPid(element, &owner)
+            XCTAssertEqual(owner, ownProcessID)
+        }
+        if let selection = service.getTextSelection() {
+            var owner: pid_t = 0
+            AXUIElementGetPid(selection.element, &owner)
+            XCTAssertEqual(owner, ownProcessID)
+        }
+        if service.getFocusedTextElement() == nil {
+            XCTAssertNil(service.captureInsertionContext())
+        }
+    }
+
     private func ownEventTaps() -> [CGEventTapInformation] {
         var count: UInt32 = 0
         CGGetEventTapList(0, nil, &count)

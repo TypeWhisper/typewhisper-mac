@@ -586,7 +586,9 @@ final class TextInsertionService {
                   CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
                 return nil
             }
-            element = focusedElement as! AXUIElement
+            let systemElement = focusedElement as! AXUIElement
+            guard systemFocusedElementIsReadable(systemElement) else { return nil }
+            element = systemElement
         }
 
         if let selection = selectionOwnedByElement(element) {
@@ -630,6 +632,7 @@ final class TextInsertionService {
         }
 
         guard let element = axElement(from: focusedElement) else { return (nil, false) }
+        guard systemFocusedElementIsReadable(element) else { return (nil, false) }
         applyMessagingTimeout(messagingTimeout, to: element)
         if isLiveFieldTextRole(element) {
             return (element, true)
@@ -1699,6 +1702,7 @@ final class TextInsertionService {
         }
 
         let axElement = element as! AXUIElement
+        guard systemFocusedElementIsReadable(axElement) else { return nil }
 
         // Try to get the caret position from selected text range
         if let rect = caretRect(from: axElement) {
@@ -2436,6 +2440,15 @@ final class TextInsertionService {
             kAXFocusedAttribute as CFString,
             kCFBooleanTrue
         ) == .success
+    }
+
+    /// 系统级焦点元素是否允许读取。测试宿主只读取本进程的元素，其他应用里的字段内容
+    /// 属于正在使用这台 Mac 的人，进入测试结果会让测试依赖他的光标位置。
+    func systemFocusedElementIsReadable(_ element: AXUIElement) -> Bool {
+        guard AppConstants.isRunningTests else { return true }
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(element, &processIdentifier) == .success else { return false }
+        return TestHostIsolation.focusedElementBelongsToTestHost(processIdentifier)
     }
 
     private func liveFieldProcessIdentifier(for element: AXUIElement) -> pid_t? {
