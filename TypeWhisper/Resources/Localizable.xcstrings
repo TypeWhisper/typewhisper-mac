@@ -9083,24 +9083,24 @@
         }
       }
     },
-    "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Disabled: Esc never cancels and passes through to the app. Applies to recording and processing." : {
+    "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Disabled: Esc never cancels and passes through to the app. Applies to recording and processing." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Doppelt: Esc zweimal drücken. Einfach: Esc einmal drücken. Beide zeigen für 1,5 Sekunden eine Abbruchbestätigung. Instant: Esc einmal drücken, ohne Bestätigungsanzeige. Deaktiviert: Esc bricht nie ab und wird an die App weitergeleitet. Gilt für Aufnahme und Verarbeitung."
+            "value" : "Doppelt: Esc zweimal drücken. Einfach: Esc einmal drücken. Beide zeigen für 1,5 Sekunden eine Abbruchbestätigung. Deaktiviert: Esc bricht nie ab und wird an die App weitergeleitet. Gilt für Aufnahme und Verarbeitung."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "双次：按两次 Esc 取消。单次：按一次 Esc 取消。这两种方式都会显示 1.5 秒的取消提示。即时：按一次 Esc 取消，不显示提示。禁用：Esc 不会取消，并传递给应用。适用于录音和处理。"
+            "value" : "双次：按两次 Esc 取消。单次：按一次 Esc 取消。这两种方式都会显示 1.5 秒的取消提示。禁用：Esc 不会取消，并传递给应用。适用于录音和处理。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "2回：Escキーを2回押してキャンセルします。1回：Escキーを1回押します。どちらもキャンセル通知を1.5秒間表示します。即時：Escキーを1回押すと、通知を表示せずにキャンセルします。無効：Escを押してもキャンセルされず、アプリにそのまま渡されます。録音中と処理中の両方に適用されます。"
+            "value" : "2回：Escキーを2回押してキャンセルします。1回：Escキーを1回押します。どちらもキャンセル通知を1.5秒間表示します。無効：Escを押してもキャンセルされず、アプリにそのまま渡されます。録音中と処理中の両方に適用されます。"
           }
         }
       }
@@ -9207,34 +9207,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1回"
-          }
-        }
-      }
-    },
-    "cancellationBehavior.instant" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instant"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "即时"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instant"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "即時"
           }
         }
       }

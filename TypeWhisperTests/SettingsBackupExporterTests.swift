@@ -584,7 +584,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         let cases: [(String?, Bool?, CancellationBehavior?)] = [
             ("doubleEscape", nil, .doubleEscape),
             ("singleEscape", nil, .singleEscape),
-            ("instant", true, .instant),
             (nil, true, .doubleEscape),
             (nil, false, .singleEscape),
             ("unknown", false, .singleEscape),
@@ -600,7 +599,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             let decoded = try JSONDecoder().decode(SettingsBackupExporter.SettingsBackup.self, from: JSONSerialization.data(withJSONObject: json))
             let destination = try makeFixture()
             defer { teardown(destination) }
-            destination.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
+        destination.userDefaults.set("singleEscape", forKey: UserDefaultsKeys.cancellationBehavior)
             var applied: CancellationBehavior?
             let result = await SettingsBackupExporter.importBackup(
                 decoded,
@@ -616,7 +615,7 @@ final class SettingsBackupExporterTests: XCTestCase {
                 cancellationBehaviorDidChange: { applied = $0 }
             )
             XCTAssertEqual(applied, expected)
-            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), expected ?? .instant)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), expected ?? .doubleEscape)
             XCTAssertEqual(result.preferencesApplied, expected == nil ? 0 : 1)
         }
     }
@@ -710,7 +709,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
         source.userDefaults.set("glass", forKey: UserDefaultsKeys.indicatorTheme)
-        source.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
+        source.userDefaults.set("singleEscape", forKey: UserDefaultsKeys.cancellationBehavior)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
@@ -736,7 +735,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
         XCTAssertEqual(backup.preferences.indicatorTheme, "glass")
-        XCTAssertEqual(backup.preferences.cancellationBehavior, "instant")
+        XCTAssertEqual(backup.preferences.cancellationBehavior, "singleEscape")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.liveFieldTranscriptEnabled, true)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
@@ -779,8 +778,8 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled), true)
         XCTAssertEqual(appliedLiveFieldTranscriptEnabled, true)
-        XCTAssertEqual(appliedCancellationBehavior, .instant)
-        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), .instant)
+        XCTAssertEqual(appliedCancellationBehavior, .doubleEscape)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), .doubleEscape)
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
