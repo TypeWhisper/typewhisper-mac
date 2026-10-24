@@ -38,8 +38,16 @@ final class VoiceBarModelNoticeRenderingTests: XCTestCase {
         }
         XCTAssertNotNil(plugin.currentSettingsActivity)
         let dictation = services.dictationViewModel
+        let panel = VoiceBarPanel()
+        panel.startObserving()
+        defer { panel.orderOut(nil) }
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(55)) }
+        XCTAssertFalse(panel.isVisible)
         _ = dictation.apiStartRecording()
         XCTAssertEqual(dictation.modelNotice, .downloading(progress: nil))
+        // 隐藏期间刷新已停止，模型提示出现后语音条仍要被唤醒并显示。
+        for _ in 0..<40 where !panel.isVisible { try await Task.sleep(for: .milliseconds(55)) }
+        XCTAssertTrue(panel.isVisible)
 
         let presentation = VoiceBarPresentation()
         presentation.refresh(.shared)

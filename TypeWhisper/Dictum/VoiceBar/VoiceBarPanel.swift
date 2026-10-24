@@ -230,8 +230,9 @@ final class VoiceBarPanel: NSPanel {
         screenChangeObservers.append(notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.lastScreenResolve = .distantPast })
-        // 隐藏期间 55ms 定时刷新停止；模型变化先唤醒一次刷新，再按需恢复定时器。
-        wakeObserver = DictationViewModel.shared.objectWillChange.sink { [weak self] _ in
+        // 隐藏期间 55ms 定时刷新停止；objectWillChange 在属性变化之前触发，
+        // 延后到下一轮主线程再刷新，才能读到变化后的值。
+        wakeObserver = DictationViewModel.shared.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
             guard let self, self.timer == nil else { return }
             self.tick()
         }
@@ -262,9 +263,8 @@ final class VoiceBarPanel: NSPanel {
     }
 
     private func tick() {
-        guard VoiceBarPresentation.enabled, presentation.isActive, isVisible else {
-            stopTimer()
-            self.presentation.refresh(.shared)
+        presentation.refresh(.shared)
+        guard VoiceBarPresentation.enabled, presentation.isActive else {
             if presentation.isPresented {
                 presentation.isPresented = false
                 hideTask = Task { [weak self] in
@@ -272,6 +272,8 @@ final class VoiceBarPanel: NSPanel {
                     guard let self, !self.presentation.isPresented else { return }
                     self.orderOut(nil)
                 }
+            } else {
+                stopTimer()
             }
             return
         }
