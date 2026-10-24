@@ -42,6 +42,11 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence: `/tmp/dictum-fix-output/r1-early-start-runtime.log` records dictation starting before the initial window became key. The receipt in `r1-final-cold-zh/proof.json` has a correct transcript, zero document bytes and `insertion=not-inserted`. Process inspection reported `launched-suspended`.
   - Fix: Wait for the run command's terminal exit result before launching the harness or inspecting the app PID. Confirm the target application is in front. The fresh cold run in `r1-final-verified-zh/proof.json` passed with one 54-byte insertion.
 
+- Serialize verification commands within one worktree (Seen x1: 2026-10-23)
+  - What went wrong: A second verification started after an Xcode compilation failure while the first invocation was still running SDK tests. Both commands wrote the same receipts and redirected log.
+  - Evidence: The shared log contained sparse bytes and an xcresult reader error, while the later invocation returned zero and its independent Xcode result reported 2,980 passing tests.
+  - Fix: Wait for the complete shell invocation to exit before starting another verification in that worktree. Use a distinct redirected log for each attempt and retain the final exit status together with the result bundle summary.
+
 - 真实字段测试依赖辅助功能授权，宿主没有授权时整个测试类会被静默跳过 (Seen x1: 2026-10-24)
   - 问题：`DuplicateInsertionRealFieldTests` 在测试宿主没有辅助功能授权时用 `XCTSkip` 跳过，换一台 Mac 运行时这组覆盖会无声消失，容易误以为修复仍被测试覆盖。
   - 证据：测试文件 `setUp` 中的 `throw XCTSkip("测试宿主没有辅助功能授权，无法通过 AX 操作本进程的文本字段")` 是唯一的授权门槛，跳过只出现在跳过计数里，不产生任何失败。

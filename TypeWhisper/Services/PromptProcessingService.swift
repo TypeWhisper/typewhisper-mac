@@ -111,6 +111,7 @@ class PromptProcessingService: ObservableObject {
     private var isSynchronizingLegacySelection = false
 
     @Published private(set) var fallbackPriorityList: [LLMFallbackPriorityItem]
+    @Published private(set) var failedFallbackIDs: Set<UUID> = []
 
     /// Compatibility projections for the currently uninstantiated legacy prompt
     /// settings view. They always reflect the first fallback item and never write
@@ -156,10 +157,25 @@ class PromptProcessingService: ObservableObject {
     }
 
     var isCurrentProviderReady: Bool {
-        primaryFallbackItem.map { isProviderReady($0.providerId) } ?? false
+        primaryFallbackItem.map { isProviderReady($0.providerId) && !failedFallbackIDs.contains($0.id) } ?? false
+    }
+
+    func recordConnectionResult(for item: LLMFallbackPriorityItem, succeeded: Bool) {
+        if succeeded { failedFallbackIDs.remove(item.id) } else { failedFallbackIDs.insert(item.id) }
+    }
+
+    var hasConfiguredPolishProvider: Bool {
+        fallbackPriorityList.contains { isProviderReady($0.providerId) }
     }
 
     func isProviderReady(_ providerId: String) -> Bool {
+        if providerId.hasPrefix("openai-compatible") {
+            let selector = NSSelectorFromString("dictumHasCredentials:")
+            guard let plugin = ProviderConfiguration.compatiblePlugin,
+                  plugin.responds(to: selector),
+                  let ready = plugin.perform(selector, with: providerId)?.takeUnretainedValue() as? NSNumber,
+                  ready.boolValue else { return false }
+        }
         return PluginManager.shared?.llmProvider(for: providerId)?.isAvailable ?? false
     }
 
@@ -553,6 +569,7 @@ class PromptProcessingService: ObservableObject {
                 }
 
                 logger.info("Prompt processing complete in \(ContinuousClock.now - totalStart), result length: \(result.count)")
+                if usesFallbackList { failedFallbackIDs.remove(candidate.id) }
                 return result
             } catch {
                 if Task.isCancelled {
@@ -564,6 +581,7 @@ class PromptProcessingService: ObservableObject {
                 guard usesFallbackList else {
                     throw error
                 }
+                failedFallbackIDs.insert(candidate.id)
 
                 if case LLMFallbackAttemptError.emptyResult = error {
                     emptyResultCount += 1
@@ -931,6 +949,7 @@ class PromptProcessingService: ObservableObject {
         }
 
         fallbackPriorityList = normalized
+        failedFallbackIDs.formIntersection(Set(normalized.map(\.id)))
         persistFallbackPriorityList(normalized)
         synchronizeLegacySelection()
     }

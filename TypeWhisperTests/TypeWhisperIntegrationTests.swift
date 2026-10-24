@@ -218,7 +218,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         super.tearDown()
     }
 
-    private final class KeychainTokenProbe: @unchecked Sendable {
+    private final class TokenStoreProbe: @unchecked Sendable {
         private let lock = NSLock()
         private var loadCalls = 0
         private var saveCalls = 0
@@ -2121,8 +2121,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         HTTPRequest(method: method, path: path, queryParams: [:], headers: headers, body: Data())
     }
 
-    func testLocalAPIAuthenticatorDefersKeychainReadOffMainThread() async throws {
-        let probe = KeychainTokenProbe()
+    func testLocalAPIAuthenticatorDefersTokenReadOffMainThread() async throws {
+        let probe = TokenStoreProbe()
         let authenticator = LocalAPIAuthenticator(
             requiresAuthentication: true,
             tokenLoader: { probe.load() },

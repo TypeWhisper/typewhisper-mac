@@ -33027,44 +33027,6 @@
         }
       }
     },
-    "Start dictation, search history and switch profiles directly from Raycast." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Starte Diktat, durchsuche den Verlauf und wechsle Profile direkt aus Raycast."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dictationを開始し、履歴を検索し、Raycastからプロファイルを直接切り替えます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "直接从 Raycast 开始听写、搜索历史记录和切换配置文件。"
-          }
-        }
-      }
-    },
-    "Start dictation, search history and switch profiles directly from Raycast. Requires the API server to be running." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Raycastから直接、ディクテーション開始、履歴検索、プロファイル切り替えができます。APIサーバーが実行中である必要があります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "直接从 Raycast 开始听写、搜索历史记录和切换配置文件。需要先运行 API 服务器。"
-          }
-        }
-      }
-    },
     "Start with a flexible workflow draft." : {
       "localizations" : {
         "ja" : {
