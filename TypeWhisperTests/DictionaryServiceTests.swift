@@ -1112,6 +1112,17 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testManualHanCorrectionAppliesWithoutTheSoundAlikeLearningRule() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "记录", replacement: "纪要")
+
+        XCTAssertEqual(service.applyCorrections(to: "请准备会议记录。"), "请准备会议纪要。")
+    }
+
+    @MainActor
     func testAPITermHelpersDeleteSingleTermWithoutClearingOthers() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
