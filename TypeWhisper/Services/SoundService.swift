@@ -153,6 +153,30 @@ private final class PreparedSoundCue: @unchecked Sendable {
     }
 }
 
+private final class PlaybackOperationCounter: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var count = 0
+
+    func begin() {
+        condition.lock()
+        count += 1
+        condition.unlock()
+    }
+
+    func end() {
+        condition.lock()
+        count = max(0, count - 1)
+        if count == 0 { condition.broadcast() }
+        condition.unlock()
+    }
+
+    var isIdle: Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        return count == 0
+    }
+}
+
 /// Calls `onChange` on the main queue when the default output device changes, or when the
 /// current default output device changes its sample rate or output channel configuration.
 /// The latter covers devices that keep their ID while reconfiguring, such as a Bluetooth
@@ -270,6 +294,7 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
     private var preparations: [URL: Task<Void, Never>] = [:]
     private var preparationGenerations: [URL: Int] = [:]
     private var activePlayers: [any SoundCuePlayback] = []
+    private let pendingOperations = PlaybackOperationCounter()
 
     init(
         makePlayer: @escaping PlayerFactory = {
@@ -291,15 +316,28 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
 
     @discardableResult
     func play(url: URL) -> Bool {
-        defer { preparePlayer(for: url) }
-        if let cached = cachedPlayers.removeValue(forKey: url),
-           start(cached.player, needsPreparation: !cached.isPrepared) {
-            return true
+        let cached = cachedPlayers.removeValue(forKey: url)
+        let makePlayer = makePlayer
+        let preparationQueue = preparationQueue
+        pendingOperations.begin()
+        preparationQueue.async { [weak self] in
+            let cue = cached.map { PreparedSoundCue(player: $0.player) }
+                ?? (try? makePlayer(url)).map { PreparedSoundCue(player: $0) }
+            if let cue {
+                let started = Self.start(cue.player, needsPreparation: cached?.isPrepared != true)
+                if started {
+                    let duration = cue.player.duration
+                    Task { @MainActor [weak self] in
+                        self?.durations[url] = duration
+                        self?.activePlayers.append(cue.player)
+                        self?.release(cue.player, after: duration)
+                    }
+                }
+            }
+            self?.pendingOperations.end()
         }
-
-        guard let player = try? makePlayer(url) else { return false }
-        durations[url] = player.duration
-        return start(player, needsPreparation: true)
+        preparePlayer(for: url)
+        return true
     }
 
     func duration(for url: URL) -> TimeInterval? {
@@ -342,19 +380,26 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
     }
 
     func waitForPendingPreparationsForTesting() async {
-        while let preparation = preparations.values.first {
-            await preparation.value
+        while !preparations.isEmpty {
+            if let preparation = preparations.values.first {
+                await preparation.value
+            } else {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
         }
     }
 
-    private func start(_ player: any SoundCuePlayback, needsPreparation: Bool) -> Bool {
+    func waitForPendingPlaybackForTesting() async {
+        while !pendingOperations.isIdle {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    private nonisolated static func start(_ player: any SoundCuePlayback, needsPreparation: Bool) -> Bool {
         if needsPreparation {
             player.prepareToPlay()
         }
-        guard player.play() else { return false }
-        activePlayers.append(player)
-        release(player, after: player.duration)
-        return true
+        return player.play()
     }
 
     private func preparePlayer(for url: URL) {
