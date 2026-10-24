@@ -1307,7 +1307,12 @@ final class DictationViewModel: ObservableObject {
 
     private func persistCompletedDictation(_ dictation: CompletedDictation, historyAudioFileName: String?) {
         let appURL = dictation.appURL
-        if dictation.historyEnabled {
+        let retention = HistoryRetention.selected()
+        let keepAudio = UserDefaults.standard.object(forKey: UserDefaultsKeys.saveAudioWithHistory) as? Bool ?? true
+        if !keepAudio, historyAudioFileName != nil {
+            historyService.discardAudioFile(forRecordID: dictation.transcriptionID)
+        }
+        if dictation.historyEnabled && retention != .never {
             // Also rejects the record, and removes its audio file, if history was cleared
             // while the audio was written in the background.
             historyService.addRecord(
@@ -1322,10 +1327,13 @@ final class DictationViewModel: ObservableObject {
                 language: dictation.language,
                 engineUsed: dictation.engineUsed,
                 modelUsed: dictation.modelUsed,
-                audioFileName: historyAudioFileName,
+                audioFileName: keepAudio ? historyAudioFileName : nil,
                 pipelineSteps: dictation.pipelineSteps,
                 capturedInClearGeneration: dictation.historyClearGeneration
             )
+            historyService.applyRetention(retention)
+        } else if historyAudioFileName != nil {
+            historyService.discardAudioFile(forRecordID: dictation.transcriptionID)
         }
 
         if !dictation.completionEventEmitted {

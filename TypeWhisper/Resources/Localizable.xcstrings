@@ -31334,28 +31334,6 @@
         }
       }
     },
-    "Save history" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verlauf speichern"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "履歴を保存"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存历史记录"
-          }
-        }
-      }
-    },
     "Save Workflow" : {
       "localizations" : {
         "ja" : {
@@ -45285,7 +45263,6 @@
     "Inbox is Empty" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Posteingang ist leer"}},"ja":{"stringUnit":{"state":"translated","value":"受信箱は空です"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"收件箱为空"}}}},
     "iOS Keyboard" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"iOS-Tastatur"}},"ja":{"stringUnit":{"state":"translated","value":"iOSキーボード"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"iOS 键盘"}}}},
     "Library" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Mediathek"}},"ja":{"stringUnit":{"state":"translated","value":"ライブラリ"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"资料库"}}}},
-    "Local History" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lokaler Verlauf"}},"ja":{"stringUnit":{"state":"translated","value":"ローカル履歴"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"本地历史记录"}}}},
     "Mark Complete" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Als erledigt markieren"}},"ja":{"stringUnit":{"state":"translated","value":"完了にする"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"标记为已完成"}}}},
     "New captures that need attention will appear here." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Neue Aufnahmen, die deine Aufmerksamkeit benötigen, erscheinen hier."}},"ja":{"stringUnit":{"state":"translated","value":"確認が必要な新しいキャプチャがここに表示されます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"需要处理的新捕获内容会显示在这里。"}}}},
     "Newest First" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Neueste zuerst"}},"ja":{"stringUnit":{"state":"translated","value":"新しい順"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"最新优先"}}}},
