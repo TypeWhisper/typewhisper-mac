@@ -53,7 +53,7 @@ final class VoiceBarModelNoticeRenderingTests: XCTestCase {
         }
         XCTAssertNil(dictation.modelNotice)
         presentation.refresh(.shared)
-        // State 13 keeps the notice visible for its 3-second feedback lifetime.
+        // 状态 13 的提示按 3 秒反馈时限保持可见。
         XCTAssertEqual(presentation.state, .downloading(nil))
         for _ in 0..<40 where presentation.isActive {
             try await Task.sleep(for: .milliseconds(100))
