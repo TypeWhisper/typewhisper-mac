@@ -7,10 +7,10 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence:
   - Fix:
 
-- 允许停止与开始同时进行，却没有保护两边同时赋值的属性 (Seen x1: 2026-10-24)
-  - 问题：录音器允许在启动挂起期间点击停止，`AudioRecorderService` 是 `@unchecked Sendable`，`startRecording` 恢复后与 `stopCapture` 在两个线程上同时给 `finalOutputURL`、`durationTimer` 等属性赋值。引用类型的赋值是读取旧值、写入新值、释放旧值三步，两个线程读到同一个旧值就会各释放一次。
-  - 证据：该测试在完整验证中四次崩溃于 `AudioRecorderService.deinit` 的 `outlined destroy of URL?`，其他线程当时都空闲，崩溃发生在对象释放时，竞争发生在更早的赋值时。修复前定向运行 3000 次迭代，5 次全部在 50 到 846 次内崩溃；Thread Sanitizer 在 300 次迭代内报告 `startRecording` 与 `stopCapture` 对 `durationTimer` 的写入竞争。只去掉 `finalOutputURL` 的锁，崩溃在第 191 次迭代重现。
-  - 方法：新增或保留“某个异步流程挂起时另一个流程可以进入”的路径时，列出两个流程共同赋值的属性并全部加锁。怀疑竞争时，用 Thread Sanitizer（`-enableThreadSanitizer YES`，环境变量 `TEST_RUNNER_TSAN_OPTIONS=halt_on_error=0`）运行单个测试，用 `-test-iterations` 重复运行；崩溃报告里的调用栈是释放现场，竞争现场要靠 Thread Sanitizer 找到。
+- 允许停止在开始挂起期间执行，停止没有等待开始完成 (Seen x1: 2026-10-24)
+  - 问题：录音器视图模型在 `await recorderService.startRecording` 之前就把状态设为录音中，启动挂起期间点击停止会立即执行 `stopCapture`。`AudioRecorderService` 是 `@unchecked Sendable`，`startRecording` 恢复后与 `stopCapture` 在两个线程上同时给 `finalOutputURL`、`durationTimer` 等属性赋值，引用类型的赋值是读取旧值、写入新值、释放旧值三步，两个线程读到同一个旧值就会各释放一次。停止拆除的也只是开始到那一刻为止的部分，开始随后装好的音频引擎、屏幕录制流和计时器继续运行，界面显示空闲时麦克风仍在录音。
+  - 证据：该测试在完整验证中四次崩溃于 `AudioRecorderService.deinit` 的 `outlined destroy of URL?`，其他线程当时都空闲，崩溃发生在对象释放时，竞争发生在更早的赋值时。修复前定向运行 3000 次迭代，5 次全部在 50 到 846 次内崩溃；Thread Sanitizer 在 300 次迭代内报告 `startRecording` 与 `stopCapture` 对 `durationTimer` 的写入竞争，没有报告 `finalOutputURL`；只让 `finalOutputURL` 的赋值失去保护，崩溃在第 191 次迭代重现。在开始挂起时停止的测试显示，开始完成后服务仍处于录音状态，计时器继续计时。
+  - 方法：停止必须等待正在进行的开始完成后再拆除会话：开始、停止和回滚排成一条操作链，每个操作等前一个结束后才读写会话属性，第二次停止什么也不做。怀疑竞争时，用 Thread Sanitizer（`-enableThreadSanitizer YES`，环境变量 `TEST_RUNNER_TSAN_OPTIONS=halt_on_error=0`）运行单个测试，用 `-test-iterations` 重复运行；崩溃报告里的调用栈是释放现场，竞争现场要靠 Thread Sanitizer 找到。Thread Sanitizer 看不到 `URL` 等 Foundation 值类型的赋值（这类赋值由运行时的值见证函数完成，没有经过插桩），这类属性的竞争要用变异运行确认：临时让该属性的赋值失去保护，重复运行同一个测试，看崩溃是否重现。
 
 - 轮询的 SwiftUI 构建器读取值快照 (Seen x1: 2026-10-23)
   - 问题：语音识别页面在嵌套视图构建器里轮询插件引用。侧栏已更新时，模型行和精度选择仍显示旧值。
