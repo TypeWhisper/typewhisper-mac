@@ -4361,6 +4361,10 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func showUndeliveredTranscriptFeedback(_ transcript: UndeliveredTranscript) {
+        // 文字无法插入时只在进入提示的这一刻复制一次，语音条关闭时同样生效。
+        let pasteboard = pasteboardProvider()
+        pasteboard.clearContents()
+        pasteboard.setString(transcript.text, forType: .string)
         var message = switch transcript.reason {
         case .noTextField:
             String(localized: "No text field detected")

@@ -17,7 +17,6 @@ final class VoiceBarPresentation: ObservableObject {
     @Published var tentativeText = ""
     @Published var duration: TimeInterval = 0
     @Published var levels = Array(repeating: Float.zero, count: 26)
-    private var copiedText: String?
     private var lastActivity: DictationViewModel.State = .idle
     private var feedback: (state: VoiceBarState, deadline: Date)?
     private var feedbackCaptured = false
@@ -86,7 +85,6 @@ final class VoiceBarPresentation: ObservableObject {
 #endif
         if lastActivity != vm.state {
             if vm.state == .recording || vm.state == .processing {
-                copiedText = nil
                 feedback = nil
                 feedbackCaptured = false
             }
@@ -166,8 +164,6 @@ final class VoiceBarPresentation: ObservableObject {
         } else if feedbackCaptured && feedback == nil && nextState.feedbackLifetime != nil {
             nextState = .idle
         }
-        // 复制回落发生在进入 copied 状态的瞬间，语音条隐藏时也会执行一次。
-        if case .copied = nextState, state != .copied { copyUndeliveredText(from: vm) }
         isActive = nextState != .idle
         if isActive { state = nextState }
         if !vm.partialText.isEmpty || !state.showsTranscript { text = vm.partialText }
@@ -175,13 +171,6 @@ final class VoiceBarPresentation: ObservableObject {
         duration = vm.recordingDuration
         levels.removeFirst()
         levels.append(vm.audioLevel)
-    }
-
-    private func copyUndeliveredText(from vm: DictationViewModel) {
-        guard let undelivered = vm.voiceBarUndeliveredText, copiedText != undelivered else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(undelivered, forType: .string)
-        copiedText = undelivered
     }
 
     func dismissFeedback() { feedback = nil; feedbackCaptured = true; isActive = false }

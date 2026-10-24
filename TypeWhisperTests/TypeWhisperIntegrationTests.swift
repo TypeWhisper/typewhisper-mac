@@ -11202,6 +11202,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let element = AXUIElementCreateSystemWide()
         var isTextFieldFocused = false
         var pastedTexts: [String] = []
+        let copiedPasteboard = NSPasteboard.withUniqueName()
+        context.dictationViewModel.pasteboardProvider = { copiedPasteboard }
         context.textInsertionService.pasteboardProvider = { pasteboard }
         context.textInsertionService.captureActiveAppOverride = { ("Finder", "com.apple.finder", nil) }
         context.textInsertionService.accessibilityGrantedOverride = true
@@ -11244,6 +11246,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertTrue(viewModel.actionFeedbackMessage?.hasPrefix(noTextFieldMessage) == true)
         XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
         XCTAssertNil(viewModel.lastSuccessfulDictationInsertion)
+        // 语音条显示「已复制」时文字已在进入提示的那一刻复制，复制不依赖语音条刷新。
+        XCTAssertEqual(copiedPasteboard.string(forType: .string), "transcribed")
 
         // Clicking Insert without focusing a field misses again and keeps the offer.
         viewModel.performActionFeedbackAction()
