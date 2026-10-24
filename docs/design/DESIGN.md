@@ -493,7 +493,7 @@ Phase 2 confirms each preset URL against the provider's docs before shipping.
 
 ### 5.8 Onboarding 上手引导 (`onboarding.html`)
 
-A separate 640 × 540 window, centered, shown on first launch and from Home's `练习一次`. Close and minimize are disabled until the last step (traffic lights greyed except close, which asks `稍后再设置？` and leaves the app usable in the menu bar). Top: 7 progress dots (current is an 18pt accent pill, past dots tertiary). Bottom bar: `返回` (plain, hidden on first and last step), `跳过` (practice steps only), primary `继续`, disabled until the step's goal is met. Steps slide in from the right (0.35 s ease-out, 14pt offset).
+A separate 640 × 540 window, centered, shown on first launch and from Home's `练习一次`. Close and minimize are disabled until the last step (traffic lights greyed except close, which asks `稍后再设置？` and leaves the app usable in the menu bar). Top: 8 progress dots (current is an 18pt accent pill, past dots tertiary). Bottom bar: `返回` (plain, hidden on first and last step), `跳过` (practice steps only), primary `继续`, disabled until the step's goal is met. Steps slide in from the right (0.35 s ease-out, 14pt offset).
 
 | # | Step | Content | Goal to continue |
 |---|---|---|---|
@@ -503,7 +503,8 @@ A separate 640 × 540 window, centered, shown on first launch and from Home's `�
 | 3 | 模型 Model | `准备语音模型`, Qwen3 card with progress, size, time left; link `改用云端识别` opens Speech. When done: `已就绪`. | download complete or cloud engine configured |
 | 4 | 练习听写 Practice | `练习听写`, instruction, an accent-soft card with the sentence to read (contains fillers and a self-correction), a text area that receives the result, the real voice bar appears at the window bottom. On success: `✓ 口头禅和改口都处理好了`. | one dictation inserted, or `跳过` |
 | 5 | 练习翻译 Practice | same with a translate-soft card `中文 → English` and a Chinese sentence. Success note `在语音条上点语言，可以换成其他目标语言`. | one translation inserted, or `跳过` |
-| 6 | 完成 Done | green check icon, `准备好了`, cheat sheet of the three shortcuts. | button `开始使用` closes the window and opens Home |
+| 6 | 同步 Sync | `同步历史`, lead `听写记录存进 iCloud Drive 里的 dictum 文件夹。换一台 Mac 或清空数据后，可以从这里找回。` One form row: cloud icon tile, `同步到 iCloud Drive` with the folder path `iCloud Drive › dictum` underneath, and a switch that is on when the step opens. Footnote: `同步文件夹里只有文字，录音只保存在这台 Mac 上。` and `以后可以在 通用 → 历史与同步 里修改。` `继续` applies the switch: on turns on sync to the default iCloud Drive folder (the same action as General → History & Sync → `同步到 iCloud Drive`), off leaves sync off; either way the choice is recorded, so General shows no sync prompt afterwards. When iCloud Drive is not available on this Mac, the switch is off and disabled and the subtitle reads `这台 Mac 没有开启 iCloud Drive，可以以后在 通用 → 历史与同步 选择其他文件夹。` When sync is already on (onboarding opened again from Home), the switch shows on and `继续` changes nothing. | none |
+| 7 | 完成 Done | green check icon, `准备好了`, cheat sheet of the three shortcuts. | button `开始使用` closes the window and opens Home |
 
 **Copy.**
 
@@ -528,12 +529,15 @@ A separate 640 × 540 window, centered, shown on first launch and from Home's `�
 | 文字会出现在这里 / 口头禅和改口都处理好了 | Your text appears here / Fillers and corrections handled |
 | 练习翻译 / 按 fn + 左 ⇧，用中文说下面这句话，再按一下 fn。 | Practice translation / Press fn + Left ⇧, say this in Chinese, then press fn. |
 | 译文会出现在这里 / 在语音条上点语言，可以换成其他目标语言 | The translation appears here / Click the language on the voice bar to switch targets |
+| 同步历史 / 听写记录存进 iCloud Drive 里的 dictum 文件夹。换一台 Mac 或清空数据后，可以从这里找回。 | Sync your history / Your dictations are saved to the dictum folder in iCloud Drive. On another Mac, or after clearing data, you can get them back from there. |
+| 同步到 iCloud Drive / 以后可以在 通用 → 历史与同步 里修改。 | Sync to iCloud Drive / You can change this later in General → History & Sync. |
+| 这台 Mac 没有开启 iCloud Drive，可以以后在 通用 → 历史与同步 选择其他文件夹。 | iCloud Drive is off on this Mac. You can choose another folder later in General → History & Sync. |
 | 准备好了 | You're all set |
 | 听写，再按一下结束 / 翻译 / 取消，可以在历史里找回 | Dictate, press again to finish / Translate / Cancel, recoverable in History |
 
 **SwiftUI.** `Window` scene with `.windowResizability(.contentSize)`; a `TabView` is not used; switch steps with a `@State` index and `.transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))`. The practice text area is a real `TextEditor` so the real insertion path is exercised.
 
-**Data.** `SetupWizardView` steps (`welcome`, `permissions`, `hotkey`, `engineAI`, `finish`) are replaced by this flow. Permissions: `AccessibilityPermissionPane`, `AVCaptureDevice.requestAccess(for: .audio)`. Fn setting: read `AppleFnUsageType` from the `com.apple.HIToolbox` defaults domain (new code; nothing in TypeWhisper reads it yet). Mic level: `AudioRecordingService`. Model: `ModelManagerService`.
+**Data.** `SetupWizardView` steps (`welcome`, `permissions`, `hotkey`, `engineAI`, `finish`) are replaced by this flow. Permissions: `AccessibilityPermissionPane`, `AVCaptureDevice.requestAccess(for: .audio)`. Fn setting: read `AppleFnUsageType` from the `com.apple.HIToolbox` defaults domain (new code; nothing in TypeWhisper reads it yet). Mic level: `AudioRecordingService`. Model: `ModelManagerService`. Sync: the same controller and setting as General → History & Sync (`CloudFolderSyncSettingsView` / `HistorySyncSection`); the onboarding step and the General switch always show the same state.
 
 ## 6. Voice bar 语音条 (`voice-bar.html`)
 
