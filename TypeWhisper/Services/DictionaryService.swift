@@ -94,6 +94,36 @@ final class DictionaryService: ObservableObject {
         setupModelContainer(appSupportDirectory: appSupportDirectory)
     }
 
+    var csvItems: [DictionaryCSVItem] {
+        entries.filter { !$0.isRegex }.map {
+            DictionaryCSVItem(original: $0.original, replacement: $0.type == .correction ? $0.replacement : nil)
+        }
+    }
+
+    func importCSV(_ data: Data, format: DictionaryCSVFormat) throws -> DictionaryCSVResult {
+        guard let context = modelContext else { throw DictionaryServiceMutationError.unavailable }
+        let result = try DictionaryCSV.parse(data, format: format, existing: Set(csvItems.map(\.identity)))
+        guard entries.count + result.items.count <= DictionaryCSV.maximumWords else { throw DictionaryCSVError.count }
+        for item in result.items {
+            context.insert(DictionaryEntry(type: item.replacement == nil ? .term : .correction,
+                                           original: item.original, replacement: item.replacement))
+        }
+        do { try context.save() }
+        catch { context.rollback(); throw DictionaryServiceMutationError.saveFailed(error) }
+        loadEntries()
+        return result
+    }
+
+    func learnedSinceLastSeen(defaults: UserDefaults = .standard) -> [DictionaryEntry] {
+        let seen = defaults.object(forKey: "dictum.dictionary.lastSeen") as? Date ?? .distantPast
+        return entries.filter { $0.source == .autoLearned && $0.createdAt > seen }
+    }
+
+    func markLearnedWordsSeen(defaults: UserDefaults = .standard, at date: Date = Date()) {
+        defaults.set(date, forKey: "dictum.dictionary.lastSeen")
+        objectWillChange.send()
+    }
+
     private func setupModelContainer(appSupportDirectory: URL) {
         guard let (container, context) = try? SwiftDataStoreFactory.create(
             for: [DictionaryEntry.self],

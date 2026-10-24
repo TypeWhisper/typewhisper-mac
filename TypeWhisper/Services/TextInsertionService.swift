@@ -1346,6 +1346,20 @@ final class TextInsertionService {
         )
     }
 
+    /// 焦点已离开时再读一次指定的输入框，让两次轮询之间做的修改不会丢失。
+    func observation(of element: AXUIElement) -> FocusedTextObservation? {
+        guard let state = captureFocusedTextState(for: element),
+              let value = state.value else {
+            return nil
+        }
+        return FocusedTextObservation(
+            element: element,
+            value: value,
+            selectedText: state.selectedText,
+            selectedRange: state.selectedRange
+        )
+    }
+
     enum FocusedTextElementMatch: Equatable {
         case same
         case different

@@ -287,6 +287,7 @@ final class DictationViewModel: ObservableObject {
 
     @Published var state: State = .idle {
         didSet {
+            if state == .recording, oldValue != .recording { clearPolishFailure() }
             refreshCancellationAvailability()
             updateSubmitOnEnterAvailability()
             clearCancelWarningIfStateNoLongerMatches()
@@ -383,6 +384,10 @@ final class DictationViewModel: ObservableObject {
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
     @Published var processingPhase: String?
+    @Published private(set) var polishFailure: String?
+    private var polishRetry: (id: UUID, text: String, handler: (String) async throws -> String,
+                              snapshot: DictationUndoService.InsertionSnapshot?)?
+    private var polishRetryTask: Task<Void, Never>?
     @Published private(set) var isModelLoading = false
     @Published private(set) var isRecordingInputReady = false
     /// The running recording has delivered only digital silence so far: a muted microphone
@@ -1302,7 +1307,12 @@ final class DictationViewModel: ObservableObject {
 
     private func persistCompletedDictation(_ dictation: CompletedDictation, historyAudioFileName: String?) {
         let appURL = dictation.appURL
-        if dictation.historyEnabled {
+        let retention = HistoryRetention.selected()
+        let keepAudio = UserDefaults.standard.object(forKey: UserDefaultsKeys.saveAudioWithHistory) as? Bool ?? true
+        if !keepAudio, historyAudioFileName != nil {
+            historyService.discardAudioFile(forRecordID: dictation.transcriptionID)
+        }
+        if dictation.historyEnabled && retention != .never {
             // Also rejects the record, and removes its audio file, if history was cleared
             // while the audio was written in the background.
             historyService.addRecord(
@@ -1317,10 +1327,13 @@ final class DictationViewModel: ObservableObject {
                 language: dictation.language,
                 engineUsed: dictation.engineUsed,
                 modelUsed: dictation.modelUsed,
-                audioFileName: historyAudioFileName,
+                audioFileName: keepAudio ? historyAudioFileName : nil,
                 pipelineSteps: dictation.pipelineSteps,
                 capturedInClearGeneration: dictation.historyClearGeneration
             )
+            historyService.applyRetention(retention)
+        } else if historyAudioFileName != nil {
+            historyService.discardAudioFile(forRecordID: dictation.transcriptionID)
         }
 
         if !dictation.completionEventEmitted {
@@ -2585,6 +2598,7 @@ final class DictationViewModel: ObservableObject {
 
     private func browserURLRequiredBeforeInsertion(bundleIdentifier: String?) -> Bool {
         hasApplicableWebsiteWorkflow(bundleIdentifier: bundleIdentifier)
+            || (matchedWorkflow == nil && promptProcessingService.hasConfiguredPolishProvider)
             || WorkflowOutputFormatResolver.isAutomaticFormat(effectiveOutputFormat)
             || effectiveActionPluginId != nil
             || PluginManager.shared?.postProcessors.isEmpty == false
@@ -2609,6 +2623,7 @@ final class DictationViewModel: ObservableObject {
 
     private var requiresVisiblePostProcessingPhase: Bool {
         effectiveTranslationTarget != nil
+            || (matchedWorkflow == nil && promptProcessingService.hasConfiguredPolishProvider)
             || matchedWorkflow?.isManuallyRunnable == true
             || effectiveOutputFormat != nil
             || effectiveActionPluginId != nil
@@ -3045,6 +3060,8 @@ final class DictationViewModel: ObservableObject {
                 let llmStepName: String? = if llmHandler != nil {
                     if self.matchedWorkflow != nil {
                         "Workflow"
+                    } else if translationTarget == nil {
+                        "Polish"
                     } else {
                         "Translation"
                     }
@@ -3070,6 +3087,7 @@ final class DictationViewModel: ObservableObject {
                     configuredLanguageCandidates: languageCandidates,
                     detectedLanguage: result.detectedLanguage
                 )
+                let polishInput = text
                 let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
                     outputFormat: resolvedOutputFormat,
@@ -3325,6 +3343,11 @@ final class DictationViewModel: ObservableObject {
                                 insertedText: insertionText,
                                 transcriptionID: transcriptionID
                             )
+                        }
+                        if llmStepName == "Polish", let failure = postProcessingFallback, let llmHandler {
+                            recordPolishFailure(reason: failure.reason, text: polishInput, handler: llmHandler,
+                                                snapshot: insertionIsVerifiable && dictationUndoService.snapshot?.transcriptionID == transcriptionID
+                                                    ? dictationUndoService.snapshot : nil)
                         }
                     }
                 }
@@ -4508,8 +4531,59 @@ final class DictationViewModel: ObservableObject {
 
     // MARK: - Shared Helpers
 
-    /// Builds an LLM handler for the post-processing pipeline.
-    /// Priority: workflow > translation > nil.
+    func recordPolishFailure(reason: String, text: String, handler: @escaping (String) async throws -> String,
+                             snapshot: DictationUndoService.InsertionSnapshot?) {
+        clearPolishFailure()
+        polishFailure = reason
+        polishRetry = (UUID(), text, handler, snapshot)
+    }
+
+    private func clearPolishFailure() {
+        polishRetryTask?.cancel()
+        polishRetryTask = nil
+        polishRetry = nil
+        polishFailure = nil
+    }
+
+    /// 重试保留原文和当时的风格；仅替换仍可核实的插入位置。
+    func retryPolish() {
+        guard let retry = polishRetry, polishRetryTask == nil,
+              state != .recording, state != .processing else { return }
+        polishRetryTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if polishRetry?.id == retry.id { polishRetryTask = nil } }
+            do {
+                let polished = try await retry.handler(retry.text)
+                guard !Task.isCancelled, polishRetry?.id == retry.id else { return }
+                var replaced = false
+                if let snapshot = retry.snapshot,
+                   textInsertionService.captureActiveApp().bundleId == snapshot.applicationBundleIdentifier,
+                   let observation = textInsertionService.captureFocusedTextObservation(),
+                   CFEqual(observation.element, snapshot.element),
+                   observation.value == snapshot.value,
+                   observation.selectedRange == NSRange(location: snapshot.caretLocation, length: 0) {
+                    let length = (snapshot.insertedText as NSString).length
+                    replaced = textInsertionService.replaceRange(
+                        NSRange(location: snapshot.caretLocation - length, length: length),
+                        with: polished, expectedState: observation) == .verified
+                }
+                if !replaced {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(polished, forType: .string)
+                }
+                polishFailure = nil
+                polishRetry = nil
+                polishRetryTask = nil
+                showNotchFeedback(message: String(localized: replaced ? "polish.retry.replaced" : "polish.retry.copied", table: "DictumStyle"),
+                                  icon: replaced ? "checkmark" : "doc.on.clipboard")
+            } catch {
+                guard !Task.isCancelled, polishRetry?.id == retry.id else { return }
+                polishFailure = error.localizedDescription
+            }
+        }
+    }
+
+    /// 工作流、翻译和默认润色按顺序选择处理路径。
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
@@ -4562,6 +4636,24 @@ final class DictationViewModel: ObservableObject {
         }
         #endif
 
+        if matchedWorkflow == nil, translationTarget == nil,
+           promptProcessingService.hasConfiguredPolishProvider {
+            let app = capturedActiveApp
+            let store = StyleStore.shared
+            let style = store.resolve(bundleID: app?.bundleId, browserURL: app?.url)
+            let level = store.level
+            let vocabulary = dictionaryService.vocabularyForPrompt()
+            let processor = promptProcessingService
+            return { text in
+                modelPostProcessingRan?.withLock { $0 = true }
+                let request = PolishRequest(rawTranscript: text, level: level, style: style,
+                                            vocabulary: vocabulary,
+                                            target: .init(appName: app?.name, bundleID: app?.bundleId, browserURL: app?.url))
+                return try await processor.processWorkflow(prompt: request.systemPrompt, text: request.userContent,
+                                                           providerOverride: nil, cloudModelOverride: nil,
+                                                           temperatureDirective: .custom(0.2))
+            }
+        }
         return nil
     }
 

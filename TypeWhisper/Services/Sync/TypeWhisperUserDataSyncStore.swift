@@ -66,7 +66,11 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
                 excludingCorrectionItemIDs: excluded.corrections
             ),
             snippets: snippetService.userDataSyncSnippets(),
-            historyRecords: historyService?.userDataSyncHistoryRecords() ?? [],
+            historyRecords: (historyService?.userDataSyncHistoryRecords() ?? []).map {
+                UserDataSyncHistoryRecord(content: $0.content, inbox: $0.inbox, audio: nil,
+                                          transcript: $0.transcript, speakers: $0.speakers,
+                                          localAudioFileURL: nil, audioEligible: false)
+            },
             deletedHistoryRecords: historyService?.userDataSyncHistoryDeletions() ?? []
         )
     }
