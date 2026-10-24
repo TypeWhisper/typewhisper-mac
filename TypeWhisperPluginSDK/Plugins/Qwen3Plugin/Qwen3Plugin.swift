@@ -268,6 +268,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             }
     }
 
+    // 卸载会释放模型的 MLX 数组；在主线程上释放，就不会和主线程上的 exit() 同时运行。
+    @MainActor
     func deleteDownloadedModel(_ modelId: String) async throws {
         try activationLock.withLock {
             guard modelState != .loading else { throw PluginModelImportError.busy }
@@ -487,34 +489,34 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                     }
                 }
             }
-            // Release the previous runtime before constructing its replacement.
-            // Keep its files and selection so a failed import can be retried.
-            try activationLock.withLock {
-                try Task.checkCancellation()
-                guard generation == activationID, host != nil else { throw CancellationError() }
-                model = nil
-                loadedModelId = nil
-            }
-            try await PluginLocalInferenceGate.shared.withLock {
-                try Task.checkCancellation()
+            // 释放旧模型和构建新模型都使用 MLX 的全局对象，应用退出前关闭识别门时要等它们结束。
+            try await PluginLocalInferenceGate.shared.withLock { [self] in
+                // Release the previous runtime before constructing its replacement.
+                // Keep its files and selection so a failed import can be retried.
+                try activationLock.withLock {
+                    try Task.checkCancellation()
+                    guard generation == activationID, host != nil else { throw CancellationError() }
+                    model = nil
+                    loadedModelId = nil
+                }
                 Self.runtimeUsage.withLock { $0 = true }
                 Stream.gpu.synchronize()
                 Memory.clearCache()
-            }
-            try Task.checkCancellation()
-            guard generation == activationID, host != nil else { throw CancellationError() }
-            let loaded = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
-
-            try activationLock.withLock {
                 try Task.checkCancellation()
                 guard generation == activationID, host != nil else { throw CancellationError() }
-                model = loaded
-                loadedModelId = modelDef.id
-                _selectedModelId = modelDef.id
-                host?.setUserDefault(modelDef.id, forKey: "selectedModel")
-                host?.setUserDefault(modelDef.id, forKey: "loadedModel")
-                modelState = .ready(modelDef.id)
-                if notifyHost { host?.notifyCapabilitiesChanged() }
+                let loaded = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
+
+                try activationLock.withLock {
+                    try Task.checkCancellation()
+                    guard generation == activationID, host != nil else { throw CancellationError() }
+                    model = loaded
+                    loadedModelId = modelDef.id
+                    _selectedModelId = modelDef.id
+                    host?.setUserDefault(modelDef.id, forKey: "selectedModel")
+                    host?.setUserDefault(modelDef.id, forKey: "loadedModel")
+                    modelState = .ready(modelDef.id)
+                    if notifyHost { host?.notifyCapabilitiesChanged() }
+                }
             }
         } catch is CancellationError {
             if generation == activationID, host != nil {
