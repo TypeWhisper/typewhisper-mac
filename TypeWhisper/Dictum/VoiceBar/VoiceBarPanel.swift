@@ -199,6 +199,7 @@ private final class VoiceBarHostingView<Content: View>: NSHostingView<Content> {
 final class VoiceBarPanel: NSPanel {
     private let presentation = VoiceBarPresentation()
     private let resolver = IndicatorScreenResolver()
+    private var screenChangeObservers: [NSObjectProtocol] = []
     private var timer: AnyCancellable?
     private var hideTask: Task<Void, Never>?
     private var cachedScreen: NSScreen?
@@ -218,6 +219,19 @@ final class VoiceBarPanel: NSPanel {
         hosting.sizingOptions = []
         hosting.safeAreaRegions = []
         contentView = hosting
+        let notificationCenter = NotificationCenter.default
+        screenChangeObservers.append(notificationCenter.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.lastScreenResolve = .distantPast })
+        screenChangeObservers.append(notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.lastScreenResolve = .distantPast })
+    }
+
+    deinit {
+        for observer in screenChangeObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     override var canBecomeKey: Bool { false }
@@ -262,7 +276,11 @@ final class VoiceBarPanel: NSPanel {
 #endif
             let frame = NSRect(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.minY + 72, width: size.width, height: size.height)
             if self.frame != frame { self.setFrame(frame, display: true) }
-            if !self.isVisible { self.orderFrontRegardless() }
+            if !self.isVisible {
+                // 语音条重新显示时焦点可能已迁移到别的屏幕，强制重新解析一次。
+                self.lastScreenResolve = .distantPast
+                self.orderFrontRegardless()
+            }
             self.presentation.isPresented = true
         }
     }
