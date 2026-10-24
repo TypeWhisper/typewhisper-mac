@@ -7,6 +7,11 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence:
   - Fix:
 
+- 允许停止与开始同时进行，却没有保护两边同时赋值的属性 (Seen x1: 2026-10-24)
+  - 问题：录音器允许在启动挂起期间点击停止，`AudioRecorderService` 是 `@unchecked Sendable`，`startRecording` 恢复后与 `stopCapture` 在两个线程上同时给 `finalOutputURL`、`durationTimer` 等属性赋值。引用类型的赋值是读取旧值、写入新值、释放旧值三步，两个线程读到同一个旧值就会各释放一次。
+  - 证据：该测试在完整验证中四次崩溃于 `AudioRecorderService.deinit` 的 `outlined destroy of URL?`，其他线程当时都空闲，崩溃发生在对象释放时，竞争发生在更早的赋值时。修复前定向运行 3000 次迭代，5 次全部在 50 到 846 次内崩溃；Thread Sanitizer 在 300 次迭代内报告 `startRecording` 与 `stopCapture` 对 `durationTimer` 的写入竞争。只去掉 `finalOutputURL` 的锁，崩溃在第 191 次迭代重现。
+  - 方法：新增或保留“某个异步流程挂起时另一个流程可以进入”的路径时，列出两个流程共同赋值的属性并全部加锁。怀疑竞争时，用 Thread Sanitizer（`-enableThreadSanitizer YES`，环境变量 `TEST_RUNNER_TSAN_OPTIONS=halt_on_error=0`）运行单个测试，用 `-test-iterations` 重复运行；崩溃报告里的调用栈是释放现场，竞争现场要靠 Thread Sanitizer 找到。
+
 - 轮询的 SwiftUI 构建器读取值快照 (Seen x1: 2026-10-23)
   - 问题：语音识别页面在嵌套视图构建器里轮询插件引用。侧栏已更新时，模型行和精度选择仍显示旧值。
   - 证据：真实的 Qwen3 下载进行中，侧栏显示 63%，页面仍显示“下载”。修改精度后模型大小已更新，选择器仍显示 6-bit。
