@@ -121,6 +121,23 @@ final class TranslationLanguageSettingsTests: XCTestCase {
         XCTAssertEqual(Set(extra), ["en", "ko"], "已选语言即使引擎不支持也保留")
     }
 
+    func testPracticeSentencesExistPerSpokenLanguageAndFallBackToTheDefault() {
+        let chinese = TranslationPractice.sentence(for: TranslationLanguageSettings.defaultSpokenLanguage)
+        XCTAssertFalse(chinese.text.isEmpty)
+        XCTAssertFalse(chinese.isFallback)
+        for code in ["en", "ja", "ko", "fr", "de", "es", "zh-Hant"] {
+            let sentence = TranslationPractice.sentence(for: code)
+            XCTAssertFalse(sentence.isFallback, code)
+            XCTAssertNotEqual(sentence.text, chinese.text, code)
+        }
+        let regional = TranslationPractice.sentence(for: "fr-CA")
+        XCTAssertFalse(regional.isFallback)
+        let missing = TranslationPractice.sentence(for: "sw")
+        XCTAssertTrue(missing.isFallback)
+        XCTAssertEqual(missing.text, chinese.text)
+        XCTAssertEqual(TranslationPractice.sentence(for: nil), TranslationPractice.Sentence(text: chinese.text, isFallback: false))
+    }
+
     func testTargetCandidatesExcludeExistingLanguages() {
         let candidates = TranslationLanguageCatalog.targetCandidates(excluding: ["en", "zh-Hans"])
         XCTAssertFalse(candidates.contains("en"))

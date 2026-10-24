@@ -30,13 +30,13 @@
     "There is no sample sentence in %@ yet. Read this one, or say anything in %@.": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"还没有%@的示例句。读下面这句，或用%@说任意一句话。"}}}},
     "The translation appears here": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"译文会出现在这里"}}}},
     "Click the language on the voice bar to switch targets": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"在语音条上点语言，可以换成其他目标语言"}}}},
-    "practice.sentence.zh-Hans": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"今晚我请大家吃饭，七点在公司楼下集合。"}}}},
-    "practice.sentence.zh-Hant": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"今晚我請大家吃飯，七點在公司樓下集合。"}}}},
-    "practice.sentence.en": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"I'm treating everyone to dinner tonight. Let's meet downstairs at the office at seven."}}}},
-    "practice.sentence.ja": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"今夜はみんなに夕食をごちそうします。七時に会社の下に集まりましょう。"}}}},
-    "practice.sentence.ko": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"오늘 저녁은 제가 살게요. 일곱 시에 회사 아래층에서 만나요."}}}},
-    "practice.sentence.fr": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Ce soir, c'est moi qui invite tout le monde au dîner. On se retrouve à sept heures en bas du bureau."}}}},
-    "practice.sentence.de": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Heute Abend lade ich alle zum Essen ein. Wir treffen uns um sieben Uhr unten vor dem Büro."}}}},
-    "practice.sentence.es": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Esta noche invito yo a todos a cenar. Nos vemos a las siete abajo, en la entrada de la oficina."}}}}
+    "practice.sentence.zh-Hans": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"今晚我请大家吃饭，七点在公司楼下集合。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"今晚我请大家吃饭，七点在公司楼下集合。"}}}},
+    "practice.sentence.zh-Hant": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"今晚我請大家吃飯，七點在公司樓下集合。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"今晚我請大家吃飯，七點在公司樓下集合。"}}}},
+    "practice.sentence.en": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"I'm treating everyone to dinner tonight. Let's meet downstairs at the office at seven."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"I'm treating everyone to dinner tonight. Let's meet downstairs at the office at seven."}}}},
+    "practice.sentence.ja": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"今夜はみんなに夕食をごちそうします。七時に会社の下に集まりましょう。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"今夜はみんなに夕食をごちそうします。七時に会社の下に集まりましょう。"}}}},
+    "practice.sentence.ko": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"오늘 저녁은 제가 살게요. 일곱 시에 회사 아래층에서 만나요."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"오늘 저녁은 제가 살게요. 일곱 시에 회사 아래층에서 만나요."}}}},
+    "practice.sentence.fr": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Ce soir, c'est moi qui invite tout le monde au dîner. On se retrouve à sept heures en bas du bureau."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Ce soir, c'est moi qui invite tout le monde au dîner. On se retrouve à sept heures en bas du bureau."}}}},
+    "practice.sentence.de": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Heute Abend lade ich alle zum Essen ein. Wir treffen uns um sieben Uhr unten vor dem Büro."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Heute Abend lade ich alle zum Essen ein. Wir treffen uns um sieben Uhr unten vor dem Büro."}}}},
+    "practice.sentence.es": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Esta noche invito yo a todos a cenar. Nos vemos a las siete abajo, en la entrada de la oficina."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Esta noche invito yo a todos a cenar. Nos vemos a las siete abajo, en la entrada de la oficina."}}}}
   }
 }
