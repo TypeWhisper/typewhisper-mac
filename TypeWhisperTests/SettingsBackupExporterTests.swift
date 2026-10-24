@@ -599,7 +599,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             let decoded = try JSONDecoder().decode(SettingsBackupExporter.SettingsBackup.self, from: JSONSerialization.data(withJSONObject: json))
             let destination = try makeFixture()
             defer { teardown(destination) }
-        destination.userDefaults.set("singleEscape", forKey: UserDefaultsKeys.cancellationBehavior)
+            destination.userDefaults.set("disabled", forKey: UserDefaultsKeys.cancellationBehavior)
             var applied: CancellationBehavior?
             let result = await SettingsBackupExporter.importBackup(
                 decoded,
@@ -615,7 +615,7 @@ final class SettingsBackupExporterTests: XCTestCase {
                 cancellationBehaviorDidChange: { applied = $0 }
             )
             XCTAssertEqual(applied, expected)
-            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), expected ?? .doubleEscape)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), expected ?? .disabled)
             XCTAssertEqual(result.preferencesApplied, expected == nil ? 0 : 1)
         }
     }
@@ -778,8 +778,8 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled), true)
         XCTAssertEqual(appliedLiveFieldTranscriptEnabled, true)
-        XCTAssertEqual(appliedCancellationBehavior, .doubleEscape)
-        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), .doubleEscape)
+        XCTAssertEqual(appliedCancellationBehavior, .singleEscape)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), .singleEscape)
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))

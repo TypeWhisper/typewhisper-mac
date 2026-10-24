@@ -1888,10 +1888,10 @@ final class DictationViewModel: ObservableObject {
         clearCancelWarning()
 
         guard state == .recording || state == .processing else { return }
+        let cancelledSessionID = activeDictationSessionID
         cancelActiveDictationSessionIfNeeded()
         cancelledRecordingTask?.cancel()
         discardCancelledRecording()
-        let cancelledSessionID = activeDictationSessionID
         self.cancelledSessionID = cancelledSessionID
         let deadline = Date().addingTimeInterval(3)
         cancelledRecordingDeadline = deadline
@@ -1959,8 +1959,9 @@ final class DictationViewModel: ObservableObject {
     }
 
     func restoreCancelledRecording() {
+        // 取消时会话已立即失败并清除了活动会话，恢复时按记下的会话编号重新打开。
         guard let deadline = cancelledRecordingDeadline, Date() < deadline,
-              state == .inserting, activeDictationSessionID == cancelledSessionID else { return }
+              state == .inserting, activeDictationSessionID == nil || activeDictationSessionID == cancelledSessionID else { return }
         if let cancelledSessionID {
             beginDictationSession(id: cancelledSessionID)
         }

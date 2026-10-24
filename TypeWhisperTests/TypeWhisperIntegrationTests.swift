@@ -8578,7 +8578,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
         XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
-        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.error, "Cancelled")
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
+        )
 
         await stopGate.release()
 
