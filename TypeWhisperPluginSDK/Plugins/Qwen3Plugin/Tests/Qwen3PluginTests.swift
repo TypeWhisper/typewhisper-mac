@@ -163,8 +163,34 @@ final class Qwen3PluginTests: XCTestCase {
         )
     }
 
-    func testDictionaryTermsAreNotAdvertisedForQwen3Prompting() {
-        XCTAssertEqual(Qwen3Plugin().dictionaryTermsSupport, .unsupported)
+    func testDictionaryTermsReachQwen3ContextWithABoundedBudget() {
+        XCTAssertEqual(Qwen3Plugin().dictionaryTermsSupport, .supported)
+        XCTAssertEqual(Qwen3Plugin().dictionaryTermsBudget.maxTerms, 64)
+        XCTAssertTrue(Qwen3Plugin.contextBiasString(from: "dictum, 星阙科技").contains("星阙科技"))
+        let context = Qwen3Plugin.contextBiasString(from: String(repeating: "星阙科技", count: 400))
+        XCTAssertLessThanOrEqual(context.count, Qwen3ContextBiasFormatter.baseInstruction.count + 1100)
+    }
+
+    func testDownloadByteCountsIncludeActiveChildProgressAndUseRecentTransferRate() throws {
+        let snapshot = Progress(totalUnitCount: 1_000)
+        snapshot.completedUnitCount = 100
+        let weights = Progress(totalUnitCount: 900)
+        snapshot.addChild(weights, withPendingUnitCount: 900)
+        weights.completedUnitCount = 450
+        let start = Date(timeIntervalSince1970: 0)
+        var status = Qwen3Plugin.DownloadStatus()
+        status.update(snapshot, at: start)
+        XCTAssertEqual(status.completed, 550)
+        XCTAssertNil(status.remainingSeconds)
+        weights.completedUnitCount = 540
+        status.update(snapshot, at: start.addingTimeInterval(2))
+        XCTAssertEqual(try XCTUnwrap(status.remainingSeconds), 8, accuracy: 0.01)
+        weights.completedUnitCount = 630
+        status.update(snapshot, at: start.addingTimeInterval(20))
+        XCTAssertNil(status.remainingSeconds)
+        weights.completedUnitCount = 720
+        status.update(snapshot, at: start.addingTimeInterval(22))
+        XCTAssertEqual(try XCTUnwrap(status.remainingSeconds), 4, accuracy: 0.01)
     }
 
     func testFrenchTrailingOuiArtifactIsRemovedOnlyAfterSentencePunctuation() {
@@ -255,14 +281,14 @@ final class Qwen3PluginTests: XCTestCase {
         )
 
         XCTAssertEqual(modelsById["qwen3-asr-0.6b-6bit"]?.recommendation, .lowMemory)
-        XCTAssertEqual(modelsById["qwen3-asr-1.7b-6bit"]?.recommendation, .balanced)
-        XCTAssertEqual(modelsById["qwen3-asr-1.7b-8bit"]?.recommendation, .highQuality)
+        XCTAssertNil(modelsById["qwen3-asr-1.7b-6bit"]?.recommendation)
+        XCTAssertEqual(modelsById["qwen3-asr-1.7b-8bit"]?.recommendation, .balanced)
+        XCTAssertFalse(modelsById["qwen3-asr-1.7b-8bit"]!.ramRequirement.contains("32 GB"))
         XCTAssertTrue(Qwen3Plugin.availableModels.allSatisfy { !$0.usageHint.isEmpty })
         XCTAssertEqual(
             Qwen3Plugin.availableModels.filter { $0.recommendation != nil }.map(\.id),
             [
                 "qwen3-asr-0.6b-6bit",
-                "qwen3-asr-1.7b-6bit",
                 "qwen3-asr-1.7b-8bit",
             ]
         )

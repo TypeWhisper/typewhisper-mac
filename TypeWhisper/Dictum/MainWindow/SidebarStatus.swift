@@ -26,6 +26,7 @@ enum SidebarStatus: Equatable {
                 default: return .missing
                 }
             }
+            if hasMissingModel { return .missing }
             return .ready(engine: engine)
         }
     }
@@ -93,7 +94,7 @@ enum SidebarStatus: Equatable {
             let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
             speech = Speech.current(activity: activity,
                                     readinessError: modelManager.transcriptionReadinessError(providerId: id),
-                                    hasMissingModel: modelManager.lacksDownloadedModel(engine),
+                                    hasMissingModel: !engine.isConfigured && !DictationModelNotice.hasDownloadedSelectedModel(engine),
                                     engine: engine.providerDisplayName)
         } else {
             speech = .missing
