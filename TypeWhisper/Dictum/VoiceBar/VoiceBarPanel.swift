@@ -30,6 +30,15 @@ final class VoiceBarPresentation: ObservableObject {
     }()
 #endif
 
+#if DEBUG
+    nonisolated static let debugFeedbackLifetime: TimeInterval? = {
+        guard let index = CommandLine.arguments.firstIndex(of: "--dictum-voicebar-feedback-lifetime"),
+              CommandLine.arguments.indices.contains(index + 1),
+              let seconds = TimeInterval(CommandLine.arguments[index + 1]), seconds > 0 else { return nil }
+        return seconds
+    }()
+#endif
+
     var contentSize: NSSize {
 #if DEBUG
         let started = ContinuousClock.now
@@ -187,6 +196,8 @@ final class VoiceBarPanel: NSPanel {
     private let resolver = IndicatorScreenResolver()
     private var timer: AnyCancellable?
     private var hideTask: Task<Void, Never>?
+    private var cachedScreen: NSScreen?
+    private var lastScreenResolve = Date.distantPast
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -227,7 +238,17 @@ final class VoiceBarPanel: NSPanel {
 #if DEBUG
             let started = ContinuousClock.now
 #endif
-            let screen = self.resolver.resolveScreen(for: .activeScreen)
+            // Resolving the active screen queries the focused element over the accessibility
+            // API, which can block the main thread for tens of milliseconds per call. The
+            // screen only needs to track focus changes, not run every 55 ms tick.
+            let screen: NSScreen
+            if Date().timeIntervalSince(lastScreenResolve) < 2, let cachedScreen {
+                screen = cachedScreen
+            } else {
+                screen = self.resolver.resolveScreen(for: .activeScreen)
+                cachedScreen = screen
+                lastScreenResolve = Date()
+            }
 #if DEBUG
             let elapsed = started.duration(to: .now)
             if elapsed > .milliseconds(100) {
@@ -244,7 +265,7 @@ final class VoiceBarPanel: NSPanel {
 
 private extension VoiceBarState {
     var feedbackLifetime: TimeInterval? {
-        switch self {
+        let lifetime: TimeInterval? = switch self {
         case .inserted: 1.2
         case .copied, .downloading: 3
         case .recoveredError, .noAI: 4
@@ -252,6 +273,10 @@ private extension VoiceBarState {
         case .blockingError: .infinity
         default: nil
         }
+        guard let debugLifetime = VoiceBarPresentation.debugFeedbackLifetime, let lifetime, lifetime.isFinite else {
+            return lifetime
+        }
+        return debugLifetime
     }
     var collapsedWidth: CGFloat {
         switch self {
