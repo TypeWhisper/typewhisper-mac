@@ -26,7 +26,7 @@ final class VoiceBarPresentation: ObservableObject {
     private var lastActivity: DictationViewModel.State = .idle
     private var feedback: (state: VoiceBarState, deadline: Date)?
     private var feedbackCaptured = false
-    private var hadModelNotice = false
+    private var lastModelNoticeAttempt = 0
     private var preparingDebounce = PreparingDebounce()
     static var enabled: Bool { UserDefaults.standard.object(forKey: "dictumVoiceBarEnabled") as? Bool ?? true }
 
@@ -104,13 +104,12 @@ final class VoiceBarPresentation: ObservableObject {
             if vm.state != .recording { preparingDebounce.reset() }
             lastActivity = vm.state
         }
-        // 每次发起听写时模型提示都重新出现一次，包括上一次提示已过期或已被关闭之后。
-        let hasModelNotice = vm.modelNotice != nil
-        if hasModelNotice && !hadModelNotice {
+        // 每次被拒绝的听写尝试都让模型提示重新出现，包括提示刚被关闭之后。
+        if vm.modelNoticeAttempt != lastModelNoticeAttempt {
             feedback = nil
             feedbackCaptured = false
+            lastModelNoticeAttempt = vm.modelNoticeAttempt
         }
-        hadModelNotice = hasModelNotice
         var input = VoiceBarState.Input()
         input.confirmedText = vm.partialText
         input.tentativeText = vm.streamingPreview.tentativeTail
@@ -222,6 +221,7 @@ final class VoiceBarPresentation: ObservableObject {
 
 /// 准备中状态只在准备条件连续成立 0.15 秒后显示，离开同样需要连续 0.15 秒，
 /// 引擎就绪与模型加载之间的瞬时切换不会让语音条在准备中与聆听之间闪烁。
+/// 一次录音显示过聆听之后，后续的准备条件一律显示为聆听，直到 `reset()`。
 struct PreparingDebounce {
     static let delay: TimeInterval = 0.15
     private var shown: Bool?
@@ -235,6 +235,10 @@ struct PreparingDebounce {
     /// 返回 nil 表示准备条件刚出现、尚未持续足够久，语音条暂不显示。
     mutating func update(preparing: Bool, now: Date) -> Bool? {
         if shown == nil, !preparing { shown = false }
+        if shown == false {
+            changeSince = nil
+            return false
+        }
         if let current = shown, current == preparing {
             changeSince = nil
             return current
@@ -254,7 +258,8 @@ private final class VoiceBarHostingView<Content: View>: NSHostingView<Content> {
 
 @MainActor
 final class VoiceBarPanel: NSPanel {
-    private let presentation = VoiceBarPresentation()
+    let presentation = VoiceBarPresentation()
+    private let dictation: DictationViewModel
     // 焦点元素与焦点窗口都要跨进程查询辅助功能接口，首次显示时会让主线程停顿约 200 毫秒；
     // 语音条只需要最前应用的窗口所在的屏幕。
     private let resolver = IndicatorScreenResolver(
@@ -268,7 +273,8 @@ final class VoiceBarPanel: NSPanel {
     private var lastScreenResolve = Date.distantPast
     private var wakeObserver: AnyCancellable?
 
-    init() {
+    init(dictation: DictationViewModel = .shared) {
+        self.dictation = dictation
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
@@ -291,7 +297,7 @@ final class VoiceBarPanel: NSPanel {
         ) { [weak self] _ in self?.lastScreenResolve = .distantPast })
         // 隐藏期间 55ms 定时刷新停止；objectWillChange 在属性变化之前触发，
         // 延后到下一轮主线程再刷新，才能读到变化后的值。
-        wakeObserver = DictationViewModel.shared.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
+        wakeObserver = dictation.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
             guard let self, self.timer == nil else { return }
             self.tick()
         }
@@ -322,7 +328,7 @@ final class VoiceBarPanel: NSPanel {
     }
 
     private func tick() {
-        presentation.refresh(.shared)
+        presentation.refresh(dictation)
         guard VoiceBarPresentation.enabled, presentation.isActive else {
             if presentation.isPresented {
                 presentation.isPresented = false
@@ -331,6 +337,9 @@ final class VoiceBarPanel: NSPanel {
                     guard let self, !self.presentation.isPresented else { return }
                     self.orderOut(nil)
                 }
+            } else if dictation.state == .recording {
+                // 准备中状态要等条件持续 0.15 秒才显示，录音开始后没有新的发布，刷新要继续运行。
+                startTimer()
             } else {
                 stopTimer()
             }

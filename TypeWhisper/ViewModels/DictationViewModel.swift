@@ -322,6 +322,8 @@ final class DictationViewModel: ObservableObject {
     @Published var partialText: String = ""
     @Published private(set) var streamingPreview: StreamingHandler.Preview = .init(confirmedPrefix: "", tentativeTail: "")
     @Published private(set) var modelNotice: DictationModelNotice?
+    /// 每次因模型未就绪而被拒绝的听写尝试加 1，语音条据此让每次尝试都重新显示提示。
+    @Published private(set) var modelNoticeAttempt = 0
     private var modelNoticeTask: Task<Void, Never>?
     @Published var isStreaming: Bool = false
     @Published private(set) var externalStreamingDisplayCount: Int = 0
@@ -2064,6 +2066,7 @@ final class DictationViewModel: ObservableObject {
         guard canDictate, notice == nil else {
             if let notice {
                 modelNotice = notice
+                modelNoticeAttempt += 1
                 failDictationSession(id: sessionID, error: notice.errorMessage)
                 hotkeyService.cancelDictation()
                 modelNoticeTask?.cancel()

@@ -12229,6 +12229,48 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testVoiceBarShowsPreparingWhileRecordingInputStaysNotReadyWithoutPublishedChanges() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalSoundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        var dictationContext: DictationContext?
+        var panel: VoiceBarPanel?
+        defer {
+            panel?.orderOut(nil)
+            panel = nil
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalSoundFeedbackEnabled, forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = false
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+
+        let voiceBar = VoiceBarPanel(dictation: context.dictationViewModel)
+        panel = voiceBar
+        voiceBar.startObserving()
+        _ = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+
+        // 此后听写模型没有发布任何变化，语音条自己的刷新要在约 0.2 秒内显示准备中。
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(voiceBar.presentation.state, .preparing)
+        XCTAssertTrue(voiceBar.presentation.isActive)
+
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(voiceBar.presentation.state, .listening)
+    }
+
+    @MainActor
     func testUSBDictationStartIsNonBlockingAndDelaysTimerUntilAudioStartCompletes() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)

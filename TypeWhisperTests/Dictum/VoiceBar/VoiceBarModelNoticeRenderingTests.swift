@@ -75,6 +75,24 @@ final class VoiceBarModelNoticeRenderingTests: XCTestCase {
         }
     }
 
+    func testImmediateSecondAttemptAfterDismissShowsTheModelNoticeAgain() async throws {
+        try await withDownloadingModel { dictation, _ in
+            let presentation = VoiceBarPresentation()
+            _ = dictation.apiStartRecording()
+            presentation.refresh(.shared)
+            XCTAssertEqual(presentation.state, .downloading(nil))
+
+            presentation.dismissFeedback()
+            presentation.refresh(.shared)
+            XCTAssertFalse(presentation.isActive)
+
+            _ = dictation.apiStartRecording()
+            presentation.refresh(.shared)
+            XCTAssertEqual(presentation.state, .downloading(nil))
+            XCTAssertTrue(presentation.isActive)
+        }
+    }
+
     func testModelNotDownloadedAndFailedUseDedicatedStates() async throws {
         let presentation = VoiceBarPresentation()
         presentation.setStateForTesting(.notDownloaded)

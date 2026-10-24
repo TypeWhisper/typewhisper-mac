@@ -108,13 +108,33 @@ final class VoiceBarStateTests: XCTestCase {
         XCTAssertEqual(debounce.update(preparing: false, now: start.addingTimeInterval(0.52)), false)
     }
 
-    func testBriefPreparingBlipDoesNotLeaveListening() {
+    func testPreparingConditionAfterListeningStaysListeningForTheWholeSession() {
         var debounce = PreparingDebounce()
         let start = Date()
         XCTAssertEqual(debounce.update(preparing: false, now: start), false)
-        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.05)), false)
-        XCTAssertEqual(debounce.update(preparing: false, now: start.addingTimeInterval(0.1)), false)
-        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.2)), false)
-        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.4)), true)
+        for step in 1...20 {
+            XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(Double(step) * 0.05)), false)
+        }
+    }
+
+    func testPreparingAfterPreparingShownAndListeningStaysListening() {
+        var debounce = PreparingDebounce()
+        let start = Date()
+        _ = debounce.update(preparing: true, now: start)
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.2)), true)
+        _ = debounce.update(preparing: false, now: start.addingTimeInterval(0.25))
+        XCTAssertEqual(debounce.update(preparing: false, now: start.addingTimeInterval(0.41)), false)
+        for step in 1...20 {
+            XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(0.41 + Double(step) * 0.05)), false)
+        }
+    }
+
+    func testResetStartsANewRecordingSessionWithPreparingAllowed() {
+        var debounce = PreparingDebounce()
+        let start = Date()
+        XCTAssertEqual(debounce.update(preparing: false, now: start), false)
+        debounce.reset()
+        XCTAssertNil(debounce.update(preparing: true, now: start.addingTimeInterval(1)))
+        XCTAssertEqual(debounce.update(preparing: true, now: start.addingTimeInterval(1.16)), true)
     }
 }
