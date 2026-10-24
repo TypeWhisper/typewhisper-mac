@@ -37,20 +37,31 @@ public actor PluginLocalInferenceGate {
     private var isClosed = false
     private var waiters: [Waiter] = []
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+    private var cancelRunningOperation: (@Sendable () -> Void)?
 
     public init() {}
 
     public func withLock<T: Sendable>(
-        _ operation: @Sendable () async throws -> T
+        _ operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
         try Task.checkCancellation()
         try await acquire()
         defer { release() }
         try Task.checkCancellation()
-        return try await operation()
+        // 门交给排队者之后、排队者恢复之前，close() 可能已经运行。
+        guard !isClosed else { throw CancellationError() }
+        // 操作在单独的任务中运行，close() 才能取消它；调用方的取消同样转给它。
+        let running = Task { try await operation() }
+        cancelRunningOperation = { running.cancel() }
+        defer { cancelRunningOperation = nil }
+        return try await withTaskCancellationHandler {
+            try await running.value
+        } onCancel: {
+            running.cancel()
+        }
     }
 
-    /// 等正在运行的操作结束，并拒绝排队中和之后的操作。
+    /// 取消正在运行的操作并等它结束，拒绝排队中和之后的操作。
     public func close() async {
         isClosed = true
         let pending = waiters
@@ -59,6 +70,7 @@ public actor PluginLocalInferenceGate {
             waiter.continuation.resume(returning: false)
         }
         guard isLocked else { return }
+        cancelRunningOperation?()
         await withCheckedContinuation { continuation in
             idleWaiters.append(continuation)
         }

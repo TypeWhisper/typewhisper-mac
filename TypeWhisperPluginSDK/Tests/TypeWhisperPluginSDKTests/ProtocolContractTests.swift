@@ -470,6 +470,15 @@ private actor GateLockRelease {
     }
 }
 
+private actor GateChunkCounter {
+    private(set) var started = 0
+
+    func start() -> Int {
+        started += 1
+        return started
+    }
+}
+
 private actor GateOperationState {
     private(set) var didRun = false
 
@@ -669,13 +678,17 @@ final class ProtocolContractTests: XCTestCase {
         }
         try await Task.sleep(for: .milliseconds(20))
 
-        let closed = Task { await gate.close() }
+        let closed = expectation(description: "close returned")
+        Task {
+            await gate.close()
+            closed.fulfill()
+        }
         try await Task.sleep(for: .milliseconds(20))
         let holderFinishedBeforeRelease = await holderFinished.value()
         XCTAssertFalse(holderFinishedBeforeRelease)
 
         await release.release()
-        await closed.value
+        await fulfillment(of: [closed], timeout: 2.0)
         let holderFinishedWhenClosed = await holderFinished.value()
         XCTAssertTrue(holderFinishedWhenClosed)
         try await holder.value
@@ -697,6 +710,42 @@ final class ProtocolContractTests: XCTestCase {
         }
 
         await gate.close()
+    }
+
+    func testLocalInferenceGateCloseCancelsRunningOperationAtNextChunk() async throws {
+        let gate = PluginLocalInferenceGate()
+        let release = GateLockRelease()
+        let chunks = GateChunkCounter()
+        let firstChunkStarted = expectation(description: "first chunk started")
+
+        let holder = Task {
+            try await gate.withLock {
+                for _ in 0..<3 {
+                    try Task.checkCancellation()
+                    if await chunks.start() == 1 { firstChunkStarted.fulfill() }
+                    await release.wait()
+                }
+            }
+        }
+        await fulfillment(of: [firstChunkStarted], timeout: 1.0)
+
+        let closed = expectation(description: "close returned")
+        Task {
+            await gate.close()
+            closed.fulfill()
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        await release.release()
+        await fulfillment(of: [closed], timeout: 2.0)
+
+        let startedChunks = await chunks.started
+        XCTAssertEqual(startedChunks, 1)
+        do {
+            try await holder.value
+            XCTFail("The running operation should stop at the next chunk after close")
+        } catch is CancellationError {
+            // Expected.
+        }
     }
 
     func testPluginAuthRolesExposeStableRawValues() {
