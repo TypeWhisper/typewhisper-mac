@@ -442,6 +442,22 @@ private final class AudioFileChunkReader {
     }
 }
 
+/// 开始录音在挂起恢复后可能与停止录音同时在不同线程上赋值同一个属性。
+/// 引用类型的赋值包含读取旧值、写入新值和释放旧值三步，必须在同一把锁内完成，否则旧值会被释放两次。
+@propertyWrapper
+private struct RecorderSessionLocked<Value>: @unchecked Sendable {
+    private let lock: OSAllocatedUnfairLock<Value>
+
+    init(wrappedValue: Value) {
+        lock = OSAllocatedUnfairLock(uncheckedState: wrappedValue)
+    }
+
+    var wrappedValue: Value {
+        get { lock.withLockUnchecked { $0 } }
+        nonmutating set { lock.withLockUnchecked { $0 = newValue } }
+    }
+}
+
 /// Records audio from microphone and/or system audio to file.
 /// Uses AVAudioEngine for mic and ScreenCaptureKit for system audio.
 final class AudioRecorderService: ObservableObject, @unchecked Sendable {
@@ -640,25 +656,25 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     var currentBufferOverride: (() -> [Float])?
     var hasMicrophonePermissionOverride: Bool?
 
-    private var audioEngine: AVAudioEngine?
-    private var micInputCaptureSession: AudioInputCaptureSession?
+    @RecorderSessionLocked private var audioEngine: AVAudioEngine?
+    @RecorderSessionLocked private var micInputCaptureSession: AudioInputCaptureSession?
     private let micDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController()
     private let micTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver()
     private let micBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let micInputCaptureFactory: AudioInputCaptureFactory
     private let micInputActivationGuard: AudioInputDeviceActivating
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(uncheckedState: nil)
-    private var scStream: SCStream?
-    private var streamOutput: SystemAudioStreamOutput?
-    private var systemLevelSetter: SystemLevelSetter?
+    @RecorderSessionLocked private var scStream: SCStream?
+    @RecorderSessionLocked private var streamOutput: SystemAudioStreamOutput?
+    @RecorderSessionLocked private var systemLevelSetter: SystemLevelSetter?
     private let sysFileLock = OSAllocatedUnfairLock<AVAudioFile?>(uncheckedState: nil)
-    private var durationTimer: Timer?
-    private var startTime: Date?
+    @RecorderSessionLocked private var durationTimer: Timer?
+    @RecorderSessionLocked private var startTime: Date?
     private let systemAudioDiagnosticsLock = OSAllocatedUnfairLock(initialState: SystemAudioCaptureDiagnostics())
 
-    private var micTempURL: URL?
-    private var systemTempURL: URL?
-    private var finalOutputURL: URL?
+    @RecorderSessionLocked private var micTempURL: URL?
+    @RecorderSessionLocked private var systemTempURL: URL?
+    @RecorderSessionLocked private var finalOutputURL: URL?
     private var outputFormat: OutputFormat = .wav
     private var micEnabled = false
     private var systemAudioEnabled = false
