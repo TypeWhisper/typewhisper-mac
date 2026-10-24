@@ -906,6 +906,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await ServiceContainer.shared.cloudFolderSyncController.handleApplicationDidBecomeActive() }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // exit() 会析构 MLX 的 C++ 全局对象，本地识别仍在运行时会访问已析构的对象而崩溃。
+        Task {
+            await PluginLocalInferenceGate.shared.close()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         if AppConstants.isScreenshotAutomation {
             try? FileManager.default.removeItem(at: AppConstants.appSupportDirectory)
