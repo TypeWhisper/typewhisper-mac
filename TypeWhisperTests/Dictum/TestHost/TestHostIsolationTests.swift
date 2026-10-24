@@ -61,15 +61,56 @@ final class TestHostIsolationTests: XCTestCase {
 
         XCTAssertTrue(shouldRecord("TestHostIsolationTests-suite"))
         XCTAssertFalse(shouldRecord(appDomain))
+        XCTAssertFalse(shouldRecord("COM.EXAMPLE.APP"))
         XCTAssertFalse(shouldRecord(UserDefaults.globalDomain))
+        XCTAssertFalse(shouldRecord("nsglobaldomain"))
         XCTAssertFalse(shouldRecord("/Users/test/Library/Preferences/example"))
         XCTAssertFalse(shouldRecord("../x"))
         XCTAssertFalse(shouldRecord("a/../../x"))
         XCTAssertFalse(shouldRecord("com.schneidervvv.dictum"))
+        XCTAssertFalse(shouldRecord("COM.SCHNEIDERVVV.DICTUM.DEV"))
+        XCTAssertFalse(shouldRecord("com.schneidervvv.Dictum"))
+        XCTAssertFalse(shouldRecord("com.ſchneidervvv.dictum"))
         XCTAssertFalse(shouldRecord("com.schneidervvv.dictum.dev"))
         XCTAssertFalse(shouldRecord(".GlobalPreferences"))
+        XCTAssertFalse(shouldRecord(".globalpreferences"))
         XCTAssertFalse(shouldRecord("TestHostIsolationTests-suite", exists: true))
         XCTAssertFalse(shouldRecord("TestHostIsolationTests-suite", inTestBundle: false))
+    }
+
+    func testPreferencesFileRejectsProtectedAndPathLikeNames() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let appDomain = "com.example.app"
+        let rejectedNames = [
+            appDomain,
+            appDomain.uppercased(),
+            "com.schneidervvv.dictum",
+            "COM.SCHNEIDERVVV.DICTUM",
+            "com.schneidervvv.dictum.dev",
+            "COM.SCHNEIDERVVV.DICTUM.DEV",
+            "com.schneidervvv.Dictum",
+            "com.ſchneidervvv.dictum",
+            UserDefaults.globalDomain,
+            "nsglobaldomain",
+            ".GlobalPreferences",
+            ".globalpreferences",
+            "../x",
+            "a/../../x",
+        ]
+
+        for name in rejectedNames {
+            XCTAssertNil(
+                TestHostIsolation.preferencesFile(forDomain: name, in: directory, appDomain: appDomain),
+                "\(name) must not resolve to a preferences file"
+            )
+        }
+
+        let acceptedName = "TestHostIsolationTests-\(UUID().uuidString)"
+        XCTAssertEqual(
+            TestHostIsolation.preferencesFile(forDomain: acceptedName, in: directory, appDomain: appDomain),
+            directory.appendingPathComponent(acceptedName + ".plist")
+        )
     }
 
     func testRemovingADomainDeletesItsPreferencesFile() throws {
@@ -104,7 +145,7 @@ final class TestHostIsolationTests: XCTestCase {
         XCTAssertEqual(names, ["earlier-run-suite", "this-run-suite"])
     }
 
-    func testManifestNamesOutsideTheTestOwnedSuitesDeleteNothingElse() throws {
+    func testManifestSweepDeletesOnlyTheListedSuiteFiles() throws {
         let root = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(root) }
         let preferences = root.appendingPathComponent("Preferences", isDirectory: true)
@@ -113,9 +154,8 @@ final class TestHostIsolationTests: XCTestCase {
         try FileManager.default.createDirectory(at: manifests, withIntermediateDirectories: true)
         let owned = "TestHostIsolationTests-\(UUID().uuidString)"
         defer { TestHostIsolation.removeDomain(owned) }
-        let outsideNames = ["../x", "a/../../x", "com.schneidervvv.dictum", "com.schneidervvv.dictum.dev"]
         let survivors = [
-            root.appendingPathComponent("x.plist"),
+            preferences.appendingPathComponent("TestHostIsolationTests-unlisted.plist"),
             preferences.appendingPathComponent("com.schneidervvv.dictum.plist"),
             preferences.appendingPathComponent("com.schneidervvv.dictum.dev.plist"),
         ]
@@ -124,8 +164,7 @@ final class TestHostIsolationTests: XCTestCase {
             try Data("plist".utf8).write(to: file)
         }
         let endedProcessID = try endedProcessIdentifier()
-        try JSONEncoder().encode(outsideNames + [owned])
-            .write(to: manifests.appendingPathComponent("\(endedProcessID).json"))
+        try JSONEncoder().encode([owned]).write(to: manifests.appendingPathComponent("\(endedProcessID).json"))
 
         TestHostIsolation.removeDomainsOfEndedRuns(manifestDirectory: manifests, preferencesDirectory: preferences)
 

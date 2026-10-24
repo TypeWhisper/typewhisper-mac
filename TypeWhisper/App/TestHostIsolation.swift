@@ -58,9 +58,7 @@ enum TestHostIsolation {
     /// 清单和文件夹扫描都可能带来任意名称，所以删除前在这里把关。
     /// 清空偏好设置域后，系统仍会在偏好设置文件夹里留下一个空文件，所以文件也一并删除。
     static func removeDomain(_ name: String, preferencesDirectory directory: URL = preferencesDirectory) {
-        guard isTestOwnedName(name, appDomain: Bundle.main.bundleIdentifier) else { return }
-        let file = directory.appendingPathComponent(name + ".plist")
-        guard file.standardizedFileURL.deletingLastPathComponent().path == directory.standardizedFileURL.path else { return }
+        guard let file = preferencesFile(forDomain: name, in: directory, appDomain: Bundle.main.bundleIdentifier) else { return }
 
         UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
         CFPreferencesAppSynchronize(name as CFString)
@@ -77,8 +75,22 @@ enum TestHostIsolation {
     static func isTestOwnedName(_ name: String, appDomain: String?) -> Bool {
         !name.contains("/")
             && !name.contains("..")
-            && name != appDomain
-            && !protectedDomains.contains(name)
+            && !isProtectedName(name, appDomain: appDomain)
+    }
+
+    /// 本机的文件系统大小写不敏感，偏好设置域同样按大小写不敏感匹配，所以保护名单的比较忽略大小写。
+    private static func isProtectedName(_ name: String, appDomain: String?) -> Bool {
+        protectedDomains.contains { name.compare($0, options: .caseInsensitive) == .orderedSame }
+            || appDomain.map { name.compare($0, options: .caseInsensitive) == .orderedSame } == true
+    }
+
+    /// 名称和文件位置检查合在一个纯函数里：名称可接受且对应文件直接位于该偏好设置文件夹时返回文件。
+    /// `removeDomain` 在任何删除或同步操作之前调用它。
+    static func preferencesFile(forDomain name: String, in directory: URL, appDomain: String?) -> URL? {
+        guard isTestOwnedName(name, appDomain: appDomain) else { return nil }
+        let file = directory.appendingPathComponent(name + ".plist")
+        guard file.standardizedFileURL.deletingLastPathComponent().path == directory.standardizedFileURL.path else { return nil }
+        return file
     }
 
     static var preferencesDirectory: URL {
@@ -90,13 +102,13 @@ enum TestHostIsolation {
         FileManager.default.temporaryDirectory.appendingPathComponent("TypeWhisper-TestHost-Suites", isDirectory: true)
     }
 
-    /// 追加而不是覆盖：复用已结束进程号的宿主要保留前一个宿主崩溃时留下的套件名。
+    /// 把名称并入本进程号已有的清单：复用已结束进程号的宿主会保留前一个宿主崩溃时留下的套件名。
     static func appendToSuiteManifest(_ names: Set<String>, in directory: URL) {
         let url = manifestURL(in: directory, processID: ProcessInfo.processInfo.processIdentifier)
         let existing = (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
         guard let data = try? JSONEncoder().encode(names.union(existing).sorted()) else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? data.write(to: url)
+        try? data.write(to: url, options: .atomic)
     }
 
     private static func manifestURL(in directory: URL, processID: pid_t) -> URL {
