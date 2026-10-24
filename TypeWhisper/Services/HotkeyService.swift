@@ -1302,6 +1302,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         hotkey: UnifiedHotkey
     ) {
         guard Self.supportsCarbonHotkey(hotkey) else { return }
+        // 测试宿主与已安装的应用共用同一个标识，注册系统级快捷键会抢走正在使用的应用的按键。
+        guard !AppConstants.isRunningTests else { return }
 
         let hotkeyId = EventHotKeyID(signature: Self.carbonHotkeySignature, id: id)
         let options = UInt32(kEventHotKeyNoOptions)
@@ -1599,7 +1601,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return shouldSuppress ? nil : Unmanaged.passUnretained(event)
         }
 
-        let tapOptions: CGEventTapOptions = .defaultTap
+        // 测试宿主继承已安装应用的辅助功能授权。只监听的 tap 仍走完整的创建、启用和看门狗流程，
+        // 但不会拦截或延迟其他进程收到的按键和鼠标事件。
+        let tapOptions: CGEventTapOptions = AppConstants.isRunningTests ? .listenOnly : .defaultTap
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: Self.hotkeyEventTapPlacement,

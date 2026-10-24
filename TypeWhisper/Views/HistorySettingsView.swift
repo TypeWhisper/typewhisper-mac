@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct HistorySettingsView: View {
-    @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled = true
-    @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays = 0
-    @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory = false
     @ObservedObject private var syncController = ServiceContainer.shared.cloudFolderSyncController
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @State private var confirmingHistorySync = false
@@ -41,39 +38,9 @@ struct HistorySettingsView: View {
                     }
                 }
 
-                Section(String(localized: "Local History")) {
-                    Toggle(String(localized: "Save history"), isOn: $historyEnabled)
-                    if historyEnabled {
-                        Toggle(String(localized: "Save audio with transcriptions"), isOn: $saveAudioWithHistory)
-                        Picker(String(localized: "Auto-delete after"), selection: $historyRetentionDays) {
-                            Text(String(localized: "Unlimited")).tag(0)
-                            Text(String(localized: "30 days")).tag(30)
-                            Text(String(localized: "60 days")).tag(60)
-                            Text(String(localized: "90 days")).tag(90)
-                            Text(String(localized: "180 days")).tag(180)
-                        }
-                    }
-                }
-
                 Section(String(localized: "Sync")) {
                     Toggle(String(localized: "Sync History & Inbox"), isOn: historySyncBinding)
                         .disabled(syncController.mode == .off || syncController.isSyncing)
-
-                    if syncController.historySyncPreferences?.isEnabled == true {
-                        Toggle(String(localized: "Sync Audio for New Entries"), isOn: historyAudioBinding)
-                        Text(String(localized: "History sync is optional on each device. Audio sync applies to new entries and downloads automatically on enabled devices."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(localizedAppText(
-                            "Enable sync first, then choose whether this Mac participates in History and Inbox sync.",
-                            de: "Aktiviere die Synchronisierung und wähle dann, ob dieser Mac Verlauf und Eingang synchronisiert.",
-                            ja: "同期を有効にしてから、このMacの履歴と受信トレイを同期するか選択します。",
-                            zh: "先启用同步，再选择此 Mac 是否参与历史记录和收件箱同步。"
-                        ))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
                 Section(String(localized: "Restore & Delete")) {
@@ -170,13 +137,6 @@ struct HistorySettingsView: View {
                     Task { await syncController.setHistorySyncEnabled(false) }
                 }
             }
-        )
-    }
-
-    private var historyAudioBinding: Binding<Bool> {
-        Binding(
-            get: { syncController.historySyncPreferences?.isAudioEnabled == true },
-            set: { enabled in syncController.setHistoryAudioSyncEnabled(enabled) }
         )
     }
 

@@ -147,7 +147,7 @@ private final class TargetAppCorrectionWakeCoordinator: @unchecked Sendable {
     private var sleepTask: Task<Void, Never>?
     private var generation = 0
 
-    func wait(for duration: Duration) async {
+    func wait(for duration: Duration, sleep: @escaping @MainActor (Duration) async -> Void) async {
         guard duration > .seconds(0), !Task.isCancelled else { return }
 
         await withTaskCancellationHandler(operation: {
@@ -158,7 +158,7 @@ private final class TargetAppCorrectionWakeCoordinator: @unchecked Sendable {
                 }
                 let waitID = self.startWait(continuation)
                 let task = Task { [weak self] in
-                    try? await Task.sleep(for: duration)
+                    await sleep(duration)
                     self?.resume(waitID: waitID)
                 }
                 self.storeSleepTask(task, waitID: waitID)
@@ -222,7 +222,12 @@ private struct PendingCorrectionObservation: Codable, Equatable {
 
 @MainActor
 final class TargetAppCorrectionLearningService: ObservableObject {
-    private static let defaultPollSchedule: [Duration] = (1...30).map { .seconds($0) }
+    /// 用户经常先读完整段再改词，改完按 Return 时距插入已经过去半分钟以上；观察期过短会漏掉
+    /// 这类修正。前 20 秒每秒读一次输入框，之后逐渐放慢，两分钟内仍停留在同一输入框的修改
+    /// 都算同一次修正。插入后切换输入框或应用会立即结束观察，所以加长窗口不会学到别的插入。
+    private static let defaultPollSchedule: [Duration] =
+        (1...20).map { .seconds($0) }
+        + [30, 40, 50, 60, 75, 90, 105, 120].map { .seconds($0) }
     /// Choices offered for how often the same correction must be made before it is learned.
     static let requiredObservationChoices = [1, 2, 3, 5]
     private static let pendingObservationLifetime: TimeInterval = 30 * 24 * 60 * 60
@@ -267,6 +272,12 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         self.sleep = sleep
         self.makeCommitObserver = makeCommitObserver
         self.defaults = defaults
+        let persistedPreference = Bundle.main.bundleIdentifier.flatMap {
+            defaults.persistentDomain(forName: $0)?[UserDefaultsKeys.targetAppCorrectionLearningEnabled]
+        }
+        if defaults === UserDefaults.standard && persistedPreference == nil {
+            defaults.set(true, forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        }
         self.shouldPersistLatestAttempt = persistLatestAttempt
         self.now = now
         self.pendingObservations = Self.loadPendingObservations(from: defaults)
@@ -329,6 +340,27 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         var latestNonConfidentOutcome: TargetAppCorrectionLearningOutcome = .unsupportedTextObservation
         var latestObservation: TargetAppCorrectionObservation?
         var elapsed: Duration = .seconds(0)
+
+        func record(editedText: String) {
+            latestObservation = correctionObservation(
+                insertedText: insertedText,
+                baselineText: baseline.value,
+                editedText: editedText,
+                commitSignal: commitSignal
+            )
+            let suggestions = highConfidenceCorrectionSuggestions(
+                insertedText: insertedText,
+                baselineText: baseline.value,
+                editedText: editedText
+            )
+            if !suggestions.isEmpty {
+                latestSuggestions = suggestions
+            } else {
+                latestSuggestions = []
+                latestNonConfidentOutcome = editedText == baseline.value ? .noEdit : .ambiguousEdit
+            }
+        }
+
         for pollOffset in pollSchedule {
             let waitDuration: Duration
             if pollOffset > elapsed {
@@ -339,7 +371,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             }
             if commitSignal == nil {
                 if waitDuration > .seconds(0) {
-                    await wakeCoordinator.wait(for: waitDuration)
+                    await wakeCoordinator.wait(for: waitDuration, sleep: sleep)
                 } else {
                     await sleep(.seconds(0))
                 }
@@ -353,6 +385,9 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             }
 
             guard let observation = textInsertionService.recaptureFocusedTextObservation(matching: baseline) else {
+                if let finalObservation = textInsertionService.observation(of: baseline.element) {
+                    record(editedText: finalObservation.value)
+                }
                 switch textInsertionService.focusedTextElementMatch(baseline) {
                 case .same, .unavailable:
                     if let commitSignal {
@@ -383,24 +418,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
                 }
             }
 
-            latestObservation = correctionObservation(
-                insertedText: insertedText,
-                baselineText: baseline.value,
-                editedText: observation.value,
-                commitSignal: commitSignal
-            )
-
-            let suggestions = highConfidenceCorrectionSuggestions(
-                insertedText: insertedText,
-                baselineText: baseline.value,
-                editedText: observation.value
-            )
-            if !suggestions.isEmpty {
-                latestSuggestions = suggestions
-            } else {
-                latestSuggestions = []
-                latestNonConfidentOutcome = observation.value == baseline.value ? .noEdit : .ambiguousEdit
-            }
+            record(editedText: observation.value)
 
             if let commitSignal {
                 return completeCommittedAttempt(

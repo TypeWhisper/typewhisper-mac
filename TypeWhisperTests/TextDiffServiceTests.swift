@@ -212,4 +212,167 @@ final class TextDiffServiceTests: XCTestCase {
             edited: "1 2 3 4"
         ).isEmpty)
     }
+
+    func testHighConfidenceExtractionSegmentsChineseWithoutSpacesByWord() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，讨论星河项目，请准备会议记录。"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "新河")
+        XCTAssertEqual(suggestions.first?.replacement, "星河")
+    }
+
+    func testHighConfidenceExtractionLearnsAChineseMishearingSplitIntoSeveralTokens() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "我想用迪克腾做听写，请帮我打开设置",
+            edited: "我想用dictum做听写，请帮我打开设置"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "迪克腾")
+        XCTAssertEqual(suggestions.first?.replacement, "dictum")
+    }
+
+    func testHighConfidenceExtractionSkipsChineseEditsAcrossSeveralClauses() {
+        let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周五上午九点，讨论星河项目，请准备会议记录。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，请准备会议记录。"
+        ).isEmpty)
+    }
+
+    func testChineseAutoLearningKeepsOnlyTheEditedWord() {
+        let service = TextDiffService()
+
+        let word = service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，讨论星河项目，请准备会议记录。"
+        )
+        XCTAssertEqual(word.map(\.original), ["新河"])
+        XCTAssertEqual(word.map(\.replacement), ["星河"])
+
+        let extended = service.extractHighConfidenceCorrections(
+            original: "请准备会议记录",
+            edited: "请准备会议纪要和议程"
+        )
+        XCTAssertFalse(extended.contains { $0.replacement == "纪要和议程" })
+        XCTAssertTrue(extended.isEmpty || (extended.map(\.original) == ["记录"] && extended.map(\.replacement) == ["纪要"]))
+    }
+
+    func testChineseAutoLearningRejectsPhrasesAndSharedTokens() {
+        let service = TextDiffService()
+
+        let phrase = service.extractHighConfidenceCorrections(
+            original: "周四下午三点，讨论新河项目，请准备会议记录。",
+            edited: "周四下午三点，讨论星河方案，请准备会议记录。"
+        )
+        XCTAssertFalse(phrase.contains { $0.replacement == "星河方案" || $0.original == "新河项目" })
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "讨论新河项目的进度安排",
+            edited: "讨论星河计划的时间安排"
+        ).isEmpty)
+    }
+
+    func testChineseAutoLearningStillLearnsAMishearingSplitIntoManyTokens() {
+        let suggestions = TextDiffService().extractHighConfidenceCorrections(
+            original: "我们把服务部署到酷伯尼特斯。",
+            edited: "我们把服务部署到Kubernetes。"
+        )
+
+        XCTAssertEqual(suggestions.map(\.original), ["酷伯尼特斯"])
+        XCTAssertEqual(suggestions.map(\.replacement), ["Kubernetes"])
+    }
+
+    func testChineseAutoLearningRejectsMultiTokenContentRewrites() {
+        let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "把会议记录和议程安排整理好",
+            edited: "把材料整理好"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "生产环境的集群已经扩容",
+            edited: "线已经扩容"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "市场部的同事会参加评审",
+            edited: "小王会参加评审"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "我们开会讨论了这个方案",
+            edited: "我们聊了这个方案"
+        ).isEmpty)
+    }
+
+    func testChineseAutoLearningRejectsOtherEditShapes() {
+        let service = TextDiffService()
+        let original = "周四下午三点，讨论新河项目，请准备会议记录。"
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周五下午三点，讨论星河项目，请准备会议纪要。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周四下午三点，讨论新河项目，请准备会议记录！"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周四下午三点，讨论项目，请准备会议记录。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: original,
+            edited: "周四下午三点，讨论新河大项目，请准备会议记录。"
+        ).isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "please open Github today",
+            edited: "please open GitHub today"
+        ).isEmpty)
+    }
+
+    func testChineseNumeralToNumeralEditsAreNeverLearned() {
+        let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(original: "订三份", edited: "订四份").isEmpty)
+        XCTAssertTrue(service.extractCorrections(original: "订 三 份", edited: "订 四 份").isEmpty)
+        XCTAssertTrue(service.extractHighConfidenceCorrections(original: "共计二十三人", edited: "共计二十四人").isEmpty)
+    }
+
+    func testHighConfidenceExtractionHandlesMixedChineseAndEnglish() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "把 teh 项目发给星河团队",
+            edited: "把 the 项目发给星河团队"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "teh")
+        XCTAssertEqual(suggestions.first?.replacement, "the")
+    }
+
+    func testHighConfidenceExtractionKeepsEnglishBehaviour() {
+        let service = TextDiffService()
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "please use teh word",
+            edited: "please use the word"
+        )
+
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "teh")
+        XCTAssertEqual(suggestions.first?.replacement, "the")
+    }
 }

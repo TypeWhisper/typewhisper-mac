@@ -1200,8 +1200,32 @@ final class HistoryService: ObservableObject {
         return counts.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
     }
 
-    func purgeOldRecords(retentionDays: Int = 90) {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
+    func retentionDeletionCount(_ retention: HistoryRetention, now: Date = Date()) -> Int {
+        if retention == .never { return recordCount() }
+        guard let cutoff = retention.cutoff(now: now) else { return 0 }
+        return allRecords().filter { $0.timestamp < cutoff }.count
+    }
+
+    func applyRetention(_ retention: HistoryRetention, now: Date = Date()) {
+        if retention == .never { purgeRecords(before: .distantFuture); return }
+        guard let cutoff = retention.cutoff(now: now) else { return }
+        purgeRecords(before: cutoff)
+    }
+
+    /// 定时轮询和每次同步后调用：只套用按天数的档位；“不保留”只在设置页确认后清除一次，
+    /// 由 HistorySyncSection 调用 applyRetention(.never)。
+    func applySelectedDayBasedRetention(in defaults: UserDefaults = .standard, now: Date = Date()) {
+        let retention = HistoryRetention.selected(in: defaults)
+        guard retention != .never else { return }
+        applyRetention(retention, now: now)
+    }
+
+    func purgeOldRecords(retentionDays: Int = 365) {
+        guard retentionDays > 0 else { return }
+        applyRetention(HistoryRetention(storedDays: retentionDays))
+    }
+
+    private func purgeRecords(before cutoff: Date) {
         let descriptor = FetchDescriptor<TranscriptionRecord>(
             predicate: #Predicate { $0.timestamp < cutoff }
         )

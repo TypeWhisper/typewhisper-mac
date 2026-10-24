@@ -78,6 +78,31 @@ final class CloudFolderSyncController: ObservableObject {
     @Published private(set) var isSyncing = false
     @Published var errorMessage: String?
     @Published var statusMessage: String?
+    @Published private(set) var needsSyncConsent = false
+
+    static var defaultICloudFolder: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/dictum", isDirectory: true)
+    }
+
+    var synchronizedRecordCount: Int { historyService?.recordCount() ?? 0 }
+
+    func acceptDefaultSync() async {
+        guard FileManager.default.fileExists(atPath: Self.defaultICloudFolder.deletingLastPathComponent().path) else {
+            errorMessage = HistorySyncPresentation.missingFolder
+            return
+        }
+        needsSyncConsent = false
+        defaults.set(true, forKey: "dictum.sync.consent")
+        historySyncPreferences?.isEnabled = true
+        historySyncPreferences?.isAudioEnabled = false
+        await selectCustomFolder(Self.defaultICloudFolder)
+    }
+
+    func declineDefaultSync() {
+        needsSyncConsent = false
+        defaults.set(false, forKey: "dictum.sync.consent")
+    }
 
     var availableModes: [PremiumSyncMode] {
         automaticICloudAvailable ? PremiumSyncMode.allCases : [.off, .cloudFolder]
@@ -108,6 +133,14 @@ final class CloudFolderSyncController: ObservableObject {
         self.defaults = defaults
         self.automaticICloudBridge = automaticICloudBridge
         self.automaticICloudAvailableOverride = automaticICloudAvailable
+        if defaults === UserDefaults.standard {
+            if defaults.object(forKey: UserDefaultsKeys.historyRetentionDays) == nil {
+                defaults.set(HistoryRetention.year.rawValue, forKey: UserDefaultsKeys.historyRetentionDays)
+            }
+            if defaults.object(forKey: UserDefaultsKeys.saveAudioWithHistory) == nil {
+                defaults.set(true, forKey: UserDefaultsKeys.saveAudioWithHistory)
+            }
+        }
         let isAutomaticICloudAvailable = automaticICloudAvailable
             ?? (TypeWhisperBuildCapabilities.iCloudSyncEnabled && automaticICloudBridge.isAvailable)
         self.customState = Self.loadState(from: defaults, key: Keys.syncState, legacyKey: Keys.legacySyncState)
@@ -120,6 +153,9 @@ final class CloudFolderSyncController: ObservableObject {
         self.lastSyncDate = mode == .automaticICloud ? automaticState.lastSyncAt : customState.lastSyncAt
 
         restoreSelectedFolder()
+        historySyncPreferences?.isAudioEnabled = false
+        needsSyncConsent = storedMode == nil && defaults.object(forKey: "dictum.sync.consent") == nil
+            && FileManager.default.fileExists(atPath: Self.defaultICloudFolder.deletingLastPathComponent().path)
         if mode == .automaticICloud { provider = .iCloudDrive }
         installLocalChangeObserver()
         updateICloudObservation()
@@ -187,13 +223,6 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
-    func setHistoryAudioSyncEnabled(_ enabled: Bool) {
-        historySyncPreferences?.isAudioEnabled = enabled
-        // The next automatic check installs audio that is now allowed to arrive.
-        if enabled { hasPendingLocalChanges = true }
-        objectWillChange.send()
-    }
-
     func clearFolder() {
         guard !isSyncing else { return }
         scheduledSyncTask?.cancel()
@@ -210,6 +239,11 @@ final class CloudFolderSyncController: ObservableObject {
             mode = .off
             defaults.set(mode.rawValue, forKey: Keys.mode)
         }
+    }
+
+    func disableHistoryAudioSync() {
+        historySyncPreferences?.isAudioEnabled = false
+        objectWillChange.send()
     }
 
     /// True for this Mac's record, including an older record of the same
@@ -288,6 +322,10 @@ final class CloudFolderSyncController: ObservableObject {
         let syncMode = mode
         guard syncMode != .off else { return }
         guard let folderURL = activeFolderURL(for: syncMode) else { return }
+        if syncMode == .cloudFolder && !FileManager.default.fileExists(atPath: folderURL.path) {
+            errorMessage = HistorySyncPresentation.missingFolder
+            return
+        }
         guard !isSyncing else {
             needsResync = true
             return
@@ -318,6 +356,7 @@ final class CloudFolderSyncController: ObservableObject {
                 cache: syncCache
             )
             setState(syncState, for: syncMode)
+            historyService?.applySelectedDayBasedRetention(in: defaults)
             if syncMode == .automaticICloud {
                 try await automaticICloudBridge.synchronize()
             }
@@ -350,10 +389,11 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
-    private func selectCustomFolder(_ url: URL) async {
+    func selectCustomFolder(_ url: URL) async {
         guard !isSyncing else { return }
         let bookmark: Data
         do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
             bookmark = try url.bookmarkData(
                 options: .withSecurityScope,
                 includingResourceValuesForKeys: nil,
@@ -375,9 +415,14 @@ final class CloudFolderSyncController: ObservableObject {
         }
         selectedFolderURL = url
         mode = .cloudFolder
+        historySyncPreferences?.isEnabled = true
+        historySyncPreferences?.isAudioEnabled = false
+        needsSyncConsent = false
+        defaults.set(true, forKey: "dictum.sync.consent")
         defaults.set(mode.rawValue, forKey: Keys.mode)
         provider = CloudFolderSyncProvider.detect(folderURL: url)
         saveDefault(bookmark, forKey: Keys.folderBookmark, legacyKey: Keys.legacyFolderBookmark)
+        updateICloudObservation()
         await syncNow()
     }
 
@@ -436,7 +481,7 @@ final class CloudFolderSyncController: ObservableObject {
 
     private func updateICloudObservation() {
         stopICloudObservation()
-        guard mode == .automaticICloud, automaticICloudBridge.isAvailable else { return }
+        guard isConfigured, mode != .automaticICloud || automaticICloudBridge.isAvailable else { return }
         automaticPollTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
@@ -455,7 +500,8 @@ final class CloudFolderSyncController: ObservableObject {
 
     /// Checks for remote changes; a full sync only runs when the package or local data changed.
     func automaticPollTick() async {
-        guard mode == .automaticICloud, !isSyncing else { return }
+        guard isConfigured, !isSyncing else { return }
+        historyService?.applySelectedDayBasedRetention(in: defaults)
         await syncIfNeeded()
     }
 
@@ -871,18 +917,6 @@ struct CloudFolderSyncSettingsView: View {
                     )
                     .disabled(controller.mode == .off || controller.isSyncing)
                     .accessibilityIdentifier("premium.sync.history")
-
-                    if controller.historySyncPreferences?.isEnabled == true {
-                        Toggle(
-                            String(localized: "Sync Audio for New Entries"),
-                            isOn: Binding(
-                                get: { controller.historySyncPreferences?.isAudioEnabled == true },
-                                set: { controller.setHistoryAudioSyncEnabled($0) }
-                            )
-                        )
-                        .disabled(controller.mode == .off || controller.isSyncing)
-                        .accessibilityIdentifier("premium.sync.historyAudio")
-                    }
 
                     Text(String(localized: "premium.window.sync.modeHelp"))
                         .font(.caption)
