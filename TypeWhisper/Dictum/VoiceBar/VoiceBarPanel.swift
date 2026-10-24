@@ -337,7 +337,7 @@ final class VoiceBarPanel: NSPanel {
                     guard let self, !self.presentation.isPresented else { return }
                     self.orderOut(nil)
                 }
-            } else if dictation.state == .recording {
+            } else if VoiceBarPresentation.enabled, dictation.state == .recording {
                 // 准备中状态要等条件持续 0.15 秒才显示，录音开始后没有新的发布，刷新要继续运行。
                 startTimer()
             } else {
