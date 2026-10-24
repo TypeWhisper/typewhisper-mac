@@ -1,4 +1,5 @@
 import XCTest
+@testable import TypeWhisper
 
 /// 翻译路径上的源码里，除默认语言对和测试之外，不能写死语言代码或语言名。
 final class TranslationNoHardCodedLanguageTests: XCTestCase {
@@ -10,7 +11,16 @@ final class TranslationNoHardCodedLanguageTests: XCTestCase {
         "TypeWhisper/Dictum/Pages/General/TranslationShortcutRow.swift",
         "TypeWhisper/Dictum/Onboarding/DictumOnboardingView.swift",
         "TypeWhisper/Dictum/History/HistoryRecordFilter.swift",
-        "TypeWhisper/Dictum/History/HistoryRetryController.swift"
+        "TypeWhisper/Dictum/History/HistoryRetryController.swift",
+        "TypeWhisper/Dictum/VoiceBar/VoiceBarPanel.swift",
+        "TypeWhisper/Dictum/VoiceBar/VoiceBarState.swift",
+        "TypeWhisper/Dictum/Pages/HistoryPage.swift",
+        "TypeWhisper/Dictum/Pages/HomePage.swift",
+        "TypeWhisper/Dictum/MenuBar/DictumMenuBarView.swift",
+        "TypeWhisper/ViewModels/DictationViewModel.swift",
+        "TypeWhisper/Services/HotkeyService.swift",
+        "TypeWhisper/Services/HistoryExporter.swift",
+        "TypeWhisper/Models/TranscriptionRecord.swift"
     ]
     private static let defaultsFile = "TranslationLanguageSettings.swift"
     private static let codePattern = try! NSRegularExpression(
@@ -70,6 +80,31 @@ final class TranslationNoHardCodedLanguageTests: XCTestCase {
         }
         XCTAssertEqual(found, [], "翻译路径不能写死语言：\n" + found.joined(separator: "\n"))
     }
+
+    /// 提示词只含从语言代码生成的语言名；其余文字里没有语言名、CJK 文字或某种语言的口头禅示例。
+    func testPromptTextContainsOnlyLanguageNamesGeneratedFromCodes() {
+        let style = ResolvedStyle.resolve(bundleID: nil, browserURL: nil, global: StyleSettings(), apps: AppStyle.defaults)
+        let pairs: [(String?, String)] = [("zh-Hans", "en"), ("en", "ja"), (nil, "fr"), ("ko", "de"), ("zh-Hant", "es")]
+        for (spoken, target) in pairs {
+            for level in [PolishLevel.light, .standard, .rewrite] {
+                let request = TranslationRequest(
+                    rawTranscript: "x", spokenLanguage: spoken, targetLanguage: target, level: level, style: style,
+                    vocabulary: [], target: .init(appName: nil, bundleID: nil, browserURL: nil))
+                var text = request.systemPrompt
+                for code in [spoken, target].compactMap({ $0 }) {
+                    text = text.replacingOccurrences(of: TranslationLanguageNames.promptName(for: code), with: " ")
+                    text = text.replacingOccurrences(of: code, with: " ")
+                }
+                let range = NSRange(text.startIndex..., in: text)
+                XCTAssertNil(Self.namePattern.firstMatch(in: text, range: range), "\(spoken ?? "auto")→\(target) \(level): 提示词含语言名")
+                XCTAssertNil(Self.fillerPattern.firstMatch(in: text, range: range), "\(spoken ?? "auto")→\(target) \(level): 提示词含口头禅示例")
+                XCTAssertFalse(text.unicodeScalars.contains { scalar in Self.nonLatinScalars.contains { $0.contains(scalar.value) } },"\(spoken ?? "auto")→\(target) \(level): 提示词含非拉丁文字")
+            }
+        }
+    }
+
+    private static let fillerPattern = try! NSRegularExpression(pattern: "\\b(um|uh|er|hmm|euh)\\b", options: .caseInsensitive)
+    private static let nonLatinScalars: [ClosedRange<UInt32>] = [0x3040...0x30FF, 0x4E00...0x9FFF, 0xAC00...0xD7AF]
 
     func testScannerDetectsAHardCodedLanguage() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("hard-coded-\(UUID().uuidString).swift")
