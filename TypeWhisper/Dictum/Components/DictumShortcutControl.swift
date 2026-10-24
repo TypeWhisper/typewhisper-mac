@@ -6,10 +6,11 @@ struct DictumShortcutControl: View {
     var tableName: String = "DictumShell"
     let action: () -> Void
 
-    private static let shiftKeyNames: Set<String> = ["Left Shift", "Right Shift"]
-
+    /// 键帽按设计稿显示：fn 小写，Shift 用 ⇧，例如 [fn][左 ⇧]。
     private var keys: [String] {
-        label.components(separatedBy: " + ").map { $0.replacingOccurrences(of: "Fn", with: "fn") }
+        label.components(separatedBy: " + ").map {
+            $0.replacingOccurrences(of: "Fn", with: "fn").replacingOccurrences(of: "Shift", with: "⇧")
+        }
     }
 
     var body: some View {
@@ -23,7 +24,7 @@ struct DictumShortcutControl: View {
                 } else {
                     // 组合键的每个键一个键帽，例如 [fn][左 ⇧]。
                     ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
-                        KeyCapView(key: key, tableName: Self.shiftKeyNames.contains(key) ? "DictumTranslation" : tableName)
+                        KeyCapView(key: key, tableName: tableName)
                     }
                     .opacity(isRecording ? 0.35 : 1)
                 }
