@@ -291,9 +291,8 @@ final class VoiceBarPanel: NSPanel {
 #if DEBUG
         let started = ContinuousClock.now
 #endif
-        // Resolving the active screen queries the focused element over the accessibility
-        // API, which can block the main thread for tens of milliseconds per call. The
-        // screen only needs to track focus changes, not run every 55 ms tick.
+        // 解析活动屏幕会经辅助功能 API 查询焦点元素，单次可能阻塞主线程数十毫秒；
+        // 屏幕只需跟随焦点变化，不必每 55ms 都解析。
         let screen: NSScreen
         if Date().timeIntervalSince(lastScreenResolve) < 2, let cachedScreen {
             screen = cachedScreen
