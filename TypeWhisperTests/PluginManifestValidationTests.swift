@@ -1050,6 +1050,60 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-cloud-engine")
     }
 
+    func testFirstRunSelectsQwen3OnlyWhenSetupWasNeverCompleted() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "FirstRunDefaultEngine")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: nil,
+            UserDefaultsKeys.setupWizardCompleted: nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let qwen3 = Qwen3SelectionRecordingPlugin()
+        let cloud = MockCloudEnginePlugin()
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: qwen3, pluginId: Qwen3SelectionRecordingPlugin.pluginId, directory: appSupportDirectory),
+            try makeLoadedPlugin(plugin: cloud, pluginId: MockCloudEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, SetupWizardQwen3Recommendation.providerId)
+        XCTAssertEqual(qwen3.restoreRequests, ["qwen3-asr-1.7b-8bit"])
+    }
+
+    func testCompletedSetupDoesNotRestartQwen3DownloadWhenSelectionWasCleared() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "FirstRunDefaultEngine")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: nil,
+            UserDefaultsKeys.setupWizardCompleted: "YES",
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let qwen3 = Qwen3SelectionRecordingPlugin()
+        let cloud = MockCloudEnginePlugin()
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: qwen3, pluginId: Qwen3SelectionRecordingPlugin.pluginId, directory: appSupportDirectory),
+            try makeLoadedPlugin(plugin: cloud, pluginId: MockCloudEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+
+        modelManager.restoreProviderSelection()
+
+        XCTAssertNotEqual(modelManager.selectedProviderId, SetupWizardQwen3Recommendation.providerId)
+        XCTAssertTrue(qwen3.restoreRequests.isEmpty)
+    }
+
     func testDeletingLastModelWithoutAlternativeReportsMissingModel() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1270,6 +1324,45 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: key)
         }
+    }
+}
+
+private final class Qwen3SelectionRecordingPlugin: NSObject, TranscriptionEnginePlugin, PluginDownloadedModelManaging, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.first-run.qwen3"
+    static let pluginName = "Qwen3 First Run Test Plugin"
+
+    var downloadedModels: [PluginModelInfo] = []
+    private(set) var restoreRequests: [String] = []
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { SetupWizardQwen3Recommendation.providerId }
+    var providerDisplayName: String { "Qwen3 ASR" }
+    var isConfigured: Bool { false }
+    var supportsTranslation: Bool { false }
+    var supportedLanguages: [String] { ["zh", "en"] }
+    var transcriptionModels: [PluginModelInfo] {
+        [
+            PluginModelInfo(id: "qwen3-asr-1.7b-8bit", displayName: "8-bit"),
+            PluginModelInfo(id: "qwen3-asr-1.7b-6bit", displayName: "6-bit"),
+        ]
+    }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+
+    func download(_ modelId: String) {}
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        downloadedModels.removeAll { $0.id == modelId }
+    }
+
+    @objc func triggerRestoreModelForModel(_ modelId: NSString) {
+        restoreRequests.append(modelId as String)
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "")
     }
 }
 

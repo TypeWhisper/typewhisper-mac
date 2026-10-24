@@ -120,7 +120,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         XCTAssertNil(providerId)
     }
 
-    func testQwen3RecommendationPrefers17B6BitModel() {
+    func testQwen3RecommendationPrefers17B8BitModel() {
         let modelId = SetupWizardQwen3Recommendation.preferredModelId(
             from: [
                 PluginModelInfo(id: "qwen3-asr-0.6b-6bit", displayName: "Qwen3 0.6B 6-bit"),
@@ -129,14 +129,14 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(modelId, "qwen3-asr-1.7b-6bit")
+        XCTAssertEqual(modelId, "qwen3-asr-1.7b-8bit")
     }
 
     func testQwen3RecommendationFallsBackToFirstAvailableModel() {
         let modelId = SetupWizardQwen3Recommendation.preferredModelId(
             from: [
                 PluginModelInfo(id: "qwen3-asr-0.6b-6bit", displayName: "Qwen3 0.6B 6-bit"),
-                PluginModelInfo(id: "qwen3-asr-1.7b-8bit", displayName: "Qwen3 1.7B 8-bit")
+                PluginModelInfo(id: "qwen3-asr-1.7b-6bit", displayName: "Qwen3 1.7B 6-bit")
             ]
         )
 

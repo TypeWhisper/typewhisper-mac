@@ -243,24 +243,46 @@
         }
       }
     },
-    "32 GB quality": {
+    "Recommended": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "32-GB-Qualität"
+            "value": "Empfohlen"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "32-GB-品質"
+            "value": "推奨"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "32 GB 品质"
+            "value": "推荐"
+          }
+        }
+      }
+    },
+    "Unquantized quality": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unquantisierte Qualität"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "非量子化の品質"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未量化精度"
           }
         }
       }
@@ -376,24 +398,24 @@
         }
       }
     },
-    "Best default for most 16 GB+ Macs.": {
+    "Lighter pick when memory is tight; MLX peak about 2.8 GiB.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beste Vorgabe für die meisten Macs mit 16 GB+."
+            "value": "Leichtere Wahl bei knappem Speicher; MLX-Spitzenwert etwa 2,8 GiB."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "16 GB以上のMacのほとんどに最適な設定。"
+            "value": "メモリが不足しがちな場合の軽量な選択。MLX最大使用量は約2.8 GiB。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "大多数 16 GB 以上 Mac 的最佳默认选择。"
+            "value": "内存紧张时的轻量选择；MLX 峰值约 2.8 GiB。"
           }
         }
       }
@@ -640,24 +662,24 @@
         }
       }
     },
-    "Higher-quality pick for 32 GB+ Macs.": {
+    "Default precision; MLX peak about 3.2 GiB.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qualitätswahl für Macs mit 32 GB+."
+            "value": "Standardgenauigkeit; MLX-Spitzenwert etwa 3,2 GiB."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "32 GB以上のMac向けの品質選択。"
+            "value": "標準の精度。MLX最大使用量は約3.2 GiB。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "32 GB 以上 Mac 的高品质选择。"
+            "value": "默认精度；MLX 峰值约 3.2 GiB。"
           }
         }
       }
@@ -992,24 +1014,24 @@
         }
       }
     },
-    "Middle ground if the default 6-bit model is tight on memory.": {
+    "Middle ground if the default 8-bit model is tight on memory.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mittelweg, wenn das 6-bit-Standardmodell knapp im Speicher wird."
+            "value": "Mittelweg, wenn das 8-bit-Standardmodell knapp im Speicher wird."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "6-bit標準モデルがメモリ不足になる場合に中間選択。"
+            "value": "8-bit標準モデルがメモリ不足になる場合に中間選択。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "默认 6 位模型内存紧张时的折中选择。"
+            "value": "默认 8 位模型内存紧张时的折中选择。"
           }
         }
       }
@@ -1076,28 +1098,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
-          }
-        }
-      }
-    },
-    "Quality / 32 GB": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Qualität / 32 GB"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "品質 / 32 GB"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "品质 / 32 GB"
           }
         }
       }
