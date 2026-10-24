@@ -51,6 +51,17 @@ final class VoiceBarStateTests: XCTestCase {
     }
 
     @MainActor
+    func testRecordingTextSplitsConfirmedPrefixFromTentativeTail() {
+        let preview = StreamingHandler.Preview.comparing(previous: "明天下午三点。", current: "明天下午三点。地点不变。")
+        let recording = VoiceBarPresentation.transcriptParts(recording: true, partialText: "明天下午三点。地点不变。", preview: preview)
+        XCTAssertEqual(recording.confirmed, "明天下午三点。")
+        XCTAssertEqual(recording.tentative, "地点不变。")
+        let polishing = VoiceBarPresentation.transcriptParts(recording: false, partialText: "明天下午三点。地点不变。", preview: preview)
+        XCTAssertEqual(polishing.confirmed, "明天下午三点。地点不变。")
+        XCTAssertEqual(polishing.tentative, "")
+    }
+
+    @MainActor
     func testInsertedCountIgnoresLineBreaksAndPunctuation() {
         XCTAssertEqual(VoiceBarPresentation.countWords("明天下午三点，请准备。\n\n我们开会。"), 13)
         XCTAssertEqual(VoiceBarPresentation.countWords("Hello, world.\nSecond line"), 4)

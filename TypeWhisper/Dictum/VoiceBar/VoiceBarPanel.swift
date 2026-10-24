@@ -173,8 +173,9 @@ final class VoiceBarPresentation: ObservableObject {
         }
         isActive = nextState != .idle
         if isActive { state = nextState }
-        if !vm.partialText.isEmpty || !state.showsTranscript { text = vm.partialText }
-        tentativeText = vm.state == .recording ? vm.streamingPreview.tentativeTail : ""
+        let parts = Self.transcriptParts(recording: vm.state == .recording, partialText: vm.partialText, preview: vm.streamingPreview)
+        if !vm.partialText.isEmpty || !state.showsTranscript { text = parts.confirmed }
+        tentativeText = parts.tentative
         duration = vm.recordingDuration
         levels.removeFirst()
         levels.append(vm.audioLevel)
@@ -188,6 +189,11 @@ final class VoiceBarPresentation: ObservableObject {
         isActive = true
     }
 #endif
+
+    /// partialText 已包含待确认尾段，录音中按预览拆成确认前缀与尾段，其余状态整段显示。
+    static func transcriptParts(recording: Bool, partialText: String, preview: StreamingHandler.Preview) -> (confirmed: String, tentative: String) {
+        recording ? (preview.confirmedPrefix, preview.tentativeTail) : (partialText, "")
+    }
 
     static func countWords(_ text: String) -> Int {
         var count = 0
