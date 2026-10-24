@@ -35,8 +35,6 @@ Agents write, review, merge and release this project's code. Each time an agent 
 - Wait for the run command before starting dependent live checks (Seen x1: 2026-10-23)
   - What went wrong: The dictation harness and process inspection started while `dictum-verify.sh run` was still building and launching the app. Its initial window then took focus from the test document.
   - Evidence: `/tmp/dictum-fix-output/r1-early-start-runtime.log` records dictation starting before the initial window became key. The receipt in `r1-final-cold-zh/proof.json` has a correct transcript, zero document bytes and `insertion=not-inserted`. Process inspection reported `launched-suspended`.
-  - Fix: Wait for the run command's terminal exit result before launching the harness or inspecting the app PID. Confirm the target application is in front. The fresh cold run in `r1-final-verified-zh/proof.json` passed with one 54-byte insertion.
-
 - Acquire the application lock for tests that insert text (Seen x1: 2026-10-23)
   - What went wrong: A complete test run included integration tests that use the real text insertion service while another phase could own the desktop.
   - Evidence: Existing integration tests call the paste path with text including `transcribed`. The coordinator observed unexpected text in another phase's dictionary field. The exact originating process was not captured.
@@ -46,6 +44,10 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - What went wrong: Registering the new history retention default affected other UserDefaults suites in the same test process and removed old history in backup tests.
   - Evidence: Six SettingsBackupExporterTests failed in the first phase 4 complete run and passed in the targeted regression run after the default initialization was corrected.
   - Fix: Initialize production defaults only in the standard preferences domain. Apply retention at the history and sync lifecycle boundaries, keeping generic backup mutation restoration independent of retention.
+- Serialize verification commands within one worktree (Seen x1: 2026-10-23)
+  - What went wrong: A second verification started after an Xcode compilation failure while the first invocation was still running SDK tests. Both commands wrote the same receipts and redirected log.
+  - Evidence: The shared log contained sparse bytes and an xcresult reader error, while the later invocation returned zero and its independent Xcode result reported 2,980 passing tests.
+  - Fix: Wait for the complete shell invocation to exit before starting another verification in that worktree. Use a distinct redirected log for each attempt and retain the final exit status together with the result bundle summary.
 
 - 真实字段测试依赖辅助功能授权，宿主没有授权时整个测试类会被静默跳过 (Seen x1: 2026-10-24)
   - 问题：`DuplicateInsertionRealFieldTests` 在测试宿主没有辅助功能授权时用 `XCTSkip` 跳过，换一台 Mac 运行时这组覆盖会无声消失，容易误以为修复仍被测试覆盖。
