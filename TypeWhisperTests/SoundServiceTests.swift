@@ -339,6 +339,21 @@ final class SoundServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testOneShotPlayerReportsQueuedPlaybackFailureToTheResultHandler() async {
+        let factory = FailingSoundCuePlayerFactory()
+        let player = makeOneShotPlayer(factory: factory)
+        let url = URL(fileURLWithPath: "/tmp/failing-cue.wav")
+
+        var reported: (url: URL, started: Bool)?
+        player.setPlaybackResultHandler { reported = ($0, $1) }
+
+        XCTAssertTrue(player.play(url: url))
+        await player.waitForPendingPlaybackForTesting()
+        XCTAssertEqual(reported?.url, url)
+        XCTAssertEqual(reported?.started, false)
+    }
+
+    @MainActor
     func testOneShotPlayerInvalidationDiscardsCachedPlayerAndDuration() async {
         let factory = FakeSoundCuePlayerFactory(duration: 0.4)
         let player = makeOneShotPlayer(factory: factory)
@@ -482,6 +497,7 @@ final class SoundServiceTests: XCTestCase {
     @MainActor
     private final class SpyOneShotSoundPlayer: OneShotSoundPlaying {
         var durationToReturn: TimeInterval?
+        var playbackResultHandler: (@MainActor @Sendable (URL, Bool) -> Void)?
         private(set) var playedURLs: [URL] = []
         private(set) var durationRequests: [URL] = []
         private(set) var preparedURLSets: [Set<URL>] = []
@@ -489,6 +505,7 @@ final class SoundServiceTests: XCTestCase {
 
         func play(url: URL) -> Bool {
             playedURLs.append(url)
+            playbackResultHandler?(url, true)
             return true
         }
 
@@ -503,6 +520,10 @@ final class SoundServiceTests: XCTestCase {
 
         func invalidate(url: URL) {
             invalidatedURLs.append(url)
+        }
+
+        func setPlaybackResultHandler(_ handler: (@MainActor @Sendable (URL, Bool) -> Void)?) {
+            playbackResultHandler = handler
         }
     }
 
@@ -570,6 +591,20 @@ final class SoundServiceTests: XCTestCase {
                 return player
             }
         }
+    }
+
+    /// The play closure fails while creation succeeds; the result handler must
+    /// report the failure so callers can fall back to the system sound.
+    private final class FailingSoundCuePlayerFactory: @unchecked Sendable {
+        func makePlayer(url: URL) throws -> any SoundCuePlayback {
+            FailingSoundCuePlayer()
+        }
+    }
+
+    private final class FailingSoundCuePlayer: SoundCuePlayback, @unchecked Sendable {
+        var duration: TimeInterval { 0.2 }
+        func prepareToPlay() -> Bool { true }
+        func play() -> Bool { false }
     }
 
 }

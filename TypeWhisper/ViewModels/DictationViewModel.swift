@@ -2792,6 +2792,7 @@ final class DictationViewModel: ObservableObject {
             ? nil
             : String(localized: "Processing...")
         markActiveDictationSessionProcessingIfNeeded()
+        soundService.play(.recordingStopped, enabled: soundFeedbackEnabled)
         // A push-to-talk recording interrupted by other keys is discarded without
         // transcription; its discard banner is announced instead.
         if pendingPushToTalkDiscardMessage == nil {

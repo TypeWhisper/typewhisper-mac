@@ -136,6 +136,9 @@ extension AVAudioPlayer: SoundCuePlayback {}
 protocol OneShotSoundPlaying: AnyObject {
     @discardableResult
     func play(url: URL) -> Bool
+    /// Reports whether the queued playback actually started; runs on the main actor
+    /// after `play(url:)` has already returned.
+    func setPlaybackResultHandler(_ handler: (@MainActor @Sendable (URL, Bool) -> Void)?)
     func duration(for url: URL) -> TimeInterval?
     /// Keeps a prepared player ready for each URL and releases players for URLs no longer listed.
     func preparePlayback(for urls: Set<URL>)
@@ -295,6 +298,7 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
     private var preparationGenerations: [URL: Int] = [:]
     private var activePlayers: [any SoundCuePlayback] = []
     private let pendingOperations = PlaybackOperationCounter()
+    private var playbackResultHandler: (@MainActor @Sendable (URL, Bool) -> Void)?
 
     init(
         makePlayer: @escaping PlayerFactory = {
@@ -319,12 +323,14 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
         let cached = cachedPlayers.removeValue(forKey: url)
         let makePlayer = makePlayer
         let preparationQueue = preparationQueue
+        let resultHandler = playbackResultHandler
         pendingOperations.begin()
         preparationQueue.async { [weak self] in
             let cue = cached.map { PreparedSoundCue(player: $0.player) }
                 ?? (try? makePlayer(url)).map { PreparedSoundCue(player: $0) }
+            var started = false
             if let cue {
-                let started = Self.start(cue.player, needsPreparation: cached?.isPrepared != true)
+                started = Self.start(cue.player, needsPreparation: cached?.isPrepared != true)
                 if started {
                     let duration = cue.player.duration
                     Task { @MainActor [weak self] in
@@ -334,10 +340,17 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
                     }
                 }
             }
+            if let resultHandler {
+                Task { @MainActor in resultHandler(url, started) }
+            }
             self?.pendingOperations.end()
         }
         preparePlayer(for: url)
         return true
+    }
+
+    func setPlaybackResultHandler(_ handler: (@MainActor @Sendable (URL, Bool) -> Void)?) {
+        playbackResultHandler = handler
     }
 
     func duration(for url: URL) -> TimeInterval? {
@@ -464,6 +477,9 @@ class SoundService {
 
     init(oneShotPlayer: OneShotSoundPlaying = AVAudioOneShotSoundPlayer()) {
         self.oneShotPlayer = oneShotPlayer
+        oneShotPlayer.setPlaybackResultHandler { [weak self] url, started in
+            self?.handleOneShotPlaybackResult(url: url, started: started)
+        }
         preloadSounds()
         loadChoices()
         prepareFilePlayback()
@@ -473,14 +489,28 @@ class SoundService {
     func play(_ event: SoundEvent, enabled: Bool) -> Bool {
         guard enabled else { return false }
         let choice = choices[event] ?? event.defaultChoice
-        if let playbackURL = filePlaybackURL(for: choice),
-           oneShotPlayer.play(url: playbackURL) {
+        if let playbackURL = filePlaybackURL(for: choice) {
+            oneShotPlayer.play(url: playbackURL)
             return true
         }
         guard let sound = sound(for: choice) else { return false }
         sound.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
         sound.stop()
         return sound.play()
+    }
+
+    private func handleOneShotPlaybackResult(url: URL, started: Bool) {
+        guard !started else { return }
+        // 音频文件播放失败时回落到同一事件的系统提示音，压低音量逻辑
+        // 不能误以为播放已开始。
+        guard let event = choices.first(where: { filePlaybackURL(for: $0.value) == url })?.key else { return }
+        let fallbackChoice = event.defaultChoice
+        guard fallbackChoice != .none, let sound = sound(for: fallbackChoice) else { return }
+        choices[event] = fallbackChoice
+        defer { choices[event] = event.defaultChoice }
+        sound.volume = (UserDefaults.standard.object(forKey: "soundVolume") as? NSNumber)?.floatValue ?? 0.35
+        sound.stop()
+        sound.play()
     }
 
     func playbackDuration(for event: SoundEvent, enabled: Bool) -> TimeInterval? {

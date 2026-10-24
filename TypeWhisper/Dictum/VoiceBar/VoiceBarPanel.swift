@@ -83,9 +83,6 @@ final class VoiceBarPresentation: ObservableObject {
             }
         }
 #endif
-        if lastActivity == .recording && vm.state == .processing && vm.cancelledRecordingDeadline == nil {
-            ServiceContainer.shared.soundService.play(.recordingStopped, enabled: vm.soundFeedbackEnabled)
-        }
         if lastActivity != vm.state {
             if vm.state == .recording || vm.state == .processing {
                 copiedText = nil
