@@ -53,6 +53,14 @@ private actor RecorderStartGate {
     }
 }
 
+private actor RecorderSessionEventLog {
+    private(set) var events: [String] = []
+
+    func append(_ event: String) {
+        events.append(event)
+    }
+}
+
 private final class BlockingRecordingsLoader: @unchecked Sendable {
     let started = DispatchSemaphore(value: 0)
     let release = DispatchSemaphore(value: 0)
@@ -1581,6 +1589,112 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(recording.calendarEvent, metadata)
         XCTAssertNil(recording.transcript)
+    }
+
+    func testManualStopDuringStartupWaitsForStartAndEndsTheSession() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = recordingsDirectory
+        let startGate = RecorderStartGate()
+        let eventLog = RecorderSessionEventLog()
+        recorderService.startRecordingOverride = { _, _, _, outputURL, _ in
+            try Data("starting".utf8).write(to: outputURL)
+            let startedURL = await startGate.wait(outputURL: outputURL)
+            await eventLog.append("start-finished")
+            return startedURL
+        }
+        recorderService.stopRecordingOverride = { outputURL in
+            await eventLog.append("stop-finalize")
+            try Data("recorded".utf8).write(to: outputURL)
+            return outputURL
+        }
+        let viewModel = makeViewModel(defaults: defaults, recorderService: recorderService)
+        viewModel.transcriptionEnabled = false
+        viewModel.livePreviewEnabled = false
+
+        let startTask = Task {
+            try await viewModel.startCalendarMeetingRecording(preferredBaseName: "First")
+        }
+        for _ in 0..<100 where !(await startGate.hasStarted()) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let startupDidSuspend = await startGate.hasStarted()
+        XCTAssertTrue(startupDidSuspend)
+
+        viewModel.stopRecording()
+        var finalizedDuringStartup = false
+        for _ in 0..<50 where !finalizedDuringStartup {
+            try await Task.sleep(for: .milliseconds(10))
+            finalizedDuringStartup = await eventLog.events.contains("stop-finalize")
+        }
+        XCTAssertFalse(finalizedDuringStartup, "Stop finalized the recording while start was suspended")
+
+        await startGate.resume()
+        do {
+            _ = try await startTask.value
+            XCTFail("Expected startup to observe the manual stop")
+        } catch let error as AudioRecorderViewModel.RecorderAPIError {
+            guard case .notRecording = error else {
+                return XCTFail("Expected notRecording, got \(error)")
+            }
+        }
+        try await waitForRecorderState(viewModel, .idle)
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let firstCycleEvents = await eventLog.events
+        XCTAssertEqual(firstCycleEvents, ["start-finished", "stop-finalize"])
+
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        XCTAssertFalse(recorderService.isRecording)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(recorderService.duration, 0)
+
+        recorderService.startRecordingOverride = { _, _, _, outputURL, _ in
+            try Data("starting".utf8).write(to: outputURL)
+            await eventLog.append("start-finished")
+            return outputURL
+        }
+        let handle = try await viewModel.startCalendarMeetingRecording(preferredBaseName: "Second")
+        try viewModel.stopCalendarMeetingRecording(handle: handle)
+        try await waitForRecorderState(viewModel, .idle)
+        try await waitForRecordingsToLoad(viewModel, count: 2)
+        let events = await eventLog.events
+        XCTAssertEqual(events, ["start-finished", "stop-finalize", "start-finished", "stop-finalize"])
+        XCTAssertEqual(try String(contentsOf: handle.outputURL, encoding: .utf8), "recorded")
+    }
+
+    func testSecondStopWhileFinalizingDoesNothing() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recorderService = makeRecorderService(recordingsDirectory: makeTemporaryDirectory())
+        let eventLog = RecorderSessionEventLog()
+        recorderService.stopRecordingOverride = { outputURL in
+            await eventLog.append("stop-finalize")
+            try Data("recorded".utf8).write(to: outputURL)
+            return outputURL
+        }
+        let viewModel = makeViewModel(defaults: defaults, recorderService: recorderService)
+        viewModel.transcriptionEnabled = false
+        viewModel.livePreviewEnabled = false
+        var stoppedEvents = 0
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .recordingStopped = event { stoppedEvents += 1 }
+        }
+
+        _ = try await viewModel.startCalendarMeetingRecording(preferredBaseName: "Double stop")
+        viewModel.stopRecording()
+        viewModel.stopRecording()
+        try await waitForRecorderState(viewModel, .idle)
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await Task.sleep(for: .milliseconds(300))
+
+        let events = await eventLog.events
+        XCTAssertEqual(events, ["stop-finalize"])
+        XCTAssertEqual(stoppedEvents, 1)
+        XCTAssertEqual(viewModel.state, .idle)
     }
 
     func testCalendarMetadataPersistsWithoutTranscriptionAndIsDeletedWithRecording() async throws {

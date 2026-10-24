@@ -442,22 +442,6 @@ private final class AudioFileChunkReader {
     }
 }
 
-/// 开始录音在挂起恢复后可能与停止录音同时在不同线程上赋值同一个属性。
-/// 引用类型的赋值包含读取旧值、写入新值和释放旧值三步，必须在同一把锁内完成，否则旧值会被释放两次。
-@propertyWrapper
-private struct RecorderSessionLocked<Value>: @unchecked Sendable {
-    private let lock: OSAllocatedUnfairLock<Value>
-
-    init(wrappedValue: Value) {
-        lock = OSAllocatedUnfairLock(uncheckedState: wrappedValue)
-    }
-
-    var wrappedValue: Value {
-        get { lock.withLockUnchecked { $0 } }
-        nonmutating set { lock.withLockUnchecked { $0 = newValue } }
-    }
-}
-
 /// Records audio from microphone and/or system audio to file.
 /// Uses AVAudioEngine for mic and ScreenCaptureKit for system audio.
 final class AudioRecorderService: ObservableObject, @unchecked Sendable {
@@ -656,25 +640,28 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     var currentBufferOverride: (() -> [Float])?
     var hasMicrophonePermissionOverride: Bool?
 
-    @RecorderSessionLocked private var audioEngine: AVAudioEngine?
-    @RecorderSessionLocked private var micInputCaptureSession: AudioInputCaptureSession?
+    /// 录音器允许在开始挂起期间点击停止，所以开始、停止和回滚依次执行：
+    /// 每个操作等前一个结束后才读写下面的会话属性，停止拆除的总是完整开始或已回滚的会话。
+    private let sessionOperationTail = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
+    private var audioEngine: AVAudioEngine?
+    private var micInputCaptureSession: AudioInputCaptureSession?
     private let micDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController()
     private let micTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver()
     private let micBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let micInputCaptureFactory: AudioInputCaptureFactory
     private let micInputActivationGuard: AudioInputDeviceActivating
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(uncheckedState: nil)
-    @RecorderSessionLocked private var scStream: SCStream?
-    @RecorderSessionLocked private var streamOutput: SystemAudioStreamOutput?
-    @RecorderSessionLocked private var systemLevelSetter: SystemLevelSetter?
+    private var scStream: SCStream?
+    private var streamOutput: SystemAudioStreamOutput?
+    private var systemLevelSetter: SystemLevelSetter?
     private let sysFileLock = OSAllocatedUnfairLock<AVAudioFile?>(uncheckedState: nil)
-    @RecorderSessionLocked private var durationTimer: Timer?
-    @RecorderSessionLocked private var startTime: Date?
+    /// 只在主线程上安装、读取和停止。
+    private var durationTimer: Timer?
     private let systemAudioDiagnosticsLock = OSAllocatedUnfairLock(initialState: SystemAudioCaptureDiagnostics())
 
-    @RecorderSessionLocked private var micTempURL: URL?
-    @RecorderSessionLocked private var systemTempURL: URL?
-    @RecorderSessionLocked private var finalOutputURL: URL?
+    private var micTempURL: URL?
+    private var systemTempURL: URL?
+    private var finalOutputURL: URL?
     private var outputFormat: OutputFormat = .wav
     private var micEnabled = false
     private var systemAudioEnabled = false
@@ -816,6 +803,56 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             throw RecorderError.noSourceEnabled
         }
 
+        let result: Result<URL, any Error> = await performSessionOperation {
+            do {
+                return .success(try await self.startSession(
+                    micEnabled: micEnabled,
+                    systemAudioEnabled: systemAudioEnabled,
+                    format: format,
+                    microphoneSelection: microphoneSelection,
+                    preferredBaseName: preferredBaseName
+                ))
+            } catch {
+                return .failure(error)
+            }
+        }
+        return try result.get()
+    }
+
+    func stopRecording() async -> URL? {
+        let stoppedRecording = await stopCapture()
+        return await finalizeRecording(stoppedRecording)
+    }
+
+    /// 停止没有正在录音的会话时什么也不做，返回的结果不含任何文件。
+    func stopCapture(includeTranscriptionSamples: Bool = false) async -> StoppedRecording {
+        await performSessionOperation {
+            await self.stopSession(includeTranscriptionSamples: includeTranscriptionSamples)
+        }
+    }
+
+    private func performSessionOperation<Value: Sendable>(
+        _ operation: @escaping @Sendable () async -> Value
+    ) async -> Value {
+        let task = sessionOperationTail.withLock { tail in
+            let previous = tail
+            let task = Task {
+                await previous?.value
+                return await operation()
+            }
+            tail = Task { _ = await task.value }
+            return task
+        }
+        return await task.value
+    }
+
+    private func startSession(
+        micEnabled: Bool,
+        systemAudioEnabled: Bool,
+        format: OutputFormat,
+        microphoneSelection: ResolvedRecordingInputSelection,
+        preferredBaseName: String?
+    ) async throws -> URL {
         self.micEnabled = micEnabled
         self.systemAudioEnabled = systemAudioEnabled
         self.outputFormat = format
@@ -879,42 +916,44 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             }
         }
 
-        // Start duration timer
-        startTime = Date()
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self, let startTime = self.startTime else { return }
-            let elapsed = Date().timeIntervalSince(startTime)
-            DispatchQueue.main.async {
-                self.duration = elapsed
+        let startedAt = Date()
+        await MainActor.run {
+            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+                self?.duration = Date().timeIntervalSince(startedAt)
             }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        durationTimer = timer
-
-        DispatchQueue.main.async {
+            RunLoop.main.add(timer, forMode: .common)
+            self.durationTimer = timer
             self.isRecording = true
         }
 
         return finalOutputURL ?? outputURL
     }
 
-    func stopRecording() async -> URL? {
-        let stoppedRecording = await stopCapture()
-        return await finalizeRecording(stoppedRecording)
-    }
+    private func stopSession(includeTranscriptionSamples: Bool) async -> StoppedRecording {
+        let usesFinalizationOverride = stopRecordingOverride != nil
+        guard let stoppedFinalOutputURL = finalOutputURL else {
+            return StoppedRecording(
+                finalOutputURL: nil,
+                micTempURL: nil,
+                systemTempURL: nil,
+                outputFormat: outputFormat,
+                trackMode: trackMode,
+                micDuckingMode: micDuckingMode,
+                transcriptionSamples: [],
+                usesFinalizationOverride: usesFinalizationOverride
+            )
+        }
 
-    func stopCapture(includeTranscriptionSamples: Bool = false) async -> StoppedRecording {
-        // Stop timer
-        durationTimer?.invalidate()
-        durationTimer = nil
+        await MainActor.run {
+            self.durationTimer?.invalidate()
+            self.durationTimer = nil
+        }
         endSystemAudioMonitoring()
 
-        let usesFinalizationOverride = stopRecordingOverride != nil
         let stoppedMicEnabled = micEnabled
         let stoppedSystemAudioEnabled = systemAudioEnabled
         let stoppedMicTempURL = stoppedMicEnabled ? micTempURL : nil
         let stoppedSystemTempURL = stoppedSystemAudioEnabled ? systemTempURL : nil
-        let stoppedFinalOutputURL = finalOutputURL
         let stoppedOutputFormat = outputFormat
         let stoppedTrackMode = trackMode
         let stoppedMicDuckingMode = micDuckingMode
@@ -967,7 +1006,6 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         micTempURL = nil
         systemTempURL = nil
         finalOutputURL = nil
-        startTime = nil
 
         // Must happen before the reset below: an already-scheduled flush
         // from a value received just before this stop would otherwise still
@@ -1807,10 +1845,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         return mixed
     }
 
+    /// 只在开始操作内运行：失败的开始还没有安装计时器。
     private func rollbackFailedStart() async {
-        durationTimer?.invalidate()
-        durationTimer = nil
-        startTime = nil
         endSystemAudioMonitoring()
 
         if let stream = scStream {
