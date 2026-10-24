@@ -30,24 +30,57 @@ final class PolishConfigurationTests: XCTestCase {
     }
 
     func testRemovingOneOfTwoModelRowsKeepsSharedProfile() throws {
+        let pluginId = "com.typewhisper.openai-compatible"
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let previousManager = PluginManager.shared
+        let previousBus = EventBus.shared
+        let previousOverride = AppConstants.testAppSupportDirectoryOverride
+        let pluginDefaultsPrefix = "plugin.\(pluginId)."
+        let savedPluginDefaults = UserDefaults.standard.dictionaryRepresentation()
+            .filter { $0.key.hasPrefix(pluginDefaultsPrefix) }
+        // 插件的配置写在标准偏好设置里，密钥写在应用支持文件夹的密钥文件里，两处都在测试后还原。
+        AppConstants.testAppSupportDirectoryOverride = directory
+        PluginManager.shared = PluginManager(appSupportDirectory: directory)
+        EventBus.shared = EventBus()
+        defer {
+            PluginManager.shared.unloadPlugin(pluginId, keepsSavedEngine: true)
+            for key in UserDefaults.standard.dictionaryRepresentation().keys where key.hasPrefix(pluginDefaultsPrefix) {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+            for (key, value) in savedPluginDefaults { UserDefaults.standard.set(value, forKey: key) }
+            PluginManager.shared = previousManager
+            EventBus.shared = previousBus
+            AppConstants.testAppSupportDirectoryOverride = previousOverride
+            TestSupport.remove(directory)
+        }
+        let bundleURL = try XCTUnwrap(Bundle.main.builtInPlugInsURL).appendingPathComponent("OpenAICompatiblePlugin.bundle")
+        try PluginManager.shared.loadPlugin(at: bundleURL)
+        XCTAssertNotNil(ProviderConfiguration.compatiblePlugin)
+
+        let profile = try ProviderConfiguration.configure(["preset": "deepseek", "key": "sk-fixed-test-key-0000"])
+        let profileID = try XCTUnwrap(profile["id"] as? String)
+        XCTAssertEqual(profile["hasKey"] as? Bool, true)
+        XCTAssertEqual(KeychainService.load(service: "\(pluginId).api-key.\(profileID)"), "sk-fixed-test-key-0000")
+
         let suite = "PolishConfigurationTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let processing = PromptProcessingService(userDefaults: defaults)
-        processing.addLLMFallback(providerId: "openai-compatible:deepseek", modelId: "deepseek-v4-flash")
-        processing.addLLMFallback(providerId: "openai-compatible:deepseek", modelId: "deepseek-v4-pro")
+        processing.addLLMFallback(providerId: profileID, modelId: "deepseek-v4-flash")
+        processing.addLLMFallback(providerId: profileID, modelId: "deepseek-v4-pro")
         processing.addLLMFallback(providerId: "openai-compatible:qwen", modelId: "qwen-plus")
         let flash = try XCTUnwrap(processing.fallbackPriorityList.first { $0.modelId == "deepseek-v4-flash" })
         let pro = try XCTUnwrap(processing.fallbackPriorityList.first { $0.modelId == "deepseek-v4-pro" })
-        var removedProfiles: [String] = []
 
-        ProviderConfiguration.removeFallback(flash, from: processing) { removedProfiles.append($0) }
+        ProviderConfiguration.removeFallback(flash, from: processing)
         XCTAssertEqual(processing.fallbackPriorityList.map(\.modelId), ["deepseek-v4-pro", "qwen-plus"])
-        XCTAssertEqual(removedProfiles, [])
+        XCTAssertEqual(try ProviderConfiguration.configure(["id": profileID])["hasKey"] as? Bool, true)
+        XCTAssertEqual(KeychainService.load(service: "\(pluginId).api-key.\(profileID)"), "sk-fixed-test-key-0000")
 
-        ProviderConfiguration.removeFallback(pro, from: processing) { removedProfiles.append($0) }
+        ProviderConfiguration.removeFallback(pro, from: processing)
         XCTAssertEqual(processing.fallbackPriorityList.map(\.modelId), ["qwen-plus"])
-        XCTAssertEqual(removedProfiles, ["openai-compatible:deepseek"])
+        XCTAssertThrowsError(try ProviderConfiguration.configure(["id": profileID]))
+        XCTAssertNil(KeychainService.load(service: "\(pluginId).api-key.\(profileID)"))
     }
 
     func testStrengthTracksExternalAppStorageWrites() async throws {

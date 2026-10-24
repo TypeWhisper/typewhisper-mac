@@ -64,11 +64,7 @@ enum ProviderConfiguration {
         }
     }
     /// 同一个兼容供应商可以有多个模型行，只有最后一行被移除时才删除配置和密钥。
-    static func removeFallback(
-        _ item: LLMFallbackPriorityItem,
-        from processing: PromptProcessingService,
-        removeProfile: @MainActor (String) -> Void = ProviderConfiguration.removeProfile
-    ) {
+    static func removeFallback(_ item: LLMFallbackPriorityItem, from processing: PromptProcessingService) {
         processing.removeLLMFallback(item)
         guard !processing.fallbackPriorityList.contains(where: { $0.providerId == item.providerId }) else { return }
         removeProfile(item.providerId)
