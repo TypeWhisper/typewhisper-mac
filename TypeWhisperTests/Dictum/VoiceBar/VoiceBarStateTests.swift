@@ -36,7 +36,7 @@ final class VoiceBarStateTests: XCTestCase {
         input.model = .notDownloaded
         XCTAssertEqual(VoiceBarState.derive(input), .notDownloaded)
         input.model = .failed("Download failed")
-        XCTAssertEqual(VoiceBarState.derive(input), .blockingError("Download failed"))
+        XCTAssertEqual(VoiceBarState.derive(input), .modelFailed("Download failed"))
         input.model = nil
         input.activity = .recording
         input.duration = 498

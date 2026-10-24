@@ -15,6 +15,7 @@ enum VoiceBarState: Equatable {
     case noSpeech
     case downloading(Double?)
     case notDownloaded
+    case modelFailed(String)
     case noAI
     case countdown(seconds: Int)
     case cancelled(remaining: Double)
@@ -53,7 +54,7 @@ enum VoiceBarState: Equatable {
             case .downloading(let progress): return .downloading(progress)
             case .loading: return .preparing
             case .notDownloaded: return .notDownloaded
-            case .failed(let message): return .blockingError(message)
+            case .failed(let message): return .modelFailed(message)
             }
         }
         switch input.activity {

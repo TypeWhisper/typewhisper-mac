@@ -62,11 +62,11 @@ final class VoiceBarModelNoticeRenderingTests: XCTestCase {
         XCTAssertFalse(presentation.isActive)
     }
 
-    func testModelNotDownloadedShowsUndownloadedCopyAndFailedOpensSpeechPage() async throws {
+    func testModelNotDownloadedAndFailedUseDedicatedStates() async throws {
         let presentation = VoiceBarPresentation()
         presentation.setStateForTesting(.notDownloaded)
         XCTAssertEqual(presentation.state, .notDownloaded)
-        presentation.setStateForTesting(.blockingError("Download failed"))
-        XCTAssertEqual(presentation.state, .blockingError("Download failed"))
+        presentation.setStateForTesting(.modelFailed("Download failed"))
+        XCTAssertEqual(presentation.state, .modelFailed("Download failed"))
     }
 }

@@ -314,7 +314,7 @@ private extension VoiceBarState {
         case .copied, .downloading, .notDownloaded: 3
         case .recoveredError, .noAI: 4
         case .noSpeech: 2
-        case .blockingError: .infinity
+        case .blockingError, .modelFailed: .infinity
         default: nil
         }
 #if DEBUG
@@ -490,6 +490,11 @@ struct VoiceBarView: View {
             Image(systemName: "arrow.down.circle")
             label("Speech model not downloaded")
             action("Open Settings") { model.dismissFeedback(); DictumNavigation.shared.open(.speech) }
+        case .modelFailed(let message):
+            Image(systemName: "arrow.down.circle.fill").foregroundStyle(DictumTheme.danger)
+            Text(verbatim: message).lineLimit(1)
+            action("Open Settings") { model.dismissFeedback(); DictumNavigation.shared.open(.speech) }
+            Button { model.dismissFeedback() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel(Text("Close", tableName: "DictumHome"))
         case .noAI:
             Image(systemName: "cloud")
             label("No AI model connected. Original inserted.")
