@@ -40,7 +40,7 @@ Agents write, review, merge and release this project's code. Each time an agent 
 - Keep the test host away from system-wide input state (Seen x1: 2026-10-24)
   - What went wrong: The test host has the live Dev app's bundle identifier and signing identity, so it inherits the Accessibility grant. Every `HotkeyService.updateHotkey` in a test installed a real head-inserted active event tap on the session and registered Carbon hotkeys, so a full verification run could swallow or delay Fn and Esc and lose clicks in a live session. Tests also wrote and cleared the real clipboard, and about 33,000 preference suites stayed in `~/Library/Preferences`.
   - Evidence: Sampling `CGGetEventTapList` every second found an ACTIVE session tap (mask keyDown, keyUp, flagsChanged) owned by 24 different test-host processes, some for more than three minutes, and the logs of those processes repeat `Using head-inserted CGEventTap`. The same sampling of a test host with this fix shows only listen-only taps. With the guard removed, `TestHostIsolationTests/testHotkeyEventTapOnlyListens` fails with `The test host must not hold an active tap`.
-  - Fix: In the test host the hotkey tap is listen-only, Carbon hotkeys and synthetic key posting are skipped, `NSPasteboard.general` is a private pasteboard, and the suites created by test code are emptied when the bundle finishes. Objects still alive in the host write an empty plist again after the file is deleted, so the host writes the suite names to a manifest keyed by its process ID, and the next test host deletes those files once that process has ended. List the event taps of a process with `CGGetEventTapList` before trusting that a test does not touch other apps.
+  - Fix: In the test host the hotkey tap is listen-only, Carbon hotkeys and synthetic key posting are skipped, `NSPasteboard.general` is a private pasteboard, and the suites created by test code are emptied when the bundle finishes. Objects still alive in the host write an empty plist again after the file is deleted, so the host appends each suite name to a manifest keyed by its process ID when the suite is created, and the next test host deletes those files once that process has ended. Deletion accepts only names without a path and outside the app and system domains, whose file lies directly in `~/Library/Preferences`. List the event taps of a process with `CGGetEventTapList` before trusting that a test does not touch other apps.
 
 - Wait for the run command before starting dependent live checks (Seen x1: 2026-10-23)
   - What went wrong: The dictation harness and process inspection started while `dictum-verify.sh run` was still building and launching the app. Its initial window then took focus from the test document.
@@ -55,20 +55,20 @@ Agents write, review, merge and release this project's code. Each time an agent 
 
 - 没有持有运行锁时产生了全局按键事件 (Seen x1: 2026-10-24)
   - 问题：为了观察测试宿主，一次发送了 F19 探测按键，另外三次对照运行真实发出了回车和 Cmd+V，当时都没有持有 `/tmp/dictum-run.lock`，这些事件会进入正在使用这台 Mac 的人的前台应用。
-  - 证据：三次对照运行的测试宿主进程号为 12468、14761、17350，作者的时间线 `/tmp/dictum-fix-test-isolation/TIMELINE.md` 记录了这些运行。
+  - 证据：三次没有任何保护的对照运行，测试宿主进程号为 12468、14761、17350，在 00:30 到 01:10 之间发出了真实的 Cmd+V 和回车；另有一次 F19 探测按键经过会话事件监听。这四次发送时都没有持有运行锁，当时剪贴板为空。
   - 方法：没有运行锁时只做构建、单元测试和读文件。观察测试宿主是否影响其他进程时，读取 `CGGetEventTapList` 的结果，不发送任何按键、鼠标、粘贴或文本插入事件，包括探测事件。
 
 - 验证仍在运行时删除了验证槽目录 (Seen x1: 2026-10-24)
   - 问题：第二次完整验证被终止后，对 `/tmp/dictum-verify-slot-1` 执行了两次 `rm -rf`，第一次删除时它的测试进程仍在运行。槽目录是整台 Mac 同时只运行一个完整验证的凭据，运行仍在进行时删除它，等于提前放开了这把锁。
-  - 证据：时间线记录了对进程 22098、21587、21586 发出的 `kill` 没有结束它们，随后的 `rm -rf` 在进程仍存活时执行。
+  - 证据：02:47 对进程 22098、21587、21586 发出的 `kill` 没有结束它们，随后的 `rm -rf /tmp/dictum-verify-slot-1` 在这些进程仍存活时执行，之后又执行了第二次。
   - 方法：槽目录由 `verify-detached.py` 创建和释放，其他人不删除它。只停止自己启动并记录了进程号的进程，确认进程已退出后让 `verify-detached.py` 自己释放槽。
 
 - 在 `dictum-verify.sh` 之外直接启动 dictum Dev 做诊断 (Seen x1: 2026-10-24)
   - 问题：测试宿主卡住后，为了诊断直接启动了 `dictum Dev` 并设置 `XCTestBundlePath`，应用把自己当作测试宿主，启动时的清理删除了已结束进程留下的 `com.schneidervvv.dictum.dev.tests.<进程号>.plist`。
-  - 证据：这一次启动（进程 40840）删除了约 189 个这类文件，时间线记录于 03:20。
+  - 证据：03:20 的这一次启动（进程 40840）删除了约 189 个这类文件。
   - 方法：只通过 `scripts/dictum-verify.sh build` 和 `test` 启动应用和测试宿主；诊断卡住的测试宿主时对它运行 `sample`，不另行启动应用。
 
 - 复制了其他工作区的 SourcePackages (Seen x1: 2026-10-24)
   - 问题：为了省去依赖下载，把另一个工作区的 `.build/DerivedData/SourcePackages` 克隆到自己的工作区，并复制了它的 `mlx-c` 子模块，两个工作区的构建缓存因此不再互相独立。
-  - 证据：时间线记录了对 fix-double-paste 的 `cp -Rc`，那一侧只读，但复制违反了每个单元只使用自己工作区的规则。
+  - 证据：00:20 左右对 fix-double-paste 的 `.build/DerivedData/SourcePackages` 执行了 `cp -Rc`，并把它的 `mlx-c` 子模块复制进自己的工作区；那一侧只读，但复制违反了每个单元只使用自己工作区的规则。
   - 方法：在自己的工作区里由 `xcodebuild` 解析和下载依赖，不复制其他工作区的任何文件。
