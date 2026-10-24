@@ -224,7 +224,12 @@ final class TranslationSessionRoutingTests: XCTestCase {
         fixture.chain.reply = .success("我到楼下了。")
         _ = try await runSession(fixture, mode: .dictation)
         XCTAssertFalse(fixture.chain.prompts.contains { $0.contains("Translate a speech transcript") })
-        XCTAssertEqual(fixture.history.recentRecords.first?.mode, .dictation)
+        XCTAssertEqual(fixture.chain.prompts.count, 1, "听写会话只运行润色提示词")
+        XCTAssertEqual(fixture.pasteboard.string(forType: .string), "我到楼下了。")
+        XCTAssertNil(fixture.model.sessionPair)
+        let record = try XCTUnwrap(fixture.history.recentRecords.first)
+        XCTAssertEqual(record.mode, .dictation)
+        XCTAssertNil(record.targetLanguage)
     }
 
     func testFailureInsertsTheOriginalAndShowsTheTranslationFailedState() async throws {
