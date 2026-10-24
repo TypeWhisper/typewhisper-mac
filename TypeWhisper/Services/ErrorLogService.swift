@@ -361,7 +361,6 @@ private struct DiagnosticsReport: Encodable {
         let bundledReleaseChannel: String
         let selectedLanguage: String?
         let selectedTask: String?
-        let translationEnabled: Bool
         let translationTargetLanguage: String?
         let historyRetentionDays: Int
         let saveAudioWithHistory: Bool
@@ -590,7 +589,6 @@ final class ErrorLogService: ObservableObject {
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
                 selectedLanguage: defaults.string(forKey: UserDefaultsKeys.selectedLanguage),
                 selectedTask: defaults.string(forKey: UserDefaultsKeys.selectedTask),
-                translationEnabled: defaults.bool(forKey: UserDefaultsKeys.translationEnabled),
                 translationTargetLanguage: defaults.string(forKey: UserDefaultsKeys.translationTargetLanguage),
                 historyRetentionDays: defaults.integer(forKey: UserDefaultsKeys.historyRetentionDays),
                 saveAudioWithHistory: defaults.bool(forKey: UserDefaultsKeys.saveAudioWithHistory),
