@@ -9,10 +9,13 @@ final class TranslationPipelineTests: XCTestCase {
     private var appSupport: URL!
     private var pipeline: PostProcessingPipeline!
     private var suite = ""
+    private var previousPluginManager: PluginManager?
 
     override func setUp() async throws {
         try await super.setUp()
         appSupport = try TestSupport.makeTemporaryDirectory(prefix: "dictum-translation-pipeline")
+        previousPluginManager = PluginManager.shared
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupport)
         suite = "dictum-translation-pipeline-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         pipeline = PostProcessingPipeline(
@@ -24,10 +27,11 @@ final class TranslationPipelineTests: XCTestCase {
         )
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
+        PluginManager.shared = previousPluginManager
         UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
         TestSupport.remove(appSupport)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func handler(pair: TranslationPair?, chain: ChainDouble, bundleID: String = "com.tinyspeck.slackmacgap") -> TranslationHandler.Handler? {
