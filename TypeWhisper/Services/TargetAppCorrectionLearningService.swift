@@ -385,7 +385,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             }
 
             guard let observation = textInsertionService.recaptureFocusedTextObservation(matching: baseline) else {
-                if let finalObservation = textInsertionService.observation(of: baseline.element, matching: baseline) {
+                if let finalObservation = textInsertionService.observation(of: baseline.element) {
                     record(editedText: finalObservation.value)
                 }
                 switch textInsertionService.focusedTextElementMatch(baseline) {
