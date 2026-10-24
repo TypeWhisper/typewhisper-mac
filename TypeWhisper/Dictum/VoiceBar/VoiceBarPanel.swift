@@ -9,7 +9,13 @@ private let voiceBarTimingLogger = Logger(subsystem: AppConstants.loggerSubsyste
 
 @MainActor
 final class VoiceBarPresentation: ObservableObject {
-    @Published var state: VoiceBarState = .idle
+    @Published var state: VoiceBarState = .idle {
+        didSet {
+#if DEBUG
+            if state != oldValue { voiceBarTimingLogger.notice("VoiceBar state \(String(describing: self.state), privacy: .public)") }
+#endif
+        }
+    }
     @Published var isPresented = false
     @Published var targetMenuOpen = false
     private(set) var isActive = false
