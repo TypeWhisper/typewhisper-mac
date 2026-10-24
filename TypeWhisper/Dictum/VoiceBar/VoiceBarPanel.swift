@@ -14,6 +14,7 @@ final class VoiceBarPresentation: ObservableObject {
     @Published var targetMenuOpen = false
     private(set) var isActive = false
     @Published var text = ""
+    @Published var tentativeText = ""
     @Published var duration: TimeInterval = 0
     @Published var levels = Array(repeating: Float.zero, count: 26)
     private var copiedText: String?
@@ -111,12 +112,7 @@ final class VoiceBarPresentation: ObservableObject {
         case .processing: input.activity = .processing
         case .error(let message): input.outcome = .blockingError(message)
         case .inserting:
-            if let undelivered = vm.voiceBarUndeliveredText {
-                if copiedText != undelivered {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(undelivered, forType: .string)
-                    copiedText = undelivered
-                }
+            if vm.voiceBarUndeliveredText != nil {
                 input.outcome = .copied
                 break
             }
@@ -170,15 +166,32 @@ final class VoiceBarPresentation: ObservableObject {
         } else if feedbackCaptured && feedback == nil && nextState.feedbackLifetime != nil {
             nextState = .idle
         }
+        // 复制回落发生在进入 copied 状态的瞬间，语音条隐藏时也会执行一次。
+        if case .copied = nextState, state != .copied { copyUndeliveredText(from: vm) }
         isActive = nextState != .idle
         if isActive { state = nextState }
         if !vm.partialText.isEmpty || !state.showsTranscript { text = vm.partialText }
+        tentativeText = vm.state == .recording ? vm.streamingPreview.tentativeTail : ""
         duration = vm.recordingDuration
         levels.removeFirst()
         levels.append(vm.audioLevel)
     }
 
+    private func copyUndeliveredText(from vm: DictationViewModel) {
+        guard let undelivered = vm.voiceBarUndeliveredText, copiedText != undelivered else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(undelivered, forType: .string)
+        copiedText = undelivered
+    }
+
     func dismissFeedback() { feedback = nil; feedbackCaptured = true; isActive = false }
+
+#if DEBUG
+    func setStateForTesting(_ newState: VoiceBarState) {
+        state = newState
+        isActive = true
+    }
+#endif
 
     private func countWords(_ text: String) -> Int {
         var count = 0
@@ -204,6 +217,7 @@ final class VoiceBarPanel: NSPanel {
     private var hideTask: Task<Void, Never>?
     private var cachedScreen: NSScreen?
     private var lastScreenResolve = Date.distantPast
+    private var wakeObserver: AnyCancellable?
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -226,9 +240,14 @@ final class VoiceBarPanel: NSPanel {
         screenChangeObservers.append(notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.lastScreenResolve = .distantPast })
+        // 隐藏期间 55ms 定时刷新停止；模型变化先唤醒一次刷新，再按需恢复定时器。
+        wakeObserver = DictationViewModel.shared.objectWillChange.sink { [weak self] _ in
+            guard let self, self.timer == nil else { return }
+            self.tick()
+        }
     }
 
-    deinit {
+    isolated deinit {
         for observer in screenChangeObservers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -238,51 +257,65 @@ final class VoiceBarPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     func startObserving() {
+        startTimer()
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
         timer = Timer.publish(every: 0.055, on: .main, in: .common).autoconnect().sink { [weak self] _ in
-            guard let self else { return }
-            self.presentation.refresh(.shared)
-            guard VoiceBarPresentation.enabled, self.presentation.isActive else {
-                if self.presentation.isPresented {
-                    self.presentation.isPresented = false
-                    self.hideTask = Task { [weak self] in
-                        do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
-                        guard let self, !self.presentation.isPresented else { return }
-                        self.orderOut(nil)
-                    }
-                }
-                return
-            }
-            self.hideTask?.cancel()
-            let size = NSSize(width: 460, height: 126)
-#if DEBUG
-            let started = ContinuousClock.now
-#endif
-            // Resolving the active screen queries the focused element over the accessibility
-            // API, which can block the main thread for tens of milliseconds per call. The
-            // screen only needs to track focus changes, not run every 55 ms tick.
-            let screen: NSScreen
-            if Date().timeIntervalSince(lastScreenResolve) < 2, let cachedScreen {
-                screen = cachedScreen
-            } else {
-                screen = self.resolver.resolveScreen(for: .activeScreen)
-                cachedScreen = screen
-                lastScreenResolve = Date()
-            }
-#if DEBUG
-            let elapsed = started.duration(to: .now)
-            if elapsed > .milliseconds(100) {
-                voiceBarTimingLogger.warning("Screen lookup took \(elapsed.description, privacy: .public)")
-            }
-#endif
-            let frame = NSRect(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.minY + 72, width: size.width, height: size.height)
-            if self.frame != frame { self.setFrame(frame, display: true) }
-            if !self.isVisible {
-                // 语音条重新显示时焦点可能已迁移到别的屏幕，强制重新解析一次。
-                self.lastScreenResolve = .distantPast
-                self.orderFrontRegardless()
-            }
-            self.presentation.isPresented = true
+            self?.tick()
         }
+    }
+
+    private func stopTimer() {
+        timer = nil
+    }
+
+    private func tick() {
+        guard VoiceBarPresentation.enabled, presentation.isActive, isVisible else {
+            stopTimer()
+            self.presentation.refresh(.shared)
+            if presentation.isPresented {
+                presentation.isPresented = false
+                hideTask = Task { [weak self] in
+                    do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                    guard let self, !self.presentation.isPresented else { return }
+                    self.orderOut(nil)
+                }
+            }
+            return
+        }
+        startTimer()
+        hideTask?.cancel()
+        let size = NSSize(width: 460, height: 126)
+#if DEBUG
+        let started = ContinuousClock.now
+#endif
+        // Resolving the active screen queries the focused element over the accessibility
+        // API, which can block the main thread for tens of milliseconds per call. The
+        // screen only needs to track focus changes, not run every 55 ms tick.
+        let screen: NSScreen
+        if Date().timeIntervalSince(lastScreenResolve) < 2, let cachedScreen {
+            screen = cachedScreen
+        } else {
+            screen = self.resolver.resolveScreen(for: .activeScreen)
+            cachedScreen = screen
+            lastScreenResolve = Date()
+        }
+#if DEBUG
+        let elapsed = started.duration(to: .now)
+        if elapsed > .milliseconds(100) {
+            voiceBarTimingLogger.warning("Screen lookup took \(elapsed.description, privacy: .public)")
+        }
+#endif
+        let frame = NSRect(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.minY + 72, width: size.width, height: size.height)
+        if self.frame != frame { self.setFrame(frame, display: true) }
+        if !self.isVisible {
+            // 语音条重新显示时焦点可能已迁移到别的屏幕，强制重新解析一次。
+            self.lastScreenResolve = .distantPast
+            self.orderFrontRegardless()
+        }
+        presentation.isPresented = true
     }
 }
 
@@ -290,7 +323,7 @@ private extension VoiceBarState {
     var feedbackLifetime: TimeInterval? {
         let lifetime: TimeInterval? = switch self {
         case .inserted: 1.2
-        case .copied, .downloading: 3
+        case .copied, .downloading, .notDownloaded: 3
         case .recoveredError, .noAI: 4
         case .noSpeech: 2
         case .blockingError: .infinity
@@ -367,13 +400,10 @@ struct VoiceBarView: View {
             ScrollView(.vertical) {
                 TimelineView(.animation(minimumInterval: 0.055, paused: !isPolishing || reduceMotion)) { timeline in
                     let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
-                    Text(verbatim: model.text).font(.system(size: 15)).lineSpacing(4)
-                        .foregroundStyle(LinearGradient(
-                            colors: isPolishing && !reduceMotion ? [.white.opacity(0.55), .white, .white.opacity(0.55)] : [.white, .white],
-                            startPoint: UnitPoint(x: phase * 2 - 1, y: 0), endPoint: UnitPoint(x: phase * 2, y: 0)
-                        )) + Text(verbatim: model.tentativeText).font(.system(size: 15)).lineSpacing(4)
-                            .foregroundStyle(Color.white.opacity(0.34))
-                        .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                    Text(verbatim: "\(confirmedText(phase: phase))\(tentativeText)")
+                        .font(.system(size: 15)).lineSpacing(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }.id("transcript")
             }
             .scrollIndicators(.hidden).scrollDisabled(true)
@@ -387,6 +417,23 @@ struct VoiceBarView: View {
     private var isPolishing: Bool {
         if case .polishing = model.state { return true }
         return false
+    }
+
+    private func confirmedText(phase: Double) -> Text {
+        Text(verbatim: model.text).foregroundColor(shimmerColor(phase: phase))
+    }
+
+    private func shimmerColor(phase: Double) -> Color {
+        // 润色微光按 1.4 秒周期在 55% 与 100% 白之间往返。
+        let wave = 0.5 - 0.5 * cos(2 * .pi * phase)
+        if isPolishing && !reduceMotion {
+            return Color.white.opacity(0.55 + 0.45 * wave)
+        }
+        return .white
+    }
+
+    private var tentativeText: Text {
+        Text(verbatim: model.tentativeText).foregroundColor(Color.white.opacity(0.34))
     }
 
     @ViewBuilder private var controls: some View {
@@ -451,6 +498,10 @@ struct VoiceBarView: View {
             label("Downloading speech model")
             if let progress { Text(progress, format: .percent.precision(.fractionLength(0))) }
             action("View") { DictumNavigation.shared.open(.speech) }
+        case .notDownloaded:
+            Image(systemName: "arrow.down.circle")
+            label("Speech model not downloaded")
+            action("Open Settings") { model.dismissFeedback(); DictumNavigation.shared.open(.speech) }
         case .noAI:
             Image(systemName: "cloud")
             label("No AI model connected. Original inserted.")

@@ -21,6 +21,7 @@
     "Settings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Settings"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"设置"}}}},
     "Didn't hear anything": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Didn't hear anything"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有听到声音"}}}},
     "Downloading speech model": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Downloading speech model"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"语音模型下载中"}}}},
+    "Speech model not downloaded": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Speech model not downloaded"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"未下载语音模型"}}}},
     "View": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"View"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"查看"}}}},
     "No AI model connected. Original inserted.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No AI model connected. Original inserted."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"未连接 AI 模型，已插入原文"}}}},
     "Edit Languages…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Edit Languages…"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"编辑语言…"}}}},

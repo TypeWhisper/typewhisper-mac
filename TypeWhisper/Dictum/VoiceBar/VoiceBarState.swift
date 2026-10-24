@@ -14,6 +14,7 @@ enum VoiceBarState: Equatable {
     case blockingError(String)
     case noSpeech
     case downloading(Double?)
+    case notDownloaded
     case noAI
     case countdown(seconds: Int)
     case cancelled(remaining: Double)
@@ -51,7 +52,7 @@ enum VoiceBarState: Equatable {
             switch model {
             case .downloading(let progress): return .downloading(progress)
             case .loading: return .preparing
-            case .notDownloaded: return .downloading(nil)
+            case .notDownloaded: return .notDownloaded
             case .failed(let message): return .blockingError(message)
             }
         }
