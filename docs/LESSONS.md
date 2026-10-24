@@ -71,8 +71,13 @@ Agents write, review, merge and release this project's code. Each time an agent 
 
 - 只看崩溃线程就推断为多线程竞争 (Seen x1: 2026-10-24)
   - 问题：Qwen3 的 MLX 编译缓存崩溃最初被推断为两个编译函数在不同线程上同时访问缓存。崩溃报告的主线程实际正在 `exit()` 中析构 MLX 的 C++ 全局对象，原因是应用在识别运行时退出。
-  - 证据：`/tmp/dictum-qwen3-crash/FINDINGS.md` 中 3 份报告的主线程都是 `_handleAEQuit` → `exit` → `__cxa_finalize_ranges` → MLX 析构函数，没有第二个线程在执行 MLX 代码；mlx-swift 0.31.6 用进程级 `evalLock` 保护编译缓存。17:01 的崩溃发生在 `dictum-verify.sh stop` 退出仍在录音的应用时。
+  - 证据：`/tmp/dictum-qwen3-crash/FINDINGS.md` 中 3 份报告的主线程都是 `_handleAEQuit` → `exit` → `__cxa_finalize_ranges` → MLX 析构函数，每份报告只有一次识别在运行（10-23 那份的 MLX CPU 流线程正在为这次识别执行 `copy_cpu_inplace`）；mlx-swift 0.31.6 用进程级 `evalLock` 保护编译缓存。三次退出都来自自动化操作：10-23 06:30 崩溃的是 p5a-shell 工作区的构建（进程 67225，06:26:29 启动，当时有测试宿主在运行），它正通过 `DictumDebugDictation.handle` 识别；10-24 06:32 的退出来自一个自动化实机脚本，06:32:32 到 06:32:34 有 `screencapture` 和 `osascript` 运行；10-24 17:01 的退出是 `dictum-verify.sh stop` 退出仍在录音的应用。
   - 方法：读崩溃报告时先读主线程和其他所有线程。主线程出现 `exit`、`__cxa_finalize` 或 `terminate:` 时，先检查退出时还有哪些工作在运行，再考虑线程竞争。
+
+- 实机脚本停止了其他工作区的 dictum Dev (Seen x1: 2026-10-24)
+  - 问题：Qwen3 退出崩溃调查的实机脚本把路径不在自己工作区和 `~/Applications` 下的每个 dictum Dev 都当作误启动的实例，发送了 SIGTERM，结果停止了 fix-recorder-deinit 单元正在运行的两个 Xcode 测试宿主。
+  - 证据：`/tmp/dictum-qwen3-crash/tools/session.py` 的 `check_single_instance`（第 131 到 137 行）对这类进程调用 `os.kill(pid, 15)`；`/tmp/dictum-qwen3-crash/session.jsonl` 记录 19:52:09 停止了进程 62259、20:03:33 停止了进程 82750，两者都是 fix-recorder-deinit 的构建；该单元的测试在 19:53:44 和 20:05:20 记录了 `Test crashed with signal term`。
+  - 方法：实机脚本只停止由它自己的命令启动、并在启动时记录了进程号的进程。发现其他 dictum Dev 或测试宿主时等待它们结束，不停止它们。
 
 - 真实字段测试依赖辅助功能授权，宿主没有授权时整个测试类会被静默跳过 (Seen x1: 2026-10-24)
   - 问题：`DuplicateInsertionRealFieldTests` 在测试宿主没有辅助功能授权时用 `XCTSkip` 跳过，换一台 Mac 运行时这组覆盖会无声消失，容易误以为修复仍被测试覆盖。
