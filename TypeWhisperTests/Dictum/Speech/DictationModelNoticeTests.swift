@@ -77,7 +77,7 @@ final class DictationModelNoticeTests: XCTestCase {
     }
 }
 
-private final class NoticeDownloadSession: PluginHTTPClientSession, @unchecked Sendable {
+final class NoticeDownloadSession: PluginHTTPClientSession, @unchecked Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         while true { try await Task.sleep(for: .seconds(1)) }
     }
