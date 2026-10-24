@@ -70,3 +70,8 @@ enum VoiceBarState: Equatable {
         }
     }
 }
+
+extension VoiceBarState.Input.Outcome {
+    /// 后处理失败而插入原文：翻译会话是翻译失败，听写会话是润色失败。
+    static func warning(translation: Bool) -> Self { translation ? .translationFailed : .recoveredError }
+}

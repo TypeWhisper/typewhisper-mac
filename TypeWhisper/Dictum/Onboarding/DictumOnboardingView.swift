@@ -83,6 +83,7 @@ struct DictumOnboardingView: View {
                 if step == 2 && recorder.rawAudioLevel > 0.01 { heardSeconds += 0.1 }
                 if (step == 4 || step == 5), dictation.state == .inserting,
                    dictation.sessionMode == (step == 5 ? .translation : .dictation),
+                   dictation.translationFailure == nil,
                    !practiceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { completedPractice = true }
             }
             .onAppear {

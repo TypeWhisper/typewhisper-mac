@@ -141,7 +141,7 @@ final class VoiceBarPresentation: ObservableObject {
             }
             switch vm.actionFeedbackIcon {
             case "mic.slash", "waveform.badge.exclamationmark": input.outcome = vm.actionFeedbackIsError ? .blockingError(vm.actionFeedbackMessage ?? "") : .noSpeech
-            case "exclamationmark.triangle.fill": input.outcome = vm.sessionMode == .translation ? .translationFailed : .recoveredError
+            case "exclamationmark.triangle.fill": input.outcome = .warning(translation: vm.sessionMode == .translation)
             case "doc.on.clipboard", "doc.on.doc": input.outcome = .copied
             default:
                 if vm.actionFeedbackIsError {

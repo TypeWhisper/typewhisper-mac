@@ -41,7 +41,7 @@ extension HistoryTranslationRetry.Failure: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notTranslation: String(localized: "This record is not a translation.", table: "DictumTranslation")
-        case .noModel: String(localized: "No AI model connected.", table: "DictumTranslation")
+        case .noModel: TranslationStrings.noModel
         case .emptyResult: String(localized: "The model returned no translation.", table: "DictumTranslation")
         }
     }

@@ -434,6 +434,7 @@ final class HistoryService: ObservableObject {
             record.mode = .translation
             record.spokenLanguage = translation.spokenLanguage
             record.targetLanguage = translation.targetLanguage
+            record.processingFailureMessage = translation.failureMessage
         }
         record.originDeviceID = historySyncPreferences?.deviceID ?? ""
         record.originPlatformRaw = "macOS"

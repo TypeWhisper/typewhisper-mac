@@ -413,6 +413,8 @@ final class DictationViewModel: ObservableObject {
     @Published private(set) var sessionMode: DictationMode = .dictation
     /// 翻译会话的语言对；语音条上选择新目标时更新。
     @Published private(set) var sessionPair: TranslationPair?
+    /// 翻译会话没有得到译文、插入了原话时的原因；会话开始时清除。
+    @Published private(set) var translationFailure: String?
     private var polishRetry: (id: UUID, text: String, handler: (String) async throws -> String,
                               snapshot: DictationUndoService.InsertionSnapshot?, translation: Bool)?
     private var polishRetryTask: Task<Void, Never>?
@@ -2081,6 +2083,7 @@ final class DictationViewModel: ObservableObject {
         self.forcedWorkflowId = mode == .translation ? nil : forcedWorkflowId
         sessionMode = mode
         sessionPair = mode == .translation ? TranslationLanguageStore.shared.settings.pair : nil
+        translationFailure = nil
         beginDictationSession(id: sessionID)
         dictationLatencyTraces[sessionID] = DictationLatencyTrace(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
@@ -3259,6 +3262,13 @@ final class DictationViewModel: ObservableObject {
                 )
                 text = ppResult.text
                 let postProcessingFallback = ppResult.fallback
+                // 没有可用模型或全部失败时插入的是原话，历史和上手引导都不把它当作译文。
+                let translationFailure: String? = sessionMode == .translation
+                    ? (llmHandler == nil
+                        ? TranslationStrings.noModel
+                        : (postProcessingFallback == nil ? nil : TranslationStrings.failedInserted))
+                    : nil
+                self.translationFailure = translationFailure
                 if let postProcessingFallback {
                     errorLogService.addEntry(
                         message: localizedAppText(
@@ -3580,7 +3590,11 @@ final class DictationViewModel: ObservableObject {
                         audioSamples: audioSamplesForHistory,
                         pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps,
                         translation: sessionMode == .translation
-                            ? sessionPair.map { HistoryTranslationInfo(spokenLanguage: $0.spoken ?? result.detectedLanguage, targetLanguage: $0.target) }
+                            ? sessionPair.map {
+                                HistoryTranslationInfo(
+                                    spokenLanguage: $0.spoken ?? result.detectedLanguage, targetLanguage: $0.target,
+                                    failureMessage: translationFailure)
+                            }
                             : nil
                     ),
                     pendingURLResolution: activeApp.url == nil ? pendingURLResolution : nil

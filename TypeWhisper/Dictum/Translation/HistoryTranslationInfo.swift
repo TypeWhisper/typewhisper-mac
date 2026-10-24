@@ -4,4 +4,6 @@ import Foundation
 struct HistoryTranslationInfo: Equatable, Sendable {
     var spokenLanguage: String?
     var targetLanguage: String
+    /// 翻译失败而插入原话时的提示；历史里显示为翻译失败。
+    var failureMessage: String?
 }

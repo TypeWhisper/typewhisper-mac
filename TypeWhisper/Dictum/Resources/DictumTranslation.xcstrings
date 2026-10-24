@@ -4,6 +4,9 @@
   "strings" : {
     "language.name.zh-Hans": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Chinese (Simplified)"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"中文（简体）"}}}},
     "language.name.zh-Hant": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Chinese (Traditional)"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"中文（繁體）"}}}},
+    "Left Shift": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Left ⇧"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"左 ⇧"}}}},
+    "Right Shift": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Right ⇧"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"右 ⇧"}}}},
+    "Translation failed": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"翻译失败"}}}},
     "Auto": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"自动"}}}},
     "Detect automatically": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"自动识别"}}}},
     "Spoken language": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"说话语言"}}}},

@@ -220,8 +220,10 @@ struct DictumHistoryPage: View {
                         .foregroundStyle(DictumTheme.textTertiary)
                     if record.mode == .translation {
                         Badge(text: "translation.badge", tint: DictumTheme.translate, tableName: "DictumTranslation")
-                    }
-                    if failed {
+                        if failed {
+                            Badge(text: "Translation failed", tint: DictumTheme.warning, tableName: "DictumTranslation")
+                        }
+                    } else if failed {
                         Badge(text: "Not polished", tint: DictumTheme.warning, tableName: "DictumHistory")
                     }
                 }
@@ -342,15 +344,17 @@ struct DictumHistoryPage: View {
         }
     }
 
-    /// 翻译记录显示两个文字框：译文在上，原话在下。
+    /// 翻译记录显示两个文字框：译文在上，原话在下；翻译失败的记录没有译文，只显示原话。
     private func translationWells(_ record: TranscriptionRecord) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            well(
-                Text("Translation · \(TranslationLanguageNames.name(for: record.targetLanguage ?? ""))", tableName: "DictumTranslation"),
-                text: record.finalText, secondary: false
-            ).padding(.top, 18)
+            if record.processingFailureMessage == nil {
+                well(
+                    Text("Translation · \(TranslationLanguageNames.name(for: record.targetLanguage ?? ""))", tableName: "DictumTranslation"),
+                    text: record.finalText, secondary: false
+                ).padding(.top, 18)
+            }
             well(Text("What you said", tableName: "DictumTranslation"), text: record.rawText, secondary: true)
-                .padding(.top, 12)
+                .padding(.top, record.processingFailureMessage == nil ? 12 : 18)
         }
     }
 
