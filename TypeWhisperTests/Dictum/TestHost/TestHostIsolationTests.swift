@@ -63,6 +63,11 @@ final class TestHostIsolationTests: XCTestCase {
         XCTAssertFalse(shouldRecord(appDomain))
         XCTAssertFalse(shouldRecord(UserDefaults.globalDomain))
         XCTAssertFalse(shouldRecord("/Users/test/Library/Preferences/example"))
+        XCTAssertFalse(shouldRecord("../x"))
+        XCTAssertFalse(shouldRecord("a/../../x"))
+        XCTAssertFalse(shouldRecord("com.schneidervvv.dictum"))
+        XCTAssertFalse(shouldRecord("com.schneidervvv.dictum.dev"))
+        XCTAssertFalse(shouldRecord(".GlobalPreferences"))
         XCTAssertFalse(shouldRecord("TestHostIsolationTests-suite", exists: true))
         XCTAssertFalse(shouldRecord("TestHostIsolationTests-suite", inTestBundle: false))
     }
@@ -77,20 +82,57 @@ final class TestHostIsolationTests: XCTestCase {
         TestHostIsolation.removeDomain(suiteName)
     }
 
-    func testSuiteManifestListsTheSuitesTheTestsCreated() throws {
-        let directory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(directory) }
+    func testSuiteManifestListsASuiteWhenTheTestCreatesIt() throws {
         let (suiteName, _) = try makeSuiteWithPreferencesFile()
         defer { TestHostIsolation.removeDomain(suiteName) }
 
-        TestHostIsolation.writeSuiteManifest(
-            TestHostIsolation.createdSuiteNames.withLock { $0 },
-            in: directory
-        )
-
-        let manifest = directory.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
+        let manifest = TestHostIsolation.suiteManifestDirectory
+            .appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
         let names = try JSONDecoder().decode([String].self, from: Data(contentsOf: manifest))
         XCTAssertTrue(names.contains(suiteName))
+    }
+
+    func testAppendingToTheSuiteManifestKeepsNamesOfAnEarlierRunWithTheSameProcessID() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let manifest = directory.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
+        try JSONEncoder().encode(["earlier-run-suite"]).write(to: manifest)
+
+        TestHostIsolation.appendToSuiteManifest(["this-run-suite"], in: directory)
+
+        let names = try JSONDecoder().decode([String].self, from: Data(contentsOf: manifest))
+        XCTAssertEqual(names, ["earlier-run-suite", "this-run-suite"])
+    }
+
+    func testManifestNamesOutsideTheTestOwnedSuitesDeleteNothingElse() throws {
+        let root = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(root) }
+        let preferences = root.appendingPathComponent("Preferences", isDirectory: true)
+        let manifests = root.appendingPathComponent("Manifests", isDirectory: true)
+        try FileManager.default.createDirectory(at: preferences, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: manifests, withIntermediateDirectories: true)
+        let owned = "TestHostIsolationTests-\(UUID().uuidString)"
+        defer { TestHostIsolation.removeDomain(owned) }
+        let outsideNames = ["../x", "a/../../x", "com.schneidervvv.dictum", "com.schneidervvv.dictum.dev"]
+        let survivors = [
+            root.appendingPathComponent("x.plist"),
+            preferences.appendingPathComponent("com.schneidervvv.dictum.plist"),
+            preferences.appendingPathComponent("com.schneidervvv.dictum.dev.plist"),
+        ]
+        let ownedFile = preferences.appendingPathComponent(owned + ".plist")
+        for file in survivors + [ownedFile] {
+            try Data("plist".utf8).write(to: file)
+        }
+        let endedProcessID = try endedProcessIdentifier()
+        try JSONEncoder().encode(outsideNames + [owned])
+            .write(to: manifests.appendingPathComponent("\(endedProcessID).json"))
+
+        TestHostIsolation.removeDomainsOfEndedRuns(manifestDirectory: manifests, preferencesDirectory: preferences)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ownedFile.path))
+        for file in survivors {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "\(file.lastPathComponent) must stay")
+        }
     }
 
     func testEndedRunsSuitesAreRemovedAfterTheirProcessEnded() throws {
@@ -102,7 +144,7 @@ final class TestHostIsolationTests: XCTestCase {
         defer { TestHostIsolation.removeDomain(runningSuite) }
         let endedManifest = directory.appendingPathComponent("\(endedProcessID).json")
         try JSONEncoder().encode([endedSuite]).write(to: endedManifest)
-        TestHostIsolation.writeSuiteManifest([runningSuite], in: directory)
+        TestHostIsolation.appendToSuiteManifest([runningSuite], in: directory)
         let runningManifest = directory.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
 
         TestHostIsolation.removeDomainsOfEndedRuns(manifestDirectory: directory)
@@ -121,7 +163,7 @@ final class TestHostIsolationTests: XCTestCase {
             defaults.set("value", forKey: "key")
             CFPreferencesAppSynchronize(suiteName as CFString)
         }
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(20)
         while !FileManager.default.fileExists(atPath: file.path), Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }

@@ -44,10 +44,9 @@ enum TestHostIsolation {
     }
 
     /// 测试包结束时调用。进程里仍存活的 UserDefaults 对象会在文件删除后再写出一个空文件，
-    /// 所以这里清空域并把套件名写入清单，文件留给下一次测试宿主启动时在本进程结束后删除。
+    /// 所以这里清空域，文件留给下一次测试宿主启动时按清单在本进程结束后删除。
     static func removeIsolatedDefaults() {
         let names = createdSuiteNames.withLock { $0 }
-        writeSuiteManifest(names, in: suiteManifestDirectory)
         for name in names {
             removeDomain(name)
         }
@@ -55,11 +54,31 @@ enum TestHostIsolation {
         isolatedPasteboard?.releaseGlobally()
     }
 
+    /// 只删除测试自己的域：名称不能带路径，不能是应用或系统的域，对应文件必须直接位于偏好设置文件夹里。
+    /// 清单和文件夹扫描都可能带来任意名称，所以删除前在这里把关。
     /// 清空偏好设置域后，系统仍会在偏好设置文件夹里留下一个空文件，所以文件也一并删除。
-    static func removeDomain(_ name: String) {
+    static func removeDomain(_ name: String, preferencesDirectory directory: URL = preferencesDirectory) {
+        guard isTestOwnedName(name, appDomain: Bundle.main.bundleIdentifier) else { return }
+        let file = directory.appendingPathComponent(name + ".plist")
+        guard file.standardizedFileURL.deletingLastPathComponent().path == directory.standardizedFileURL.path else { return }
+
         UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
         CFPreferencesAppSynchronize(name as CFString)
-        try? FileManager.default.removeItem(at: preferencesDirectory.appendingPathComponent(name + ".plist"))
+        try? FileManager.default.removeItem(at: file)
+    }
+
+    private static let protectedDomains: Set<String> = [
+        "com.schneidervvv.dictum",
+        "com.schneidervvv.dictum.dev",
+        UserDefaults.globalDomain,
+        ".GlobalPreferences",
+    ]
+
+    static func isTestOwnedName(_ name: String, appDomain: String?) -> Bool {
+        !name.contains("/")
+            && !name.contains("..")
+            && name != appDomain
+            && !protectedDomains.contains(name)
     }
 
     static var preferencesDirectory: URL {
@@ -71,10 +90,13 @@ enum TestHostIsolation {
         FileManager.default.temporaryDirectory.appendingPathComponent("TypeWhisper-TestHost-Suites", isDirectory: true)
     }
 
-    static func writeSuiteManifest(_ names: Set<String>, in directory: URL) {
-        guard let data = try? JSONEncoder().encode(names.sorted()) else { return }
+    /// 追加而不是覆盖：复用已结束进程号的宿主要保留前一个宿主崩溃时留下的套件名。
+    static func appendToSuiteManifest(_ names: Set<String>, in directory: URL) {
+        let url = manifestURL(in: directory, processID: ProcessInfo.processInfo.processIdentifier)
+        let existing = (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
+        guard let data = try? JSONEncoder().encode(names.union(existing).sorted()) else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? data.write(to: manifestURL(in: directory, processID: ProcessInfo.processInfo.processIdentifier))
+        try? data.write(to: url)
     }
 
     private static func manifestURL(in directory: URL, processID: pid_t) -> URL {
@@ -108,7 +130,12 @@ enum TestHostIsolation {
                    exists: isolatedDefaults?.persistentDomain(forName: name) != nil,
                    callerIsInTestBundle: { callerIsInTestBundle() }
                ) {
-                createdSuiteNames.withLock { _ = $0.insert(name) }
+                // 创建时就写入清单，宿主崩溃时来不及清理的套件也会被下一次启动删除。
+                createdSuiteNames.withLock { names in
+                    if names.insert(name).inserted {
+                        appendToSuiteManifest([name], in: suiteManifestDirectory)
+                    }
+                }
             }
             return original(object, selector, name)
         }
@@ -118,19 +145,19 @@ enum TestHostIsolation {
     static func shouldRecordSuite(
         named name: String,
         appDomain: String?,
-        exists: Bool,
+        exists: @autoclosure () -> Bool,
         callerIsInTestBundle: () -> Bool
     ) -> Bool {
-        name != appDomain
-            && name != UserDefaults.globalDomain
-            && !name.hasPrefix("/")
-            && !exists
+        isTestOwnedName(name, appDomain: appDomain)
+            && !exists()
             && callerIsInTestBundle()
     }
 
+    nonisolated(unsafe) private static let ownImage: UnsafeRawPointer = #dsohandle
+
     /// 调用栈上第一个不在本映像里的帧所在的映像是测试包时返回 true。
     /// 栈里属于本映像的帧是替换后的初始化方法自己，以及测试直接调用的应用代码。
-    static func callerIsInTestBundle(ownImage: UnsafeRawPointer = #dsohandle) -> Bool {
+    static func callerIsInTestBundle() -> Bool {
         for address in Thread.callStackReturnAddresses {
             var info = Dl_info()
             guard let pointer = UnsafeRawPointer(bitPattern: address.uintValue),
@@ -159,15 +186,18 @@ enum TestHostIsolation {
 
     /// 崩溃或被终止的测试运行来不及删除自己的偏好设置域，下一次启动时按进程号清理；
     /// 正常结束的运行留下了套件清单，按清单删除它列出的套件。
-    static func removeDomainsOfEndedRuns(manifestDirectory: URL = suiteManifestDirectory) {
+    static func removeDomainsOfEndedRuns(
+        manifestDirectory: URL = suiteManifestDirectory,
+        preferencesDirectory directory: URL = preferencesDirectory
+    ) {
         let prefix = defaultsSuiteName.split(separator: ".").dropLast().joined(separator: ".") + "."
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: preferencesDirectory.path)) ?? []
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         for fileName in names where fileName.hasPrefix(prefix) && fileName.hasSuffix(".plist") {
             let domain = String(fileName.dropLast(".plist".count))
             guard let processID = pid_t(domain.dropFirst(prefix.count)),
                   processID != ProcessInfo.processInfo.processIdentifier,
                   processHasEnded(processID) else { continue }
-            removeDomain(domain)
+            removeDomain(domain, preferencesDirectory: directory)
         }
 
         let manifests = (try? FileManager.default.contentsOfDirectory(at: manifestDirectory, includingPropertiesForKeys: nil)) ?? []
@@ -177,7 +207,7 @@ enum TestHostIsolation {
                   processHasEnded(processID) else { continue }
             let suiteNames = (try? Data(contentsOf: manifest)).flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
             for name in suiteNames {
-                removeDomain(name)
+                removeDomain(name, preferencesDirectory: directory)
             }
             try? FileManager.default.removeItem(at: manifest)
         }
