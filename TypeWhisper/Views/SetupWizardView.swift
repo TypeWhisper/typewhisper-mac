@@ -1653,6 +1653,7 @@ struct SetupWizardView: View {
         case .recorderToggle: return dictation.recorderToggleHotkeyLabel
         case .undoLastDictation: return dictation.undoLastDictationHotkeyLabel
         case .restoreRawTranscript: return dictation.restoreRawTranscriptHotkeyLabel
+        case .translation: return dictation.translationHotkeyLabel
         }
     }
 
@@ -1668,6 +1669,7 @@ struct SetupWizardView: View {
         case .recorderToggle: return String(localized: "settings.tab.recorder")
         case .undoLastDictation: return localizedAppText("Undo Last Dictation", de: "Letztes Diktat rückgängig")
         case .restoreRawTranscript: return localizedAppText("Restore Raw Transcript", de: "Rohtext wiederherstellen")
+        case .translation: return String(localized: "Translate", table: "DictumShell")
         }
     }
 

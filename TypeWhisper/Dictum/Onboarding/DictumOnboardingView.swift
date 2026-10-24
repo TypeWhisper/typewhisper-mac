@@ -25,7 +25,7 @@ struct DictumOnboardingView: View {
     @State private var failure: String?
     @State private var practiceText = ""
     @State private var completedPractice = false
-    @State private var previousTranslation: Bool?
+    @ObservedObject private var languages = TranslationLanguageStore.shared
     @FocusState private var practiceFocused: Bool
 
     private static var initialStep: Int {
@@ -74,30 +74,26 @@ struct DictumOnboardingView: View {
                 if new == 4 || new == 5 {
                     practiceText = ""
                     completedPractice = false
-                    if previousTranslation == nil { previousTranslation = SettingsViewModel.shared.translationEnabled }
-                    SettingsViewModel.shared.translationEnabled = new == 5
-                } else { restoreTranslation() }
+                }
             }
             .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
                 microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
                 accessibility = AXIsProcessTrusted()
                 fnAction = Self.fnUsage
                 if step == 2 && recorder.rawAudioLevel > 0.01 { heardSeconds += 0.1 }
-                if (step == 4 || step == 5), dictation.state == .inserting, !practiceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { completedPractice = true }
+                if (step == 4 || step == 5), dictation.state == .inserting,
+                   dictation.sessionMode == (step == 5 ? .translation : .dictation),
+                   !practiceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { completedPractice = true }
             }
             .onAppear {
                 if UserDefaults.standard.bool(forKey: "dictumPracticeRequested") {
                     UserDefaults.standard.removeObject(forKey: "dictumPracticeRequested")
                 }
-                if step == 4 || step == 5 {
-                    previousTranslation = SettingsViewModel.shared.translationEnabled
-                    SettingsViewModel.shared.translationEnabled = step == 5
-                }
                 if !SetupWizardDefaultHotkey.triggerSlots.contains(where: { !dictation.hotkeys(for: $0).isEmpty }) {
                     dictation.setHotkey(SetupWizardDefaultHotkey.recommendedHybridHotkey, for: .hybrid)
                 }
             }
-            .onDisappear { stopMeter(); restoreTranslation() }
+            .onDisappear { stopMeter() }
     }
 
     private var canContinue: Bool {
@@ -158,19 +154,50 @@ struct DictumOnboardingView: View {
             Button { DictumNavigation.shared.open(.speech) } label: { text("Use cloud recognition instead") }.buttonStyle(.plain).foregroundStyle(DictumTheme.accent)
         case 4, 5:
             title(step == 4 ? "Practice dictation" : "Practice translation")
-            text(step == 4 ? "Press fn, read the text below, then press fn again." : "Press fn + Left ⇧, say this in Chinese, then press fn.").foregroundStyle(.secondary)
-            text(step == 4 ? "Um, let's meet Friday, no, Thursday afternoon, to discuss the budget, hiring, and next quarter's plans." : "I'm treating everyone to dinner tonight. Let's meet downstairs at 7.")
-                .padding(14).frame(maxWidth: .infinity, alignment: .leading).background(step == 4 ? DictumTheme.accentSoft : DictumTheme.translateSoft, in: RoundedRectangle(cornerRadius: 10))
+            if step == 4 {
+                text("Press fn, read the text below, then press fn again.").foregroundStyle(.secondary)
+                text("Um, let's meet Friday, no, Thursday afternoon, to discuss the budget, hiring, and next quarter's plans.")
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading).background(DictumTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                translationPractice
+            }
             TextEditor(text: $practiceText).font(.system(size: 14)).frame(height: 118).overlay(RoundedRectangle(cornerRadius: 10).stroke(DictumTheme.separator))
                 .focused($practiceFocused).onAppear { practiceFocused = true }
-                .accessibilityLabel(text(step == 4 ? "Your text appears here" : "The translation appears here"))
+                .accessibilityLabel(step == 4 ? text("Your text appears here") : Text("The translation appears here", tableName: "DictumTranslation"))
             if completedPractice {
-                Label { text(step == 4 ? "Fillers and corrections handled" : "Click the language on the voice bar to switch targets") } icon: { Image(systemName: "checkmark.circle.fill") }.foregroundStyle(DictumTheme.success)
+                Label {
+                    if step == 4 { text("Fillers and corrections handled") }
+                    else { Text("Click the language on the voice bar to switch targets", tableName: "DictumTranslation") }
+                } icon: { Image(systemName: "checkmark.circle.fill") }.foregroundStyle(DictumTheme.success)
             }
         default:
             Image(systemName: "checkmark.circle.fill").font(.system(size: 72)).foregroundStyle(DictumTheme.success).padding(.top, 34)
             title("You're all set")
             shortcuts
+        }
+    }
+
+    @ViewBuilder private var translationPractice: some View {
+        let settings = languages.settings
+        let practice = TranslationPractice.sentence(for: settings.isAutomatic ? nil : settings.spokenLanguage)
+        if let pair = settings.pair {
+            let spokenName = pair.spoken.map { TranslationLanguageNames.shortName(for: $0) }
+            if let spokenName {
+                Text("Press fn + Left ⇧, say this in \(spokenName), then press fn.", tableName: "DictumTranslation").foregroundStyle(.secondary)
+            } else {
+                Text("Press fn + Left ⇧, say this, then press fn.", tableName: "DictumTranslation").foregroundStyle(.secondary)
+            }
+            if practice.isFallback, let spokenName {
+                Text("There is no sample sentence in \(spokenName) yet. Read this one, or say anything in \(spokenName).", tableName: "DictumTranslation")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(verbatim: "\(spokenName ?? String(localized: "Auto", table: "DictumTranslation")) → \(TranslationLanguageNames.name(for: pair.target))")
+                    .font(.system(size: 11)).foregroundStyle(DictumTheme.translate)
+                Text(verbatim: practice.text)
+            }
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(DictumTheme.translateSoft, in: RoundedRectangle(cornerRadius: 10))
         }
     }
 
@@ -238,9 +265,6 @@ struct DictumOnboardingView: View {
                 if !Task.isCancelled { failure = error.localizedDescription }
             }
         }
-    }
-    private func restoreTranslation() {
-        if let previousTranslation { SettingsViewModel.shared.translationEnabled = previousTranslation; self.previousTranslation = nil }
     }
     private func prepareModel() async {
         failure = nil

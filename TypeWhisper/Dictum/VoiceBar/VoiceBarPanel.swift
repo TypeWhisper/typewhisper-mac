@@ -115,7 +115,7 @@ final class VoiceBarPresentation: ObservableObject {
         input.tentativeText = vm.streamingPreview.tentativeTail
         input.duration = vm.recordingDuration
         input.cancellationRemaining = vm.state == .inserting ? vm.cancelledRecordingDeadline?.timeIntervalSinceNow : nil
-        input.translation = SettingsViewModel.shared.translationEnabled
+        input.translation = vm.sessionMode == .translation
         input.targetMenuOpen = targetMenuOpen
         if vm.state == .idle, let notice = vm.modelNotice {
             switch notice {
@@ -141,7 +141,7 @@ final class VoiceBarPresentation: ObservableObject {
             }
             switch vm.actionFeedbackIcon {
             case "mic.slash", "waveform.badge.exclamationmark": input.outcome = vm.actionFeedbackIsError ? .blockingError(vm.actionFeedbackMessage ?? "") : .noSpeech
-            case "exclamationmark.triangle.fill": input.outcome = .recoveredError
+            case "exclamationmark.triangle.fill": input.outcome = vm.sessionMode == .translation ? .translationFailed : .recoveredError
             case "doc.on.clipboard", "doc.on.doc": input.outcome = .copied
             default:
                 if vm.actionFeedbackIsError {
@@ -163,6 +163,7 @@ final class VoiceBarPresentation: ObservableObject {
             case "not-downloaded": input.model = .notDownloaded
             case "failed": input.model = .failed(parts.count > 1 ? String(parts[1]) : "")
             case "recovered-error": input.outcome = .recoveredError
+            case "translation-failed": input.outcome = .translationFailed
             case "blocking-error": input.outcome = .blockingError(parts.count > 1 ? String(parts[1]) : "")
             case "no-ai": input.outcome = .noAI
             case "no-speech": input.outcome = .noSpeech
@@ -284,7 +285,7 @@ final class VoiceBarPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         appearance = NSAppearance(named: .darkAqua)
-        let hosting = VoiceBarHostingView(rootView: VoiceBarView(model: presentation))
+        let hosting = VoiceBarHostingView(rootView: VoiceBarView(model: presentation, retryPolish: { DictationViewModel.shared.retryPolish() }))
         hosting.sizingOptions = []
         hosting.safeAreaRegions = []
         contentView = hosting
@@ -383,7 +384,7 @@ private extension VoiceBarState {
         let lifetime: TimeInterval? = switch self {
         case .inserted: 1.2
         case .copied, .downloading, .notDownloaded: 3
-        case .recoveredError, .noAI: 4
+        case .recoveredError, .translationFailed, .noAI: 4
         case .noSpeech: 2
         case .blockingError, .modelFailed: .infinity
         default: nil
@@ -542,6 +543,10 @@ struct VoiceBarView: View {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DictumTheme.warning)
             label("Polishing failed. Original inserted.")
             action("Retry") { retryPolish?() }.disabled(retryPolish == nil)
+        case .translationFailed:
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DictumTheme.warning)
+            Text("Translation failed. What you said was inserted.", tableName: "DictumTranslation").font(.system(size: 12.5))
+            action("Retry") { retryPolish?() }.disabled(retryPolish == nil)
         case .blockingError(let message):
             Image(systemName: "mic.slash.fill").foregroundStyle(DictumTheme.danger)
             if message.isEmpty { label("Microphone unavailable") } else { Text(verbatim: message).lineLimit(1) }
@@ -613,10 +618,18 @@ struct VoiceBarView: View {
 }
 
 struct VoiceBarLanguageMenu: View {
-    @ObservedObject private var settings = SettingsViewModel.shared
+    @ObservedObject private var dictation = DictationViewModel.shared
     @Binding var isOpen: Bool
     var body: some View {
-        VoiceBarLanguagePicker(target: settings.translationTargetLanguage, isOpen: $isOpen)
-            .frame(width: 150, height: 26)
+        if let pair = dictation.sessionPair {
+            VoiceBarLanguagePicker(pair: pair, isOpen: $isOpen)
+                .frame(width: max(150, Self.titleWidth(for: pair) + 28), height: 26)
+        }
+    }
+
+    private static func titleWidth(for pair: TranslationPair) -> CGFloat {
+        let spoken = pair.spoken.map { TranslationLanguageNames.shortName(for: $0) } ?? String(localized: "Auto", table: "DictumTranslation")
+        let title = "\(spoken) → \(TranslationLanguageNames.name(for: pair.target)) ⌄"
+        return (title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12.5)]).width
     }
 }

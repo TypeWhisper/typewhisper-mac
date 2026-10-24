@@ -25,7 +25,6 @@ struct GeneralSettingsView: View {
         return preferredLanguage?.hasPrefix("de") == true ? "de" : "en"
     }()
     @State private var showRestartAlert = false
-    @ObservedObject private var settings = SettingsViewModel.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,26 +34,6 @@ struct GeneralSettingsView: View {
             Form {
                 // The spoken language lives on the Dictation page next to the engine
                 // it applies to; this page keeps the app language.
-                #if canImport(Translation)
-                if #available(macOS 15, *) {
-                    Section(String(localized: "Translation")) {
-                    Toggle(String(localized: "Enable translation"), isOn: $settings.translationEnabled)
-
-                    if settings.translationEnabled {
-                        Picker(String(localized: "Target language"), selection: $settings.translationTargetLanguage) {
-                            ForEach(TranslationService.availableTargetLanguages, id: \.code) { lang in
-                                Text(lang.name).tag(lang.code)
-                            }
-                        }
-                    }
-
-                    Text(String(localized: "Uses Apple Translate (on-device)"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                #endif
-
                 Section(String(localized: "Language")) {
                 Picker(String(localized: "App Language"), selection: $appLanguage) {
                     Text(String(localized: "English")).tag("en")

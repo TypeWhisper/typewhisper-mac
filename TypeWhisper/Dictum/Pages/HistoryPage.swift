@@ -134,7 +134,7 @@ struct DictumHistoryPage: View {
 
     private var noResultsMessageKey: LocalizedStringKey {
         filter == .translation && search.isEmpty
-            ? "Translation records appear here once translation is available."
+            ? "Translations show up here after you press fn + Left ⇧ and talk."
             : "Try a different word."
     }
 
@@ -218,6 +218,9 @@ struct DictumHistoryPage: View {
                     Text(record.timestamp, format: .dateTime.hour().minute())
                         .font(.system(size: 11)).monospacedDigit()
                         .foregroundStyle(DictumTheme.textTertiary)
+                    if record.mode == .translation {
+                        Badge(text: "translation.badge", tint: DictumTheme.translate, tableName: "DictumTranslation")
+                    }
                     if failed {
                         Badge(text: "Not polished", tint: DictumTheme.warning, tableName: "DictumHistory")
                     }
@@ -273,8 +276,9 @@ struct DictumHistoryPage: View {
 
     private func detail(_ record: TranscriptionRecord) -> some View {
         let failed = record.processingFailureMessage != nil
-        let showsOriginalToggle = !failed && record.rawText != record.finalText
-        let shownText = original ? record.rawText : record.finalText
+        let isTranslation = record.mode == .translation
+        let showsOriginalToggle = !failed && !isTranslation && record.rawText != record.finalText
+        let shownText = original && !isTranslation ? record.rawText : record.finalText
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
                 DictumAppIcon(bundleIdentifier: record.appBundleIdentifier, name: record.appName ?? "dictum", size: 28)
@@ -295,15 +299,19 @@ struct DictumHistoryPage: View {
                 failureBanner(failure)
                     .padding(.top, 18)
             }
-            Text(highlight(shownText))
-                .font(.system(size: 15))
-                .lineSpacing(DictumTheme.Typography.readingLineSpacing)
-                .foregroundStyle(failed || original ? DictumTheme.textSecondary : DictumTheme.textPrimary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 18).padding(.horizontal, 20)
-                .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.top, 18)
+            if isTranslation {
+                translationWells(record)
+            } else {
+                Text(highlight(shownText))
+                    .font(.system(size: 15))
+                    .lineSpacing(DictumTheme.Typography.readingLineSpacing)
+                    .foregroundStyle(failed || original ? DictumTheme.textSecondary : DictumTheme.textPrimary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 18).padding(.horizontal, 20)
+                    .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.top, 18)
+            }
             HStack(spacing: 16) {
                 metaValue("Duration", "\(Int(record.durationSeconds) / 60):\(String(format: "%02d", Int(record.durationSeconds) % 60))")
                 metaValue("Words", record.wordsCount.formatted())
@@ -313,8 +321,10 @@ struct DictumHistoryPage: View {
             .padding(.top, 14)
             HStack(spacing: 8) {
                 actionButton("Copy", symbol: "doc.on.doc") { copy(shownText) }
-                actionButton("Retry", symbol: "arrow.clockwise") { retry.request(record) }
-                    .disabled(history.audioFileURL(for: record) == nil || retry.isRunning)
+                actionButton("Retry", symbol: "arrow.clockwise") {
+                    if isTranslation { retry.retranslate(record) } else { retry.request(record) }
+                }
+                .disabled((!isTranslation && history.audioFileURL(for: record) == nil) || retry.isRunning)
                 if let url = history.audioFileURL(for: record) {
                     actionButton("Play Recording", symbol: "play.fill") { play(url) }
                 }
@@ -329,6 +339,32 @@ struct DictumHistoryPage: View {
                 .accessibilityLabel(Text("Delete", tableName: "DictumHistory"))
             }
             .padding(.top, 16)
+        }
+    }
+
+    /// 翻译记录显示两个文字框：译文在上，原话在下。
+    private func translationWells(_ record: TranscriptionRecord) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            well(
+                Text("Translation · \(TranslationLanguageNames.name(for: record.targetLanguage ?? ""))", tableName: "DictumTranslation"),
+                text: record.finalText, secondary: false
+            ).padding(.top, 18)
+            well(Text("What you said", tableName: "DictumTranslation"), text: record.rawText, secondary: true)
+                .padding(.top, 12)
+        }
+    }
+
+    private func well(_ title: Text, text: String, secondary: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            title.font(.system(size: 11.5, weight: .medium)).foregroundStyle(DictumTheme.textSecondary)
+            Text(highlight(text))
+                .font(.system(size: 15))
+                .lineSpacing(DictumTheme.Typography.readingLineSpacing)
+                .foregroundStyle(secondary ? DictumTheme.textSecondary : DictumTheme.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 18).padding(.horizontal, 20)
+                .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -476,8 +512,11 @@ struct DictumHistoryPage: View {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "dictum-history.md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let text = history.allRecords(query: HistoryQuery(searchText: search)).filter { filter.includes($0) }.map {
-            "## \($0.timestamp.formatted(.iso8601))\n\n\($0.finalText)\n"
+        let text = history.allRecords(query: HistoryQuery(searchText: search)).filter { filter.includes($0) }.map { record in
+            let heading = "## \(record.timestamp.formatted(.iso8601))\n\n"
+            guard record.mode == .translation else { return heading + "\(record.finalText)\n" }
+            let pair = "\(record.spokenLanguage ?? "auto") → \(record.targetLanguage ?? "")"
+            return heading + "Translation (\(pair))\n\n\(record.finalText)\n\n> \(record.rawText)\n"
         }.joined(separator: "\n")
         do { try text.write(to: url, atomically: true, encoding: .utf8) }
         catch { showToast(error.localizedDescription) }

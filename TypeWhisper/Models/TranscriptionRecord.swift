@@ -118,6 +118,15 @@ final class TranscriptionRecord {
     /// syncing them as separate components. Epoch 0 means never.
     var speakerTranscriptUpdatedAt: Date = Date(timeIntervalSince1970: 0)
     var speakerNamesUpdatedAt: Date = Date(timeIntervalSince1970: 0)
+    /// 翻译记录的模式与语言对。旧记录没有这些字段，按听写读取。
+    var modeRaw: String?
+    var spokenLanguage: String?
+    var targetLanguage: String?
+
+    var mode: DictationMode {
+        get { modeRaw.flatMap(DictationMode.init(rawValue:)) ?? .dictation }
+        set { modeRaw = newValue == .dictation ? nil : newValue.rawValue }
+    }
 
     var preview: String { String(finalText.prefix(100)) }
     var source: RecordingSource {

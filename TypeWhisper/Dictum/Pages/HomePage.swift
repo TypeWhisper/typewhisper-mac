@@ -123,6 +123,9 @@ struct HomePage: View {
                         if let bundle = record.appBundleIdentifier, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 20, height: 20)
                         } else { Image(systemName: "app").frame(width: 20, height: 20).foregroundStyle(.secondary) }
+                        if record.mode == .translation {
+                            Badge(text: "translation.badge", tint: DictumTheme.translate, tableName: "DictumTranslation")
+                        }
                         Button {
                             HistoryViewModel.shared.requestOpenRecord(withID: record.id)
                             DictumNavigation.shared.open(.history)

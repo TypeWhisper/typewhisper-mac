@@ -41,6 +41,7 @@ enum SettingsBackupExporter {
         UserDefaultsKeys.recorderToggleHotkeys,
         UserDefaultsKeys.undoLastDictationHotkeys,
         UserDefaultsKeys.restoreRawTranscriptHotkeys,
+        UserDefaultsKeys.translationHotkeys,
     ]
 
     // MARK: - DTOs
@@ -131,6 +132,10 @@ enum SettingsBackupExporter {
         let engineUsed: String
         let modelUsed: String?
         let pipelineSteps: [String]
+        /// 翻译记录的可选字段；旧备份没有它们。
+        var mode: String? = nil
+        var spokenLanguage: String? = nil
+        var targetLanguage: String? = nil
     }
 
     /// Simple, portable preferences from the General, Dictation, Dictation
@@ -158,6 +163,9 @@ enum SettingsBackupExporter {
         var selectedTask: String? = nil
         var translationEnabled: Bool? = nil
         var translationTargetLanguage: String? = nil
+        var translationSpokenLanguage: String? = nil
+        var translationTargets: [String]? = nil
+        var translationCurrentTarget: String? = nil
         var showMenuBarIcon: Bool? = nil
         var dockIconBehaviorWhenMenuBarHidden: String? = nil
         // Dictation
@@ -213,6 +221,9 @@ enum SettingsBackupExporter {
             if selectedTask != nil { count += 1 }
             if translationEnabled != nil { count += 1 }
             if translationTargetLanguage != nil { count += 1 }
+            if translationSpokenLanguage != nil { count += 1 }
+            if translationTargets != nil { count += 1 }
+            if translationCurrentTarget != nil { count += 1 }
             if showMenuBarIcon != nil { count += 1 }
             if dockIconBehaviorWhenMenuBarHidden != nil { count += 1 }
             if audioDuckingEnabled != nil { count += 1 }
@@ -523,7 +534,10 @@ enum SettingsBackupExporter {
                 language: record.language,
                 engineUsed: record.engineUsed,
                 modelUsed: record.modelUsed,
-                pipelineSteps: record.pipelineStepList
+                pipelineSteps: record.pipelineStepList,
+                mode: record.modeRaw,
+                spokenLanguage: record.spokenLanguage,
+                targetLanguage: record.targetLanguage
             )
         }
 
@@ -544,6 +558,9 @@ enum SettingsBackupExporter {
                 selectedTask: userDefaults.string(forKey: UserDefaultsKeys.selectedTask),
                 translationEnabled: userDefaults.object(forKey: UserDefaultsKeys.translationEnabled) as? Bool,
                 translationTargetLanguage: userDefaults.string(forKey: UserDefaultsKeys.translationTargetLanguage),
+                translationSpokenLanguage: userDefaults.string(forKey: TranslationLanguageStore.Keys.spoken),
+                translationTargets: userDefaults.stringArray(forKey: TranslationLanguageStore.Keys.targets),
+                translationCurrentTarget: userDefaults.string(forKey: TranslationLanguageStore.Keys.current),
                 showMenuBarIcon: userDefaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool,
                 dockIconBehaviorWhenMenuBarHidden: userDefaults.string(forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden),
                 audioDuckingEnabled: userDefaults.object(forKey: UserDefaultsKeys.audioDuckingEnabled) as? Bool,
@@ -934,7 +951,10 @@ enum SettingsBackupExporter {
                 language: entry.language,
                 engineUsed: entry.engineUsed,
                 modelUsed: entry.modelUsed,
-                pipelineSteps: entry.pipelineSteps
+                pipelineSteps: entry.pipelineSteps,
+                translation: entry.mode == DictationMode.translation.rawValue
+                    ? entry.targetLanguage.map { HistoryTranslationInfo(spokenLanguage: entry.spokenLanguage, targetLanguage: $0) }
+                    : nil
             )
             // UsageStatisticsService only backfills from history once, at app
             // launch (ServiceContainer), so an import happening mid-session
@@ -966,6 +986,9 @@ enum SettingsBackupExporter {
         apply(preferences.selectedTask, forKey: UserDefaultsKeys.selectedTask)
         apply(preferences.translationEnabled, forKey: UserDefaultsKeys.translationEnabled)
         apply(preferences.translationTargetLanguage, forKey: UserDefaultsKeys.translationTargetLanguage)
+        apply(preferences.translationSpokenLanguage, forKey: TranslationLanguageStore.Keys.spoken)
+        apply(preferences.translationTargets, forKey: TranslationLanguageStore.Keys.targets)
+        apply(preferences.translationCurrentTarget, forKey: TranslationLanguageStore.Keys.current)
         apply(preferences.showMenuBarIcon, forKey: UserDefaultsKeys.showMenuBarIcon)
         apply(preferences.dockIconBehaviorWhenMenuBarHidden, forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden)
         apply(preferences.audioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)

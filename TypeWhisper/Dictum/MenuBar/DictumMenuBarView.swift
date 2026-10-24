@@ -13,22 +13,11 @@ enum MenuBarActionDispatcher {
 @MainActor
 private final class MenuBarDictationSession {
     static let shared = MenuBarDictationSession()
-    private var observation: AnyCancellable?
-    private var previousTranslation: Bool?
 
     func start(translation: Bool) {
         let dictation = DictationViewModel.shared
         guard dictation.canDictate, dictation.canStartAPIRecording else { return }
-        let settings = SettingsViewModel.shared
-        previousTranslation = settings.translationEnabled
-        settings.translationEnabled = translation
-        observation = dictation.$state.dropFirst().sink { [weak self] state in
-            guard state == .idle, let self, let previous = self.previousTranslation else { return }
-            settings.translationEnabled = previous
-            self.previousTranslation = nil
-            self.observation = nil
-        }
-        _ = dictation.apiStartRecording()
+        _ = dictation.apiStartRecording(mode: translation ? .translation : .dictation)
     }
 }
 
@@ -39,7 +28,7 @@ struct DictumMenuBarView: View {
     @ObservedObject private var models = ServiceContainer.shared.modelManagerService
     @ObservedObject private var history = ServiceContainer.shared.historyService
     @ObservedObject private var recent = ServiceContainer.shared.recentTranscriptionStore
-    @ObservedObject private var settings = SettingsViewModel.shared
+    @ObservedObject private var languages = TranslationLanguageStore.shared
 
     var body: some View {
         Group {
@@ -62,7 +51,10 @@ struct DictumMenuBarView: View {
             Divider()
             Menu {
                 ForEach(VoiceBarLanguages.options) { language in
-                    Toggle(language.name, isOn: Binding(get: { settings.translationTargetLanguage == language.code }, set: { if $0 { settings.translationTargetLanguage = language.code } }))
+                    Toggle(language.name, isOn: Binding(
+                        get: { languages.settings.currentTarget == language.code },
+                        set: { if $0 { dictation.selectSessionTarget(language.code) } }
+                    ))
                 }
             } label: { text("Translate To") }
             Menu {

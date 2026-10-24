@@ -36,6 +36,25 @@ final class HistoryRetryController: ObservableObject {
         } catch { message = error.localizedDescription }
     }
 
+    /// 翻译记录不重新识别录音，只用记录的语言对重新翻译原话。
+    func retranslate(_ record: TranscriptionRecord) {
+        guard !isRunning else { return }
+        isRunning = true
+        message = String(localized: "Translating again…", table: "DictumTranslation")
+        let styles = StyleStore.shared
+        let style = styles.resolve(bundleID: record.appBundleIdentifier, browserURL: record.appURL)
+        Task { @MainActor [container] in
+            defer { isRunning = false }
+            do {
+                try await HistoryTranslationRetry.run(
+                    record: record, history: container.historyService, processor: container.promptProcessingService,
+                    style: style, level: styles.level, vocabulary: container.dictionaryService.vocabularyForPrompt()
+                )
+                message = String(localized: "Translated again", table: "DictumTranslation")
+            } catch { message = error.localizedDescription }
+        }
+    }
+
     func cancelConfirmation() { pending = nil; confirmation = nil }
 
     func start() {

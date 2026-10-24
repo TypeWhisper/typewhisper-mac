@@ -11,6 +11,7 @@ enum VoiceBarState: Equatable {
     case inserted(count: Int)
     case copied
     case recoveredError
+    case translationFailed
     case blockingError(String)
     case noSpeech
     case downloading(Double?)
@@ -22,7 +23,7 @@ enum VoiceBarState: Equatable {
 
     struct Input {
         enum Activity { case idle, preparing, recording, processing }
-        enum Outcome { case inserted(Int), copied, recoveredError, blockingError(String), noSpeech, noAI }
+        enum Outcome { case inserted(Int), copied, recoveredError, translationFailed, blockingError(String), noSpeech, noAI }
         enum Model { case downloading(Double?), loading, notDownloaded, failed(String) }
         var activity: Activity = .idle
         var outcome: Outcome?
@@ -44,6 +45,7 @@ enum VoiceBarState: Equatable {
             case .inserted(let count): return .inserted(count: count)
             case .copied: return .copied
             case .recoveredError: return .recoveredError
+            case .translationFailed: return .translationFailed
             case .blockingError(let message): return .blockingError(message)
             case .noSpeech: return .noSpeech
             case .noAI: return .noAI

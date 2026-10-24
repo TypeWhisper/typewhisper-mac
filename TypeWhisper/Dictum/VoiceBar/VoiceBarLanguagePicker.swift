@@ -6,7 +6,7 @@ private final class VoiceBarLanguageButton: NSButton {
 }
 
 struct VoiceBarLanguagePicker: NSViewRepresentable {
-    let target: String
+    let pair: TranslationPair
     @Binding var isOpen: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(isOpen: $isOpen) }
@@ -23,13 +23,15 @@ struct VoiceBarLanguagePicker: NSViewRepresentable {
     }
 
     func updateNSView(_ button: NSButton, context: Context) {
-        context.coordinator.targetLanguage = target
-        button.title = "中文 → \(VoiceBarLanguages.Option(code: target).name) ⌄"
+        context.coordinator.targetLanguage = pair.target
+        let spoken = pair.spoken.map { TranslationLanguageNames.shortName(for: $0) }
+            ?? String(localized: "Auto", table: "DictumTranslation")
+        button.title = "\(spoken) → \(TranslationLanguageNames.name(for: pair.target)) ⌄"
         button.setAccessibilityLabel(button.title)
     }
 
     @MainActor final class Coordinator: NSObject, NSMenuDelegate {
-        var targetLanguage = "en"
+        var targetLanguage = ""
         private var isOpen: Binding<Bool>
 
         init(isOpen: Binding<Bool>) { self.isOpen = isOpen }
@@ -54,7 +56,7 @@ struct VoiceBarLanguagePicker: NSViewRepresentable {
 
         @objc private func selectLanguage(_ sender: NSMenuItem) {
             guard let code = sender.representedObject as? String else { return }
-            SettingsViewModel.shared.translationTargetLanguage = code
+            DictationViewModel.shared.selectSessionTarget(code)
         }
 
         @objc private func editLanguages() { DictumNavigation.shared.open(.general) }
