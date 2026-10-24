@@ -241,7 +241,7 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
-    func setHistoryAudioSyncEnabled(_ enabled: Bool) {
+    func disableHistoryAudioSync() {
         historySyncPreferences?.isAudioEnabled = false
         objectWillChange.send()
     }
@@ -356,7 +356,7 @@ final class CloudFolderSyncController: ObservableObject {
                 cache: syncCache
             )
             setState(syncState, for: syncMode)
-            historyService?.applyRetention(HistoryRetention.selected(in: defaults))
+            historyService?.applySelectedDayBasedRetention(in: defaults)
             if syncMode == .automaticICloud {
                 try await automaticICloudBridge.synchronize()
             }
@@ -501,7 +501,7 @@ final class CloudFolderSyncController: ObservableObject {
     /// Checks for remote changes; a full sync only runs when the package or local data changed.
     func automaticPollTick() async {
         guard isConfigured, !isSyncing else { return }
-        historyService?.applyRetention(HistoryRetention.selected(in: defaults))
+        historyService?.applySelectedDayBasedRetention(in: defaults)
         await syncIfNeeded()
     }
 

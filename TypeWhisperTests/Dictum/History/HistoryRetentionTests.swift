@@ -23,6 +23,33 @@ final class HistoryRetentionTests: XCTestCase {
         XCTAssertEqual(service.recordCount(), 0)
     }
 
+    @MainActor
+    func testSelectedDayBasedRetentionWithHistoryDisabledDeletesNothing() throws {
+        let root = try TestSupport.makeTemporaryDirectory(prefix: "dictum-retention-disabled")
+        defer { TestSupport.remove(root) }
+        let suite = "dictum-retention-disabled-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let service = HistoryService(appSupportDirectory: root, eventEmitter: { _ in })
+        let now = Date()
+        for days in [0, 2, 40] {
+            XCTAssertTrue(service.addRecord(timestamp: now.addingTimeInterval(Double(-days * 86400)), rawText: "会议记录", finalText: "会议记录。", appName: nil, appBundleIdentifier: nil, durationSeconds: 2, language: "zh", engineUsed: "Qwen3-ASR"))
+        }
+
+        defaults.set(false, forKey: UserDefaultsKeys.historyEnabled)
+        XCTAssertEqual(HistoryRetention.selected(in: defaults), .never)
+        service.applySelectedDayBasedRetention(in: defaults, now: now)
+        XCTAssertEqual(service.recordCount(), 3)
+
+        HistoryRetention.never.save(to: defaults)
+        service.applySelectedDayBasedRetention(in: defaults, now: now)
+        XCTAssertEqual(service.recordCount(), 3)
+
+        HistoryRetention.week.save(to: defaults)
+        service.applySelectedDayBasedRetention(in: defaults, now: now)
+        XCTAssertEqual(service.recordCount(), 2)
+    }
+
     func testCalendarMonthAndNever() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

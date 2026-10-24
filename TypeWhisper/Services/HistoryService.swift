@@ -1212,6 +1212,14 @@ final class HistoryService: ObservableObject {
         purgeRecords(before: cutoff)
     }
 
+    /// 定时轮询和每次同步后调用：只套用按天数的档位；“不保留”只在设置页确认后清除一次，
+    /// 由 HistorySyncSection 调用 applyRetention(.never)。
+    func applySelectedDayBasedRetention(in defaults: UserDefaults = .standard, now: Date = Date()) {
+        let retention = HistoryRetention.selected(in: defaults)
+        guard retention != .never else { return }
+        applyRetention(retention, now: now)
+    }
+
     func purgeOldRecords(retentionDays: Int = 365) {
         guard retentionDays > 0 else { return }
         applyRetention(HistoryRetention(storedDays: retentionDays))

@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct HistorySettingsView: View {
-    @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled = true
     @ObservedObject private var syncController = ServiceContainer.shared.cloudFolderSyncController
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @State private var confirmingHistorySync = false
@@ -37,10 +36,6 @@ struct HistorySettingsView: View {
                     } label: {
                         Text(String(localized: "Search, review, edit, export, and complete Inbox entries in a dedicated window."))
                     }
-                }
-
-                Section(String(localized: "Local History")) {
-                    Toggle(String(localized: "Save history"), isOn: $historyEnabled)
                 }
 
                 Section(String(localized: "Sync")) {
