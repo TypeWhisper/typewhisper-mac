@@ -222,7 +222,13 @@ final class RemoteLinkServer: @unchecked Sendable {
         parameters.includePeerToPeer = false
         let listener = try NWListener(using: parameters)
         listener.service = makeService(pairing: lock.withLock { pairingApprover != nil })
-        lock.withLock { self.listener = listener }
+        // A start that began later owns the server; this listener never starts.
+        let installed = lock.withLock {
+            guard listenerGeneration == generation else { return false }
+            self.listener = listener
+            return true
+        }
+        guard installed else { return }
         listener.stateUpdateHandler = { [weak self] state in
             guard let self, isCurrentListener(generation) else { return }
             switch state {
