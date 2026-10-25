@@ -211,16 +211,18 @@ final class RemoteLinkServer: @unchecked Sendable {
     }
 
     func start() throws {
+        // The new generation comes first, so the listener stopped here cannot
+        // report while its replacement is created.
+        let generation = lock.withLock {
+            listenerGeneration += 1
+            return listenerGeneration
+        }
         stop()
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = false
         let listener = try NWListener(using: parameters)
         listener.service = makeService(pairing: lock.withLock { pairingApprover != nil })
-        let generation = lock.withLock {
-            listenerGeneration += 1
-            self.listener = listener
-            return listenerGeneration
-        }
+        lock.withLock { self.listener = listener }
         listener.stateUpdateHandler = { [weak self] state in
             guard let self, isCurrentListener(generation) else { return }
             switch state {
