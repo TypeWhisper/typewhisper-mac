@@ -173,7 +173,7 @@ struct StylePage: View {
         guard let url, let bundle = Bundle(url: url), let id = bundle.bundleIdentifier,
               !store.apps.contains(where: { !$0.isBuiltIn && $0.bundleIDs.contains(id) }) else { return }
         let global = store.global
-        let app = AppStyle(id: UUID().uuidString, kind: .userApp, name: FileManager.default.displayName(atPath: url.path),
+        let app = AppStyle(id: UUID().uuidString, kind: .userApp, name: AppStyle.applicationName(at: url),
                            bundleIDs: [id], urlPatterns: [], formality: global.formality, tone: global.tone, emoji: global.emoji)
         store.apps.append(app)
         expanded = app.id
