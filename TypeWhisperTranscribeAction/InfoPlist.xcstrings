@@ -8,25 +8,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mit TypeWhisper transkribieren"
+            "value" : "Mit dictum transkribieren"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transcribe with TypeWhisper"
+            "value" : "Transcribe with dictum"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperで文字起こし"
+            "value" : "dictumで文字起こし"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用 TypeWhisper 转录"
+            "value" : "使用 dictum 转录"
           }
         }
       }
@@ -38,25 +38,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mit TypeWhisper transkribieren"
+            "value" : "Mit dictum transkribieren"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transcribe with TypeWhisper"
+            "value" : "Transcribe with dictum"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperで文字起こし"
+            "value" : "dictumで文字起こし"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用 TypeWhisper 转录"
+            "value" : "使用 dictum 转录"
           }
         }
       }

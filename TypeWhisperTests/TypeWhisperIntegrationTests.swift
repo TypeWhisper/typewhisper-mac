@@ -2520,7 +2520,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let invalidBody = try Self.jsonObject(invalidResponse)
         XCTAssertEqual(
             (invalidBody["error"] as? [String: Any])?["message"] as? String,
-            "Request body is not a valid TypeWhisper settings backup"
+            "Request body is not a valid dictum settings backup"
         )
     }
 
@@ -2667,7 +2667,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             ("not json", "Request body must be a JSON object"),
             (
                 #"{"audio_ducking_enabled":false,"noise_suppression":true}"#,
-                "Unknown field 'noise_suppression'. TypeWhisper for macOS accepts: input_priority, audio_ducking_enabled, audio_ducking_level, pause_media_during_recording, sound_feedback_enabled"
+                "Unknown field 'noise_suppression'. dictum accepts: input_priority, audio_ducking_enabled, audio_ducking_level, pause_media_during_recording, sound_feedback_enabled"
             ),
             (#"{"active_input":{"id":"BlackHole2ch_UID"}}"#, "'active_input' is read-only"),
             (#"{"input_devices":[]}"#, "'input_devices' is read-only"),
@@ -2739,7 +2739,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(response.status, 409, "\(busyState)")
             XCTAssertEqual(
                 (try Self.jsonObject(response)["error"] as? [String: Any])?["message"] as? String,
-                "Audio settings cannot change while TypeWhisper is recording or processing"
+                "Audio settings cannot change while dictum is recording or processing"
             )
         }
 

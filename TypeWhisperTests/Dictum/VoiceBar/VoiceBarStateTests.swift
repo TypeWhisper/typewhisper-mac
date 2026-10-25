@@ -21,7 +21,8 @@ final class VoiceBarStateTests: XCTestCase {
         XCTAssertEqual(VoiceBarState.derive(input), .polishing(translating: false))
         let outcomes: [(VoiceBarState.Input.Outcome, VoiceBarState)] = [
             (.inserted(7), .inserted(count: 7)), (.copied, .copied),
-            (.recoveredError, .recoveredError), (.blockingError("Microphone unavailable"), .blockingError("Microphone unavailable")),
+            (.recoveredError, .recoveredError), (.blockingError("Microphone unavailable", page: .general), .blockingError("Microphone unavailable", page: .general)),
+            (.failure("Recognition failed", .page(.speech)), .failure("Recognition failed", destination: .page(.speech))),
             (.noSpeech, .noSpeech), (.noAI, .noAI)
         ]
         for (outcome, expected) in outcomes {
