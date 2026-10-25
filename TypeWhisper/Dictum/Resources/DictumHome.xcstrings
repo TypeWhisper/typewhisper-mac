@@ -111,6 +111,7 @@
     "To type into other apps and detect the fn key": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"To type into other apps and detect the fn key"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"把文字输入到其他应用，并识别 fn 键"}}}},
     "Open Keyboard Settings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Keyboard Settings"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"打开键盘设置"}}}},
     "Open Settings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Settings"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"打开设置"}}}},
+    "Open Dictation Recovery": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Dictation Recovery"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"打开听写恢复"}}}},
     "Press fn + Left ⇧, say this in Chinese, then press fn.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Press fn + Left ⇧, say this in Chinese, then press fn."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"按 fn + 左 ⇧，用中文说下面这句话，再按一下 fn。"}}}},
     "Fillers and corrections handled": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Fillers and corrections handled"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"口头禅和改口都处理好了"}}}},
     "Click the language on the voice bar to switch targets": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Click the language on the voice bar to switch targets"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"在语音条上点语言，可以换成其他目标语言"}}}}

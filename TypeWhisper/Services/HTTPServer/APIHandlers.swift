@@ -97,13 +97,13 @@ final class APIHandlers: @unchecked Sendable {
             return HTTPResponse(status: 200, contentType: "application/json", body: data)
         } catch {
             apiLogger.error("Settings export failed: \(error.localizedDescription, privacy: .public)")
-            return .error(status: 500, message: "Could not export TypeWhisper settings")
+            return .error(status: 500, message: "Could not export dictum settings")
         }
     }
 
     private func handleImportSettings(_ request: HTTPRequest) async -> HTTPResponse {
         guard !request.body.isEmpty else {
-            return .error(status: 400, message: "Request body must contain a TypeWhisper settings backup")
+            return .error(status: 400, message: "Request body must contain a dictum settings backup")
         }
         guard let mode = SettingsBackupExporter.ImportMode(rawValue: request.queryParams["mode"] ?? "merge") else {
             return .error(status: 400, message: "mode must be merge or replace")
@@ -113,10 +113,10 @@ final class APIHandlers: @unchecked Sendable {
             let result = try await settingsBackupService.importData(request.body, mode: mode)
             return .json(result)
         } catch SettingsBackupExporter.ImportError.invalidFile {
-            return .error(status: 400, message: "Request body is not a valid TypeWhisper settings backup")
+            return .error(status: 400, message: "Request body is not a valid dictum settings backup")
         } catch {
             apiLogger.error("Settings import failed: \(error.localizedDescription, privacy: .public)")
-            return .error(status: 500, message: "Could not import TypeWhisper settings")
+            return .error(status: 500, message: "Could not import dictum settings")
         }
     }
 
@@ -147,7 +147,7 @@ final class APIHandlers: @unchecked Sendable {
                 dictationState: dictationViewModel.state,
                 recorderState: audioRecorderViewModel.state
             ) else {
-                return .error(status: 409, message: "Audio settings cannot change while TypeWhisper is recording or processing")
+                return .error(status: 409, message: "Audio settings cannot change while dictum is recording or processing")
             }
 
             // Same setters the settings window uses, so the change persists and applies to the next recording.
@@ -471,7 +471,7 @@ final class APIHandlers: @unchecked Sendable {
         if resolvedOverride.engineId == nil {
             let hasEngine = await modelManager.selectedProviderId != nil
             guard hasEngine else {
-                return .error(status: 503, message: "No engine selected. Select an engine in TypeWhisper first.")
+                return .error(status: 503, message: "No engine selected. Select an engine in dictum first.")
             }
         }
 

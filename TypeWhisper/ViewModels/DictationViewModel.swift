@@ -1752,7 +1752,14 @@ final class DictationViewModel: ObservableObject {
                 guard self.state == .recording, !self.isStopInFlight else { return }
                 let errorMessage = error.localizedDescription
                 self.abortActiveRecordingImmediately(sessionMessage: errorMessage, preserveRecoveryAudio: true)
-                self.showError(errorMessage, category: "recording")
+                self.soundService.play(.error, enabled: self.soundFeedbackEnabled)
+                self.showNotchFeedback(
+                    message: errorMessage,
+                    icon: "mic.slash",
+                    duration: Self.errorFeedbackDuration(message: errorMessage, baseDuration: 3.0),
+                    isError: true,
+                    errorCategory: "recording"
+                )
             }
             .store(in: &cancellables)
 
@@ -2511,7 +2518,18 @@ final class DictationViewModel: ObservableObject {
             errorMessage = error.localizedDescription
         }
         failDictationSession(id: sessionID, error: errorMessage)
-        showError(errorMessage, category: "recording")
+        if error is AudioRecordingService.AudioRecordingError {
+            soundService.play(.error, enabled: soundFeedbackEnabled)
+            showNotchFeedback(
+                message: errorMessage,
+                icon: "mic.slash",
+                duration: Self.errorFeedbackDuration(message: errorMessage, baseDuration: 3.0),
+                isError: true,
+                errorCategory: "recording"
+            )
+        } else {
+            showError(errorMessage, category: "recording")
+        }
         hotkeyService.cancelDictation()
     }
 
