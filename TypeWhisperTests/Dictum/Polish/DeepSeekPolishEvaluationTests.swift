@@ -10,17 +10,56 @@ final class DeepSeekPolishEvaluationTests: XCTestCase {
         var list = false
     }
 
+    struct StyleCase {
+        let name: String
+        let text: String
+        let style: ResolvedStyle
+        let required: [String]
+        var list = false
+        var corrected = ""
+        var wantsEmoji = false
+    }
+
+    private lazy var key: String = {
+        let file = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".config/dictum/test-keys.env")
+        guard let contents = try? String(contentsOf: file, encoding: .utf8),
+              let line = contents.components(separatedBy: .newlines).first(where: { $0.hasPrefix("DEEPSEEK_API_KEY=") }) else { return "" }
+        return String(line.dropFirst("DEEPSEEK_API_KEY=".count)).trimmingCharacters(in: CharacterSet(charactersIn: "\"' \t\r"))
+    }()
+
+    private func call(_ model: String, prompt: String, text: String) async throws -> String {
+        var request = URLRequest(url: URL(string: "https://api.deepseek.com/chat/completions")!)
+        request.timeoutInterval = 120
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["model": model, "temperature": 0.2,
+            "messages": [["role": "system", "content": prompt], ["role": "user", "content": TypeWhisperDictatedTextBoundary.wrap(text)]]])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw EvaluationError.http(status) }
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let choice = (object?["choices"] as? [[String: Any]])?.first
+        return try XCTUnwrap((choice?["message"] as? [String: Any])?["content"] as? String)
+    }
+
+    private func model(_ key: String) async throws -> String {
+        var modelsRequest = URLRequest(url: URL(string: "https://api.deepseek.com/models")!)
+        modelsRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        let (modelsData, modelsResponse) = try await URLSession.shared.data(for: modelsRequest)
+        guard (modelsResponse as? HTTPURLResponse)?.statusCode == 200 else { throw EvaluationError.http((modelsResponse as? HTTPURLResponse)?.statusCode ?? 0) }
+        let modelsObject = try JSONSerialization.jsonObject(with: modelsData) as? [String: Any]
+        let ids = (modelsObject?["data"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
+        return try XCTUnwrap(["deepseek-chat", "deepseek-flash"].first { ids.contains($0) })
+    }
+
     // 通过测试启动环境显式启用，普通单元测试不发送用户文本或产生费用。
     func testRealDeepSeekEvaluation() async throws {
         guard ProcessInfo.processInfo.environment["DICTUM_POLISH_EVAL"] == "1" else {
             throw XCTSkip("Set DICTUM_POLISH_EVAL=1 to run the real DeepSeek evaluation.")
         }
-        let file = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".config/dictum/test-keys.env")
-        let contents = try String(contentsOf: file, encoding: .utf8)
-        let line = try XCTUnwrap(contents.components(separatedBy: .newlines).first { $0.hasPrefix("DEEPSEEK_API_KEY=") })
-        let key = String(line.dropFirst("DEEPSEEK_API_KEY=".count)).trimmingCharacters(in: CharacterSet(charactersIn: "\"' \t\r"))
         guard !key.isEmpty else { throw XCTSkip("DeepSeek key is empty") }
-        let outputURL = URL(fileURLWithPath: "/tmp/dictum-p2/eval.md")
+        let outputURL = URL(fileURLWithPath: "/tmp/dictum-p6-fix-style/eval.md")
         try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let samples: [Sample] = [
             .init(name: "中文口头禅", text: "嗯，那个，我今天去图书馆借了两本书，呃，晚上看。", bundleID: "com.apple.Notes", required: ["图书馆", "两本", "晚上"]),
@@ -36,14 +75,32 @@ final class DeepSeekPolishEvaluationTests: XCTestCase {
             .init(name: "混合词典", text: "嗯，dictum 的 Qwen3-ASR 已经接上了，那个，明天检查 API latency。", bundleID: "com.apple.dt.Xcode", required: ["dictum", "Qwen3-ASR", "API", "latency"]),
             .init(name: "否定与不确定", text: "呃，我不确定周三能不能发布，那个，不要承诺客户明天交付。", bundleID: "com.apple.Notes", required: ["不确定", "周三", "明天"])
         ]
-        var report = "# DeepSeek 润色评估\n\n检查规则：去除语气填充词；保留全部事实、否定与疑问；不添加内容。标准和重写另检查改口与列表；轻度保留改口措辞。自动检查后须人工检查全部输出。\n\n"
-        var modelsRequest = URLRequest(url: URL(string: "https://api.deepseek.com/models")!)
-        modelsRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        let (modelsData, modelsResponse) = try await URLSession.shared.data(for: modelsRequest)
-        guard (modelsResponse as? HTTPURLResponse)?.statusCode == 200 else { throw EvaluationError.http((modelsResponse as? HTTPURLResponse)?.statusCode ?? 0) }
-        let modelsObject = try JSONSerialization.jsonObject(with: modelsData) as? [String: Any]
-        let ids = (modelsObject?["data"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
-        let model = try XCTUnwrap(["deepseek-chat", "deepseek-flash"].first { ids.contains($0) })
+        let styleCases: [StyleCase] = [
+            .init(name: "正式·温和·不用表情（列表改口署名）",
+                  text: "嗯，那个，明天的评审改到下午三点，不对，四点，呃，地点还是二楼会议室，要确认三件事，第一投影仪，第二会议纪要模板，第三茶水。",
+                  style: ResolvedStyle(formality: .formal, tone: .warm, emoji: .none,
+                                       signOff: "祝好", extraInstructions: "", group: nil),
+                  required: ["四点", "二楼", "投影仪", "纪要", "茶水"], list: true, corrected: "三点"),
+            .init(name: "正式·温和·不用表情（留言）",
+                  text: "呃，老师您好，嗯，孩子明天的家长会我准时到，那个，大概十点半，谢谢老师。",
+                  style: ResolvedStyle(formality: .formal, tone: .warm, emoji: .none,
+                                       signOff: "祝好", extraInstructions: "", group: nil),
+                  required: ["家长会", "十点半"]),
+            .init(name: "随意·热情·常用表情（列表改口）",
+                  text: "嗯，我到楼下了，那个，顺便买了三样东西，第一牛奶，第二鸡蛋，第三面包，呃，你说七点见，不对，八点，慢慢来不着急。",
+                  style: ResolvedStyle(formality: .casual, tone: .upbeat, emoji: .often,
+                                       signOff: nil, extraInstructions: "", group: .chat),
+                  required: ["楼下", "牛奶", "鸡蛋", "面包", "八点"], list: true, corrected: "七点", wantsEmoji: true),
+            .init(name: "随意·热情·常用表情（消息）",
+                  text: "嗯，周五的聚餐我确定能来，那个，我带上次说的蛋糕，呃，超期待。",
+                  style: ResolvedStyle(formality: .casual, tone: .upbeat, emoji: .often,
+                                       signOff: nil, extraInstructions: "", group: .chat),
+                  required: ["聚餐", "蛋糕"], wantsEmoji: true)
+        ]
+        var report = "# DeepSeek 润色评估\n\n检查规则：去除语气填充词；保留全部事实、否定与疑问；不添加内容。标准和重写另检查改口与列表；轻度保留改口措辞。风格用例只在标准档运行：正式·温和·不用表情要求没有表情、结尾是署名；随意·热情·常用表情要求有表情、没有署名。自动检查后须人工检查全部输出。\n\n"
+        var failures: [String] = []
+        var passCount = 0
+        let model = try await self.model(key)
         report += "模型：\(model)\n\n"
         for sample in samples {
             for level in PolishLevel.allCases {
@@ -51,23 +108,14 @@ final class DeepSeekPolishEvaluationTests: XCTestCase {
                 let polish = PolishRequest(rawTranscript: sample.text, level: level, style: style,
                                            vocabulary: ["dictum", "Qwen3-ASR", "userID", "fetchUser", "timeout"],
                                            target: .init(appName: nil, bundleID: sample.bundleID, browserURL: nil))
-                var request = URLRequest(url: URL(string: "https://api.deepseek.com/chat/completions")!)
-                request.timeoutInterval = 120
-                request.httpMethod = "POST"
-                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = try JSONSerialization.data(withJSONObject: ["model": model, "temperature": 0.2,
-                    "messages": [["role": "system", "content": polish.systemPrompt], ["role": "user", "content": TypeWhisperDictatedTextBoundary.wrap(polish.userContent)]]])
-                let (data, response) = try await URLSession.shared.data(for: request)
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                guard status == 200 else {
+                let rawOutput: String
+                do {
+                    rawOutput = try await call(model, prompt: polish.systemPrompt, text: polish.userContent)
+                } catch EvaluationError.http(let status) {
                     report += "\nHTTP \(status)，停止评估。\n"
                     try report.write(to: outputURL, atomically: true, encoding: .utf8)
                     throw EvaluationError.http(status)
                 }
-                let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                let choice = (object?["choices"] as? [[String: Any]])?.first
-                let rawOutput = try XCTUnwrap((choice?["message"] as? [String: Any])?["content"] as? String)
                 let output = TypeWhisperDictatedTextBoundary.sanitize(rawOutput, originalUserText: sample.text, fallbackToOriginalUserText: false)
                 let missing = sample.required.filter { !output.localizedCaseInsensitiveContains($0) }
                 let hasFillers = output.range(of: "嗯|呃|\\b(um|uh)\\b", options: [.regularExpression, .caseInsensitive]) != nil
@@ -77,11 +125,48 @@ final class DeepSeekPolishEvaluationTests: XCTestCase {
                     (sample.name != "中文改口" || !output.contains("三点")) &&
                     (sample.name != "English correction" || !output.localizedCaseInsensitiveContains("three"))
                 let passed = missing.isEmpty && !hasFillers && hasList && mailParagraphs && correctionResolved
+                passCount += passed ? 1 : 0
+                if !passed { failures.append("\(sample.name)/\(level.rawValue)") }
                 report += "## \(sample.name) / \(level.rawValue) / 自动检查 \(passed ? "PASS" : "FAIL")\n\n输入：\(sample.text)\n\n输出：\n\n\(output)\n\n"
                 try report.write(to: outputURL, atomically: true, encoding: .utf8)
-                XCTAssertTrue(passed, "\(sample.name)/\(level.rawValue) failed; inspect eval.md")
             }
         }
+        for styleCase in styleCases {
+            let polish = PolishRequest(rawTranscript: styleCase.text, level: .standard, style: styleCase.style,
+                                       vocabulary: [],
+                                       target: .init(appName: nil, bundleID: nil, browserURL: nil))
+            let rawOutput: String
+            do {
+                rawOutput = try await call(model, prompt: polish.systemPrompt, text: polish.userContent)
+            } catch EvaluationError.http(let status) {
+                report += "\nHTTP \(status)，停止评估。\n"
+                try report.write(to: outputURL, atomically: true, encoding: .utf8)
+                throw EvaluationError.http(status)
+            }
+            let output = TypeWhisperDictatedTextBoundary.sanitize(rawOutput, originalUserText: styleCase.text, fallbackToOriginalUserText: false)
+            let missing = styleCase.required.filter { !output.localizedCaseInsensitiveContains($0) }
+            let hasFillers = output.range(of: "嗯|呃|\\b(um|uh)\\b", options: [.regularExpression, .caseInsensitive]) != nil
+            let hasList = !styleCase.list || output.components(separatedBy: .newlines).filter { !$0.isEmpty }.count >= 3
+            let correctionResolved = styleCase.corrected.isEmpty || !output.contains(styleCase.corrected)
+            let hasEmoji = output.unicodeScalars.contains { $0.properties.isEmojiPresentation }
+            let emojiOK = styleCase.wantsEmoji ? hasEmoji : !hasEmoji
+            let body = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let signOffOK: Bool
+            if let signOff = styleCase.style.requestedSignOff {
+                signOffOK = styleCase.style.appendingSignOff(to: body) == body
+            } else {
+                signOffOK = true
+            }
+            let passed = missing.isEmpty && !hasFillers && hasList && correctionResolved && emojiOK && signOffOK
+            passCount += passed ? 1 : 0
+            if !passed { failures.append(styleCase.name) }
+            report += "## \(styleCase.name) / 标准 / 自动检查 \(passed ? "PASS" : "FAIL")\n\n输入：\(styleCase.text)\n\n输出：\n\n\(output)\n\n署名检查 \(signOffOK ? "PASS" : "FAIL") · 表情检查 \(emojiOK ? "PASS" : "FAIL")\n\n"
+            try report.write(to: outputURL, atomically: true, encoding: .utf8)
+        }
+        let total = samples.count * PolishLevel.allCases.count + styleCases.count
+        report += "\n通过 \(passCount)/\(total)。\(failures.isEmpty ? "" : "失败：\(failures.joined(separator: "，"))")\n"
+        try report.write(to: outputURL, atomically: true, encoding: .utf8)
+        XCTAssertTrue(failures.isEmpty, "失败：\(failures.joined(separator: "，"))；查看 eval.md")
     }
 
     enum EvaluationError: Error { case http(Int) }
