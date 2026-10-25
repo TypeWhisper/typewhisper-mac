@@ -140,11 +140,16 @@ final class RemoteLinkServer: @unchecked Sendable {
     static let responseTimeout: TimeInterval = 60
 
     let store: RemoteLinkDeviceStore
-    var onStateChange: (@Sendable (State) -> Void)?
+    /// Also passes the listener's generation. A consumer that handles the
+    /// state on another queue checks it again there with `isCurrentListener`
+    /// or `isActiveListener`, because the listener can be replaced or stopped
+    /// in between.
+    var onStateChange: (@Sendable (State, Int) -> Void)?
     var onDevicesChange: (@Sendable () -> Void)?
     /// True once Bonjour registered the service. macOS holds the registration
-    /// back until the user allows local network access.
-    var onAdvertisingChange: (@Sendable (Bool) -> Void)?
+    /// back until the user allows local network access. Also passes the
+    /// listener's generation, like `onStateChange`.
+    var onAdvertisingChange: (@Sendable (Bool, Int) -> Void)?
     var onPairingFinished: (@Sendable (RemoteLinkDevice?) -> Void)?
 
     private let router: APIRouter
@@ -154,8 +159,8 @@ final class RemoteLinkServer: @unchecked Sendable {
     private let lock = NSLock()
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "RemoteLink")
     private var listener: NWListener?
-    /// Changes on every start and stop, so a replaced or stopped listener
-    /// cannot report its state over the current one.
+    /// Changes on every start, so a replaced listener cannot report its
+    /// state over the current one.
     private var listenerGeneration = 0
     private var activeConnections: [UUID: (connection: RemoteLinkConnection, host: String, task: Task<Void, Never>)] = [:]
     /// Device behind each authenticated session, so removing a device closes it.
@@ -189,6 +194,17 @@ final class RemoteLinkServer: @unchecked Sendable {
         lock.withLock { listener != nil }
     }
 
+    /// True if no newer listener started since the one with this generation.
+    func isCurrentListener(_ generation: Int) -> Bool {
+        lock.withLock { listenerGeneration == generation }
+    }
+
+    /// True if the listener with this generation is the current one and was
+    /// not stopped.
+    func isActiveListener(_ generation: Int) -> Bool {
+        lock.withLock { listenerGeneration == generation && listener != nil }
+    }
+
     static func computerName() -> String {
         (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "Mac"
     }
@@ -208,12 +224,12 @@ final class RemoteLinkServer: @unchecked Sendable {
             guard let self, isCurrentListener(generation) else { return }
             switch state {
             case .ready:
-                onStateChange?(.ready)
+                onStateChange?(.ready, generation)
             case .failed(let error):
-                onStateChange?(.failed(error.localizedDescription))
+                onStateChange?(.failed(error.localizedDescription), generation)
                 stop()
             case .cancelled:
-                onStateChange?(.stopped)
+                onStateChange?(.stopped, generation)
             default:
                 break
             }
@@ -222,9 +238,9 @@ final class RemoteLinkServer: @unchecked Sendable {
             guard let self, isCurrentListener(generation) else { return }
             switch change {
             case .add:
-                onAdvertisingChange?(true)
+                onAdvertisingChange?(true, generation)
             case .remove:
-                onAdvertisingChange?(false)
+                onAdvertisingChange?(false, generation)
             @unknown default:
                 break
             }
@@ -239,7 +255,6 @@ final class RemoteLinkServer: @unchecked Sendable {
         let (listener, connections) = lock.withLock {
             let current = (self.listener, Array(activeConnections.values))
             self.listener = nil
-            listenerGeneration += 1
             activeConnections.removeAll()
             return current
         }
@@ -317,10 +332,6 @@ final class RemoteLinkServer: @unchecked Sendable {
     }
 
     // MARK: - Connections
-
-    private func isCurrentListener(_ generation: Int) -> Bool {
-        lock.withLock { listenerGeneration == generation }
-    }
 
     private func makeService(pairing: Bool) -> NWListener.Service? {
         guard advertises else { return nil }

@@ -50,11 +50,11 @@ final class RemoteLinkViewModel: ObservableObject {
         isWritingAllowed = defaults.bool(forKey: UserDefaultsKeys.remoteLinkWritingAllowed)
         devices = server.store.devices()
 
-        server.onStateChange = { [weak self] state in
-            Task { @MainActor in self?.apply(state) }
+        server.onStateChange = { [weak self] state, generation in
+            Task { @MainActor in self?.apply(state, generation: generation) }
         }
-        server.onAdvertisingChange = { [weak self] advertised in
-            Task { @MainActor in self?.isAdvertised = advertised }
+        server.onAdvertisingChange = { [weak self] advertised, generation in
+            Task { @MainActor in self?.applyAdvertising(advertised, generation: generation) }
         }
         server.onDevicesChange = { [weak self] in
             Task { @MainActor in self?.reloadDevices() }
@@ -151,7 +151,15 @@ final class RemoteLinkViewModel: ObservableObject {
         }
     }
 
-    private func apply(_ state: RemoteLinkServer.State) {
+    /// The listener can be stopped or replaced while an update waits for the
+    /// main actor: "ready" and "visible" only count for a listener that still
+    /// runs, failures and stops only for the current one.
+    private func apply(_ state: RemoteLinkServer.State, generation: Int) {
+        if case .ready = state {
+            guard server.isActiveListener(generation) else { return }
+        } else {
+            guard server.isCurrentListener(generation) else { return }
+        }
         switch state {
         case .ready:
             isRunning = true
@@ -164,6 +172,12 @@ final class RemoteLinkViewModel: ObservableObject {
             isAdvertised = false
             errorMessage = message
         }
+    }
+
+    private func applyAdvertising(_ advertised: Bool, generation: Int) {
+        let applies = advertised ? server.isActiveListener(generation) : server.isCurrentListener(generation)
+        guard applies else { return }
+        isAdvertised = advertised
     }
 
     private func reloadDevices() {
