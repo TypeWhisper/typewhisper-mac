@@ -42,6 +42,13 @@ struct AppStyle: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
+    /// Finder 设置为显示所有扩展名时，`displayName` 会带上 `.app`。
+    static func applicationName(at url: URL) -> String {
+        let name = FileManager.default.displayName(atPath: url.path)
+        guard url.pathExtension == "app", name.hasSuffix(".app") else { return name }
+        return String(name.dropLast(4))
+    }
+
     func matches(bundleID: String?, browserURL: String?) -> Bool {
         if let bundleID, bundleIDs.contains(bundleID) { return true }
         guard let browserURL, let url = URL(string: browserURL),
@@ -90,6 +97,29 @@ struct ResolvedStyle: Equatable, Sendable {
                     tone: selected?.tone ?? global.tone, emoji: selected?.emoji ?? global.emoji,
                     signOff: (selected?.addSignOff ?? (global.formality == .formal)) ? global.signOff : nil,
                     extraInstructions: selected?.extraInstructions ?? "", group: group)
+    }
+
+    var requestedSignOff: String? {
+        guard let signOff = signOff?.trimmingCharacters(in: .whitespacesAndNewlines), !signOff.isEmpty else { return nil }
+        return signOff
+    }
+
+    /// 模型有时漏掉署名，署名由 dictum 保证在插入文字的最后。
+    /// 比较时忽略结尾的空白、标点和表情，模型在署名后加的表情不会让署名重复。
+    func appendingSignOff(to text: String) -> String {
+        guard let signOff = requestedSignOff else { return text }
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return text }
+        func isDecoration(_ character: Character) -> Bool {
+            character.isWhitespace || character.isPunctuation || character.isSymbol
+        }
+        var core = Substring(signOff)
+        while let first = core.first, isDecoration(first) { core = core.dropFirst() }
+        while let last = core.last, isDecoration(last) { core = core.dropLast() }
+        var ending = Substring(body)
+        while let last = ending.last, isDecoration(last) { ending = ending.dropLast() }
+        if ending.lowercased().hasSuffix(core.lowercased()) { return text }
+        return body + "\n" + signOff
     }
 }
 
