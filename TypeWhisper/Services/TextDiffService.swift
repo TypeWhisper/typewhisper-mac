@@ -278,8 +278,9 @@ final class TextDiffService {
     }
 
     /// 汉字改成汉字时，只有读音相近才是听错的词；读音不同（明天 → 后天、记录 → 纪要）是改了内容，
-    /// 学进词典会改写之后每次听写里的这个词。两边转成不带声调的拼音，每个字一个音节，按音节对齐求编辑距离：
-    /// 两个音节对齐的代价是它们拼音字母的编辑距离，多出或缺少一个音节的代价是它的字母数。
+    /// 学进词典会改写之后每次听写里的这个词。两边转成不带声调的拼音，每个字一个音节，按音节逐个比较求编辑距离：
+    /// 两个音节相差 0 或 1 个字母时，代价是它们拼音字母的编辑距离；相差更多时（今天 → 明天 的 jin / ming），
+    /// 代价是两个音节的字母数之和；多出或缺少一个音节的代价是它的字母数。
     /// 距离超过较长一方拼音字母数的三分之一时不学习。
     private static func isHanEditWithDifferentSound(_ original: String, _ replacement: String) -> Bool {
         guard original.allSatisfy(\.isHan), replacement.allSatisfy(\.isHan) else { return false }
@@ -287,7 +288,8 @@ final class TextDiffService {
         let replacementSyllables = pinyinSyllables(of: replacement)
         let longerLetterCount = max(originalSyllables.joined().count, replacementSyllables.joined().count)
         let distance = editDistance(originalSyllables, replacementSyllables, indelCost: \.count) { first, second in
-            editDistance(first, second, indelCost: { _ in 1 }) { $0 == $1 ? 0 : 1 }
+            let letterDistance = editDistance(first, second, indelCost: { _ in 1 }) { $0 == $1 ? 0 : 1 }
+            return letterDistance <= 1 ? letterDistance : first.count + second.count
         }
         return distance * 3 > longerLetterCount
     }

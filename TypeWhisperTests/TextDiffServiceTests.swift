@@ -282,6 +282,8 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertEqual(learned("下午三点开会。", "上午三点开会。"), [])
         XCTAssertEqual(learned("我们按这个方案做。", "我们按这个计划做。"), [])
         XCTAssertEqual(learned("我们明天开会。", "我们大后天开会。"), [])
+        XCTAssertEqual(learned("我们今天开会。", "我们明天开会。"), [])
+        XCTAssertEqual(learned("我们周一开会。", "我们周二开会。"), [])
     }
 
     func testHistoryEditLearningLearnsHanCorrectionsOnlyWhenTheySoundAlike() {
