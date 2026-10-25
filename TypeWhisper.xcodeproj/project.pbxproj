@@ -6174,7 +6174,7 @@
 				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync.dev;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.icloudbridge;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				SKIP_INSTALL = YES;
@@ -6197,7 +6197,7 @@
 				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				PROVISIONING_PROFILE_SPECIFIER = "$(TYPEWHISPER_ICLOUD_HELPER_PROFILE_SPECIFIER)";
@@ -6405,7 +6405,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
 				PRODUCT_MODULE_NAME = TypeWhisper;
 				PRODUCT_NAME = "TypeWhisper Dev";
@@ -6439,7 +6439,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
@@ -6457,7 +6457,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_NAME = "typewhisper-cli";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;
@@ -6470,7 +6470,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_NAME = "typewhisper-cli";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;
@@ -7189,7 +7189,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -7216,7 +7216,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -7244,7 +7244,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -7272,7 +7272,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
