@@ -416,15 +416,18 @@ final class RemoteLinkTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         try await Task.sleep(for: .milliseconds(300))
-        // The replaced first listener must not report `.stopped`.
-        XCTAssertEqual(states.get(), [.ready])
+        // The first listener may still report `.ready` before it is replaced,
+        // but the replaced listener must not report `.stopped`.
+        XCTAssertFalse(states.get().isEmpty)
+        XCTAssertTrue(states.get().allSatisfy { $0 == .ready }, "\(states.get())")
         XCTAssertTrue(server.isListening)
+        let readyCount = states.get().count
 
         server.stop()
         XCTAssertFalse(server.isListening)
         try await Task.sleep(for: .milliseconds(300))
         // A stopped listener may still report that it stopped, never that it is ready.
-        XCTAssertEqual(states.get().filter { $0 == .ready }.count, 1)
+        XCTAssertEqual(states.get().filter { $0 == .ready }.count, readyCount)
         XCTAssertNotEqual(states.get().last, .ready)
     }
 

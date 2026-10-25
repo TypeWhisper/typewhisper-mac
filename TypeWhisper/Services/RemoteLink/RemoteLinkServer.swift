@@ -162,7 +162,8 @@ final class RemoteLinkServer: @unchecked Sendable {
     /// Changes on every start, so a replaced listener cannot report its
     /// state over the current one.
     private var listenerGeneration = 0
-    private var activeConnections: [UUID: (connection: RemoteLinkConnection, host: String, task: Task<Void, Never>)] = [:]
+    private typealias ActiveConnection = (connection: RemoteLinkConnection, host: String, task: Task<Void, Never>)
+    private var activeConnections: [UUID: ActiveConnection] = [:]
     /// Device behind each authenticated session, so removing a device closes it.
     private var sessionDevices: [UUID: String] = [:]
     private var pairingApprover: PairingApprover?
@@ -227,7 +228,7 @@ final class RemoteLinkServer: @unchecked Sendable {
                 onStateChange?(.ready, generation)
             case .failed(let error):
                 onStateChange?(.failed(error.localizedDescription), generation)
-                stop()
+                stop(generation: generation)
             case .cancelled:
                 onStateChange?(.stopped, generation)
             default:
@@ -252,7 +253,14 @@ final class RemoteLinkServer: @unchecked Sendable {
     }
 
     func stop() {
-        let (listener, connections) = lock.withLock {
+        stop(generation: nil)
+    }
+
+    /// With a generation, stops only if that listener is still the current
+    /// one, so a failed listener cannot stop the one that replaced it.
+    private func stop(generation: Int?) {
+        let (listener, connections): (NWListener?, [ActiveConnection]) = lock.withLock {
+            guard generation == nil || generation == listenerGeneration else { return (nil, []) }
             let current = (self.listener, Array(activeConnections.values))
             self.listener = nil
             activeConnections.removeAll()
