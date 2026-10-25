@@ -359,7 +359,7 @@ Apps not covered use the global style. A per-app row wins over a group that cont
 **Layout.** Grouped form, max width 600, sections in this order:
 
 1. **快捷键 Shortcuts.** `听写` [fn] · `翻译` [fn][左 ⇧] · `取消` [esc] (fixed) · `按住快捷键` popup (`按住说话，松开结束` / `不使用`) · `外接键盘` [右 ⌥] with a remove button, or an `添加备用快捷键` button when empty. Footer: `外接键盘没有 fn 键时，用这个备用快捷键听写。` Clicking a key cap enters recording: accent ring, caps dim, caption `按下新快捷键`; Esc or 3 s without input restores the old value. Conflicts show inline `这个快捷键已被“{app}”使用` in `danger`.
-2. **润色强度 Polish strength.** Three selectable option cards in a row: `轻度` (`去掉口头禅和重复，其余保留原话`), `标准` (`再处理改口、分段和列表，语气按风格调整`, default), `重写` (`按风格设置重新组织措辞`). Below, a well with `你说：…` and `写出：…` for the selected level. What each level takes from the resolved style (§5.4): sign-off and extra instructions at every level; formality, tone and emoji at `标准` and `重写`, where `标准` adjusts word choice, tone and emoji inside the speaker's own sentence structure and `重写` may reorganize the wording. A sign-off the style asks for is always at the end of the inserted text: when the model leaves it out, dictum appends it.
+2. **润色强度 Polish strength.** Three selectable option cards in a row: `轻度` (`去掉「嗯」「那个」等口头禅和重复的词，其余照原话`), `标准` (`说错后改口的，只留改正后的说法；分好段落和列表；语气按风格调整`, default), `重写` (`按风格把整段话重新组织成通顺的文字`). Below, a well with `你说：…` and `写出：…` for the selected level. What each level takes from the resolved style (§5.4): sign-off and extra instructions at every level; formality, tone and emoji at `标准` and `重写`, where `标准` adjusts word choice, tone and emoji inside the speaker's own sentence structure and `重写` may reorganize the wording. A sign-off the style asks for is always at the end of the inserted text: when the model leaves it out, dictum appends it.
 3. **翻译语言 Translation languages.** First row `说话语言` popup: `自动识别` plus every language the speech engine supports, default `中文（简体）`. Below it, `翻译成`: a reorderable target list with drag grips; the first row carries a `默认` badge; hover shows a remove button; last row `添加语言` (the spoken language is not offered as a target). Default list: `English`. Footer: `第一个是默认目标语言。拖动可以调整顺序，语音条上按这个顺序显示。`
 4. **声音 Sound.** `麦克风` with a 12-segment live level meter and device popup (`自动（{device}）`); `提示音` switch; `听写时暂停其他声音` switch.
 5. **历史与同步 History & Sync.** `同步到 iCloud Drive` switch with status underneath (`2 分钟前已同步 · 1,286 条`, or `已关闭`); `同步文件夹` path (`iCloud Drive › dictum`) with `更改…`; `保留历史` popup (永久 / 1 年 / 1 个月 / 1 周 / 24 小时 / 不保留, default 1 年); `保存录音` switch. Footer: `同步文件夹里只有文字，录音只保存在这台 Mac 上。` Turning sync off asks: `关闭同步后，这台 Mac 上的历史会保留，同步文件夹里的文件不会删除。` Shortening retention asks `将删除 {n} 条早于 {date} 的记录。`
@@ -377,9 +377,9 @@ Apps not covered use the global style. A per-app row wins over a group that cont
 | 按下新快捷键 | Press new shortcut |
 | 这个快捷键已被“{app}”使用 | "{app}" already uses this shortcut |
 | 润色强度：轻度 / 标准 / 重写 | Polish: Light / Standard / Rewrite |
-| 去掉口头禅和重复，其余保留原话 | Removes fillers and repeats, keeps your words |
-| 再处理改口、分段和列表，语气按风格调整 | Also fixes self-corrections, paragraphs, and lists, in your style's tone |
-| 按风格设置重新组织措辞 | Rewrites in your style |
+| 去掉「嗯」「那个」等口头禅和重复的词，其余照原话 | Removes filler words like "um" and repeats; keeps the rest as you said it |
+| 说错后改口的，只留改正后的说法；分好段落和列表；语气按风格调整 | When you correct yourself, keeps only the corrected words; adds paragraphs and lists; matches your style's tone |
+| 按风格把整段话重新组织成通顺的文字 | Rewrites the whole passage smoothly in your style |
 | 翻译语言 / 说话语言 / 自动识别 | Translation languages / Spoken language / Detect automatically |
 | 翻译成 / 默认 / 添加语言 | Translate to / Default / Add Language |
 | 第一个是默认目标语言…… | The first language is the default. Drag to reorder; the voice bar uses this order. |
