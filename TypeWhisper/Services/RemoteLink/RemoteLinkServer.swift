@@ -154,6 +154,9 @@ final class RemoteLinkServer: @unchecked Sendable {
     private let lock = NSLock()
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "RemoteLink")
     private var listener: NWListener?
+    /// Changes on every start and stop, so a replaced or stopped listener
+    /// cannot report its state over the current one.
+    private var listenerGeneration = 0
     private var activeConnections: [UUID: (connection: RemoteLinkConnection, host: String, task: Task<Void, Never>)] = [:]
     /// Device behind each authenticated session, so removing a device closes it.
     private var sessionDevices: [UUID: String] = [:]
@@ -180,6 +183,12 @@ final class RemoteLinkServer: @unchecked Sendable {
         lock.withLock { listener?.port?.rawValue }
     }
 
+    /// True from `start()` until `stop()`, also while the listener is still
+    /// getting ready.
+    var isListening: Bool {
+        lock.withLock { listener != nil }
+    }
+
     static func computerName() -> String {
         (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "Mac"
     }
@@ -190,25 +199,32 @@ final class RemoteLinkServer: @unchecked Sendable {
         parameters.includePeerToPeer = false
         let listener = try NWListener(using: parameters)
         listener.service = makeService(pairing: lock.withLock { pairingApprover != nil })
+        let generation = lock.withLock {
+            listenerGeneration += 1
+            self.listener = listener
+            return listenerGeneration
+        }
         listener.stateUpdateHandler = { [weak self] state in
+            guard let self, isCurrentListener(generation) else { return }
             switch state {
             case .ready:
-                self?.onStateChange?(.ready)
+                onStateChange?(.ready)
             case .failed(let error):
-                self?.onStateChange?(.failed(error.localizedDescription))
-                self?.stop()
+                onStateChange?(.failed(error.localizedDescription))
+                stop()
             case .cancelled:
-                self?.onStateChange?(.stopped)
+                onStateChange?(.stopped)
             default:
                 break
             }
         }
         listener.serviceRegistrationUpdateHandler = { [weak self] change in
+            guard let self, isCurrentListener(generation) else { return }
             switch change {
             case .add:
-                self?.onAdvertisingChange?(true)
+                onAdvertisingChange?(true)
             case .remove:
-                self?.onAdvertisingChange?(false)
+                onAdvertisingChange?(false)
             @unknown default:
                 break
             }
@@ -216,7 +232,6 @@ final class RemoteLinkServer: @unchecked Sendable {
         listener.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
-        lock.withLock { self.listener = listener }
         listener.start(queue: queue)
     }
 
@@ -224,6 +239,7 @@ final class RemoteLinkServer: @unchecked Sendable {
         let (listener, connections) = lock.withLock {
             let current = (self.listener, Array(activeConnections.values))
             self.listener = nil
+            listenerGeneration += 1
             activeConnections.removeAll()
             return current
         }
@@ -301,6 +317,10 @@ final class RemoteLinkServer: @unchecked Sendable {
     }
 
     // MARK: - Connections
+
+    private func isCurrentListener(_ generation: Int) -> Bool {
+        lock.withLock { listenerGeneration == generation }
+    }
 
     private func makeService(pairing: Bool) -> NWListener.Service? {
         guard advertises else { return nil }

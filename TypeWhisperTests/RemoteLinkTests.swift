@@ -402,6 +402,58 @@ final class RemoteLinkTests: XCTestCase {
         }
     }
 
+    func testReplacedAndStoppedListenersReportNoState() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        let states = RemoteLinkLockedValue<[RemoteLinkServer.State]>([])
+        server.onStateChange = { state in states.set(states.get() + [state]) }
+        try server.start()
+        try server.start()
+        defer { server.stop() }
+        _ = try await Self.endpoint(of: server)
+        for _ in 0..<100 where states.get().isEmpty {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        // The cancelled first listener must not report `.stopped`.
+        XCTAssertEqual(states.get(), [.ready])
+        XCTAssertTrue(server.isListening)
+
+        server.stop()
+        XCTAssertFalse(server.isListening)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(states.get(), [.ready])
+    }
+
+    @MainActor
+    func testPremiumChangeWhileStartingKeepsTheListener() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        let defaults = UserDefaults(suiteName: "RemoteLinkTests-\(UUID().uuidString)")!
+        defaults.set(true, forKey: UserDefaultsKeys.remoteLinkEnabled)
+        let viewModel = RemoteLinkViewModel(server: server, defaults: defaults, premiumAccess: { true })
+        defer { viewModel.stop() }
+
+        viewModel.startIfEnabled()
+        // Wait without yielding the main actor, so the view model has not
+        // seen `.ready` yet, like a premium update that arrives at launch.
+        let deadline = Date().addingTimeInterval(5)
+        while (server.port ?? 0) == 0, Date() < deadline {
+            usleep(10_000)
+        }
+        let port = try XCTUnwrap(server.port)
+        XCTAssertFalse(viewModel.isRunning)
+        viewModel.premiumAccessChanged()
+
+        for _ in 0..<100 where !viewModel.isRunning {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(viewModel.isRunning)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(viewModel.isRunning)
+        XCTAssertEqual(server.port, port, "The listener must not be restarted")
+    }
+
     // MARK: - Helpers
 
     private static func openSession(
