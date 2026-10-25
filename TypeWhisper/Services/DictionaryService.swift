@@ -1281,6 +1281,12 @@ final class DictionaryService: ObservableObject {
             return previous?.isLatinOrNumber != true && next?.isLatinOrNumber != true
         }
 
+        // 中文词与词之间没有分隔，两个字以上的汉字词在不含假名的文本中直接匹配；
+        // 单字词和日文文本仍按词边界判断，避免改动更长的词。
+        if original.isAllHan, original.count > 1, !text.containsKana {
+            return true
+        }
+
         let startsAtBoundary = previous?.isWordLike != true || previous?.isJapaneseParticleBoundary == true
         let endsAtBoundary = next?.isWordLike != true ||
             next?.isJapaneseParticleBoundary == true ||
@@ -1733,6 +1739,16 @@ final class DictionaryService: ObservableObject {
 
 }
 
+extension Character {
+    var isHan: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
+            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
+            (0x20000...0x323AF).contains(Int(scalar.value))
+        }
+    }
+}
+
 private extension Character {
     var isKatakana: Bool {
         unicodeScalars.allSatisfy { scalar in
@@ -1747,12 +1763,9 @@ private extension Character {
     }
 
     var isWordLike: Bool {
-        unicodeScalars.contains { scalar in
+        isHan || unicodeScalars.contains { scalar in
             CharacterSet.alphanumerics.contains(scalar) ||
             (0x3040...0x30FF).contains(Int(scalar.value)) ||
-            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
-            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
-            (0x20000...0x323AF).contains(Int(scalar.value)) ||
             (0xFF66...0xFF9D).contains(Int(scalar.value))
         }
     }
@@ -1818,6 +1831,23 @@ private extension String {
     var isAllLatinOrNumber: Bool {
         !isEmpty && allSatisfy { character in
             character.isLatinOrNumber || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+        }
+    }
+
+    var isAllHan: Bool {
+        !isEmpty && allSatisfy { character in
+            character.isHan || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+        }
+    }
+
+    /// 中文音译人名用 `・`（U+30FB）分隔（列夫・托尔斯泰），它和半角的 `･`（U+FF65）都不说明文本是日文。
+    var containsKana: Bool {
+        unicodeScalars.contains { scalar in
+            scalar.value != 0x30FB && (
+                (0x3040...0x30FF).contains(Int(scalar.value)) ||
+                (0x31F0...0x31FF).contains(Int(scalar.value)) ||
+                (0xFF66...0xFF9D).contains(Int(scalar.value))
+            )
         }
     }
 }

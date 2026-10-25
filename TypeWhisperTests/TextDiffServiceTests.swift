@@ -262,12 +262,43 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertEqual(word.map(\.original), ["新河"])
         XCTAssertEqual(word.map(\.replacement), ["星河"])
 
-        let extended = service.extractHighConfidenceCorrections(
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
             original: "请准备会议记录",
             edited: "请准备会议纪要和议程"
-        )
-        XCTAssertFalse(extended.contains { $0.replacement == "纪要和议程" })
-        XCTAssertTrue(extended.isEmpty || (extended.map(\.original) == ["记录"] && extended.map(\.replacement) == ["纪要"]))
+        ).isEmpty)
+    }
+
+    func testChineseAutoLearningLearnsHanCorrectionsOnlyWhenTheySoundAlike() {
+        let service = TextDiffService()
+        func learned(_ original: String, _ edited: String) -> [String] {
+            service.extractHighConfidenceCorrections(original: original, edited: edited)
+                .map { "\($0.original) → \($0.replacement)" }
+        }
+
+        XCTAssertEqual(learned("我们讨论新河项目。", "我们讨论星河项目。"), ["新河 → 星河"])
+        XCTAssertEqual(learned("我昨天看了奥特曼的采访。", "我昨天看了奥尔特曼的采访。"), ["奥特曼 → 奥尔特曼"])
+        XCTAssertEqual(learned("请准备会议记录。", "请准备会议纪要。"), [])
+        XCTAssertEqual(learned("我们明天开会。", "我们后天开会。"), [])
+        XCTAssertEqual(learned("下午三点开会。", "上午三点开会。"), [])
+        XCTAssertEqual(learned("我们按这个方案做。", "我们按这个计划做。"), [])
+        XCTAssertEqual(learned("我们明天开会。", "我们大后天开会。"), [])
+        XCTAssertEqual(learned("我们今天开会。", "我们明天开会。"), [])
+        XCTAssertEqual(learned("我们周一开会。", "我们周二开会。"), [])
+    }
+
+    func testHistoryEditLearningLearnsHanCorrectionsOnlyWhenTheySoundAlike() {
+        let service = TextDiffService()
+        func learned(_ original: String, _ edited: String) -> [String] {
+            service.extractCorrections(original: original, edited: edited)
+                .map { "\($0.original) → \($0.replacement)" }
+        }
+
+        XCTAssertEqual(learned("讨论 新河 项目", "讨论 星河 项目"), ["新河 → 星河"])
+        XCTAssertEqual(learned("讨论 新眼 项目", "讨论 星衍 项目"), ["新眼 → 星衍"])
+        XCTAssertEqual(learned("会议 记录", "会议 纪要"), [])
+        XCTAssertEqual(learned("明天 开会", "后天 开会"), [])
+        XCTAssertEqual(learned("下午 开会", "上午 开会"), [])
+        XCTAssertEqual(learned("这个 方案", "这个 计划"), [])
     }
 
     func testChineseAutoLearningRejectsPhrasesAndSharedTokens() {

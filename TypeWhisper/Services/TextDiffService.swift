@@ -169,6 +169,8 @@ final class TextDiffService {
 
                 if Self.isNumericValue(origStripped), Self.isNumericValue(replStripped) { continue }
 
+                if Self.isHanEditWithDifferentSound(origStripped, replStripped) { continue }
+
                 suggestions.append(CorrectionSuggestion(
                     original: origStripped,
                     replacement: replStripped
@@ -220,7 +222,8 @@ final class TextDiffService {
 
         guard !originalStripped.isEmpty, !editedStripped.isEmpty,
               originalStripped.lowercased() != editedStripped.lowercased(),
-              !(Self.isNumericValue(originalStripped) && Self.isNumericValue(editedStripped)) else {
+              !(Self.isNumericValue(originalStripped) && Self.isNumericValue(editedStripped)),
+              !Self.isHanEditWithDifferentSound(originalStripped, editedStripped) else {
             return []
         }
 
@@ -272,5 +275,54 @@ final class TextDiffService {
     private static func isNumericValue(_ token: String) -> Bool {
         token.contains(where: \.isNumber)
             && token.allSatisfy { $0.isNumber || $0.isPunctuation || $0.isSymbol || $0.isWhitespace }
+    }
+
+    /// 汉字改成汉字时，只有读音相近才是听错的词；读音不同（明天 → 后天、记录 → 纪要）是改了内容，
+    /// 学进词典会改写之后每次听写里的这个词。两边转成不带声调的拼音，每个字一个音节，按音节逐个比较求编辑距离：
+    /// 两个音节相差 0 或 1 个字母时，代价是它们拼音字母的编辑距离；相差更多时（今天 → 明天 的 jin / ming），
+    /// 代价是两个音节的字母数之和；多出或缺少一个音节的代价是它的字母数。
+    /// 距离超过较长一方拼音字母数的三分之一时不学习。
+    private static func isHanEditWithDifferentSound(_ original: String, _ replacement: String) -> Bool {
+        guard original.allSatisfy(\.isHan), replacement.allSatisfy(\.isHan) else { return false }
+        let originalSyllables = pinyinSyllables(of: original)
+        let replacementSyllables = pinyinSyllables(of: replacement)
+        let longerLetterCount = max(originalSyllables.joined().count, replacementSyllables.joined().count)
+        let distance = editDistance(originalSyllables, replacementSyllables, indelCost: \.count) { first, second in
+            let letterDistance = editDistance(first, second, indelCost: { _ in 1 }) { $0 == $1 ? 0 : 1 }
+            return letterDistance <= 1 ? letterDistance : first.count + second.count
+        }
+        return distance * 3 > longerLetterCount
+    }
+
+    private static func pinyinSyllables(of text: String) -> [[Character]] {
+        let pinyin = text.applyingTransform(.mandarinToLatin, reverse: false)?
+            .applyingTransform(.stripDiacritics, reverse: false) ?? text
+        return pinyin.lowercased().split(whereSeparator: \.isWhitespace).map(Array.init)
+    }
+
+    private static func editDistance<Element>(
+        _ first: [Element],
+        _ second: [Element],
+        indelCost: (Element) -> Int,
+        substitutionCost: (Element, Element) -> Int
+    ) -> Int {
+        var row = [0]
+        for element in second {
+            row.append(row[row.count - 1] + indelCost(element))
+        }
+        for element in first {
+            var diagonal = row[0]
+            row[0] += indelCost(element)
+            for (index, other) in second.enumerated() {
+                let above = row[index + 1]
+                row[index + 1] = min(
+                    above + indelCost(element),
+                    row[index] + indelCost(other),
+                    diagonal + substitutionCost(element, other)
+                )
+                diagonal = above
+            }
+        }
+        return row[second.count]
     }
 }
