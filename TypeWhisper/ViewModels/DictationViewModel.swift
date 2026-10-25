@@ -4822,19 +4822,14 @@ final class DictationViewModel: ObservableObject {
         if matchedWorkflow == nil, promptProcessingService.hasConfiguredPolishProvider {
             let app = capturedActiveApp
             let store = StyleStore.shared
-            let style = store.resolve(bundleID: app?.bundleId, browserURL: app?.url)
-            let level = store.level
-            let vocabulary = dictionaryService.vocabularyForPrompt()
-            let processor = promptProcessingService
-            return { text in
-                modelPostProcessingRan?.withLock { $0 = true }
-                let request = PolishRequest(rawTranscript: text, level: level, style: style,
-                                            vocabulary: vocabulary,
-                                            target: .init(appName: app?.name, bundleID: app?.bundleId, browserURL: app?.url))
-                return try await processor.processWorkflow(prompt: request.systemPrompt, text: request.userContent,
-                                                           providerOverride: nil, cloudModelOverride: nil,
-                                                           temperatureDirective: .custom(0.2))
-            }
+            return PolishHandler.make(
+                processor: promptProcessingService,
+                level: store.level,
+                style: store.resolve(bundleID: app?.bundleId, browserURL: app?.url),
+                vocabulary: dictionaryService.vocabularyForPrompt(),
+                target: .init(appName: app?.name, bundleID: app?.bundleId, browserURL: app?.url),
+                onModelRun: { modelPostProcessingRan?.withLock { $0 = true } }
+            )
         }
         return nil
     }

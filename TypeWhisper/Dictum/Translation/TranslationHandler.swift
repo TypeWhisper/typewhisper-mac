@@ -38,7 +38,9 @@ enum TranslationHandler {
                 rawTranscript: text, spokenLanguage: pair.spoken, targetLanguage: pair.target,
                 level: level, style: style, vocabulary: vocabulary, target: app
             )
-            return try await processor.translate(prompt: request.systemPrompt, text: request.userContent)
+            let translated = try await processor.translate(prompt: request.systemPrompt, text: request.userContent)
+            // 轻度档提示词不要求署名，补齐只覆盖模型漏写已要求署名的情况。
+            return level == .light ? translated : style.appendingSignOff(to: translated)
         }
     }
 }
