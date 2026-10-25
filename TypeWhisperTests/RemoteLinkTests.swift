@@ -1,3 +1,4 @@
+import Combine
 import CryptoKit
 import Network
 import XCTest
@@ -400,6 +401,93 @@ final class RemoteLinkTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is CancellationError, String(describing: error))
         }
+    }
+
+    func testReplacedAndStoppedListenersReportNoState() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        let states = RemoteLinkLockedValue<[RemoteLinkServer.State]>([])
+        server.onStateChange = { state, _ in states.set(states.get() + [state]) }
+        try server.start()
+        try server.start()
+        defer { server.stop() }
+        _ = try await Self.endpoint(of: server)
+        for _ in 0..<100 where states.get().isEmpty {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        // The first listener may still report `.ready` before it is replaced,
+        // but the replaced listener must not report `.stopped`.
+        XCTAssertFalse(states.get().isEmpty)
+        XCTAssertTrue(states.get().allSatisfy { $0 == .ready }, "\(states.get())")
+        XCTAssertTrue(server.isListening)
+        let readyCount = states.get().count
+
+        server.stop()
+        XCTAssertFalse(server.isListening)
+        try await Task.sleep(for: .milliseconds(300))
+        // A stopped listener may still report that it stopped, never that it is ready.
+        XCTAssertEqual(states.get().filter { $0 == .ready }.count, readyCount)
+        XCTAssertNotEqual(states.get().last, .ready)
+    }
+
+    @MainActor
+    func testReadyWaitingForTheMainActorDoesNotReviveAStoppedListener() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        let defaults = UserDefaults(suiteName: "RemoteLinkTests-\(UUID().uuidString)")!
+        defaults.set(true, forKey: UserDefaultsKeys.remoteLinkEnabled)
+        let viewModel = RemoteLinkViewModel(server: server, defaults: defaults, premiumAccess: { true })
+        defer { viewModel.stop() }
+
+        viewModel.startIfEnabled()
+        // Keep the main actor busy until the listener is ready, so `.ready`
+        // waits in a main-actor task while the user turns the setting off.
+        let deadline = Date().addingTimeInterval(5)
+        while (server.port ?? 0) == 0, Date() < deadline {
+            usleep(10_000)
+        }
+        usleep(200_000)
+        XCTAssertNotNil(server.port)
+        XCTAssertFalse(viewModel.isRunning)
+        viewModel.setEnabled(false)
+        var runningAfterStop: [Bool] = []
+        let observation = viewModel.$isRunning.dropFirst().sink { runningAfterStop.append($0) }
+        defer { observation.cancel() }
+
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(runningAfterStop.contains(true), "A stopped listener reported ready: \(runningAfterStop)")
+        XCTAssertFalse(viewModel.isRunning)
+        XCTAssertFalse(viewModel.isAdvertised)
+    }
+
+    @MainActor
+    func testPremiumChangeWhileStartingKeepsTheListener() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        let defaults = UserDefaults(suiteName: "RemoteLinkTests-\(UUID().uuidString)")!
+        defaults.set(true, forKey: UserDefaultsKeys.remoteLinkEnabled)
+        let viewModel = RemoteLinkViewModel(server: server, defaults: defaults, premiumAccess: { true })
+        defer { viewModel.stop() }
+
+        viewModel.startIfEnabled()
+        // Wait without yielding the main actor, so the view model has not
+        // seen `.ready` yet, like a premium update that arrives at launch.
+        let deadline = Date().addingTimeInterval(5)
+        while (server.port ?? 0) == 0, Date() < deadline {
+            usleep(10_000)
+        }
+        let port = try XCTUnwrap(server.port)
+        XCTAssertFalse(viewModel.isRunning)
+        viewModel.premiumAccessChanged()
+
+        for _ in 0..<100 where !viewModel.isRunning {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(viewModel.isRunning)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(viewModel.isRunning)
+        XCTAssertEqual(server.port, port, "The listener must not be restarted")
     }
 
     // MARK: - Helpers
