@@ -338,6 +338,8 @@ document.addEventListener('click', e => {
 .mini-vb .ok{width:18px;height:18px;border-radius:50%;background:#30d158;color:#06260f;display:flex;align-items:center;justify-content:center}
 .nice{margin-top:10px;font-size:12.5px;color:var(--success);display:flex;align-items:center;gap:6px;justify-content:center;opacity:0;transition:opacity .3s}
 .nice.on{opacity:1}
+.path{display:inline-flex;align-items:center;gap:5px}
+.path svg{color:#4b9bf5}
 .cheat{display:grid;grid-template-columns:auto 1fr;gap:14px 18px;align-items:center;margin-top:30px;text-align:left}
 .cheat .kbd-row{justify-content:flex-end}
 .cheat span{font-size:14px}
@@ -404,6 +406,15 @@ document.addEventListener('click', e => {
   </section>
 
   <section class="pane" data-step="6">
+    <h1>同步历史</h1>
+    <p class="lead">听写记录存进 iCloud Drive 里的 dictum 文件夹。换一台 Mac 或清空数据后，可以从这里找回。</p>
+    <div class="perm form-box">
+      <div class="form-row"><span class="ic" style="color:#4b9bf5"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M4.6 12.4h7a2.8 2.8 0 0 0 .4-5.6 4 4 0 0 0-7.7-.9 3.3 3.3 0 0 0 .3 6.5z"/></svg></span><div class="label"><div>同步到 iCloud Drive</div><div class="t-sub path" id="syncPath"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.2 4.4c0-.6.5-1.1 1.1-1.1h3l1.4 1.5h5c.6 0 1.1.5 1.1 1.1v6c0 .6-.5 1.1-1.1 1.1H3.3c-.6 0-1.1-.5-1.1-1.1z"/></svg>iCloud Drive › dictum</div></div><span class="switch on" id="obSync"></span></div>
+    </div>
+    <p class="t-sub" style="margin-top:14px;line-height:1.6">同步文件夹里只有文字，录音只保存在这台 Mac 上。<br>以后可以在 通用 → 历史与同步 里修改。</p>
+  </section>
+
+  <section class="pane" data-step="7">
     <div class="hero" style="background:linear-gradient(160deg,#3ccf72,#23a55a);box-shadow:0 12px 30px rgba(35,165,90,.3)"><svg width="44" height="44" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg></div>
     <h1>准备好了</h1>
     <div class="cheat">
@@ -418,7 +429,7 @@ document.addEventListener('click', e => {
 </div>
 
 <script>
-const N = 7, NAMES = ['欢迎','权限','麦克风','模型','听写','翻译','完成'];
+const N = 8, NAMES = ['欢迎','权限','麦克风','模型','听写','翻译','同步','完成'];
 let step = 0, perms = {mic:false, ax:false, fn:false}, heardOk = false, dl = 0, did = {4:false, 5:false};
 $('#dots').innerHTML = '<i></i>'.repeat(N);
 $('#jump').innerHTML = NAMES.map((n, i) => `<button data-jump="${i}">${n}</button>`).join('');
@@ -444,6 +455,7 @@ $('#back').onclick = () => { if (step > 0){ step--; render(); } };
 $('#skip').onclick = () => { step++; render(); };
 document.addEventListener('click', e => {
   const j = e.target.closest('[data-jump]'); if (j){ step = +j.dataset.jump; render(); return; }
+  if (e.target.id === 'obSync'){ e.target.classList.toggle('on'); $('#syncPath').style.opacity = e.target.classList.contains('on') ? 1 : .4; return; }
   const p = e.target.closest('[data-perm]'); if (!p) return;
   const k = p.dataset.perm, slot = p.parentElement;
   const ok = '<span class="ok"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg>已开启</span>';
