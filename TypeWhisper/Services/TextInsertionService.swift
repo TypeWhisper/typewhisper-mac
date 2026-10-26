@@ -701,28 +701,30 @@ final class TextInsertionService {
         return result == .success
     }
 
-    /// Inserts via Accessibility and waits for the focused text value to change. Returns nil
-    /// when the write failed or the value still reads unchanged after
-    /// `accessibilityInsertionVerificationAttempts`, so the caller pastes instead.
+    /// Inserts via Accessibility and checks whether the focused text value changed. Returns nil
+    /// when the value still reads unchanged, so the caller pastes instead.
     ///
-    /// Some apps report AX success but ignore the write, or only move the caret (#783). Others
-    /// apply the write but update `AXValue` late. Pasting after the first unchanged read
-    /// inserted the text twice in cmux, Telegram and web editors in Safari (#1518, #1732).
+    /// The setter result does not decide this. Telegram applies the write right away but
+    /// reports `kAXErrorFailure`, and other apps report success but ignore the write or only
+    /// move the caret (#783). Some apps also update `AXValue` late. Pasting in these cases
+    /// inserted the text twice (#1518, #1732). A write that reported success gets
+    /// `accessibilityInsertionVerificationAttempts` to show up. A write that reported an error
+    /// gets one check, so apps that reject it still get the paste without a delay.
     func insertTextAtAndVerifyChange(element: AXUIElement, text: String) async -> InsertionTiming? {
-        guard let initialState = captureFocusedTextState(for: element),
-              insertTextAt(element: element, text: text) else {
-            return nil
-        }
+        guard let initialState = captureFocusedTextState(for: element) else { return nil }
+        let writeSucceeded = insertTextAt(element: element, text: text)
         let insertedUptime = DispatchTime.now().uptimeNanoseconds
         func elapsedMilliseconds() -> UInt64 {
             (DispatchTime.now().uptimeNanoseconds - insertedUptime) / 1_000_000
         }
-        let attempts = max(0, accessibilityInsertionVerificationAttempts)
+        let attempts = writeSucceeded ? max(0, accessibilityInsertionVerificationAttempts) : 0
         var currentValue: String?
         for attempt in 0...attempts {
             currentValue = captureFocusedTextState(for: element)?.value
             if let currentValue, currentValue != initialState.value {
-                if attempt > 0 {
+                if !writeSucceeded {
+                    logger.info("AX insertion reported an error, but the focused field shows the text")
+                } else if attempt > 0 {
                     logger.info(
                         "AX insertion showed in the focused field after \(elapsedMilliseconds(), privacy: .public)ms"
                     )
@@ -738,12 +740,12 @@ final class TextInsertionService {
 
         // The app accepted the write and then stopped exposing the value it exposed before, so
         // it changed or replaced the field. A paste would most likely insert the text again.
-        if currentValue == nil, initialState.value != nil {
+        if writeSucceeded, currentValue == nil, initialState.value != nil {
             logger.info("AX insertion accepted: the focused field became unreadable after the write")
             return InsertionTiming(insertedUptimeNanoseconds: insertedUptime, verifiedUptimeNanoseconds: nil)
         }
         logger.info(
-            "AX insertion left the focused field unchanged after \(elapsedMilliseconds(), privacy: .public)ms; pasting instead"
+            "AX insertion left the focused field unchanged after \(elapsedMilliseconds(), privacy: .public)ms; pasting instead: writeSucceeded=\(writeSucceeded, privacy: .public)"
         )
         return nil
     }

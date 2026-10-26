@@ -7683,9 +7683,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testPreserveClipboardDoesNotPasteAgainWhenAccessibilityWriteReportsErrorButApplies() async throws {
+        // Telegram for macOS inserts the text but answers the AX write with kAXErrorFailure,
+        // so the paste fallback inserted it a second time (#1732).
+        let harness = makeAccessibilityInsertionHarness(writeSucceeds: false) { _ in
+            (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testPreserveClipboardWaitsForLateAccessibilityValueInsteadOfPastingAgain() async throws {
-        // Telegram and Safari web editors applied the AX write but showed it in AXValue only
-        // a little later, so a paste right after the first read inserted the text twice (#1732).
+        // Apps can apply the AX write but show it in AXValue only a little later. A paste
+        // right after the first read then inserts the text twice (#1518, #1732).
         let harness = makeAccessibilityInsertionHarness { readsAfterWrite in
             readsAfterWrite <= 3
                 ? (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
@@ -7733,10 +7748,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
     }
 
-    /// A service whose focused field reads empty until the AX write reports success, and then
-    /// reads `stateAfterWrite` for the 1-based read count after the write.
+    /// A service whose focused field reads empty until the AX write, and then reads
+    /// `stateAfterWrite` for the 1-based read count after the write.
     @MainActor
     private func makeAccessibilityInsertionHarness(
+        writeSucceeds: Bool = true,
         stateAfterWrite: @escaping (Int) -> TextInsertionService.FocusedTextSnapshot
     ) -> (service: TextInsertionService, pasteboard: NSPasteboard, pasteCount: () -> Int) {
         let service = TextInsertionService()
@@ -7760,7 +7776,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
         service.insertTextAtOverride = { _, _ in
             didWrite = true
-            return true
+            return writeSucceeds
         }
         var pasteCount = 0
         service.pasteSimulatorOverride = {
