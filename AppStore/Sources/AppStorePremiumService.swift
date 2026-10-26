@@ -203,6 +203,27 @@ final class AppStorePremiumService: ObservableObject {
         }
     }
 
+    // MARK: - Existing License
+
+    /// Connects a TypeWhisper license bought outside the App Store through the
+    /// signed-in account. Premium follows the account entitlement right away,
+    /// so the commercial gates update without a restart.
+    func connectExistingLicense() async {
+        guard !premiumAccountService.isWorking else { return }
+        await perform {
+            do {
+                try await premiumAccountService.connectExistingLicense()
+            } catch AppStoreLicenseLink.Failure.cancelled {
+                statusMessage = AppStoreLicenseLink.Failure.cancelled.errorDescription
+                return
+            }
+            accountHasPremium = premiumAccountService.hasPremiumEntitlement
+            updateAccess()
+            scheduleExpirationCheck()
+            statusMessage = AppStoreLicenseLinkCopy.connected
+        }
+    }
+
     // MARK: - StoreKit
 
     private func loadProducts() async {

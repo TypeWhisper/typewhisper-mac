@@ -18,3 +18,6 @@ All integrations shown on the Integrations page are first-party plugins bundled 
 
 Premium:
 Open Settings > Premium to see the localized monthly and lifetime offers and Restore Purchases. These are the same in-app purchases as in the iOS app. Buying and restoring only need the Apple Account; Sign in with Apple is optional and only connects devices for cloud sync. Premium features: meeting automation, speaker detection, cloud sync of dictionary and snippets, and use of this Mac from a paired iPhone or iPad.
+
+Existing TypeWhisper license:
+Customers who already own a TypeWhisper license can connect it in Settings > Premium > Connect Existing TypeWhisper License after Sign in with Apple. The license key is entered only on a TypeWhisper web page (app.typewhisper.com) in the system web authentication sheet, never in the app, and activates this Mac as one device of that license. This is access to a purchase made outside the app under guideline 3.1.3(b); the same Premium features are offered as in-app purchases, and the app shows no prices or links to buy outside the App Store. The iOS app offers the same button.
