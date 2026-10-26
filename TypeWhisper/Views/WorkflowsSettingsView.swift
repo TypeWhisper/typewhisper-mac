@@ -1639,9 +1639,9 @@ private struct WorkflowEditorPage: View {
 
                         Text(
                             localizedAppText(
-                                "Dictionary terms and screen context are added when the workflow runs.",
-                                de: "Wörterbuch-Begriffe und Bildschirminhalt kommen beim Ausführen dazu.",
-                                es: "Los términos del diccionario y el contenido de la pantalla se añaden al ejecutarse."
+                                "Dictionary terms are added when the workflow runs.",
+                                de: "Wörterbuch-Begriffe kommen beim Ausführen dazu.",
+                                es: "Los términos del diccionario se añaden al ejecutarse."
                             )
                         )
                         .font(.caption)
