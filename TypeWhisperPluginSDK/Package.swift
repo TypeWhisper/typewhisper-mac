@@ -247,6 +247,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "LanguageDetectionPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/LanguageDetectionPlugin",
+            exclude: ["Tests", "MODEL.md"],
+            resources: [
+                .copy("TypeWhisperEar.mlmodelc"),
+                .copy("THIRD_PARTY_LICENSE.txt"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "FileJobScriptPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/FileJobScriptPlugin",
@@ -664,6 +675,14 @@ let package = Package(
                 "FillerWordsPlugin",
             ],
             path: "Plugins/FillerWordsPlugin/Tests"
+        ),
+        .testTarget(
+            name: "LanguageDetectionPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "LanguageDetectionPlugin",
+            ],
+            path: "Plugins/LanguageDetectionPlugin/Tests"
         ),
         .testTarget(
             name: "FileJobScriptPluginTests",

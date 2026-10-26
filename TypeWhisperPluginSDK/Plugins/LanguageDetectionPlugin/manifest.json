@@ -1,0 +1,22 @@
+{
+    "id": "com.typewhisper.language-detection",
+    "name": "Language Detection",
+    "version": "1.0.0",
+    "minHostVersion": "1.8.1",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "author": "TypeWhisper",
+    "description": "Detects which of your selected languages you are speaking, so engines that take a single language still follow a multi-language selection. Runs on your Mac; the audio never leaves it.",
+    "descriptions": {
+        "de": "Erkennt, welche deiner ausgewählten Sprachen du sprichst, damit auch Engines mit nur einer Sprache einer Auswahl mehrerer Sprachen folgen. Läuft auf deinem Mac; das Audio verlässt ihn nicht.",
+        "ja": "選択した言語のうちどれを話しているかを判別し、1つの言語しか受け付けないエンジンでも複数言語の選択に従えるようにします。Mac上で動作し、音声が外部に送信されることはありません。"
+    },
+    "category": "utility",
+    "iconSystemName": "character.bubble",
+    "principalClass": "LanguageDetectionPlugin",
+    "requiresAPIKey": false,
+    "locality": "local"
+}

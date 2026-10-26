@@ -60,6 +60,7 @@ final class PluginManifestValidationTests: XCTestCase {
         let expected: [String: PluginLocality] = [
             "com.typewhisper.canary": .local, "com.typewhisper.cohere-transcribe": .local,
             "com.typewhisper.filler-words": .local, "com.typewhisper.gigaam": .local, "com.typewhisper.granite": .local,
+            "com.typewhisper.language-detection": .local,
             "com.typewhisper.livetranscript": .local, "com.typewhisper.local-llm-mlx": .local,
             "com.typewhisper.memory.file": .local, "com.typewhisper.parakeet": .local,
             "com.typewhisper.qwen3": .local, "com.typewhisper.speaker-diarization": .local,

@@ -1,0 +1,55 @@
+program(1.0)
+[buildInfo = dict<tensor<string, []>, tensor<string, []>>({{"coremlc-component-MIL", "3600.16.1"}, {"coremlc-version", "3600.25.1"}, {"coremltools-component-torch", "2.14.1"}, {"coremltools-source-dialect", "TorchScript"}, {"coremltools-version", "9.0"}})]
+{
+    func main<ios17>(tensor<fp32, [1, 480000]> audio) {
+            tensor<fp32, [80, 201]> filters = const()[name = tensor<string, []>("filters"), val = tensor<fp32, [80, 201]>(BLOBFILE(path = tensor<string, []>("@model_path/weights/0-weight.bin"), offset = tensor<uint64, []>(64)))];
+            tensor<fp32, [402, 1, 400]> basis = const()[name = tensor<string, []>("basis"), val = tensor<fp32, [402, 1, 400]>(BLOBFILE(path = tensor<string, []>("@model_path/weights/0-weight.bin"), offset = tensor<uint64, []>(64448)))];
+            tensor<int32, [1]> input_axes_0 = const()[name = tensor<string, []>("input_axes_0"), val = tensor<int32, [1]>([1])];
+            tensor<fp32, [1, 1, 480000]> input = expand_dims(axes = input_axes_0, x = audio)[name = tensor<string, []>("input")];
+            tensor<fp32, []> const_0 = const()[name = tensor<string, []>("const_0"), val = tensor<fp32, []>(0x0p+0)];
+            tensor<int32, [6]> x_pad_0 = const()[name = tensor<string, []>("x_pad_0"), val = tensor<int32, [6]>([0, 0, 0, 0, 200, 200])];
+            tensor<string, []> x_mode_0 = const()[name = tensor<string, []>("x_mode_0"), val = tensor<string, []>("reflect")];
+            tensor<fp32, [1, 1, 480400]> x = pad(constant_val = const_0, mode = x_mode_0, pad = x_pad_0, x = input)[name = tensor<string, []>("x")];
+            tensor<string, []> var_27_pad_type_0 = const()[name = tensor<string, []>("op_27_pad_type_0"), val = tensor<string, []>("valid")];
+            tensor<int32, [1]> var_27_strides_0 = const()[name = tensor<string, []>("op_27_strides_0"), val = tensor<int32, [1]>([160])];
+            tensor<int32, [2]> var_27_pad_0 = const()[name = tensor<string, []>("op_27_pad_0"), val = tensor<int32, [2]>([0, 0])];
+            tensor<int32, [1]> var_27_dilations_0 = const()[name = tensor<string, []>("op_27_dilations_0"), val = tensor<int32, [1]>([1])];
+            tensor<int32, []> var_27_groups_0 = const()[name = tensor<string, []>("op_27_groups_0"), val = tensor<int32, []>(1)];
+            tensor<fp32, [1, 402, 3001]> var_27 = conv(dilations = var_27_dilations_0, groups = var_27_groups_0, pad = var_27_pad_0, pad_type = var_27_pad_type_0, strides = var_27_strides_0, weight = basis, x = x)[name = tensor<string, []>("op_27")];
+            tensor<int32, [3]> spec_begin_0 = const()[name = tensor<string, []>("spec_begin_0"), val = tensor<int32, [3]>([0, 0, 0])];
+            tensor<int32, [3]> spec_end_0 = const()[name = tensor<string, []>("spec_end_0"), val = tensor<int32, [3]>([1, 402, 3000])];
+            tensor<bool, [3]> spec_end_mask_0 = const()[name = tensor<string, []>("spec_end_mask_0"), val = tensor<bool, [3]>([true, true, false])];
+            tensor<fp32, [1, 402, 3000]> spec = slice_by_index(begin = spec_begin_0, end = spec_end_0, end_mask = spec_end_mask_0, x = var_27)[name = tensor<string, []>("spec")];
+            tensor<int32, [3]> re_begin_0 = const()[name = tensor<string, []>("re_begin_0"), val = tensor<int32, [3]>([0, 0, 0])];
+            tensor<int32, [3]> re_end_0 = const()[name = tensor<string, []>("re_end_0"), val = tensor<int32, [3]>([1, 201, 3000])];
+            tensor<bool, [3]> re_end_mask_0 = const()[name = tensor<string, []>("re_end_mask_0"), val = tensor<bool, [3]>([true, false, true])];
+            tensor<fp32, [1, 201, 3000]> re = slice_by_index(begin = re_begin_0, end = re_end_0, end_mask = re_end_mask_0, x = spec)[name = tensor<string, []>("re")];
+            tensor<int32, [3]> im_begin_0 = const()[name = tensor<string, []>("im_begin_0"), val = tensor<int32, [3]>([0, 201, 0])];
+            tensor<int32, [3]> im_end_0 = const()[name = tensor<string, []>("im_end_0"), val = tensor<int32, [3]>([1, 402, 3000])];
+            tensor<bool, [3]> im_end_mask_0 = const()[name = tensor<string, []>("im_end_mask_0"), val = tensor<bool, [3]>([true, true, true])];
+            tensor<fp32, [1, 201, 3000]> im = slice_by_index(begin = im_begin_0, end = im_end_0, end_mask = im_end_mask_0, x = spec)[name = tensor<string, []>("im")];
+            tensor<fp32, [1, 201, 3000]> var_53 = mul(x = re, y = re)[name = tensor<string, []>("op_53")];
+            tensor<fp32, [1, 201, 3000]> var_54 = mul(x = im, y = im)[name = tensor<string, []>("op_54")];
+            tensor<fp32, [1, 201, 3000]> var_56 = add(x = var_53, y = var_54)[name = tensor<string, []>("op_56")];
+            tensor<bool, []> mel_transpose_x_0 = const()[name = tensor<string, []>("mel_transpose_x_0"), val = tensor<bool, []>(false)];
+            tensor<bool, []> mel_transpose_y_0 = const()[name = tensor<string, []>("mel_transpose_y_0"), val = tensor<bool, []>(false)];
+            tensor<fp32, [1, 80, 3000]> mel_1 = matmul(transpose_x = mel_transpose_x_0, transpose_y = mel_transpose_y_0, x = filters, y = var_56)[name = tensor<string, []>("mel")];
+            tensor<fp32, []> var_58 = const()[name = tensor<string, []>("op_58"), val = tensor<fp32, []>(0x1.b7cdfep-34)];
+            tensor<fp32, []> const_1 = const()[name = tensor<string, []>("const_1"), val = tensor<fp32, []>(0x1.fffffep+127)];
+            tensor<fp32, [1, 80, 3000]> clip_0 = clip(alpha = var_58, beta = const_1, x = mel_1)[name = tensor<string, []>("clip_0")];
+            tensor<fp32, []> var_61_epsilon_0 = const()[name = tensor<string, []>("op_61_epsilon_0"), val = tensor<fp32, []>(0x1p-149)];
+            tensor<fp32, [1, 80, 3000]> var_61 = log(epsilon = var_61_epsilon_0, x = clip_0)[name = tensor<string, []>("op_61")];
+            tensor<fp32, []> var_62 = const()[name = tensor<string, []>("op_62"), val = tensor<fp32, []>(0x1.bcb7b2p-2)];
+            tensor<fp32, [1, 80, 3000]> log_spec_1 = mul(x = var_61, y = var_62)[name = tensor<string, []>("log_spec_1")];
+            tensor<bool, []> var_67 = const()[name = tensor<string, []>("op_67"), val = tensor<bool, []>(true)];
+            tensor<int32, [2]> peak_axes_0 = const()[name = tensor<string, []>("peak_axes_0"), val = tensor<int32, [2]>([1, 2])];
+            tensor<fp32, [1, 1, 1]> peak = reduce_max(axes = peak_axes_0, keep_dims = var_67, x = log_spec_1)[name = tensor<string, []>("peak")];
+            tensor<fp32, []> var_70 = const()[name = tensor<string, []>("op_70"), val = tensor<fp32, []>(0x1p+3)];
+            tensor<fp32, [1, 1, 1]> var_71 = sub(x = peak, y = var_70)[name = tensor<string, []>("op_71")];
+            tensor<fp32, [1, 80, 3000]> log_spec = maximum(x = log_spec_1, y = var_71)[name = tensor<string, []>("log_spec")];
+            tensor<fp32, []> var_74 = const()[name = tensor<string, []>("op_74"), val = tensor<fp32, []>(0x1p+2)];
+            tensor<fp32, [1, 80, 3000]> var_75 = add(x = log_spec, y = var_74)[name = tensor<string, []>("op_75")];
+            tensor<fp32, []> _inversed_77_y_0 = const()[name = tensor<string, []>("_inversed_77_y_0"), val = tensor<fp32, []>(0x1p-2)];
+            tensor<fp32, [1, 80, 3000]> mel = mul(x = var_75, y = _inversed_77_y_0)[name = tensor<string, []>("_inversed_77")];
+        } -> (mel);
+}

@@ -49842,30 +49842,58 @@
         }
       }
     },
-    "This engine does not support multiple language hints. It will use #1 as the spoken language." : {
+    "This engine does not support multiple language hints. It will use #1 as the spoken language. The Language Detection plugin can pick the one you speak instead." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diese Engine unterstützt keine mehreren Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache."
+            "value" : "Diese Engine unterstützt keine mehreren Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache. Das Plugin „Language Detection“ kann stattdessen die Sprache wählen, die du sprichst."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este motor no admite varias sugerencias de idioma. Usará el n.º 1 como idioma hablado."
+            "value" : "Este motor no admite varias sugerencias de idioma. Usará el n.º 1 como idioma hablado. El plugin Language Detection puede elegir en su lugar el idioma que hablas."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このエンジンは複数の言語ヒントに対応していません。1番目を話す言語として使います。"
+            "value" : "このエンジンは複数の言語ヒントに対応していません。1番目を話す言語として使います。Language Detection プラグインを使うと、代わりに話している言語を選べます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此引擎不支持多语言提示，将使用列表中的第一种语言作为口语。"
+            "value" : "此引擎不支持多语言提示，将使用列表中的第一种语言作为口语。Language Detection 插件可以改为选择你正在说的语言。"
+          }
+        }
+      }
+    },
+    "This engine takes one language. The Language Detection plugin picks the one you speak from this list." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Engine nimmt nur eine Sprache. Das Plugin „Language Detection“ wählt daraus die Sprache, die du sprichst."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este motor admite un solo idioma. El plugin Language Detection elige de esta lista el idioma que hablas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このエンジンは1つの言語しか受け付けません。Language Detection プラグインがこのリストから話している言語を選びます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此引擎只接受一种语言。Language Detection 插件会从此列表中选择你正在说的语言。"
           }
         }
       }

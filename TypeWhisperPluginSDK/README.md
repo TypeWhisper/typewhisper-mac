@@ -417,6 +417,24 @@ final class MyAction: NSObject, ActionPlugin, @unchecked Sendable {
 }
 ```
 
+### SpokenLanguageIdentificationProviderPlugin
+
+Tell which of the user's selected languages is spoken. The host asks before a transcription when
+the user selected several languages and the engine accepts only one; without a provider the engine
+gets the first selected language. Audio must stay on the Mac.
+
+```swift
+var spokenLanguageIdentificationProviderId: String { "my-language-id" }
+
+func identifySpokenLanguage(
+    samples: [Float],          // 16 kHz mono, the whole recording
+    among candidates: [String] // ISO 639-1 codes as the user selected them, e.g. ["de", "en"]
+) async throws -> PluginSpokenLanguageIdentification? {
+    // Return one of `candidates` unchanged, or nil to keep the host's choice.
+    PluginSpokenLanguageIdentification(language: "en", confidence: 0.97, margin: 0.94)
+}
+```
+
 ### Multi-Purpose Plugins
 
 A single plugin class can conform to multiple protocols:

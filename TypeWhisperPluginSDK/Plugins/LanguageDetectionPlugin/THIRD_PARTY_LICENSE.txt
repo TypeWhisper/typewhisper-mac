@@ -1,0 +1,26 @@
+TypeWhisperEar.mlmodelc ("TypeWhisper Ear") is a spoken language identification model built by
+TypeWhisper. It contains the encoder and decoder weights of OpenAI's whisper-tiny
+(https://huggingface.co/openai/whisper-tiny, Apache License 2.0), unchanged except for 8-bit weight
+palettization, plus a classifier trained by TypeWhisper.
+
+The classifier was trained on:
+- FLEURS by Google (https://huggingface.co/datasets/google/fleurs), CC BY 4.0
+- VoxLingua107 by Jörgen Valk and Tanel Alumäe, Tallinn University of Technology
+  (https://cs.taltech.ee/staff/tanel.alumae/data/voxlingua107/), CC BY 4.0
+- VoxPopuli by Meta (https://github.com/facebookresearch/voxpopuli), CC0 1.0
+- AMI Meeting Corpus (https://groups.inf.ed.ac.uk/ami/corpus/), CC BY 4.0
+None of these recordings are included.
+
+Apache License 2.0 (whisper-tiny)
+
+Copyright (c) 2022 OpenAI
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
+compliance with the License. You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing permissions and limitations under the
+License.

@@ -286,6 +286,21 @@
       "iconURL": "https://www.typewhisper.com/brand-logos/groq/logo.svg"
     },
     {
+      "id": "com.typewhisper.language-detection",
+      "bundleName": "LanguageDetectionPlugin.bundle",
+      "name": "Language Detection",
+      "author": "TypeWhisper",
+      "description": "Detects which of your selected languages you are speaking, so engines that take a single language still follow a multi-language selection. Runs on your Mac; the audio never leaves it.",
+      "descriptions": {
+        "de": "Erkennt, welche deiner ausgewählten Sprachen du sprichst, damit auch Engines mit nur einer Sprache einer Auswahl mehrerer Sprachen folgen. Läuft auf deinem Mac; das Audio verlässt ihn nicht.",
+        "ja": "選択した言語のうちどれを話しているかを判別し、1つの言語しか受け付けないエンジンでも複数言語の選択に従えるようにします。Mac上で動作し、音声が外部に送信されることはありません。"
+      },
+      "category": "utility",
+      "iconSystemName": "character.bubble",
+      "requiresAPIKey": false,
+      "locality": "local"
+    },
+    {
       "id": "com.typewhisper.linear",
       "bundleName": "LinearPlugin.bundle",
       "name": "Linear",

@@ -145,6 +145,7 @@ jobs:
             supertonic) TARGET="SupertonicPlugin" ;;
             r2t2) TARGET="R2T2Plugin" ;;
             filler-words) TARGET="FillerWordsPlugin" ;;
+            language-detection) TARGET="LanguageDetectionPlugin" ;;
             xai) TARGET="XAIPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac

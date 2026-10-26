@@ -4,14 +4,23 @@ import TypeWhisperPluginSDK
 enum LanguageSelectionHintBehavior: Equatable {
     case unknown
     case acceptsHints
+    /// The engine takes one language; a language detection plugin picks it from the selection.
+    case detectsSpokenLanguage
     case firstSelectedFallback
 
+    @MainActor
     init(engine: TranscriptionEnginePlugin?) {
         guard let engine else {
             self = .unknown
             return
         }
-        self = engine.acceptsLanguageHints ? .acceptsHints : .firstSelectedFallback
+        if engine.acceptsLanguageHints {
+            self = .acceptsHints
+        } else if PluginManager.shared?.spokenLanguageIdentificationProviders.isEmpty == false {
+            self = .detectsSpokenLanguage
+        } else {
+            self = .firstSelectedFallback
+        }
     }
 }
 
@@ -89,8 +98,10 @@ struct LanguageSelectionEditor: View {
         switch hintBehavior {
         case .acceptsHints:
             return localizedAppText("This engine uses the ordered list as language hints.", de: "Diese Engine verwendet die sortierte Liste als Sprachhinweise.")
+        case .detectsSpokenLanguage:
+            return localizedAppText("This engine takes one language. The Language Detection plugin picks the one you speak from this list.", de: "Diese Engine nimmt nur eine Sprache. Das Plugin „Language Detection“ wählt daraus die Sprache, die du sprichst.")
         case .firstSelectedFallback:
-            return localizedAppText("This engine does not support multiple language hints. It will use #1 as the spoken language.", de: "Diese Engine unterstützt keine mehreren Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache.")
+            return localizedAppText("This engine does not support multiple language hints. It will use #1 as the spoken language. The Language Detection plugin can pick the one you speak instead.", de: "Diese Engine unterstützt keine mehreren Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache. Das Plugin „Language Detection“ kann stattdessen die Sprache wählen, die du sprichst.")
         case .unknown:
             return localizedAppText("Engines that support language hints use this ordered list. Other engines use #1 as the spoken language.", de: "Engines mit Sprachhinweisen verwenden diese sortierte Liste. Andere Engines verwenden Nr. 1 als gesprochene Sprache.")
         }
