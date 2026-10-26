@@ -2200,15 +2200,19 @@ enum ParakeetVocabularyGuard {
         }
     }
 
-    /// Symbols such as "+" and "#" belong to terms ("C++", "C#"), so only these are carried over.
-    private static let sentencePunctuation: Set<Character> = [".", ",", ";", ":", "!", "?", "…"]
+    /// Symbols such as "+" and "#" belong to terms ("C++", "C#"), so only sentence punctuation
+    /// and closing quotes and brackets are carried over.
+    private static let trailingDelimiters: Set<Character> = [
+        ".", ",", ";", ":", "!", "?", "…", "\"", "'", "”", "’", "»", ")", "]", "}",
+    ]
 
     /// The rescorer drops the punctuation of a word it replaces: "to Tasmine." becomes "to Tasmeen".
     static func carryingTrailingPunctuation(from replaced: [String], to replacement: [String]) -> [String] {
         guard let last = replaced.last, let newLast = replacement.last else { return replacement }
-        let trailing = String(last.reversed().prefix { sentencePunctuation.contains($0) }.reversed())
-        guard !trailing.isEmpty, !sentencePunctuation.contains(newLast.last ?? " ") else { return replacement }
-        return replacement.dropLast() + [newLast + trailing]
+        let trailing = String(last.reversed().prefix { trailingDelimiters.contains($0) }.reversed())
+        guard !trailing.isEmpty else { return replacement }
+        let bareLast = String(newLast.reversed().drop { trailingDelimiters.contains($0) }.reversed())
+        return replacement.dropLast() + [bareLast + trailing]
     }
 
     /// The dictation language, or the user's languages when it is detected, plus English,
