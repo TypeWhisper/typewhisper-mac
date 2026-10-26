@@ -1593,7 +1593,7 @@ private struct WorkflowEditorPage: View {
 
                     Spacer()
 
-                    if testSystemPrompt != nil {
+                    if testPromptAvailable {
                         Button {
                             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
                                 isShowingTestPrompt.toggle()
@@ -1639,16 +1639,6 @@ private struct WorkflowEditorPage: View {
                         }
                         .frame(maxHeight: 220)
                         .background(workflowsGroupedSurface(cornerRadius: 10))
-
-                        Text(
-                            localizedAppText(
-                                "Dictionary terms are added when the workflow runs.",
-                                de: "Wörterbuch-Begriffe kommen beim Ausführen dazu.",
-                                es: "Los términos del diccionario se añaden al ejecutarse."
-                            )
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     }
                 }
 
@@ -1738,9 +1728,33 @@ private struct WorkflowEditorPage: View {
         settingsViewModel.translationEnabled ? settingsViewModel.translationTargetLanguage : nil
     }
 
+    /// Whether the draft sends a prompt to an LLM, so the prompt preview has something to show.
+    private var testPromptAvailable: Bool {
+        guard draftCanBeTested, !draft.usesAppleTranslate else { return false }
+        let workflow = makeTestWorkflow()
+        return workflow.usesInlineCommands
+            || workflow.systemPrompt(fallbackTranslationTarget: testFallbackTranslationTarget) != nil
+    }
+
+    /// The prompt a run of the draft sends, built the same way as in a real dictation.
     private var testSystemPrompt: String? {
-        guard draftCanBeTested, !draft.usesAppleTranslate else { return nil }
-        return makeTestWorkflow().systemPrompt(fallbackTranslationTarget: testFallbackTranslationTarget)
+        guard testPromptAvailable else { return nil }
+        return makeTestProcessor().systemPrompt(
+            workflow: makeTestWorkflow(),
+            fallbackTranslationTarget: testFallbackTranslationTarget
+        )
+    }
+
+    private func makeTestProcessor() -> WorkflowTextProcessingService {
+        let container = ServiceContainer.shared
+        return WorkflowTextProcessingService(
+            promptProcessingService: container.promptProcessingService,
+            translationService: container.translationService,
+            workflowService: container.workflowService,
+            vocabularyProvider: { [dictionaryService = container.dictionaryService] in
+                dictionaryService.vocabularyForPrompt()
+            }
+        )
     }
 
     private var testDurationSeconds: String? {
@@ -1751,15 +1765,7 @@ private struct WorkflowEditorPage: View {
         let text = testInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isRunningTest else { return }
 
-        let container = ServiceContainer.shared
-        let processor = WorkflowTextProcessingService(
-            promptProcessingService: container.promptProcessingService,
-            translationService: container.translationService,
-            workflowService: container.workflowService,
-            vocabularyProvider: { [dictionaryService = container.dictionaryService] in
-                dictionaryService.vocabularyForPrompt()
-            }
-        )
+        let processor = makeTestProcessor()
         let workflow = makeTestWorkflow()
         let fallbackTranslationTarget = testFallbackTranslationTarget
 

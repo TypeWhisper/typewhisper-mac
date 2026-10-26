@@ -1801,6 +1801,36 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(workflow.isManuallyRunnable)
     }
 
+    func testSystemPromptPreviewMatchesTheProcessedPrompt() async throws {
+        let inlineDictation = Workflow(name: "Inline", template: .dictation,
+                                       trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)),
+                                       behavior: WorkflowBehavior(fineTuning: "Keep it polished.", inlineCommandsEnabled: true))
+        let cleanedText = Workflow(name: "Clean", template: .cleanedText, trigger: .global(),
+                                   behavior: WorkflowBehavior(fineTuning: "Keep it casual."))
+
+        var capturedPrompt: String?
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { prompt, _, _, _, _ in
+                capturedPrompt = prompt
+                return "Done"
+            },
+            appleTranslator: nil,
+            vocabularyProvider: { ["DEVONthink"] }
+        )
+
+        for workflow in [inlineDictation, cleanedText] {
+            capturedPrompt = nil
+            _ = try await service.process(workflow: workflow, text: "hello there")
+            let preview = try XCTUnwrap(service.systemPrompt(workflow: workflow))
+            XCTAssertEqual(preview, capturedPrompt, workflow.name)
+            XCTAssertTrue(preview.hasSuffix("DEVONthink"), workflow.name)
+        }
+
+        let plainDictation = Workflow(name: "Plain", template: .dictation,
+                                      trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)))
+        XCTAssertNil(service.systemPrompt(workflow: plainDictation))
+    }
+
     func testInlineCommandsDictationWorkflowRunsInlineCommandPromptPass() async throws {
         let workflow = Workflow(name: "Inline Commands Dictation", template: .dictation,
                                 trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)),

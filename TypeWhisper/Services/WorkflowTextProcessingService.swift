@@ -151,10 +151,7 @@ struct WorkflowTextProcessingService {
     ) async throws -> String {
         if workflow.usesInlineCommands {
             let behavior = workflow.behavior
-            let prompt = Self.inlineCommandSystemPrompt(
-                fineTuning: behavior.fineTuning,
-                outputInstruction: workflow.outputInstruction(resolvedOutputFormat: resolvedOutputFormat)
-            ) + vocabularyInstruction()
+            let prompt = inlineCommandPrompt(workflow: workflow, resolvedOutputFormat: resolvedOutputFormat)
             if let effortPromptProcessor {
                 return try await effortPromptProcessor(
                     prompt,
@@ -195,6 +192,37 @@ struct WorkflowTextProcessingService {
         }
 
         return try await process(request: request, text: text)
+    }
+
+    /// The system prompt `process(workflow:text:)` sends for `workflow`, including the
+    /// protected vocabulary, or nil when the workflow is not processed by an LLM.
+    func systemPrompt(
+        workflow: Workflow,
+        fallbackTranslationTarget: String? = nil,
+        detectedLanguage: String? = nil,
+        configuredLanguage: String? = nil,
+        resolvedOutputFormat: String? = nil
+    ) -> String? {
+        if workflow.usesInlineCommands {
+            return inlineCommandPrompt(workflow: workflow, resolvedOutputFormat: resolvedOutputFormat)
+        }
+        if workflow.usesAppleTranslate {
+            return nil
+        }
+        return promptRequest(
+            workflow: workflow,
+            fallbackTranslationTarget: fallbackTranslationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
+        )?.systemPrompt
+    }
+
+    private func inlineCommandPrompt(workflow: Workflow, resolvedOutputFormat: String?) -> String {
+        Self.inlineCommandSystemPrompt(
+            fineTuning: workflow.behavior.fineTuning,
+            outputInstruction: workflow.outputInstruction(resolvedOutputFormat: resolvedOutputFormat)
+        ) + vocabularyInstruction()
     }
 
     /// Sends `text` through the same provider path as whole-text workflow processing,
