@@ -1233,34 +1233,6 @@
         }
       }
     },
-    "Gemma 4 E2B/E4B 4-bit models are recommended. Smaller models need less memory but follow instructions less reliably. Larger variants may fail depending on hardware.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gemma 4 E2B/E4B 4-bit Modelle sind empfohlen. Kleinere Modelle brauchen weniger Arbeitsspeicher, befolgen Anweisungen aber weniger zuverlässig. Größere Varianten können je nach Hardware fehlschlagen."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Se recomiendan los modelos Gemma 4 E2B/E4B de 4 bits. Los modelos más pequeños necesitan menos memoria, pero siguen las instrucciones con menos fiabilidad. Las variantes más grandes pueden fallar según el hardware."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gemma 4 E2B/E4B 4-bitモデルが推奨されます。小さいモデルは必要なメモリが少ない一方、指示に従う精度が下がります。大きいバリアントはハードウェアによっては失敗する場合があります。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "推荐使用 Gemma 4 E2B/E4B 4-bit 模型。较小的模型占用内存更少，但遵循指令的可靠性较低。较大的变体可能因硬件而无法运行。"
-          }
-        }
-      }
-    },
     "Try anyway": {
       "localizations": {
         "de": {
@@ -1369,6 +1341,174 @@
           "stringUnit": {
             "state": "translated",
             "value": "“自动卸载模型”已设为“立即”。"
+          }
+        }
+      }
+    },
+    "Recommended for this Mac": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empfohlen für diesen Mac"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recomendado para este Mac"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このMacにおすすめ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推荐用于此 Mac"
+          }
+        }
+      }
+    },
+    "This Mac has %lld GB of memory, less than this model needs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Mac hat %lld GB Arbeitsspeicher, weniger als dieses Modell braucht."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este Mac tiene %lld GB de memoria, menos de lo que necesita este modelo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このMacのメモリは%lld GBで、このモデルに必要な容量に足りません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 Mac 的内存为 %lld GB，低于此模型的需求。"
+          }
+        }
+      }
+    },
+    "For this Mac with %lld GB of memory, %@ is recommended. Smaller models respond faster but follow instructions less reliably.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für diesen Mac mit %1$lld GB Arbeitsspeicher wird %2$@ empfohlen. Kleinere Modelle antworten schneller, befolgen Anweisungen aber weniger zuverlässig."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para este Mac con %1$lld GB de memoria se recomienda %2$@. Los modelos más pequeños responden más rápido, pero siguen las instrucciones con menos fiabilidad."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メモリ%1$lld GBのこのMacには%2$@がおすすめです。小さいモデルは応答が速い一方、指示に従う精度が下がります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对于这台内存为 %1$lld GB 的 Mac，推荐使用 %2$@。较小的模型响应更快，但遵循指令的可靠性较低。"
+          }
+        }
+      }
+    },
+    "Fastest. Good for cleanup and short texts, less reliable with inline commands and notes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Am schnellsten. Gut für Bereinigung und kurze Texte, weniger zuverlässig bei Inline-Befehlen und Notizen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El más rápido. Bueno para limpiar textos cortos, menos fiable con comandos en línea y notas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最速。整形や短い文章に向いていますが、インラインコマンドやメモでは精度が下がります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度最快。适合清理和短文本，处理内联命令和笔记时可靠性较低。"
+          }
+        }
+      }
+    },
+    "Balanced speed and quality for every workflow.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewogen schnell und gut für alle Workflows."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Equilibrio entre velocidad y calidad para todos los flujos de trabajo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのワークフローで速度と品質のバランスが取れています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在所有工作流中兼顾速度与质量。"
+          }
+        }
+      }
+    },
+    "Slightly more accurate than the 4-bit version, but needs more memory and runs slower.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etwas genauer als die 4-bit-Version, braucht aber mehr Arbeitsspeicher und ist langsamer."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algo más preciso que la versión de 4 bits, pero necesita más memoria y es más lento."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4-bit版よりやや正確ですが、より多くのメモリが必要で動作も遅くなります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "比 4-bit 版本略准确，但需要更多内存且速度更慢。"
           }
         }
       }

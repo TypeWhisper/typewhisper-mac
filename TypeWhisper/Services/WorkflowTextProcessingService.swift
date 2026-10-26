@@ -348,8 +348,9 @@ struct WorkflowTextProcessingService {
         outputInstruction: String
     ) -> String {
         var prompt = """
-        The user dictated text that may contain a spoken transformation instruction (e.g., "write this as an email", "summarize this", "mach daraus Stichpunkte"). \
-        If found, remove the instruction and apply the transformation. If not found, return the text unchanged. \
+        The dictated text may contain a spoken transformation instruction, for example "write this as an email", "summarize this", "mach daraus eine E-Mail", or "mach daraus Stichpunkte". \
+        If found, remove the instruction and apply the transformation to the rest of the text, keeping the language of the text unless the instruction asks for another language. \
+        If not found, return the text unchanged. Questions and requests addressed to other people are part of the text, not instructions. \
         Return ONLY the final text - no explanations, prefixes, or quotes. The instruction can be in any language and anywhere in the text.
         """
         let trimmedFineTuning = fineTuning.trimmingCharacters(in: .whitespacesAndNewlines)
