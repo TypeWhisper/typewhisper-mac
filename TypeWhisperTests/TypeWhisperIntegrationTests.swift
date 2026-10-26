@@ -7749,6 +7749,26 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testCancelledInsertionDoesNotSubmitAccessibilityWriteWithAutoEnter() async throws {
+        let harness = makeAccessibilityInsertionHarness { _ in
+            (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+        var returnCount = 0
+        harness.service.returnSimulatorOverride = { returnCount += 1 }
+
+        let insertion = Task { @MainActor in
+            try await harness.service.insertText("Hello", preserveClipboard: true, autoEnter: true)
+        }
+        insertion.cancel()
+
+        let result = try await insertion.value
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(returnCount, 0)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testOverlappingInsertionDoesNotTakeAnotherPasteAsItsAccessibilityWrite() async throws {
         // Safari reports success for AX writes but ignores them. While one insertion waits for
         // its write, the paste of another must not count as that write landing.

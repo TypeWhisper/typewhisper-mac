@@ -1503,7 +1503,8 @@ final class TextInsertionService {
             ) {
                 if autoEnter {
                     try? await Task.sleep(for: autoEnterDelay)
-                    simulateReturn()
+                    // A cancelled insertion keeps the text that landed but must not submit it.
+                    if !Task.isCancelled { simulateReturn() }
                 }
                 logger.info(
                     "insertText completed via AX insertion: bundle=\(bundleId ?? "nil", privacy: .public), verified=\(accessibilityInsertionTiming.verifiedUptimeNanoseconds != nil, privacy: .public)"
