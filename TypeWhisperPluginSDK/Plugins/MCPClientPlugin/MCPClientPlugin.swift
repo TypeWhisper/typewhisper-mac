@@ -246,7 +246,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         host.notifyCapabilitiesChanged()
 
         let runtime = runtime
-        Task { await runtime.invalidate(serverID: saved.id) }
+        Task { await runtime.invalidate(serverID: saved.id, olderThan: saved.revision) }
     }
 
     func removeServer(id: UUID) {

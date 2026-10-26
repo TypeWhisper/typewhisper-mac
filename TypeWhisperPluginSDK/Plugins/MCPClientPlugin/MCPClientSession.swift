@@ -627,8 +627,12 @@ actor MCPClientRuntime {
         )
     }
 
-    func invalidate(serverID: UUID) async {
-        guard let entry = sessions.removeValue(forKey: serverID) else { return }
+    /// With `olderThan`, a session already running the saved revision stays open. Saving
+    /// invalidates asynchronously, so an action may have connected to that revision first.
+    func invalidate(serverID: UUID, olderThan revision: Int? = nil) async {
+        guard let entry = sessions[serverID] else { return }
+        if let revision, entry.revision >= revision { return }
+        sessions.removeValue(forKey: serverID)
         await entry.session.close()
     }
 
