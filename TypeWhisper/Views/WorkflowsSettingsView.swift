@@ -1334,6 +1334,9 @@ private struct WorkflowEditorPage: View {
     @State private var isRunningTest = false
     @State private var isShowingTestPrompt = false
     @State private var testTask: Task<Void, Never>?
+    /// Identifies the current test run, so a canceled run that finishes late cannot
+    /// clear the state or overwrite the result of a newer one.
+    @State private var testRunID: UUID?
     @State private var appPickerTarget: AppPickerTarget?
     @State private var websiteInput = ""
     @State private var excludedWebsiteInput = ""
@@ -1760,6 +1763,8 @@ private struct WorkflowEditorPage: View {
         let workflow = makeTestWorkflow()
         let fallbackTranslationTarget = testFallbackTranslationTarget
 
+        let runID = UUID()
+        testRunID = runID
         isRunningTest = true
         testOutput = nil
         testError = nil
@@ -1767,20 +1772,25 @@ private struct WorkflowEditorPage: View {
         let start = CFAbsoluteTimeGetCurrent()
 
         testTask = Task { @MainActor in
-            defer { isRunningTest = false }
+            defer {
+                if testRunID == runID {
+                    isRunningTest = false
+                    testRunID = nil
+                }
+            }
             do {
                 let result = try await processor.process(
                     workflow: workflow,
                     text: text,
                     fallbackTranslationTarget: fallbackTranslationTarget
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, testRunID == runID else { return }
                 testOutput = result
                 testDurationMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
             } catch is CancellationError {
                 return
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, testRunID == runID else { return }
                 testError = error.localizedDescription
             }
         }
@@ -1789,6 +1799,7 @@ private struct WorkflowEditorPage: View {
     private func cancelTest() {
         testTask?.cancel()
         testTask = nil
+        testRunID = nil
         isRunningTest = false
     }
 
