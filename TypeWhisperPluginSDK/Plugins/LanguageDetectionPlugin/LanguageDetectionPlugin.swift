@@ -92,7 +92,7 @@ actor EarModel {
         )
         let milliseconds = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
         Self.logger.info(
-            "Spoken language \(result.language, privacy: .public) among \(candidates.joined(separator: ","), privacy: .public): p=\(result.confidence, format: .fixed(precision: 2)) margin=\(result.margin, format: .fixed(precision: 2)) in \(milliseconds) ms"
+            "Spoken language \(result.language, privacy: .public) among \(columns.count) known of \(candidates.count) candidates: p=\(result.confidence, format: .fixed(precision: 2)) margin=\(result.margin, format: .fixed(precision: 2)) in \(milliseconds) ms"
         )
         return result
     }
