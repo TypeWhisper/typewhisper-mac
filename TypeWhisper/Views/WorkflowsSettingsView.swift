@@ -1327,6 +1327,13 @@ private struct WorkflowEditorPage: View {
     @State private var isConfirmingDiscard = false
     @State private var validationMessage: String?
     @State private var isAdvancedExpanded = false
+    @State private var testInput = ""
+    @State private var testOutput: String?
+    @State private var testError: String?
+    @State private var testDurationMs: Int?
+    @State private var isRunningTest = false
+    @State private var isShowingTestPrompt = false
+    @State private var testTask: Task<Void, Never>?
     @State private var appPickerTarget: AppPickerTarget?
     @State private var websiteInput = ""
     @State private var excludedWebsiteInput = ""
@@ -1366,8 +1373,12 @@ private struct WorkflowEditorPage: View {
                     }
 
                     templateSection
-                    triggerSection
                     behaviorSection
+                    if draftCanBeTested {
+                        testSection
+                    }
+                    triggerSection
+                    advancedSection
                     reviewSection
                 }
                 .padding(SettingsLayoutMetrics.pagePadding)
@@ -1462,7 +1473,11 @@ private struct WorkflowEditorPage: View {
     private var behaviorSection: some View {
         WorkflowSectionCard(
             title: localizedAppText("Behavior", de: "Verhalten"),
-            description: localizedAppText("Define the outcome, optional fine-tuning, and the output settings.", de: "Definiere das Ergebnis, optionale Feinabstimmung und die Ausgabeeinstellungen.")
+            description: localizedAppText(
+                "Name the workflow and describe what it should do with your dictation.",
+                de: "Benenne den Workflow und beschreibe, was er mit deinem Diktat machen soll.",
+                es: "Ponle nombre al flujo de trabajo y describe qué debe hacer con tu dictado."
+            )
         ) {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -1474,8 +1489,6 @@ private struct WorkflowEditorPage: View {
                 }
 
                 if draft.template == .dictation {
-                    workflowInputLanguageEditor
-                    workflowTranscriptionEngineSection
                     workflowInlineCommandsSection
                 }
 
@@ -1484,128 +1497,500 @@ private struct WorkflowEditorPage: View {
                 }
 
                 if draft.template == .custom {
-                    WorkflowTextEditorField(
-                        title: localizedAppText("Instruction", de: "Anweisung"),
-                        placeholder: localizedAppText(
-                            "Describe what this custom workflow should do.",
-                            de: "Beschreibe, was dieser eigene Workflow tun soll."
-                        ),
-                        text: $draft.customInstruction
-                    )
+                    customInstructionEditor
+                } else if draft.usesLLMProcessing {
+                    fineTuningEditor
                 }
+            }
+        }
+    }
 
-                workflowMicrophoneBoostSection
+    private var customInstructionEditor: some View {
+        WorkflowTextEditorField(
+            title: localizedAppText("Instruction", de: "Anweisung"),
+            placeholder: localizedAppText(
+                "Describe what this custom workflow should do.",
+                de: "Beschreibe, was dieser eigene Workflow tun soll."
+            ),
+            text: $draft.customInstruction
+        )
+    }
 
-                if draft.usesLLMProcessing {
-                    WorkflowTextEditorField(
-                        title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
-                        placeholder: localizedAppText(
-                            "Optional: add tone, length, or wording hints.",
-                            de: "Optional: ergänze Hinweise zu Ton, Länge oder Formulierung."
-                        ),
-                        text: $draft.fineTuning
-                    )
-                }
+    private var fineTuningEditor: some View {
+        WorkflowTextEditorField(
+            title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
+            placeholder: localizedAppText(
+                "Optional: add tone, length, or wording hints.",
+                de: "Optional: ergänze Hinweise zu Ton, Länge oder Formulierung."
+            ),
+            text: $draft.fineTuning
+        )
+    }
 
-                if shouldShowActionTargetSection {
-                    actionTargetSection
-                }
+    // MARK: - Try it out
 
-                VStack(alignment: .leading, spacing: 0) {
+    /// Whether the draft does anything to the text that a test run could show.
+    private var draftCanBeTested: Bool {
+        draft.template != .dictation || draft.inlineCommandsEnabled == true
+    }
+
+    /// Runs the unsaved draft through the same processing as a real dictation, so a
+    /// prompt can be tried before saving. Nothing is inserted or stored.
+    private var testSection: some View {
+        WorkflowSectionCard(
+            title: localizedAppText("Try It Out", de: "Ausprobieren", es: "Probar"),
+            description: localizedAppText(
+                "Type or paste a sample dictation and run the workflow with the current settings. Nothing is saved or inserted. The test uses the workflow's AI provider.",
+                de: "Gib ein Beispiel-Diktat ein und führe den Workflow mit den aktuellen Einstellungen aus. Nichts wird gespeichert oder eingefügt. Der Test nutzt den KI-Anbieter des Workflows.",
+                es: "Escribe o pega un dictado de ejemplo y ejecuta el flujo de trabajo con los ajustes actuales. No se guarda ni se inserta nada. La prueba usa el proveedor de IA del flujo de trabajo."
+            )
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                WorkflowTextEditorField(
+                    title: localizedAppText("Sample dictation", de: "Beispiel-Diktat", es: "Dictado de ejemplo"),
+                    placeholder: localizedAppText(
+                        "What you would say, including filler words and corrections.",
+                        de: "Was du sagen würdest, mit Füllwörtern und Korrekturen.",
+                        es: "Lo que dirías, con muletillas y correcciones."
+                    ),
+                    text: $testInput,
+                    minHeight: 72
+                )
+
+                HStack(spacing: 10) {
                     Button {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
-                            isAdvancedExpanded.toggle()
-                        }
+                        runTest()
                     } label: {
-                        HStack(spacing: 10) {
-                            Text(localizedAppText("Advanced", de: "Erweitert"))
-                                .font(.subheadline.weight(.semibold))
+                        HStack(spacing: 6) {
+                            if isRunningTest {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "play.fill")
+                            }
+                            Text(localizedAppText("Run Test", de: "Test starten", es: "Ejecutar prueba"))
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isRunningTest || testInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help(localizedAppText("Run the test (⌘↩)", de: "Test starten (⌘↩)", es: "Ejecutar la prueba (⌘↩)"))
+
+                    if isRunningTest {
+                        Button(localizedAppText("Cancel", de: "Abbrechen")) {
+                            cancelTest()
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Button(localizedAppText("Insert Example", de: "Beispiel einfügen", es: "Insertar ejemplo")) {
+                            testInput = Self.exampleDictation
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Spacer()
+
+                    if testSystemPrompt != nil {
+                        Button {
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
+                                isShowingTestPrompt.toggle()
+                            }
+                        } label: {
+                            Label(
+                                isShowingTestPrompt
+                                    ? localizedAppText("Hide Prompt", de: "Prompt ausblenden", es: "Ocultar prompt")
+                                    : localizedAppText("Show Prompt", de: "Prompt anzeigen", es: "Mostrar prompt"),
+                                systemImage: "text.alignleft"
+                            )
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                    }
+                }
+
+                if !isRunningTest, workflowService.shouldSkipAIProcessingForShortDictation(text: testInput) {
+                    Text(
+                        localizedAppText(
+                            "A real dictation this short is inserted without AI processing. The test still runs it.",
+                            de: "Ein so kurzes echtes Diktat wird ohne KI-Verarbeitung eingefügt. Der Test führt es trotzdem aus.",
+                            es: "Un dictado real tan corto se inserta sin procesamiento de IA. La prueba lo ejecuta de todos modos."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if isShowingTestPrompt, let testSystemPrompt {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localizedAppText("System prompt", de: "System-Prompt", es: "Prompt del sistema"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ScrollView {
+                            Text(testSystemPrompt)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                        }
+                        .frame(maxHeight: 220)
+                        .background(workflowsGroupedSurface(cornerRadius: 10))
+
+                        Text(
+                            localizedAppText(
+                                "Dictionary terms and screen context are added when the workflow runs.",
+                                de: "Wörterbuch-Begriffe und Bildschirminhalt kommen beim Ausführen dazu.",
+                                es: "Los términos del diccionario y el contenido de la pantalla se añaden al ejecutarse."
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let testError {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .accessibilityHidden(true)
+                        Text(testError)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+
+                if let testOutput {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(localizedAppText("Result", de: "Ergebnis", es: "Resultado"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
 
                             Spacer()
 
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
+                            if let testDurationSeconds {
+                                Text(
+                                    localizedAppText(
+                                        "\(testDurationSeconds) s",
+                                        de: "\(testDurationSeconds) s",
+                                        es: "\(testDurationSeconds) s"
+                                    )
+                                )
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .rotationEffect(.degrees(isAdvancedExpanded ? 90 : 0))
-                                .accessibilityHidden(true)
+                                .monospacedDigit()
+                            }
+
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(testOutput, forType: .string)
+                            } label: {
+                                Label(localizedAppText("Copy", de: "Kopieren"), systemImage: "doc.on.doc")
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
                         }
-                        .padding(.vertical, 10)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(localizedAppText("Advanced", de: "Erweitert"))
-                    .accessibilityValue(workflowDisclosureState(isExpanded: isAdvancedExpanded))
 
-                    if isAdvancedExpanded {
-                        VStack(alignment: .leading, spacing: 14) {
-                            if draft.template != .dictation {
-                                workflowInputLanguageEditor
-
-                                Divider()
+                        Text(testOutput)
+                            .font(.body)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color.accentColor.opacity(0.08))
                             }
-
-                            if draft.usesLLMProcessing {
-                                workflowProviderOverrideSection
-
-                                Divider()
-
-                                if draft.supportsSegmentedPostProcessing {
-                                    workflowSegmentedPostProcessingSection
-
-                                    Divider()
-                                }
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(localizedAppText("Output Format", de: "Ausgabeformat"))
-                                        .font(.subheadline.weight(.semibold))
-                                    HStack(spacing: 8) {
-                                        TextField(localizedAppText("e.g. Auto, Markdown, RTF, JSON, plain text", de: "z. B. Auto, Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
-                                            .textFieldStyle(.roundedBorder)
-                                            .accessibilityLabel(localizedAppText("Output Format", de: "Ausgabeformat"))
-
-                                        Menu {
-                                            ForEach(WorkflowOutputFormatPreset.all) { preset in
-                                                Button(preset.title) {
-                                                    draft.outputFormat = preset.value
-                                                }
-                                            }
-                                        } label: {
-                                            Label(localizedAppText("Presets", de: "Presets"), systemImage: "list.bullet.rectangle")
-                                        }
-                                        .menuStyle(.borderlessButton)
-                                        .help(localizedAppText("Choose an output format preset", de: "Ausgabeformat-Preset wählen"))
-                                    }
-                                }
-
-                                Divider()
-                            }
-
-                            numberNormalizationSection
-
-                            Divider()
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                Picker(
-                                    localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"),
-                                    selection: $draft.autoEnterMode
-                                ) {
-                                    ForEach(WorkflowAutoEnterMode.allCases.filter { $0.isAvailable || $0 == draft.autoEnterMode }) { mode in
-                                        Text(mode.displayName)
-                                            .tag(mode)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-
-                                Text(draft.autoEnterMode.helpText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        .padding(.top, 4)
                     }
                 }
             }
+        }
+        .onDisappear { cancelTest() }
+    }
+
+    private static var exampleDictation: String {
+        localizedAppText(
+            "um so i think we should move the meeting to thursday at three, no wait, at four, and can you ask anna to bring the slides. thanks",
+            de: "ähm also ich denke wir sollten das Meeting auf Donnerstag um drei verschieben, nee warte, um vier, und kannst du Anna bitten die Folien mitzubringen. danke",
+            es: "eh bueno creo que deberíamos mover la reunión al jueves a las tres, no espera, a las cuatro, y puedes pedirle a Anna que traiga las diapositivas. gracias"
+        )
+    }
+
+    /// An unsaved workflow with the draft's current settings, for test runs and the prompt preview.
+    private func makeTestWorkflow() -> Workflow {
+        Workflow(
+            name: draft.resolvedName,
+            template: draft.template,
+            trigger: draft.resolvedTrigger() ?? .manual(),
+            behavior: draft.resolvedBehavior(),
+            output: draft.resolvedOutput()
+        )
+    }
+
+    /// The translation target a real dictation would fall back to when the workflow has none.
+    private var testFallbackTranslationTarget: String? {
+        settingsViewModel.translationEnabled ? settingsViewModel.translationTargetLanguage : nil
+    }
+
+    private var testSystemPrompt: String? {
+        guard draftCanBeTested, !draft.usesAppleTranslate else { return nil }
+        return makeTestWorkflow().systemPrompt(fallbackTranslationTarget: testFallbackTranslationTarget)
+    }
+
+    private var testDurationSeconds: String? {
+        testDurationMs.map { String(format: "%.1f", Double($0) / 1000) }
+    }
+
+    private func runTest() {
+        let text = testInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isRunningTest else { return }
+
+        let container = ServiceContainer.shared
+        let processor = WorkflowTextProcessingService(
+            promptProcessingService: container.promptProcessingService,
+            translationService: container.translationService,
+            workflowService: container.workflowService,
+            vocabularyProvider: { [dictionaryService = container.dictionaryService] in
+                dictionaryService.vocabularyForPrompt()
+            }
+        )
+        let workflow = makeTestWorkflow()
+        let fallbackTranslationTarget = testFallbackTranslationTarget
+
+        isRunningTest = true
+        testOutput = nil
+        testError = nil
+        testDurationMs = nil
+        let start = CFAbsoluteTimeGetCurrent()
+
+        testTask = Task { @MainActor in
+            defer { isRunningTest = false }
+            do {
+                let result = try await processor.process(
+                    workflow: workflow,
+                    text: text,
+                    fallbackTranslationTarget: fallbackTranslationTarget
+                )
+                guard !Task.isCancelled else { return }
+                testOutput = result
+                testDurationMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                testError = error.localizedDescription
+            }
+        }
+    }
+
+    private func cancelTest() {
+        testTask?.cancel()
+        testTask = nil
+        isRunningTest = false
+    }
+
+    /// Everything that only matters once the defaults are not enough. Collapsed by
+    /// default; the header lists the settings that differ from the defaults so saved
+    /// overrides stay visible without opening the card.
+    private var advancedSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
+                    isAdvancedExpanded.toggle()
+                }
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(localizedAppText("Advanced", de: "Erweitert"))
+                            .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
+
+                        Text(advancedSummary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isAdvancedExpanded ? 90 : 0))
+                        .padding(.top, 4)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(localizedAppText("Advanced", de: "Erweitert"))
+            .accessibilityValue(workflowDisclosureState(isExpanded: isAdvancedExpanded))
+
+            if isAdvancedExpanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    workflowInputLanguageEditor
+
+                    if draft.template == .dictation {
+                        Divider()
+                        workflowTranscriptionEngineSection
+                    }
+
+                    Divider()
+                    workflowMicrophoneBoostSection
+
+                    if draft.template == .custom {
+                        Divider()
+                        fineTuningEditor
+                    }
+
+                    if shouldShowActionTargetSection {
+                        Divider()
+                        actionTargetSection
+                    }
+
+                    if draft.usesLLMProcessing {
+                        Divider()
+                        workflowProviderOverrideSection
+
+                        if draft.supportsSegmentedPostProcessing {
+                            Divider()
+                            workflowSegmentedPostProcessingSection
+                        }
+
+                        Divider()
+                        outputFormatEditor
+                    }
+
+                    Divider()
+                    numberNormalizationSection
+
+                    Divider()
+                    autoEnterEditor
+                }
+                .padding(.top, 16)
+            }
+        }
+        .padding(16)
+        .background {
+            workflowsElevatedPanel(cornerRadius: 18)
+        }
+    }
+
+    /// The advanced settings that differ from the defaults, or a hint that the
+    /// defaults are in use.
+    private var advancedSummary: String {
+        var items: [String] = []
+
+        if draft.inputLanguageSelection != .inheritGlobal {
+            items.append(workflowInputLanguageSummary(for: draft.inputLanguageSelection))
+        }
+        if draft.template == .dictation, let engineId = draft.transcriptionEngineId {
+            items.append(pluginManager.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId)
+        }
+        if draft.microphoneBoostOverride != nil {
+            items.append(
+                localizedAppText(
+                    "Whisper Mode: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)",
+                    de: "Whisper-Modus: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)",
+                    es: "Modo susurro: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)"
+                )
+            )
+        }
+        if draft.template == .custom, !draft.fineTuning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            items.append(localizedAppText("Fine-Tuning", de: "Feinabstimmung"))
+        }
+        if let targetActionPluginId = draft.targetActionPluginId {
+            items.append(
+                sortedActionPlugins.first { $0.actionId == targetActionPluginId }?.actionName ?? targetActionPluginId
+            )
+        }
+        if draft.usesLLMProcessing {
+            if let providerId = draft.providerId {
+                items.append(
+                    promptProcessingService.availableProviders.first { $0.id == providerId }?.displayName ?? providerId
+                )
+            }
+            if draft.supportsSegmentedPostProcessing, draft.segmentedPostProcessingEnabled == true {
+                items.append(String(localized: "Process long dictations in segments"))
+            }
+            let outputFormat = draft.outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !outputFormat.isEmpty {
+                items.append(outputFormat)
+            }
+        }
+        if draft.numberNormalizationMode != .inherit {
+            items.append(
+                localizedAppText(
+                    "Numbers: \(draft.numberNormalizationMode.displayName)",
+                    de: "Zahlen: \(draft.numberNormalizationMode.displayName)",
+                    es: "Números: \(draft.numberNormalizationMode.displayName)"
+                )
+            )
+        }
+        if draft.autoEnterMode != .never {
+            items.append(
+                localizedAppText(
+                    "Enter: \(draft.autoEnterMode.displayName)",
+                    de: "Enter: \(draft.autoEnterMode.displayName)",
+                    es: "Intro: \(draft.autoEnterMode.displayName)"
+                )
+            )
+        }
+
+        if items.isEmpty {
+            return localizedAppText(
+                "Language, engine, provider, and output settings. The defaults work for most workflows.",
+                de: "Sprache, Engine, Provider und Ausgabe. Die Standardwerte passen für die meisten Workflows.",
+                es: "Idioma, motor, proveedor y salida. Los valores predeterminados sirven para la mayoría de los flujos de trabajo."
+            )
+        }
+        return items.joined(separator: " · ")
+    }
+
+    private var outputFormatEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(localizedAppText("Output Format", de: "Ausgabeformat"))
+                .font(.subheadline.weight(.semibold))
+            HStack(spacing: 8) {
+                TextField(localizedAppText("e.g. Auto, Markdown, RTF, JSON, plain text", de: "z. B. Auto, Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(localizedAppText("Output Format", de: "Ausgabeformat"))
+
+                Menu {
+                    ForEach(WorkflowOutputFormatPreset.all) { preset in
+                        Button(preset.title) {
+                            draft.outputFormat = preset.value
+                        }
+                    }
+                } label: {
+                    Label(localizedAppText("Presets", de: "Presets"), systemImage: "list.bullet.rectangle")
+                }
+                .menuStyle(.borderlessButton)
+                .help(localizedAppText("Choose an output format preset", de: "Ausgabeformat-Preset wählen"))
+            }
+        }
+    }
+
+    private var autoEnterEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(
+                localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"),
+                selection: $draft.autoEnterMode
+            ) {
+                ForEach(WorkflowAutoEnterMode.allCases.filter { $0.isAvailable || $0 == draft.autoEnterMode }) { mode in
+                    Text(mode.displayName)
+                        .tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Text(draft.autoEnterMode.helpText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
