@@ -363,6 +363,9 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     /// for streaming engines, concurrently after stop otherwise). `nil` means off,
     /// so data written by builds without this field decodes unchanged.
     var segmentedPostProcessingEnabled: Bool?
+    /// Opt-in: read the text of the target app's front window when recording starts
+    /// and give it to the workflow LLM as reference context. `nil` means off.
+    var screenContextEnabled: Bool?
 
     init(
         settings: [String: String] = [:],
@@ -376,7 +379,8 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         inlineCommandsEnabled: Bool? = nil,
         temperatureModeRaw: String? = nil,
         temperatureValue: Double? = nil,
-        segmentedPostProcessingEnabled: Bool? = nil
+        segmentedPostProcessingEnabled: Bool? = nil,
+        screenContextEnabled: Bool? = nil
     ) {
         self.settings = settings
         self.fineTuning = fineTuning
@@ -390,6 +394,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
         self.segmentedPostProcessingEnabled = segmentedPostProcessingEnabled
+        self.screenContextEnabled = screenContextEnabled
     }
 
     var temperatureMode: PluginLLMTemperatureMode {
@@ -823,6 +828,7 @@ extension Workflow {
         template.allowsSegmentedPostProcessing
             && !usesInlineCommands
             && !usesAppleTranslate
+            && !usesScreenContext
             && outputFormatAllowsSegmentation()
             && systemPrompt() != nil
     }
@@ -842,6 +848,12 @@ extension Workflow {
         }
         return normalizedFormat == WorkflowOutputFormatResolver.plainTextFormat
             || normalizedFormat == "plain text"
+    }
+
+    /// Screen context only applies to workflows that send the dictation to an LLM.
+    var usesScreenContext: Bool {
+        guard behavior.screenContextEnabled == true, !usesAppleTranslate else { return false }
+        return usesInlineCommands || systemPrompt() != nil
     }
 
     var usesSegmentedPostProcessing: Bool {

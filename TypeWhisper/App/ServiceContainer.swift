@@ -165,6 +165,10 @@ final class ServiceContainer: ObservableObject {
         textDiffService = TextDiffService()
         profileService = ProfileService()
         workflowService = WorkflowService()
+        workflowService.onScreenContextWorkflowsAvailable = {
+            // Asynchronous, so the system prompt never interrupts a save or app startup.
+            DispatchQueue.main.async { ScreenContextService.requestPermissionIfNeeded() }
+        }
         promptActionService = PromptActionService()
         #if canImport(Translation)
         if #available(macOS 15, *) {

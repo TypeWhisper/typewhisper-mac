@@ -1327,6 +1327,7 @@ private struct WorkflowEditorPage: View {
     @State private var isConfirmingDiscard = false
     @State private var validationMessage: String?
     @State private var isAdvancedExpanded = false
+    @State private var hasScreenRecordingPermission = ScreenContextService.hasPermission
     @State private var testInput = ""
     @State private var testOutput: String?
     @State private var testError: String?
@@ -1504,6 +1505,10 @@ private struct WorkflowEditorPage: View {
                 } else if draft.usesLLMProcessing {
                     fineTuningEditor
                 }
+
+                if draft.usesLLMProcessing {
+                    workflowScreenContextSection
+                }
             }
         }
     }
@@ -1617,6 +1622,19 @@ private struct WorkflowEditorPage: View {
                             "A real dictation this short is inserted without AI processing. The test still runs it.",
                             de: "Ein so kurzes echtes Diktat wird ohne KI-Verarbeitung eingefügt. Der Test führt es trotzdem aus.",
                             es: "Un dictado real tan corto se inserta sin procesamiento de IA. La prueba lo ejecuta de todos modos."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if draft.screenContextEnabled == true {
+                    Text(
+                        localizedAppText(
+                            "The test runs without screen context. It is added when you dictate.",
+                            de: "Der Test läuft ohne Bildschirminhalt. Er kommt beim Diktieren dazu.",
+                            es: "La prueba se ejecuta sin el contenido de la pantalla. Se añade al dictar."
                         )
                     )
                     .font(.caption)
@@ -2236,6 +2254,74 @@ private struct WorkflowEditorPage: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var workflowScreenContextSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(
+                localizedAppText("Use screen context", de: "Bildschirminhalt verwenden",
+                    es: "Usar el contenido de la pantalla"),
+                isOn: workflowScreenContextBinding
+            )
+
+            Text(
+                localizedAppText(
+                    "When recording starts, TypeWhisper reads the text in the front window on your Mac and gives it to the AI as reference, for example the email you are replying to. The screenshot is never saved. The text is sent to the workflow's AI provider.",
+                    de: "Beim Start der Aufnahme liest TypeWhisper den Text im vordersten Fenster direkt auf deinem Mac und gibt ihn der KI als Referenz, zum Beispiel die E-Mail, auf die du antwortest. Das Bildschirmfoto wird nie gespeichert. Der Text geht an den KI-Anbieter des Workflows.",
+                    es: "Al empezar a grabar, TypeWhisper lee en tu Mac el texto de la ventana delantera y se lo da a la IA como referencia, por ejemplo el correo al que respondes. La captura nunca se guarda. El texto se envía al proveedor de IA del flujo de trabajo."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            if draft.screenContextEnabled == true {
+                Text(
+                    localizedAppText(
+                        "Small on-device models such as Gemma E2B or E4B make little use of the screen context. It works best with cloud providers or large local models.",
+                        de: "Kleine lokale Modelle wie Gemma E2B oder E4B nutzen den Bildschirminhalt kaum. Am besten funktioniert er mit Cloud-Anbietern oder großen lokalen Modellen.",
+                        es: "Los modelos locales pequeños como Gemma E2B o E4B apenas aprovechan el contenido de la pantalla. Funciona mejor con proveedores en la nube o modelos locales grandes."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if draft.screenContextEnabled == true, !hasScreenRecordingPermission {
+                HStack(spacing: 8) {
+                    Text(
+                        localizedAppText(
+                            "Needs Screen Recording permission.",
+                            de: "Benötigt die Berechtigung „Bildschirmaufnahme“.",
+                            es: "Necesita el permiso de Grabación de pantalla."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+
+                    Button(localizedAppText("Open System Settings", de: "Systemeinstellungen öffnen", es: "Abrir Ajustes del Sistema")) {
+                        ScreenContextService.openPermissionSettings()
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
+            }
+        }
+        .onAppear { hasScreenRecordingPermission = ScreenContextService.hasPermission }
+    }
+
+    private var workflowScreenContextBinding: Binding<Bool> {
+        Binding(
+            get: { draft.screenContextEnabled ?? false },
+            set: { isOn in
+                draft.screenContextEnabled = isOn
+                if isOn {
+                    ScreenContextService.requestPermissionIfNeeded()
+                }
+                hasScreenRecordingPermission = ScreenContextService.hasPermission
+            }
+        )
     }
 
     private var workflowSegmentedPostProcessingBinding: Binding<Bool> {
@@ -3685,6 +3771,7 @@ struct WorkflowDraft {
     var microphoneBoostOverride: Bool?
     var inlineCommandsEnabled: Bool?
     var segmentedPostProcessingEnabled: Bool?
+    var screenContextEnabled: Bool?
 
     private var preservedBehaviorSettings: [String: String]
     var providerId: String?
@@ -3725,6 +3812,7 @@ struct WorkflowDraft {
         self.microphoneBoostOverride = nil
         self.inlineCommandsEnabled = nil
         self.segmentedPostProcessingEnabled = nil
+        self.screenContextEnabled = nil
         self.preservedBehaviorSettings = [:]
         self.providerId = nil
         self.cloudModel = nil
@@ -3760,6 +3848,7 @@ struct WorkflowDraft {
         self.microphoneBoostOverride = behavior.microphoneBoostOverride
         self.inlineCommandsEnabled = workflow.template == .dictation ? behavior.inlineCommandsEnabled : nil
         self.segmentedPostProcessingEnabled = behavior.segmentedPostProcessingEnabled
+        self.screenContextEnabled = behavior.screenContextEnabled
         self.hotkeyBehavior = .startDictation
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
@@ -3835,7 +3924,7 @@ struct WorkflowDraft {
     /// Mirrors `Workflow.supportsSegmentedPostProcessing`: a per-sentence
     /// prompt template that is not processed by Apple Translate.
     var supportsSegmentedPostProcessing: Bool {
-        template.allowsSegmentedPostProcessing && !usesAppleTranslate
+        template.allowsSegmentedPostProcessing && !usesAppleTranslate && screenContextEnabled != true
     }
 
     var reviewText: String {
@@ -4144,7 +4233,8 @@ struct WorkflowDraft {
             temperatureValue: temperatureValue,
             segmentedPostProcessingEnabled: supportsSegmentedPostProcessing && segmentedPostProcessingEnabled == true
                 ? true
-                : nil
+                : nil,
+            screenContextEnabled: usesLLMProcessing && screenContextEnabled == true ? true : nil
         )
     }
 

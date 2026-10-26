@@ -56,6 +56,13 @@ final class WorkflowService: ObservableObject {
         }
     }
 
+    /// Called when the workflows include an enabled workflow that reads the screen,
+    /// at startup and after every change. Only the app sets it, so tests never
+    /// show the macOS Screen Recording prompt.
+    var onScreenContextWorkflowsAvailable: (() -> Void)? {
+        didSet { notifyScreenContextWorkflowsIfNeeded() }
+    }
+
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private let userDefaults: UserDefaults
@@ -289,6 +296,13 @@ final class WorkflowService: ObservableObject {
         } catch {
             workflows = []
         }
+        notifyScreenContextWorkflowsIfNeeded()
+    }
+
+    private func notifyScreenContextWorkflowsIfNeeded() {
+        guard let onScreenContextWorkflowsAvailable,
+              workflows.contains(where: { $0.isEnabled && $0.usesScreenContext }) else { return }
+        onScreenContextWorkflowsAvailable()
     }
 
     private func save() {
