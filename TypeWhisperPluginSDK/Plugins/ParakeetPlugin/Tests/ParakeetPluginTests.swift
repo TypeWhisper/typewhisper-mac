@@ -668,7 +668,7 @@ final class ParakeetPluginTests: XCTestCase {
     private static let knownWords: Set<String> = [
         "the", "army", "built", "a", "super", "base", "in", "desert", "my", "grandpa", "now", "lives",
         "Sie", "hat", "sich", "entschieden", "sent", "final", "files", "SQL", "Postgres", "and", "whisper",
-        "type", "to", "invoice", "forward", "please", "Configure", "connection", "pool",
+        "type", "to", "invoice", "forward", "please", "Configure", "connection", "pool", "I", "can't", "go",
     ]
 
     private func guarded(_ original: String, _ rescored: String) -> String {
@@ -683,6 +683,7 @@ final class ParakeetPluginTests: XCTestCase {
             ("Type quietly and whisper so nobody wakes up.", "Type quietly and WhisperKit so nobody wakes up."),
             ("Docker with Postgres and Redis.", "Docker with PostgreSQL and Redis."),
             ("Tasmine sent the final design files.", "Tasmeen the final design files."),
+            ("I can't go.", "I cant go."),
         ] {
             XCTAssertEqual(guarded(original, rescored), original, original)
         }

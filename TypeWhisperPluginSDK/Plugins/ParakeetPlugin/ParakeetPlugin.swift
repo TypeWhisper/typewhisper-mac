@@ -2189,8 +2189,8 @@ enum ParakeetVocabularyGuard {
     /// inside the term ("PostGur SQL" -> "PostgreSQL", but not "Tasmine sent" -> "Tasmeen").
     static func accepts(replaced: [String], replacement: [String], isKnownWord: (String) -> Bool) -> Bool {
         guard !replaced.isEmpty, !replacement.isEmpty else { return false }
+        if joiningKey(replaced) == joiningKey(replacement) { return true }
         let term = letters(replacement.joined())
-        if letters(replaced.joined()) == term { return true }
         let known = replaced.map { word in
             let word = bare(word)
             return !word.contains(where: \.isLetter) || isKnownWord(word)
@@ -2240,6 +2240,14 @@ enum ParakeetVocabularyGuard {
 
     private static func bare(_ word: String) -> String {
         word.trimmingCharacters(in: .punctuationCharacters.union(.symbols))
+    }
+
+    /// Ignores case, spaces and the symbols at the outer edges ("C" -> "C++", "NET" -> ".NET"),
+    /// but not punctuation inside a word, so "can't" -> "cant" is not a mere recasing.
+    private static func joiningKey(_ words: [String]) -> String {
+        words.joined()
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .trimmingCharacters(in: .punctuationCharacters.union(.symbols))
     }
 
     private static func letters(_ text: String) -> String {
