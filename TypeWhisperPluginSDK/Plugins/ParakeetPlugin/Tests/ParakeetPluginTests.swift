@@ -713,6 +713,17 @@ final class ParakeetPluginTests: XCTestCase {
         )
     }
 
+    func testVocabularyGuardKeepsSymbolsThatBelongToTerms() {
+        for (original, rescored, expected) in [
+            ("Use C today.", "Use C++ today.", "Use C++ today."),
+            ("Write it in C.", "Write it in C#", "Write it in C#."),
+            ("Port it to NET first.", "Port it to .NET first.", "Port it to .NET first."),
+            ("Ask Tasmine, then send it.", "Ask Tasmeen, then send it.", "Ask Tasmeen, then send it."),
+        ] {
+            XCTAssertEqual(guarded(original, rescored), expected, original)
+        }
+    }
+
     func testVocabularyGuardRefusesDeletionsAndInsertions() {
         XCTAssertEqual(guarded("Please forward the invoice.", "Please the invoice."), "Please forward the invoice.")
         XCTAssertEqual(guarded("Please forward the invoice.", "Please forward Tasmeen the invoice."), "Please forward the invoice.")

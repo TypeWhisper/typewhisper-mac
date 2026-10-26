@@ -2150,7 +2150,7 @@ enum ParakeetVocabularyGuard {
         let after = rescored.split(whereSeparator: \.isWhitespace).map(String.init)
         var removed = Set<Int>()
         var inserted = Set<Int>()
-        for change in after.map(bare).difference(from: before.map(bare)) {
+        for change in after.difference(from: before) {
             switch change {
             case let .remove(offset, _, _): removed.insert(offset)
             case let .insert(offset, _, _): inserted.insert(offset)
@@ -2200,11 +2200,14 @@ enum ParakeetVocabularyGuard {
         }
     }
 
+    /// Symbols such as "+" and "#" belong to terms ("C++", "C#"), so only these are carried over.
+    private static let sentencePunctuation: Set<Character> = [".", ",", ";", ":", "!", "?", "…"]
+
     /// The rescorer drops the punctuation of a word it replaces: "to Tasmine." becomes "to Tasmeen".
     static func carryingTrailingPunctuation(from replaced: [String], to replacement: [String]) -> [String] {
         guard let last = replaced.last, let newLast = replacement.last else { return replacement }
-        let trailing = String(last.reversed().prefix { $0.isPunctuation }.reversed())
-        guard !trailing.isEmpty, newLast.last?.isPunctuation != true else { return replacement }
+        let trailing = String(last.reversed().prefix { sentencePunctuation.contains($0) }.reversed())
+        guard !trailing.isEmpty, !sentencePunctuation.contains(newLast.last ?? " ") else { return replacement }
         return replacement.dropLast() + [newLast + trailing]
     }
 
