@@ -7748,6 +7748,43 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
     }
 
+    @MainActor
+    func testOverlappingInsertionDoesNotTakeAnotherPasteAsItsAccessibilityWrite() async throws {
+        // Safari reports success for AX writes but ignores them. While one insertion waits for
+        // its write, the paste of another must not count as that write landing.
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Safari", "com.apple.Safari", nil) }
+        service.accessibilityInsertionVerificationPollingDelay = .milliseconds(5)
+        service.pendingPasteSettleWindow = .milliseconds(20)
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+        var fieldValue = ""
+        service.focusedTextStateOverride = { _ in
+            let length = (fieldValue as NSString).length
+            return (value: fieldValue, selectedText: nil, selectedRange: NSRange(location: length, length: 0))
+        }
+        service.insertTextAtOverride = { _, _ in true }
+        service.pasteSimulatorOverride = {
+            fieldValue += pasteboard.string(forType: .string) ?? ""
+        }
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let first = Task { @MainActor in try await service.insertText("First", preserveClipboard: true) }
+        let second = Task { @MainActor in try await service.insertText("Second", preserveClipboard: true) }
+        let results = [try await first.value, try await second.value]
+        await service.waitForPendingClipboardRestore()
+
+        XCTAssertEqual(fieldValue, "FirstSecond")
+        XCTAssertFalse(results.contains(.insertedViaAccessibility))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
     /// A service whose focused field reads empty until the AX write, and then reads
     /// `stateAfterWrite` for the 1-based read count after the write.
     @MainActor

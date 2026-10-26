@@ -293,6 +293,11 @@ final class TextInsertionService {
 
     private var pendingPaste: PendingPaste?
 
+    /// Set while an insertion waits for its Accessibility write to show in the field, until it
+    /// returns or posts its fallback paste. Other insertions wait for it: text they insert
+    /// meanwhile would look like this write landed, and this paste like theirs did.
+    private var isVerifyingAccessibilityInsertion = false
+
     init(
         browserURLResolver: BrowserURLResolver = BrowserURLResolver(),
         chromiumAccessibilityObservationController: ChromiumAccessibilityObservationController =
@@ -1453,6 +1458,10 @@ final class TextInsertionService {
         lastInsertionTiming = nil
         // Covers direct AX insertion too, so it cannot land before an earlier queued paste.
         try await settlePendingPaste()
+        while isVerifyingAccessibilityInsertion {
+            try await Task.sleep(for: .milliseconds(5))
+            try await settlePendingPaste()
+        }
 #if APPSTORE
         guard isAccessibilityGranted else {
             return copyTextForManualPaste(
@@ -1480,26 +1489,33 @@ final class TextInsertionService {
             "insertText requested: app=\(appName ?? "nil", privacy: .public), bundle=\(bundleId ?? "nil", privacy: .public), preserveClipboard=\(preserveClipboard, privacy: .public), outputFormat=\(outputFormat ?? "plain", privacy: .public), prefersSyntheticPaste=\(prefersSyntheticPaste, privacy: .public)"
         )
 
+        var holdsAccessibilityVerification = false
+        defer {
+            if holdsAccessibilityVerification { isVerifyingAccessibilityInsertion = false }
+        }
         if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
-           let focusedElement = getFocusedTextElement(),
-           let accessibilityInsertionTiming = await insertTextAtAndVerifyChange(element: focusedElement, text: text) {
-            if autoEnter {
-                try? await Task.sleep(for: autoEnterDelay)
-                simulateReturn()
+           let focusedElement = getFocusedTextElement() {
+            isVerifyingAccessibilityInsertion = true
+            holdsAccessibilityVerification = true
+            if let accessibilityInsertionTiming = await insertTextAtAndVerifyChange(
+                element: focusedElement,
+                text: text
+            ) {
+                if autoEnter {
+                    try? await Task.sleep(for: autoEnterDelay)
+                    simulateReturn()
+                }
+                logger.info(
+                    "insertText completed via AX insertion: bundle=\(bundleId ?? "nil", privacy: .public), verified=\(accessibilityInsertionTiming.verifiedUptimeNanoseconds != nil, privacy: .public)"
+                )
+                restoreClipboardIfNeeded(deferredClipboardRestore)
+                lastInsertionTiming = accessibilityInsertionTiming
+                return .insertedViaAccessibility
             }
-            logger.info(
-                "insertText completed via AX insertion: bundle=\(bundleId ?? "nil", privacy: .public), verified=\(accessibilityInsertionTiming.verifiedUptimeNanoseconds != nil, privacy: .public)"
-            )
-            restoreClipboardIfNeeded(deferredClipboardRestore)
-            lastInsertionTiming = accessibilityInsertionTiming
-            return .insertedViaAccessibility
         }
 
-        // Waiting for the AX write suspended this call. A cancelled insertion must not paste
-        // text the write may have inserted already, and a paste that another insertion posted
-        // meanwhile has to land before this one replaces the clipboard.
+        // A cancelled insertion must not paste text its AX write may have inserted already.
         try Task.checkCancellation()
-        try await settlePendingPaste()
 
         let pasteboard = pasteboardProvider()
         // Resolve an earlier restore before touching the clipboard so this insertion never
@@ -1535,6 +1551,11 @@ final class TextInsertionService {
         let pasteID = UUID()
         let pastedAt = ContinuousClock.now
         pendingPaste = PendingPaste(id: pasteID, pastedAt: pastedAt)
+        if holdsAccessibilityVerification {
+            // Insertions waiting for this one settle the paste before they continue.
+            isVerifyingAccessibilityInsertion = false
+            holdsAccessibilityVerification = false
+        }
 
         // One verification serves both this call and the clipboard restore.
         var verificationTask: Task<PasteVerification, Never>?
