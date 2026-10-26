@@ -322,6 +322,10 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
 
     @Published var modelState: LocalLLMModelState = .notLoaded
 
+    /// Whether the current load error points at a broken model cache, so that
+    /// deleting the cached files can help. Set together with every `.error` state.
+    private(set) var loadErrorSuggestsCacheReset = false
+
     required override init() {
         super.init()
     }
@@ -763,6 +767,7 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             modelContainer = nil
             loadedModelId = nil
             downloadProgress = 0
+            loadErrorSuggestsCacheReset = Self.isRecoverableCacheLoadError(error)
             modelState = .error(Self.userFacingLoadErrorMessage(for: error, modelDef: modelDef))
             host?.setUserDefault(nil, forKey: "loadedModel")
             host?.notifyCapabilitiesChanged()
@@ -1006,6 +1011,8 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
         modelContainer = nil
         loadedModelId = nil
         downloadProgress = 0
+        // A stalled download leaves partial files behind; a slow preparation keeps a good download.
+        loadErrorSuggestsCacheReset = phase == .downloading
         modelState = .error(
             Self.modelLoadTimeoutMessage(
                 for: phase,
@@ -1307,7 +1314,11 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             )
         }
 
-        let rawMessage = "\(String(describing: error))\n\(error.localizedDescription)".lowercased()
+        let rawMessage = rawLoadErrorMessage(error)
+        if isUnsupportedArchitectureError(rawMessage) {
+            return unsupportedModelMessage(for: modelDef)
+        }
+
         if isRecoverableCacheError(rawMessage) {
             let bundle = Bundle(for: LocalLLMPlugin.self)
             return String(
@@ -1316,12 +1327,31 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             )
         }
 
-        if rawMessage.contains("unsupported model type")
-            || rawMessage.contains("model type gemma4 not supported") {
-            return unsupportedModelMessage(for: modelDef)
-        }
-
         return error.localizedDescription
+    }
+
+    /// Whether deleting the cached model files can fix this load error. Weights the
+    /// model code does not know (for example a newer architecture) load the same way
+    /// after a fresh download, so they do not count.
+    static func isRecoverableCacheLoadError(_ error: Error) -> Bool {
+        guard !(error is LocalLLMPluginError),
+              !(error is PluginModelDownloadRefusedError),
+              !(error is URLError) else {
+            return false
+        }
+        let rawMessage = rawLoadErrorMessage(error)
+        return !isUnsupportedArchitectureError(rawMessage) && isRecoverableCacheError(rawMessage)
+    }
+
+    private static func rawLoadErrorMessage(_ error: Error) -> String {
+        "\(String(describing: error))\n\(error.localizedDescription)".lowercased()
+    }
+
+    private static func isUnsupportedArchitectureError(_ rawMessage: String) -> Bool {
+        rawMessage.contains("unsupported model type")
+            || rawMessage.contains("model type gemma4 not supported")
+            // MLX reports checkpoint weights the model code has no parameter for.
+            || rawMessage.contains("unhandled keys")
     }
 
     private static func modelLoadTimeoutMessage(

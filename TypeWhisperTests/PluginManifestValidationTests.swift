@@ -194,7 +194,7 @@ final class PluginManifestValidationTests: XCTestCase {
             ("TypeWhisperPluginSDK/Plugins/CanaryPlugin/manifest.json", "1.0.5", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.19", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.15", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/manifest.json", "1.0.5", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/manifest.json", "1.0.6", "1.8.0"),
         ]
 
         for (relativePath, expectedVersion, expectedMinHostVersion) in manifestExpectations {
@@ -1186,7 +1186,7 @@ final class LocalLLMPluginModelPolicyTests: XCTestCase {
     func testGemma4SupportedModelsRemainTheRecommendedDenseVariants() {
         XCTAssertEqual(
             LocalLLMPlugin.supportedModelDefinitions.map(\.id),
-            ["gemma-4-e2b-it-4bit", "gemma-4-e4b-it-4bit"]
+            ["gemma-4-e2b-it-4bit", "gemma-4-e4b-it-4bit", "gemma-4-e4b-it-8bit"]
         )
     }
 
@@ -1195,7 +1195,7 @@ final class LocalLLMPluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             experimentalModels.map(\.id),
-            ["gemma-4-e4b-it-8bit", "gemma-4-26b-a4b-it-4bit", "qwen3.5-2b-4bit", "lfm2.5-2.6b-4bit"]
+            ["gemma-4-26b-a4b-it-4bit", "qwen3.5-2b-4bit", "lfm2.5-2.6b-4bit"]
         )
         XCTAssertTrue(experimentalModels.allSatisfy { ($0.experimentalWarning ?? "").isEmpty == false })
     }
@@ -1634,8 +1634,22 @@ final class LocalLLMPluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "Gemma 4 26B-A4B (4-bit, MoE) is experimental in this TypeWhisper release and may still fail to load. Recommended models: Gemma 4 E2B (4-bit), Gemma 4 E4B (4-bit)."
+            "Gemma 4 26B-A4B (4-bit, MoE) is experimental in this TypeWhisper release and may still fail to load. Recommended models: Gemma 4 E2B (4-bit), Gemma 4 E4B (4-bit), Gemma 4 E4B (8-bit)."
         )
+    }
+
+    func testGemma4UnhandledCheckpointKeysAreNotOfferedAsCacheReset() throws {
+        let model = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-26b-a4b-it-4bit"))
+        let unsupported = LocalizedOnlyError(
+            message: #"Unhandled keys ["experts", "router"] in language_model.model.layers.0 in Gemma4TextModel.DecoderLayer"#
+        )
+        let missingWeight = LocalizedOnlyError(message: "Key lm_head.weight not found in Gemma4TextModel")
+
+        XCTAssertFalse(LocalLLMPlugin.isRecoverableCacheLoadError(unsupported))
+        XCTAssertTrue(LocalLLMPlugin.userFacingLoadErrorMessage(for: unsupported, modelDef: model).hasPrefix(
+            "Gemma 4 26B-A4B (4-bit, MoE) is experimental in this TypeWhisper release"
+        ))
+        XCTAssertTrue(LocalLLMPlugin.isRecoverableCacheLoadError(missingWeight))
     }
 
     func testGemma4TimeoutErrorsSuggestRetryAndOptionalHuggingFaceToken() throws {

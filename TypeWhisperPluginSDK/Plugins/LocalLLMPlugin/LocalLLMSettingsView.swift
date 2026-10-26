@@ -368,6 +368,7 @@ struct LocalLLMSettingsView: View {
 
     private func isRecoverableCachedModelError(for modelDef: LocalLLMModelDef) -> Bool {
         if case .error = modelState,
+           plugin.loadErrorSuggestsCacheReset,
            selectedModelId == modelDef.id,
            plugin.hasCachedModelFiles(modelDef) {
             return true
