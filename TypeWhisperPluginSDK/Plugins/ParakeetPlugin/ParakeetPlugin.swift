@@ -2247,10 +2247,11 @@ enum ParakeetVocabularyGuard {
     }
 
     /// Ignores case, spaces and the symbols at the outer edges ("C" -> "C++", "NET" -> ".NET"),
-    /// but not punctuation inside a word, so "can't" -> "cant" is not a mere recasing.
+    /// but not punctuation inside a word or accents, so "can't" -> "cant" and "schon" -> "schön"
+    /// are not a mere recasing.
     private static func joiningKey(_ words: [String]) -> String {
         words.joined()
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
             .trimmingCharacters(in: .punctuationCharacters.union(.symbols))
     }
 
