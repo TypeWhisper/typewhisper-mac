@@ -240,8 +240,10 @@ final class TextInsertionService {
     var pasteVerificationAttempts = 10
     var pasteVerificationPollingDelay: Duration = .milliseconds(50)
     /// How long an Accessibility write that reported success may take to show in the focused
-    /// field before `insertText` pastes instead, see `insertTextAtAndVerifyChange`.
-    var accessibilityInsertionVerificationAttempts = 20
+    /// field before `insertText` pastes instead, see `insertTextAtAndVerifyChange`. Apps that
+    /// report success but ignore the write, such as Safari, paste this much later, so keep it
+    /// short.
+    var accessibilityInsertionVerificationAttempts = 6
     var accessibilityInsertionVerificationPollingDelay: Duration = .milliseconds(25)
     var defaultPasteFallbackRestoreDelay: Duration = .milliseconds(350)
     var richTextPasteFallbackRestoreDelay: Duration = .milliseconds(1500)
