@@ -723,6 +723,9 @@ final class ParakeetPluginTests: XCTestCase {
             ("Ask Tasmine, then send it.", "Ask Tasmeen, then send it.", "Ask Tasmeen, then send it."),
             ("He said \"write it in C.\"", "He said \"write it in C++", "He said \"write it in C++.\""),
             ("(Port it to NET.)", "(Port it to .NET", "(Port it to .NET.)"),
+            ("Use \"C.\" today.", "Use C++ today.", "Use \"C++.\" today."),
+            ("Use C++ today.", "Use C today.", "Use C++ today."),
+            ("Port it to .NET first.", "Port it to NET first.", "Port it to .NET first."),
         ] {
             XCTAssertEqual(guarded(original, rescored), expected, original)
         }

@@ -2176,7 +2176,7 @@ enum ParakeetVocabularyGuard {
             }
             if accepts(replaced: replaced, replacement: replacement, isKnownWord: isKnownWord) {
                 acceptedAny = true
-                output += carryingTrailingPunctuation(from: replaced, to: replacement)
+                output += carryingDelimiters(from: replaced, to: replacement)
             } else {
                 output += replaced
             }
@@ -2184,12 +2184,15 @@ enum ParakeetVocabularyGuard {
         return acceptedAny ? output.joined(separator: " ") : original
     }
 
-    /// A change is kept when it only joins or recases words ("type whisper" -> "TypeWhisper"),
-    /// or when it rewrites at least one unknown word and every known word it removes is spelled
-    /// inside the term ("PostGur SQL" -> "PostgreSQL", but not "Tasmine sent" -> "Tasmeen").
+    /// A change is kept when it only joins, recases or adds symbols to words ("type whisper" ->
+    /// "TypeWhisper", "C" -> "C++"), or when it rewrites at least one unknown word and every known
+    /// word it removes is spelled inside the term ("PostGur SQL" -> "PostgreSQL", but not
+    /// "Tasmine sent" -> "Tasmeen").
     static func accepts(replaced: [String], replacement: [String], isKnownWord: (String) -> Bool) -> Bool {
         guard !replaced.isEmpty, !replacement.isEmpty else { return false }
-        if joiningKey(replaced) == joiningKey(replacement) { return true }
+        if joiningKey(replaced) == joiningKey(replacement) {
+            return edgeSymbols(replaced).isSubset(of: edgeSymbols(replacement))
+        }
         let term = letters(replacement.joined())
         let known = replaced.map { word in
             let word = bare(word)
@@ -2206,13 +2209,32 @@ enum ParakeetVocabularyGuard {
         ".", ",", ";", ":", "!", "?", "…", "\"", "'", "”", "’", "»", ")", "]", "}",
     ]
 
-    /// The rescorer drops the punctuation of a word it replaces: "to Tasmine." becomes "to Tasmeen".
-    static func carryingTrailingPunctuation(from replaced: [String], to replacement: [String]) -> [String] {
-        guard let last = replaced.last, let newLast = replacement.last else { return replacement }
+    private static let openingDelimiters: Set<Character> = ["\"", "'", "“", "‘", "„", "«", "(", "[", "{"]
+
+    /// The rescorer drops the punctuation around a word it replaces: "to Tasmine." becomes
+    /// "to Tasmeen", and "(C.)" becomes "C++".
+    static func carryingDelimiters(from replaced: [String], to replacement: [String]) -> [String] {
+        guard let first = replaced.first, let last = replaced.last, !replacement.isEmpty else { return replacement }
+        var words = replacement
+        let leading = String(first.prefix { openingDelimiters.contains($0) })
+        if !leading.isEmpty {
+            words[0] = leading + String(words[0].drop { openingDelimiters.contains($0) })
+        }
         let trailing = String(last.reversed().prefix { trailingDelimiters.contains($0) }.reversed())
-        guard !trailing.isEmpty else { return replacement }
-        let bareLast = String(newLast.reversed().drop { trailingDelimiters.contains($0) }.reversed())
-        return replacement.dropLast() + [bareLast + trailing]
+        if !trailing.isEmpty {
+            let end = words.count - 1
+            words[end] = String(words[end].reversed().drop { trailingDelimiters.contains($0) }.reversed()) + trailing
+        }
+        return words
+    }
+
+    /// Symbols at the outer edges that belong to the word, not the sentence, such as "++" in C++.
+    private static func edgeSymbols(_ words: [String]) -> Set<Character> {
+        let text = words.joined()
+        let isEdge: (Character) -> Bool = { $0.isPunctuation || $0.isSymbol }
+        let leading = text.prefix(while: isEdge).filter { !openingDelimiters.contains($0) }
+        let trailing = text.reversed().prefix(while: isEdge).filter { !trailingDelimiters.contains($0) }
+        return Set(leading).union(trailing)
     }
 
     /// The dictation language, or the user's languages when it is detected, plus English,
