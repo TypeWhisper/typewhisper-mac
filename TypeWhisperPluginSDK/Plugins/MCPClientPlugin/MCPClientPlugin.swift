@@ -290,6 +290,8 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
                 summary: MCPClientLocalization.string("Loaded %lld MCP tools.", Int64(tools.count))
             )
             return tools
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             let message = sanitize(error.localizedDescription, secrets: server.secrets)
             recordActivity(
