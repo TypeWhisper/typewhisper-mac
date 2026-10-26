@@ -793,6 +793,8 @@ final class MCPClientPluginTests: XCTestCase {
             XCTFail("Expected cancellation")
         } catch is CancellationError {
             // Expected.
+        } catch {
+            XCTFail("Expected CancellationError, got \(type(of: error)): \(error)")
         }
         await session.close()
     }
