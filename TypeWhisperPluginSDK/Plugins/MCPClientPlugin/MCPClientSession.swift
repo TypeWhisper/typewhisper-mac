@@ -363,6 +363,11 @@ actor MCPServerSession {
             let detail = standardError.text(redacting: resolvedServer.secrets)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             await closeResources()
+            // The cancellation handler disconnects the client, which can fail the
+            // pending request with a transport error before cancellation reaches it.
+            if Task.isCancelled {
+                throw CancellationError()
+            }
             if detail.isEmpty {
                 throw error
             }
@@ -417,16 +422,24 @@ actor MCPServerSession {
     }
 
     private func performRefreshToolsWithTimeout(client: Client) async throws {
-        try await withTaskCancellationHandler {
-            try await withTimeout(
-                connectionTimeout,
-                operationName: MCPClientLocalization.string("MCP tool discovery"),
-                onTimeout: { await self.disconnectClient(client) }
-            ) {
-                try await self.refreshTools()
+        do {
+            try await withTaskCancellationHandler {
+                try await withTimeout(
+                    connectionTimeout,
+                    operationName: MCPClientLocalization.string("MCP tool discovery"),
+                    onTimeout: { await self.disconnectClient(client) }
+                ) {
+                    try await self.refreshTools()
+                }
+            } onCancel: {
+                Task { await self.disconnectClient(client) }
             }
-        } onCancel: {
-            Task { await self.disconnectClient(client) }
+        } catch {
+            // Report cancellation even when the disconnect failed the request first.
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            throw error
         }
     }
 
