@@ -517,6 +517,10 @@ final class DictationViewModel: ObservableObject {
     private var capturedSelectedText: String?
     /// Text read from the target window at recording start, for workflows with screen context.
     private var screenContextTask: Task<String?, Never>?
+    /// Reads the target window's text. Tests replace it so no real screen is captured.
+    var screenContextCapture: @Sendable (String?) async -> String? = { bundleIdentifier in
+        await ScreenContextService.captureFrontWindowText(bundleIdentifier: bundleIdentifier)
+    }
 
     /// Session-only safe undo / raw-transcript restore for the most recent
     /// direct text insertion (issue #999). Independent of history settings.
@@ -2553,12 +2557,15 @@ final class DictationViewModel: ObservableObject {
 
     /// Reads the target window once per recording, as soon as a workflow with screen
     /// context applies. Reading at the start captures what the user was looking at.
+    /// A website workflow can match only after recording stopped, while processing waits
+    /// for the browser URL, so the capture may also start then.
     private func startScreenContextCaptureIfNeeded(bundleIdentifier: String?) {
         guard screenContextTask == nil,
-              state == .recording,
+              state == .recording || state == .processing,
               matchedWorkflow?.usesScreenContext == true else { return }
+        let capture = screenContextCapture
         screenContextTask = Task {
-            await ScreenContextService.captureFrontWindowText(bundleIdentifier: bundleIdentifier)
+            await capture(bundleIdentifier)
         }
     }
 
