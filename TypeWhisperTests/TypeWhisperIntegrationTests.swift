@@ -7683,6 +7683,169 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testPreserveClipboardDoesNotPasteAgainWhenAccessibilityWriteReportsErrorButApplies() async throws {
+        // Telegram for macOS inserts the text but answers the AX write with kAXErrorFailure,
+        // so the paste fallback inserted it a second time (#1732).
+        let harness = makeAccessibilityInsertionHarness(writeSucceeds: false) { _ in
+            (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testPreserveClipboardWaitsForLateAccessibilityValueInsteadOfPastingAgain() async throws {
+        // Apps can apply the AX write but show it in AXValue only a little later. A paste
+        // right after the first read then inserts the text twice (#1518, #1732).
+        let harness = makeAccessibilityInsertionHarness { readsAfterWrite in
+            readsAfterWrite <= 3
+                ? (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+                : (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testPreserveClipboardDoesNotPasteAgainWhenFieldBecomesUnreadableAfterAccessibilityWrite() async throws {
+        let harness = makeAccessibilityInsertionHarness { _ in
+            (value: nil, selectedText: nil, selectedRange: nil)
+        }
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testCancelledInsertionDoesNotPasteAfterUnverifiedAccessibilityWrite() async throws {
+        // The write may still show up late, so a cancelled insertion must not paste it again.
+        let harness = makeAccessibilityInsertionHarness { _ in
+            (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+        harness.service.accessibilityInsertionVerificationPollingDelay = .seconds(60)
+
+        let insertion = Task { @MainActor in
+            try await harness.service.insertText("Hello", preserveClipboard: true)
+        }
+        insertion.cancel()
+
+        do {
+            _ = try await insertion.value
+            XCTFail("A cancelled insertion must not paste")
+        } catch is CancellationError {}
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testCancelledInsertionDoesNotSubmitAccessibilityWriteWithAutoEnter() async throws {
+        let harness = makeAccessibilityInsertionHarness { _ in
+            (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+        var returnCount = 0
+        harness.service.returnSimulatorOverride = { returnCount += 1 }
+
+        let insertion = Task { @MainActor in
+            try await harness.service.insertText("Hello", preserveClipboard: true, autoEnter: true)
+        }
+        insertion.cancel()
+
+        let result = try await insertion.value
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(returnCount, 0)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testOverlappingInsertionDoesNotTakeAnotherPasteAsItsAccessibilityWrite() async throws {
+        // Safari reports success for AX writes but ignores them. While one insertion waits for
+        // its write, the paste of another must not count as that write landing.
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Safari", "com.apple.Safari", nil) }
+        service.accessibilityInsertionVerificationPollingDelay = .milliseconds(5)
+        service.pendingPasteSettleWindow = .milliseconds(20)
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+        var fieldValue = ""
+        service.focusedTextStateOverride = { _ in
+            let length = (fieldValue as NSString).length
+            return (value: fieldValue, selectedText: nil, selectedRange: NSRange(location: length, length: 0))
+        }
+        service.insertTextAtOverride = { _, _ in true }
+        service.pasteSimulatorOverride = {
+            fieldValue += pasteboard.string(forType: .string) ?? ""
+        }
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let first = Task { @MainActor in try await service.insertText("First", preserveClipboard: true) }
+        let second = Task { @MainActor in try await service.insertText("Second", preserveClipboard: true) }
+        let results = [try await first.value, try await second.value]
+        await service.waitForPendingClipboardRestore()
+
+        XCTAssertEqual(fieldValue, "FirstSecond")
+        XCTAssertFalse(results.contains(.insertedViaAccessibility))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    /// A service whose focused field reads empty until the AX write, and then reads
+    /// `stateAfterWrite` for the 1-based read count after the write.
+    @MainActor
+    private func makeAccessibilityInsertionHarness(
+        writeSucceeds: Bool = true,
+        stateAfterWrite: @escaping (Int) -> TextInsertionService.FocusedTextSnapshot
+    ) -> (service: TextInsertionService, pasteboard: NSPasteboard, pasteCount: () -> Int) {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Telegram", "ru.keepcoder.Telegram", nil) }
+        service.accessibilityInsertionVerificationPollingDelay = .milliseconds(1)
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+
+        var didWrite = false
+        var readsAfterWrite = 0
+        service.focusedTextStateOverride = { _ in
+            guard didWrite else {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            readsAfterWrite += 1
+            return stateAfterWrite(readsAfterWrite)
+        }
+        service.insertTextAtOverride = { _, _ in
+            didWrite = true
+            return writeSucceeds
+        }
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+        return (service, pasteboard, { pasteCount })
+    }
+
+    @MainActor
     func testPreserveClipboardFallsBackToPasteboardWhenVerifiedAccessibilityInsertionFails() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()

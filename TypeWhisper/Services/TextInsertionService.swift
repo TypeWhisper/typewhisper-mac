@@ -239,6 +239,12 @@ final class TextInsertionService {
     var textSelectionViaCopyOverride: (() -> String?)?
     var pasteVerificationAttempts = 10
     var pasteVerificationPollingDelay: Duration = .milliseconds(50)
+    /// How long an Accessibility write that reported success may take to show in the focused
+    /// field before `insertText` pastes instead, see `insertTextAtAndVerifyChange`. Apps that
+    /// report success but ignore the write, such as Safari, paste this much later, so keep it
+    /// short.
+    var accessibilityInsertionVerificationAttempts = 6
+    var accessibilityInsertionVerificationPollingDelay: Duration = .milliseconds(25)
     var defaultPasteFallbackRestoreDelay: Duration = .milliseconds(350)
     var richTextPasteFallbackRestoreDelay: Duration = .milliseconds(1500)
     var terminalPasteFallbackRestoreDelay: Duration = .milliseconds(900)
@@ -286,6 +292,11 @@ final class TextInsertionService {
     }
 
     private var pendingPaste: PendingPaste?
+
+    /// Set while an insertion waits for its Accessibility write to show in the field, until it
+    /// returns or posts its fallback paste. Other insertions wait for it: text they insert
+    /// meanwhile would look like this write landed, and this paste like theirs did.
+    private var isVerifyingAccessibilityInsertion = false
 
     init(
         browserURLResolver: BrowserURLResolver = BrowserURLResolver(),
@@ -697,20 +708,53 @@ final class TextInsertionService {
         return result == .success
     }
 
-    /// Inserts via Accessibility only when we can verify that the focused text state changed.
-    /// This avoids silently dropping text in apps that report AX success but ignore the write.
-    func insertTextAtAndVerifyChange(element: AXUIElement, text: String) -> Bool {
-        guard let initialState = captureFocusedTextState(for: element) else {
-            return false
+    /// Inserts via Accessibility and checks whether the focused text value changed. Returns nil
+    /// when the value still reads unchanged, so the caller pastes instead.
+    ///
+    /// The setter result does not decide this. Telegram applies the write right away but
+    /// reports `kAXErrorFailure`, and other apps report success but ignore the write or only
+    /// move the caret (#783). Some apps also update `AXValue` late. Pasting in these cases
+    /// inserted the text twice (#1518, #1732). A write that reported success gets
+    /// `accessibilityInsertionVerificationAttempts` to show up. A write that reported an error
+    /// gets one check, so apps that reject it still get the paste without a delay.
+    func insertTextAtAndVerifyChange(element: AXUIElement, text: String) async -> InsertionTiming? {
+        guard let initialState = captureFocusedTextState(for: element) else { return nil }
+        let writeSucceeded = insertTextAt(element: element, text: text)
+        let insertedUptime = DispatchTime.now().uptimeNanoseconds
+        func elapsedMilliseconds() -> UInt64 {
+            (DispatchTime.now().uptimeNanoseconds - insertedUptime) / 1_000_000
         }
-        guard insertTextAt(element: element, text: text),
-              let currentState = captureFocusedTextState(for: element) else {
-            return false
+        let attempts = writeSucceeded ? max(0, accessibilityInsertionVerificationAttempts) : 0
+        var currentValue: String?
+        for attempt in 0...attempts {
+            currentValue = captureFocusedTextState(for: element)?.value
+            if let currentValue, currentValue != initialState.value {
+                if !writeSucceeded {
+                    logger.info("AX insertion reported an error, but the focused field shows the text")
+                } else if attempt > 0 {
+                    logger.info(
+                        "AX insertion showed in the focused field after \(elapsedMilliseconds(), privacy: .public)ms"
+                    )
+                }
+                return InsertionTiming(
+                    insertedUptimeNanoseconds: insertedUptime,
+                    verifiedUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds
+                )
+            }
+            guard attempt < attempts, !Task.isCancelled else { break }
+            try? await Task.sleep(for: accessibilityInsertionVerificationPollingDelay)
         }
-        guard let currentValue = currentState.value else {
-            return false
+
+        // The app accepted the write and then stopped exposing the value it exposed before, so
+        // it changed or replaced the field. A paste would most likely insert the text again.
+        if writeSucceeded, currentValue == nil, initialState.value != nil {
+            logger.info("AX insertion accepted: the focused field became unreadable after the write")
+            return InsertionTiming(insertedUptimeNanoseconds: insertedUptime, verifiedUptimeNanoseconds: nil)
         }
-        return initialState.value != currentValue
+        logger.info(
+            "AX insertion left the focused field unchanged after \(elapsedMilliseconds(), privacy: .public)ms; pasting instead: writeSucceeded=\(writeSucceeded, privacy: .public)"
+        )
+        return nil
     }
 
     /// Saves all current clipboard contents for later restoration.
@@ -1414,6 +1458,10 @@ final class TextInsertionService {
         lastInsertionTiming = nil
         // Covers direct AX insertion too, so it cannot land before an earlier queued paste.
         try await settlePendingPaste()
+        while isVerifyingAccessibilityInsertion {
+            try await Task.sleep(for: .milliseconds(5))
+            try await settlePendingPaste()
+        }
 #if APPSTORE
         guard isAccessibilityGranted else {
             return copyTextForManualPaste(
@@ -1441,24 +1489,34 @@ final class TextInsertionService {
             "insertText requested: app=\(appName ?? "nil", privacy: .public), bundle=\(bundleId ?? "nil", privacy: .public), preserveClipboard=\(preserveClipboard, privacy: .public), outputFormat=\(outputFormat ?? "plain", privacy: .public), prefersSyntheticPaste=\(prefersSyntheticPaste, privacy: .public)"
         )
 
-        if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
-           let focusedElement = getFocusedTextElement(),
-           insertTextAtAndVerifyChange(element: focusedElement, text: text) {
-            let insertedUptime = DispatchTime.now().uptimeNanoseconds
-            if autoEnter {
-                try? await Task.sleep(for: autoEnterDelay)
-                simulateReturn()
-            }
-            logger.info(
-                "insertText completed via verified AX insertion: bundle=\(bundleId ?? "nil", privacy: .public)"
-            )
-            restoreClipboardIfNeeded(deferredClipboardRestore)
-            lastInsertionTiming = InsertionTiming(
-                insertedUptimeNanoseconds: insertedUptime,
-                verifiedUptimeNanoseconds: insertedUptime
-            )
-            return .insertedViaAccessibility
+        var holdsAccessibilityVerification = false
+        defer {
+            if holdsAccessibilityVerification { isVerifyingAccessibilityInsertion = false }
         }
+        if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
+           let focusedElement = getFocusedTextElement() {
+            isVerifyingAccessibilityInsertion = true
+            holdsAccessibilityVerification = true
+            if let accessibilityInsertionTiming = await insertTextAtAndVerifyChange(
+                element: focusedElement,
+                text: text
+            ) {
+                if autoEnter {
+                    try? await Task.sleep(for: autoEnterDelay)
+                    // A cancelled insertion keeps the text that landed but must not submit it.
+                    if !Task.isCancelled { simulateReturn() }
+                }
+                logger.info(
+                    "insertText completed via AX insertion: bundle=\(bundleId ?? "nil", privacy: .public), verified=\(accessibilityInsertionTiming.verifiedUptimeNanoseconds != nil, privacy: .public)"
+                )
+                restoreClipboardIfNeeded(deferredClipboardRestore)
+                lastInsertionTiming = accessibilityInsertionTiming
+                return .insertedViaAccessibility
+            }
+        }
+
+        // A cancelled insertion must not paste text its AX write may have inserted already.
+        try Task.checkCancellation()
 
         let pasteboard = pasteboardProvider()
         // Resolve an earlier restore before touching the clipboard so this insertion never
@@ -1494,6 +1552,11 @@ final class TextInsertionService {
         let pasteID = UUID()
         let pastedAt = ContinuousClock.now
         pendingPaste = PendingPaste(id: pasteID, pastedAt: pastedAt)
+        if holdsAccessibilityVerification {
+            // Insertions waiting for this one settle the paste before they continue.
+            isVerifyingAccessibilityInsertion = false
+            holdsAccessibilityVerification = false
+        }
 
         // One verification serves both this call and the clipboard restore.
         var verificationTask: Task<PasteVerification, Never>?
