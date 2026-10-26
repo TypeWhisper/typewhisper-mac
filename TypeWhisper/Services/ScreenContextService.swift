@@ -78,6 +78,10 @@ enum ScreenContextService {
     }
 
     private static func targetProcessID(bundleIdentifier: String?) -> pid_t? {
+        // Never read TypeWhisper's own windows, for example when dictation starts in Settings.
+        if let bundleIdentifier, bundleIdentifier == Bundle.main.bundleIdentifier {
+            return nil
+        }
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            bundleIdentifier == nil || frontmost.bundleIdentifier == bundleIdentifier,
            frontmost.bundleIdentifier != Bundle.main.bundleIdentifier {

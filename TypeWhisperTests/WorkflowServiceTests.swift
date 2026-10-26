@@ -509,6 +509,30 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(trigger.hotkeyBehavior, .processSelectedText)
     }
 
+    func testWorkflowDraftKeepsSegmentedChoiceWhileScreenContextPausesIt() throws {
+        let workflow = Workflow(
+            name: "Clean Up",
+            template: .cleanedText,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(segmentedPostProcessingEnabled: true)
+        )
+        var draft = WorkflowDraft(workflow)
+
+        draft.screenContextEnabled = true
+        let withScreenContext = Workflow(
+            name: "Clean Up",
+            template: .cleanedText,
+            trigger: .manual(),
+            behavior: draft.resolvedBehavior()
+        )
+        XCTAssertFalse(draft.supportsSegmentedPostProcessing)
+        XCTAssertEqual(withScreenContext.behavior.segmentedPostProcessingEnabled, true)
+        XCTAssertFalse(withScreenContext.usesSegmentedPostProcessing)
+
+        draft.screenContextEnabled = false
+        XCTAssertEqual(draft.resolvedBehavior().segmentedPostProcessingEnabled, true)
+    }
+
     func testWorkflowDraftPersistsEditedActionTargetForNonDictationWorkflow() throws {
         var draft = WorkflowDraft(template: .summary)
 

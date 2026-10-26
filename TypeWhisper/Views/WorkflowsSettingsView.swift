@@ -2292,9 +2292,9 @@ private struct WorkflowEditorPage: View {
                 HStack(spacing: 8) {
                     Text(
                         localizedAppText(
-                            "Needs Screen Recording permission.",
-                            de: "Benötigt die Berechtigung „Bildschirmaufnahme“.",
-                            es: "Necesita el permiso de Grabación de pantalla."
+                            "Needs Screen Recording permission. After allowing it, quit and reopen TypeWhisper.",
+                            de: "Benötigt die Berechtigung „Bildschirmaufnahme“. Beende TypeWhisper danach und öffne es erneut.",
+                            es: "Necesita el permiso de Grabación de pantalla. Después de permitirlo, cierra TypeWhisper y vuelve a abrirlo."
                         )
                     )
                     .font(.caption)
@@ -3924,7 +3924,13 @@ struct WorkflowDraft {
     /// Mirrors `Workflow.supportsSegmentedPostProcessing`: a per-sentence
     /// prompt template that is not processed by Apple Translate.
     var supportsSegmentedPostProcessing: Bool {
-        template.allowsSegmentedPostProcessing && !usesAppleTranslate && screenContextEnabled != true
+        templateAllowsSegmentedPostProcessing && screenContextEnabled != true
+    }
+
+    /// Screen context only pauses segments, so the saved choice is kept and returns
+    /// when screen context is turned off again.
+    private var templateAllowsSegmentedPostProcessing: Bool {
+        template.allowsSegmentedPostProcessing && !usesAppleTranslate
     }
 
     var reviewText: String {
@@ -4231,7 +4237,7 @@ struct WorkflowDraft {
             inlineCommandsEnabled: template == .dictation ? inlineCommandsEnabled : nil,
             temperatureModeRaw: temperatureModeRaw,
             temperatureValue: temperatureValue,
-            segmentedPostProcessingEnabled: supportsSegmentedPostProcessing && segmentedPostProcessingEnabled == true
+            segmentedPostProcessingEnabled: templateAllowsSegmentedPostProcessing && segmentedPostProcessingEnabled == true
                 ? true
                 : nil,
             screenContextEnabled: usesLLMProcessing && screenContextEnabled == true ? true : nil
