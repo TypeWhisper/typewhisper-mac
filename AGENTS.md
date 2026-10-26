@@ -9,6 +9,7 @@ For visible UI changes, always capture screenshots of the final interface in Eng
 
 - include the screenshots in the user handoff, with PNG files ready to attach to a pull request
 - include the relevant screenshots in the pull request description when creating or updating the PR
+- upload them with `gh pr create --attach` or `gh pr edit --attach` (`![alt](./shot.png)` in the body becomes a GitHub attachment URL); never commit screenshots to the repository
 
 ## Mac App Store Edition
 

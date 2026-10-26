@@ -33,6 +33,8 @@ vendor/bundle/
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/
+# PR screenshots are uploaded with `gh pr edit --attach`, never committed.
+.github/pr-assets/
 fastlane/test_output/
 
 # Claude Code

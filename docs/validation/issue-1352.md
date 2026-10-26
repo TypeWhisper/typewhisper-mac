@@ -77,7 +77,7 @@ Xcode 27.0 (27A266a), macOS, Swift 6:
 The signed development app and Groq plugin were built, installed, and launched
 locally. The running process loaded the new Groq plugin bundle. Recovery and Groq
 settings were visually checked in isolated screenshot instances with synthetic
-data; see [the before/after captures](../../.github/pr-assets/1352/README.md).
+data; see [the before/after captures](https://github.com/TypeWhisper/typewhisper-mac/blob/b888005740c1f2b1dcefdf3452469cfe1718f43c/.github/pr-assets/1352/README.md).
 No end-to-end manual microphone/retranscription result has been recorded. The live
 API calls are provider experiments; they do not substitute for app integration tests.
 
