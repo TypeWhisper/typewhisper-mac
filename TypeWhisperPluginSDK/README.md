@@ -435,6 +435,15 @@ func identifySpokenLanguage(
 }
 ```
 
+A transcription engine that cannot detect the spoken language itself adopts
+`HostLanguageDetectionEnginePlugin`. When the user leaves the language on automatic detection and a
+provider is enabled, the host picks one of these languages and passes it as `language`:
+
+```swift
+// One code per language, as transcribe(language:) expects it; empty when the model detects itself.
+var languagesForHostDetection: [String] { ["en-US", "de-DE", "fr-FR"] }
+```
+
 ### Multi-Purpose Plugins
 
 A single plugin class can conform to multiple protocols:

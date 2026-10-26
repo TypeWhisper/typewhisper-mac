@@ -2348,7 +2348,8 @@ private struct WorkflowEditorPage: View {
                 availableLanguages: settingsViewModel.availableLanguages,
                 nilBehavior: .inheritGlobal,
                 inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung"),
-                hintBehavior: LanguageSelectionHintBehavior(engine: workflowLanguageEngine)
+                hintBehavior: LanguageSelectionHintBehavior(engine: workflowLanguageEngine),
+                autoDetectionBehavior: LanguageAutoDetectionBehavior(engine: workflowLanguageEngine)
             )
         }
     }

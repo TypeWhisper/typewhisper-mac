@@ -1215,7 +1215,8 @@ struct RecordingSettingsView: View {
                 LanguageSelectionEditor(
                     selection: $settings.languageSelection,
                     availableLanguages: settings.availableLanguages,
-                    hintBehavior: LanguageSelectionHintBehavior(engine: settings.activeTranscriptionEngine)
+                    hintBehavior: LanguageSelectionHintBehavior(engine: settings.activeTranscriptionEngine),
+                    autoDetectionBehavior: LanguageAutoDetectionBehavior(engine: settings.activeTranscriptionEngine)
                 )
 
                 Text(String(localized: "Controls push-to-talk dictation, workflows that inherit the global spoken language, and CLI/API defaults when they use app defaults. Recorder and Recovery have separate language settings."))

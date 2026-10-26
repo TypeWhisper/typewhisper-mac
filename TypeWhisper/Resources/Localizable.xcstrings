@@ -49870,6 +49870,62 @@
         }
       }
     },
+    "This engine cannot detect the language itself. The Language Detection plugin picks it from the engine's languages." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Engine erkennt die Sprache nicht selbst. Das Plugin „Language Detection“ wählt sie aus den Sprachen der Engine."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este motor no detecta el idioma por sí mismo. El plugin Language Detection lo elige entre los idiomas del motor."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このエンジンは言語を自動で判別できません。Language Detection プラグインがエンジンの対応言語から選びます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此引擎无法自行识别语言。Language Detection 插件会从该引擎支持的语言中进行选择。"
+          }
+        }
+      }
+    },
+    "This engine cannot detect the language itself. Select its language, or enable the Language Detection plugin." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Engine erkennt die Sprache nicht selbst. Wähle ihre Sprache aus oder aktiviere das Plugin „Language Detection“."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este motor no detecta el idioma por sí mismo. Selecciona su idioma o activa el plugin Language Detection."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このエンジンは言語を自動で判別できません。言語を選択するか、Language Detection プラグインを有効にしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此引擎无法自行识别语言。请选择其语言，或启用 Language Detection 插件。"
+          }
+        }
+      }
+    },
     "This engine takes one language. The Language Detection plugin picks the one you speak from this list." : {
       "localizations" : {
         "de" : {

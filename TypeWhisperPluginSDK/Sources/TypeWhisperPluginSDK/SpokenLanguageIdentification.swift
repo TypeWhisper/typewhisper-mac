@@ -35,3 +35,19 @@ public protocol SpokenLanguageIdentificationProviderPlugin: TypeWhisperPlugin {
         among candidates: [String]
     ) async throws -> PluginSpokenLanguageIdentification?
 }
+
+// MARK: - Engines Without Automatic Language Detection
+
+/// Optional capability for transcription engines that cannot detect the spoken language
+/// themselves, such as models that need a source language.
+///
+/// When the user asks for automatic detection and a ``SpokenLanguageIdentificationProviderPlugin``
+/// is enabled, the host picks one of these languages before the transcription and passes it as
+/// `language`. Without such a provider, or when its answer is not clear enough, the engine gets no
+/// language, as before.
+public protocol HostLanguageDetectionEnginePlugin: TranscriptionEnginePlugin {
+    /// One code per language, each listed in `supportedLanguages` and written the way
+    /// `transcribe(language:)` expects it (for example the user's preferred region of a language).
+    /// Empty when the current model detects the language on its own.
+    var languagesForHostDetection: [String] { get }
+}

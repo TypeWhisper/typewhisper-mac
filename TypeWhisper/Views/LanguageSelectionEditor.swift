@@ -24,6 +24,27 @@ enum LanguageSelectionHintBehavior: Equatable {
     }
 }
 
+/// How "auto-detect" works for an engine that cannot detect the spoken language itself.
+enum LanguageAutoDetectionBehavior: Equatable {
+    case engineDetects
+    /// A language detection plugin picks among the engine's languages.
+    case detectedByPlugin
+    /// Nothing picks the language; the engine falls back to its own default or fails.
+    case unavailable
+
+    @MainActor
+    init(engine: TranscriptionEnginePlugin?) {
+        guard let engine = engine as? HostLanguageDetectionEnginePlugin,
+              !engine.languagesForHostDetection.isEmpty else {
+            self = .engineDetects
+            return
+        }
+        self = PluginManager.shared?.spokenLanguageIdentificationProviders.isEmpty == false
+            ? .detectedByPlugin
+            : .unavailable
+    }
+}
+
 struct LanguageSelectionEditor: View {
     private enum SelectionMode: Hashable {
         case inheritGlobal
@@ -38,6 +59,7 @@ struct LanguageSelectionEditor: View {
     var autoTitle: String = localizedAppText("Auto-detect all languages", de: "Alle Sprachen automatisch erkennen")
     var restrictedTitle: String = localizedAppText("Restrict detection to selected languages", de: "Erkennung auf ausgewählte Sprachen beschränken")
     var hintBehavior: LanguageSelectionHintBehavior = .unknown
+    var autoDetectionBehavior: LanguageAutoDetectionBehavior = .engineDetects
 
     @State private var isPickerPresented = false
     @State private var searchQuery = ""
@@ -88,6 +110,17 @@ struct LanguageSelectionEditor: View {
         searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !featuredLanguages.isEmpty
     }
 
+    private var autoHelpText: String? {
+        switch autoDetectionBehavior {
+        case .engineDetects:
+            return nil
+        case .detectedByPlugin:
+            return localizedAppText("This engine cannot detect the language itself. The Language Detection plugin picks it from the engine's languages.", de: "Diese Engine erkennt die Sprache nicht selbst. Das Plugin „Language Detection“ wählt sie aus den Sprachen der Engine.")
+        case .unavailable:
+            return localizedAppText("This engine cannot detect the language itself. Select its language, or enable the Language Detection plugin.", de: "Diese Engine erkennt die Sprache nicht selbst. Wähle ihre Sprache aus oder aktiviere das Plugin „Language Detection“.")
+        }
+    }
+
     private var selectedCodes: [String] {
         selection.selectedCodes
     }
@@ -122,6 +155,12 @@ struct LanguageSelectionEditor: View {
                 subtitle: localizedAppText("Let the engine detect the spoken language without restrictions.", de: "Lasse die Engine die gesprochene Sprache ohne Einschränkungen erkennen."),
                 mode: .auto
             )
+
+            if mode == .auto, let autoHelpText {
+                Text(autoHelpText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             modeButton(
                 title: restrictedTitle,

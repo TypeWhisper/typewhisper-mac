@@ -1314,3 +1314,9 @@ private struct CohereLocalSettingsView: View {
         }
     }
 }
+
+// Cohere Transcribe needs a source language; with a language detection plugin the host picks it
+// when the user asked for automatic detection.
+extension CohereLocalPlugin: HostLanguageDetectionEnginePlugin {
+    var languagesForHostDetection: [String] { Self.supportedLanguageCodes }
+}

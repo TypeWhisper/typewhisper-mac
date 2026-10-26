@@ -976,3 +976,28 @@ private let pluginModuleBundle: Bundle = {
     Bundle(for: GoogleCloudSTTPlugin.self)
 #endif
 }()
+
+// Google Cloud STT needs a language code and otherwise falls back to the default one; with a
+// language detection plugin the host picks the spoken language when the user asked for automatic
+// detection.
+extension GoogleCloudSTTPlugin: HostLanguageDetectionEnginePlugin {
+    var languagesForHostDetection: [String] {
+        Self.hostDetectionLanguages(defaultLanguageCode: _defaultLanguageCode ?? Self.defaultLanguageCode)
+    }
+
+    /// One code per language: the user's default region where the language matches, otherwise the
+    /// region a bare language code maps to.
+    static func hostDetectionLanguages(defaultLanguageCode: String) -> [String] {
+        var seen = Set<String>()
+        var languages: [String] = []
+        for code in googleCloudSupportedLanguages {
+            let base = String(code.prefix { $0 != "-" }).lowercased()
+            guard seen.insert(base).inserted else { continue }
+            let preferred = defaultLanguageCode.lowercased().hasPrefix(base + "-")
+                ? defaultLanguageCode
+                : normalizeLanguageCode(base)
+            languages.append(googleCloudSupportedLanguages.contains(preferred) ? preferred : code)
+        }
+        return languages
+    }
+}

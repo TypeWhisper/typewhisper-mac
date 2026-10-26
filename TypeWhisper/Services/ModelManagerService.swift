@@ -1757,22 +1757,54 @@ final class ModelManagerService: ObservableObject {
         String(describing: key)
     }
 
-    /// Engines without language hints otherwise get the first selected language. When the user
-    /// selected several and a language detection plugin is enabled, it picks the one spoken.
+    /// The smallest probability gap to the runner-up for which an engine that cannot detect
+    /// languages gets the detected one when the user asked for automatic detection. The detector
+    /// chooses among all languages it knows, and only an engine language counts. Measured on
+    /// held-out speech with 0.25: whole utterances get a language 89 % (Cohere Transcribe, 14
+    /// languages) and 83 % (Canary, 25) of the time, 98.9 % to 99.8 % of them correct; speech in a
+    /// language the engine lacks gets one 0.2 % to 0.4 % of the time. Otherwise the engine keeps its
+    /// old behavior instead of a likely wrong language.
+    static let hostLanguageDetectionMinimumMargin = 0.25
+
+    private static let allLanguageCodes = Locale.LanguageCode.isoLanguageCodes.map(\.identifier)
+
+    /// A language detection plugin, when enabled, picks the spoken language for engines that would
+    /// otherwise get the wrong one or none: among the user's selected languages for engines without
+    /// language hints (they used the first one), and among the engine's languages when the user asked
+    /// for automatic detection but the engine cannot detect languages itself.
     private func spokenLanguageSelection(
         for languageSelection: LanguageSelection,
         plugin: TranscriptionEnginePlugin,
         audioSamples: [Float]
     ) async -> LanguageSelection {
-        guard !plugin.acceptsLanguageHints,
-              case .hints(let codes) = languageSelection.normalizedForSupportedLanguages(plugin.supportedLanguages),
-              codes.count > 1,
+        let accepted: [String]
+        let candidates: [String]
+        let minimumMargin: Double
+        switch languageSelection.normalizedForSupportedLanguages(plugin.supportedLanguages) {
+        case .hints(let codes) where !plugin.acceptsLanguageHints:
+            accepted = codes
+            candidates = codes
+            minimumMargin = 0
+        case .auto, .inheritGlobal:
+            guard let engine = plugin as? HostLanguageDetectionEnginePlugin else { return languageSelection }
+            let supported = Set(plugin.supportedLanguages)
+            accepted = engine.languagesForHostDetection.filter { supported.contains($0) }
+            // Every other language as a rival, so speech in a language the engine lacks is not
+            // forced onto the closest engine language. Engine codes come first: a detector keeps
+            // the first code per language, so the engine's spelling (such as "de-DE") wins.
+            candidates = accepted + Self.allLanguageCodes
+            minimumMargin = Self.hostLanguageDetectionMinimumMargin
+        default:
+            return languageSelection
+        }
+        guard accepted.count > 1,
               let provider = PluginManager.shared?.spokenLanguageIdentificationProviders.first else {
             return languageSelection
         }
         do {
-            guard let identification = try await provider.identifySpokenLanguage(samples: audioSamples, among: codes),
-                  codes.contains(identification.language) else {
+            guard let identification = try await provider.identifySpokenLanguage(samples: audioSamples, among: candidates),
+                  accepted.contains(identification.language),
+                  identification.margin >= minimumMargin else {
                 return languageSelection
             }
             return .exact(identification.language)
