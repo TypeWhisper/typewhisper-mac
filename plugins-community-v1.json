@@ -4223,10 +4223,22 @@
       "downloadCount": 23,
       "descriptions": {
         "de": "Lokale Canary-Spracherkennung auf Apple Silicon. Unterst\u00fctzt Sophea f\u00fcr Griechisch und Englisch sowie kompatible importierte Modelle.",
+        "es": "Reconocimiento de voz local con Canary en Apple Silicon. Admite Sophea para griego e ingl\u00e9s y modelos importados compatibles.",
         "ja": "Apple Silicon\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebCanary\u97f3\u58f0\u8a8d\u8b58\u3002\u30ae\u30ea\u30b7\u30e3\u8a9e\u3068\u82f1\u8a9e\u306eSophea\u3084\u4e92\u63db\u30e2\u30c7\u30eb\u306b\u5bfe\u5fdc\u3002"
       },
       "iconSystemName": "cpu",
       "releases": [
+        {
+          "version": "1.1.0",
+          "minHostVersion": "1.8.1",
+          "sdkCompatibilityVersion": "v1-model-import",
+          "size": 21250643,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-canary-v1.1.0/CanaryPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
         {
           "version": "1.0.3",
           "minHostVersion": "1.8.0",
