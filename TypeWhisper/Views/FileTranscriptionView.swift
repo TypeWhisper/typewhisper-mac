@@ -140,7 +140,8 @@ struct FileTranscriptionView: View {
                         availableLanguages: localizedAppLanguageOptions(for: watchFolder.selectedEngineSupportedLanguages)
                             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
                             .map { (code: $0.code, name: $0.name) },
-                        hintBehavior: LanguageSelectionHintBehavior(engine: watchFolder.resolvedEngine)
+                        hintBehavior: LanguageSelectionHintBehavior(engine: watchFolder.resolvedEngine),
+                        autoDetectionBehavior: LanguageAutoDetectionBehavior(engine: watchFolder.resolvedEngine)
                     )
                 }
 
@@ -520,7 +521,8 @@ struct FileTranscriptionView: View {
             LanguageSelectionEditor(
                 selection: $viewModel.languageSelection,
                 availableLanguages: fileTranscriptionLanguageOptions,
-                hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine)
+                hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine),
+                autoDetectionBehavior: LanguageAutoDetectionBehavior(engine: viewModel.resolvedEngine)
             )
 
             HStack {

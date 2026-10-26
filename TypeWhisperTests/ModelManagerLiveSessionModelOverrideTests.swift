@@ -453,6 +453,47 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(detector.receivedCandidates, [["de", "en"]])
     }
 
+    func testLanguageDetectionPicksALanguageOnlyWhenClearForEnginesWithoutAutomaticDetection() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let engine = HostDetectedLanguageModelManagerPlugin()
+        let modelManager = installBatchPlugin(engine, appSupportDirectory: appSupportDirectory)
+        let detector = FixedLanguageDetectionPlugin(answer: "de-DE")
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: FixedLanguageDetectionPlugin.pluginId,
+                    name: FixedLanguageDetectionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "FixedLanguageDetectionPlugin"
+                ),
+                instance: detector,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+
+        for (answer, margin) in [("de-DE", 0.8), ("de-DE", 0.1), ("fr", 0.9)] {
+            detector.answer = answer
+            detector.margin = margin
+            _ = try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 16_000),
+                languageSelection: .auto,
+                task: .transcribe
+            )
+        }
+
+        XCTAssertEqual(
+            engine.receivedLanguages, ["de-DE", nil, nil],
+            "Unclear answers and languages the engine lacks keep the engine's own fallback"
+        )
+        let candidates = try XCTUnwrap(detector.receivedCandidates.first)
+        XCTAssertEqual(Array(candidates.prefix(2)), ["en-US", "de-DE"], "Engine spellings come first")
+        XCTAssertTrue(candidates.contains("fr"), "Other languages compete, so French speech is not forced onto German")
+    }
+
     private func installLivePlugin(
         _ plugin: LiveModelOverrideTranscriptionPlugin,
         appSupportDirectory: URL
@@ -1107,7 +1148,8 @@ private final class FixedLanguageDetectionPlugin: NSObject, SpokenLanguageIdenti
     static let pluginId = "com.typewhisper.mock.language-detection"
     static let pluginName = "Language Detection Mock"
 
-    let answer: String
+    var answer: String
+    var margin = 0.8
     private(set) var receivedCandidates: [[String]] = []
 
     init(answer: String) {
@@ -1130,6 +1172,36 @@ private final class FixedLanguageDetectionPlugin: NSObject, SpokenLanguageIdenti
         among candidates: [String]
     ) async throws -> PluginSpokenLanguageIdentification? {
         receivedCandidates.append(candidates)
-        return PluginSpokenLanguageIdentification(language: answer, confidence: 0.9, margin: 0.8)
+        return PluginSpokenLanguageIdentification(language: answer, confidence: 0.9, margin: margin)
+    }
+}
+
+private final class HostDetectedLanguageModelManagerPlugin: NSObject, HostLanguageDetectionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.host-detected-language-engine"
+    static let pluginName = "Host Detected Language Engine Mock"
+
+    private(set) var receivedLanguages: [String?] = []
+
+    var providerId: String { "mock-host-detected-language-engine" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? { nil }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var supportsTranslation: Bool { false }
+    var supportedLanguages: [String] { ["en-US", "en-GB", "de-DE"] }
+    var languagesForHostDetection: [String] { ["en-US", "de-DE"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        receivedLanguages.append(language)
+        return PluginTranscriptionResult(text: "done", detectedLanguage: language)
     }
 }

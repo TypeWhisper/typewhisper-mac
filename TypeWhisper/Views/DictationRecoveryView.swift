@@ -220,7 +220,8 @@ struct DictationRecoveryView: View {
                     LanguageSelectionEditor(
                         selection: $viewModel.languageSelection,
                         availableLanguages: recoveryLanguageOptions,
-                        hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine)
+                        hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine),
+                        autoDetectionBehavior: LanguageAutoDetectionBehavior(engine: viewModel.resolvedEngine)
                     )
                     .disabled(viewModel.isProcessing)
                 }

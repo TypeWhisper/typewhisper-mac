@@ -1039,3 +1039,9 @@ private struct CanarySettingsView: View {
         }
     }
 }
+
+// Canary needs a source language; with a language detection plugin the host picks it when the
+// user asked for automatic detection.
+extension CanaryPlugin: HostLanguageDetectionEnginePlugin {
+    var languagesForHostDetection: [String] { supportedLanguages }
+}
