@@ -11601,7 +11601,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
 
-        _ = context.dictationViewModel.apiStartRecording()
+        let sessionID = context.dictationViewModel.apiStartRecording()
         await context.dictationViewModel.testingWaitForRecordingStart()
         await fulfillment(of: [urlRequested], timeout: 1)
         _ = context.dictationViewModel.apiStopRecording()
@@ -11610,6 +11610,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         urlGate.signal()
         await fulfillment(of: [processed], timeout: 2)
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
         XCTAssertEqual(capturedBundleIdentifiers.withLock { $0 }, ["com.google.Chrome"])
         XCTAssertTrue(systemPrompt.withLock { $0 }?.contains("<screen_context>\nProject Zephyr-7") == true)
     }
