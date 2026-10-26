@@ -665,6 +665,68 @@ final class ParakeetPluginTests: XCTestCase {
         }
     }
 
+    private static let knownWords: Set<String> = [
+        "the", "army", "built", "a", "super", "base", "in", "desert", "my", "grandpa", "now", "lives",
+        "Sie", "hat", "sich", "entschieden", "sent", "final", "files", "SQL", "Postgres", "and", "whisper",
+        "type", "to", "invoice", "forward", "please", "Configure", "connection", "pool",
+    ]
+
+    private func guarded(_ original: String, _ rescored: String) -> String {
+        ParakeetVocabularyGuard.filter(original: original, rescored: rescored) { Self.knownWords.contains($0) }
+    }
+
+    func testVocabularyGuardRefusesTermsInPlaceOfKnownWords() {
+        for (original, rescored) in [
+            ("The army built a super base in the desert.", "The army built a Supabase in the desert."),
+            ("My grandpa now lives in a small town.", "My Grafana now lives in a small town."),
+            ("Sie hat sich entschieden.", "Siobhan sich entschieden."),
+            ("Type quietly and whisper so nobody wakes up.", "Type quietly and WhisperKit so nobody wakes up."),
+            ("Docker with Postgres and Redis.", "Docker with PostgreSQL and Redis."),
+            ("Tasmine sent the final design files.", "Tasmeen the final design files."),
+        ] {
+            XCTAssertEqual(guarded(original, rescored), original, original)
+        }
+    }
+
+    func testVocabularyGuardKeepsCorrectionsOfUnknownWords() {
+        for (original, rescored) in [
+            ("We moved the table to superbase.", "We moved the table to Supabase."),
+            ("Configure the PostGur SQL connection pool.", "Configure the PostgreSQL connection pool."),
+            ("Open type whisper and pick a model.", "Open TypeWhisper and pick a model."),
+            ("Install dockr first.", "Install Docker first."),
+        ] {
+            XCTAssertEqual(guarded(original, rescored), rescored, original)
+        }
+    }
+
+    func testVocabularyGuardKeepsGoodChangesNextToRefusedOnes() {
+        XCTAssertEqual(
+            guarded("My grandpa uses superbase daily.", "My Grafana uses Supabase daily."),
+            "My grandpa uses Supabase daily."
+        )
+    }
+
+    func testVocabularyGuardKeepsPunctuationTheRescorerDropped() {
+        XCTAssertEqual(
+            guarded("Please forward the invoice to Tasmine.", "Please forward the invoice to Tasmeen"),
+            "Please forward the invoice to Tasmeen."
+        )
+    }
+
+    func testVocabularyGuardRefusesDeletionsAndInsertions() {
+        XCTAssertEqual(guarded("Please forward the invoice.", "Please the invoice."), "Please forward the invoice.")
+        XCTAssertEqual(guarded("Please forward the invoice.", "Please forward Tasmeen the invoice."), "Please forward the invoice.")
+    }
+
+    @MainActor
+    func testVocabularyGuardUsesTheSystemSpellChecker() {
+        let languages = ParakeetVocabularyGuard.spellCheckLanguages(for: "de-DE")
+        XCTAssertEqual(languages.first, "de")
+        XCTAssertTrue(languages.contains("en"))
+        XCTAssertTrue(ParakeetVocabularyGuard.isKnownWord("house", languages: ["en"]))
+        XCTAssertFalse(ParakeetVocabularyGuard.isKnownWord("superbase", languages: ["en"]))
+    }
+
     private func regressionAudio() throws -> AudioData {
         guard let path = ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_REGRESSION_WAV"] else {
             throw XCTSkip("Set TYPEWHISPER_PARAKEET_REGRESSION_WAV and install Parakeet v3 to run Core ML inference")

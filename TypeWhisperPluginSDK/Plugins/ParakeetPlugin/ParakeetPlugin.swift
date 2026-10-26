@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import CoreML
@@ -487,7 +488,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         )
         let finalResult = await applyVocabularyRescoringIfNeeded(
             to: result,
-            audioSamples: normalizedSamples
+            audioSamples: normalizedSamples,
+            language: language
         )
         let text = Self.removingUnknownTokens(from: finalResult.text)
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -989,7 +991,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     private func applyVocabularyRescoringIfNeeded(
         to result: ASRResult,
-        audioSamples: [Float]
+        audioSamples: [Float],
+        language: String?
     ) async -> ASRResult {
         guard vocabularyBoostingEnabled,
               let spotter = ctcSpotter,
@@ -1032,15 +1035,26 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                 } == true
             }) else { return result }
 
+            let guardedText = await MainActor.run {
+                let languages = ParakeetVocabularyGuard.spellCheckLanguages(for: language)
+                return ParakeetVocabularyGuard.filter(original: result.text, rescored: rescoreOutput.text) {
+                    ParakeetVocabularyGuard.isKnownWord($0, languages: languages)
+                }
+            }
+            guard guardedText != result.text else {
+                Self.logger.info("Vocabulary rescoring refused: every change rewrote known words")
+                return result
+            }
+
             let detectedTerms = spotResult.detections.map(\.term.text)
             let appliedTerms = rescoreOutput.replacements.compactMap { replacement in
                 replacement.shouldReplace ? replacement.replacementWord : nil
-            }
+            }.filter { guardedText.contains($0) }
             Self.logger.info(
-                "Vocabulary rescoring applied \(rescoreOutput.replacements.count) replacement(s)"
+                "Vocabulary rescoring applied \(appliedTerms.count) of \(rescoreOutput.replacements.count) replacement(s)"
             )
             return result.withRescoring(
-                text: rescoreOutput.text,
+                text: guardedText,
                 detected: detectedTerms,
                 applied: appliedTerms
             )
@@ -2121,6 +2135,113 @@ struct ParakeetNemotronStreamFactory: Sendable {
         ParakeetNemotronStreamFactory { languagePrompt, onPartial in
             try await FluidAudioNemotronStream(models: models, languagePrompt: languagePrompt, onPartial: onPartial)
         }
+    }
+}
+
+/// Vocabulary Boosting may only rewrite words the spell checker does not know.
+/// Without this, Automatic terms turned 15 of 352 English and 20 of 261 German benchmark clips
+/// without any term into worse text ("Sie hat" -> "Siobhan", "my grandpa" -> "my Grafana").
+enum ParakeetVocabularyGuard {
+    /// Keeps each change between `original` and `rescored` that `accepts` allows, and the
+    /// original words everywhere else.
+    static func filter(original: String, rescored: String, isKnownWord: (String) -> Bool) -> String {
+        guard original != rescored else { return original }
+        let before = original.split(whereSeparator: \.isWhitespace).map(String.init)
+        let after = rescored.split(whereSeparator: \.isWhitespace).map(String.init)
+        var removed = Set<Int>()
+        var inserted = Set<Int>()
+        for change in after.map(bare).difference(from: before.map(bare)) {
+            switch change {
+            case let .remove(offset, _, _): removed.insert(offset)
+            case let .insert(offset, _, _): inserted.insert(offset)
+            }
+        }
+
+        var output: [String] = []
+        var acceptedAny = false
+        var i = 0
+        var j = 0
+        while i < before.count || j < after.count {
+            if i < before.count, j < after.count, !removed.contains(i), !inserted.contains(j) {
+                output.append(before[i])
+                i += 1
+                j += 1
+                continue
+            }
+            var replaced: [String] = []
+            var replacement: [String] = []
+            while (i < before.count && removed.contains(i)) || (j < after.count && inserted.contains(j)) {
+                while i < before.count, removed.contains(i) { replaced.append(before[i]); i += 1 }
+                while j < after.count, inserted.contains(j) { replacement.append(after[j]); j += 1 }
+            }
+            if accepts(replaced: replaced, replacement: replacement, isKnownWord: isKnownWord) {
+                acceptedAny = true
+                output += carryingTrailingPunctuation(from: replaced, to: replacement)
+            } else {
+                output += replaced
+            }
+        }
+        return acceptedAny ? output.joined(separator: " ") : original
+    }
+
+    /// A change is kept when it only joins or recases words ("type whisper" -> "TypeWhisper"),
+    /// or when it rewrites at least one unknown word and every known word it removes is spelled
+    /// inside the term ("PostGur SQL" -> "PostgreSQL", but not "Tasmine sent" -> "Tasmeen").
+    static func accepts(replaced: [String], replacement: [String], isKnownWord: (String) -> Bool) -> Bool {
+        guard !replaced.isEmpty, !replacement.isEmpty else { return false }
+        let term = letters(replacement.joined())
+        if letters(replaced.joined()) == term { return true }
+        let known = replaced.map { word in
+            let word = bare(word)
+            return !word.contains(where: \.isLetter) || isKnownWord(word)
+        }
+        return known.contains(false) && zip(replaced, known).allSatisfy { word, isKnown in
+            !isKnown || term.contains(letters(word))
+        }
+    }
+
+    /// The rescorer drops the punctuation of a word it replaces: "to Tasmine." becomes "to Tasmeen".
+    static func carryingTrailingPunctuation(from replaced: [String], to replacement: [String]) -> [String] {
+        guard let last = replaced.last, let newLast = replacement.last else { return replacement }
+        let trailing = String(last.reversed().prefix { $0.isPunctuation }.reversed())
+        guard !trailing.isEmpty, newLast.last?.isPunctuation != true else { return replacement }
+        return replacement.dropLast() + [newLast + trailing]
+    }
+
+    /// The dictation language, or the user's languages when it is detected, plus English,
+    /// which users mix into every language.
+    @MainActor
+    static func spellCheckLanguages(for language: String?) -> [String] {
+        let available = NSSpellChecker.shared.availableLanguages
+        let requested = (language.map { [$0] } ?? Locale.preferredLanguages) + ["en"]
+        var languages: [String] = []
+        for code in requested {
+            let primary = code.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? ""
+            guard let match = available.first(where: { $0 == primary })
+                ?? available.first(where: { $0.hasPrefix(primary + "_") }),
+                !languages.contains(match) else { continue }
+            languages.append(match)
+        }
+        return languages
+    }
+
+    @MainActor
+    static func isKnownWord(_ word: String, languages: [String]) -> Bool {
+        let checker = NSSpellChecker.shared
+        return languages.contains { language in
+            checker.checkSpelling(
+                of: word, startingAt: 0, language: language, wrap: false, inSpellDocumentWithTag: 0, wordCount: nil
+            ).location == NSNotFound
+        }
+    }
+
+    private static func bare(_ word: String) -> String {
+        word.trimmingCharacters(in: .punctuationCharacters.union(.symbols))
+    }
+
+    private static func letters(_ text: String) -> String {
+        String(text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .filter { $0.isLetter || $0.isNumber })
     }
 }
 
