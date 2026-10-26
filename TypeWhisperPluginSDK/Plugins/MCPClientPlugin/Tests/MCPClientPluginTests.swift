@@ -990,6 +990,40 @@ final class MCPClientPluginTests: XCTestCase {
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 4)
     }
 
+    func testInvalidatingOlderRevisionsKeepsTheSessionOfTheSavedRevision() async throws {
+        let fixture = try Self.fixtureResources()
+        defer { try? FileManager.default.removeItem(at: fixture.counter) }
+        let id = UUID()
+        func resolved(revision: Int) -> MCPResolvedServer {
+            let configuration = MCPServerConfiguration(
+                id: id,
+                name: "Fixture",
+                command: fixture.pythonPath,
+                arguments: [fixture.script.path, fixture.counter.path, "count-connection"],
+                launchAcknowledged: true,
+                revision: revision
+            )
+            return MCPResolvedServer(
+                configuration: configuration,
+                executableURL: URL(fileURLWithPath: fixture.pythonPath),
+                environment: ProcessInfo.processInfo.environment,
+                secrets: []
+            )
+        }
+        let runtime = MCPClientRuntime()
+        addTeardownBlock { await runtime.closeAll() }
+
+        // The save's invalidation lands after an action already connected to the saved revision.
+        _ = try await runtime.tools(for: resolved(revision: 1))
+        await runtime.invalidate(serverID: id, olderThan: 1)
+        _ = try await runtime.tools(for: resolved(revision: 1))
+        XCTAssertEqual(try Self.requestCount(at: fixture.counter), 2)
+
+        await runtime.invalidate(serverID: id, olderThan: 2)
+        _ = try await runtime.tools(for: resolved(revision: 1))
+        XCTAssertEqual(try Self.requestCount(at: fixture.counter), 4)
+    }
+
     func testBatchExecutionContinuesAfterToolErrorInOrder() async throws {
         let fixture = try Self.fixtureResources()
         defer { try? FileManager.default.removeItem(at: fixture.counter) }

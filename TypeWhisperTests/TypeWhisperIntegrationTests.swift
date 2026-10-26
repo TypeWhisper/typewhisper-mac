@@ -11539,6 +11539,84 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebsiteWorkflowMatchedAfterStopStillReadsScreenContext() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("please call the client about the project tomorrow morning")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/chat"), title: nil)
+        }
+        let systemPrompt = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let processed = expectation(description: "Workflow prompt processed")
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            browserURLResolver: resolver,
+            workflowTextProcessingService: WorkflowTextProcessingService(
+                promptProcessor: { prompt, _, _, _, _ in
+                    systemPrompt.withLock { $0 = prompt }
+                    processed.fulfill()
+                    return "Processed"
+                },
+                appleTranslator: nil
+            )
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        let capturedBundleIdentifiers = OSAllocatedUnfairLock(initialState: [String?]())
+        context.dictationViewModel.screenContextCapture = { bundleIdentifier in
+            capturedBundleIdentifiers.withLock { $0.append(bundleIdentifier) }
+            return "Project Zephyr-7"
+        }
+        _ = context.workflowService.addWorkflow(
+            name: "Website Workflow",
+            template: .cleanedText,
+            trigger: .website("example.com"),
+            behavior: WorkflowBehavior(screenContextEnabled: true),
+            output: WorkflowOutput(autoEnterMode: .never)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        _ = context.dictationViewModel.apiStopRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertTrue(capturedBundleIdentifiers.withLock { $0.isEmpty })
+
+        urlGate.signal()
+        await fulfillment(of: [processed], timeout: 2)
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(capturedBundleIdentifiers.withLock { $0 }, ["com.google.Chrome"])
+        XCTAssertTrue(systemPrompt.withLock { $0 }?.contains("<screen_context>\nProject Zephyr-7") == true)
+    }
+
+    @MainActor
     func testWebsiteExcludedFromAlwaysWorkflowSkipsItOnceTheURLResolves() async throws {
         let ruleName = try await alwaysWorkflowDictationRuleName(
             trigger: .global(websites: ["example.com"]),

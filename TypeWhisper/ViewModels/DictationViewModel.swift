@@ -515,6 +515,12 @@ final class DictationViewModel: ObservableObject {
     private var forcedWorkflowId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSelectedText: String?
+    /// Text read from the target window at recording start, for workflows with screen context.
+    private var screenContextTask: Task<String?, Never>?
+    /// Reads the target window's text. Tests replace it so no real screen is captured.
+    var screenContextCapture: @Sendable (String?) async -> String? = { bundleIdentifier in
+        await ScreenContextService.captureFrontWindowText(bundleIdentifier: bundleIdentifier)
+    }
 
     /// Session-only safe undo / raw-transcript restore for the most recent
     /// direct text insertion (issue #999). Independent of history settings.
@@ -1688,6 +1694,7 @@ final class DictationViewModel: ObservableObject {
     private func clearDeferredRecordingContext() {
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
+        clearScreenContextCapture()
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
         cancelIncrementalWorkflowPostProcessing()
@@ -2452,6 +2459,7 @@ final class DictationViewModel: ObservableObject {
         pinnedInsertionTarget = liveFieldCapture?.pinnedTarget
         capturedActiveApp = activeApp
         capturedSelectedText = nil
+        clearScreenContextCapture()
         activeAppIcon = nil
 
         if let forcedWorkflow = initialForcedWorkflow {
@@ -2461,6 +2469,7 @@ final class DictationViewModel: ObservableObject {
         } else {
             clearActiveRuleState()
         }
+        startScreenContextCaptureIfNeeded(bundleIdentifier: activeApp.bundleId)
         guard ensureSubmitKeySuppressionAvailable() else { return }
         beginTargetAppAccessibilityObservationIfNeeded(
             bundleIdentifier: activeApp.bundleId
@@ -2546,6 +2555,25 @@ final class DictationViewModel: ObservableObject {
         hotkeyService.cancelDictation()
     }
 
+    /// Reads the target window once per recording, as soon as a workflow with screen
+    /// context applies. Reading at the start captures what the user was looking at.
+    /// A website workflow can match only after recording stopped, while processing waits
+    /// for the browser URL, so the capture may also start then.
+    private func startScreenContextCaptureIfNeeded(bundleIdentifier: String?) {
+        guard screenContextTask == nil,
+              state == .recording || state == .processing,
+              matchedWorkflow?.usesScreenContext == true else { return }
+        let capture = screenContextCapture
+        screenContextTask = Task {
+            await capture(bundleIdentifier)
+        }
+    }
+
+    private func clearScreenContextCapture() {
+        screenContextTask?.cancel()
+        screenContextTask = nil
+    }
+
     private func scheduleDeferredRecordingMetadataCapture(
         sessionID: UUID,
         activeApp: (name: String?, bundleId: String?, url: String?),
@@ -2624,6 +2652,7 @@ final class DictationViewModel: ObservableObject {
                     logger.info("URL resolution: the website is excluded from the Always workflow")
                 }
                 applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
+                startScreenContextCaptureIfNeeded(bundleIdentifier: bundleId)
                 prewarmDictationModel()
                 let restartedLiveStreaming = refreshLiveStreamingIfParamsChanged()
                 refreshIncrementalWorkflowPostProcessing(forceRestart: restartedLiveStreaming)
@@ -4277,6 +4306,7 @@ final class DictationViewModel: ObservableObject {
         clearActiveRuleState()
         capturedActiveApp = nil
         capturedSelectedText = nil
+        clearScreenContextCapture()
         activeAppIcon = nil
         processingPhase = nil
         actionFeedbackMessage = nil
@@ -4901,6 +4931,7 @@ final class DictationViewModel: ObservableObject {
                 resolvedOutputFormat: resolvedOutputFormat
             )
         let segmentationPolicy = segmentedRequest.map { workflowSegmentationPolicy(for: $0) } ?? .default
+        let screenContextTask = workflow.usesScreenContext ? self.screenContextTask : nil
 
         return { text in
             if workflowService.shouldSkipAIProcessingForShortDictation(text: text) {
@@ -4912,13 +4943,15 @@ final class DictationViewModel: ObservableObject {
 
             guard let segmentedRequest else {
                 incrementalPostProcessing?.cancel()
+                let screenContext = await screenContextTask?.value
                 return try await workflowProcessor.process(
                     workflow: workflow,
                     text: text,
                     fallbackTranslationTarget: translationTarget,
                     detectedLanguage: detectedLanguage,
                     configuredLanguage: configuredLanguage,
-                    resolvedOutputFormat: resolvedOutputFormat
+                    resolvedOutputFormat: resolvedOutputFormat,
+                    screenContext: screenContext
                 )
             }
 
