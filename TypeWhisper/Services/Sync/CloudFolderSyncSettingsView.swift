@@ -693,6 +693,62 @@ extension PremiumAccountService {
         }
         try acceptEntitlement(synced)
     }
+
+    private struct PolarWebLinkStartResponse: Decodable {
+        let authorizationURL: URL
+        let state: String
+        let expiresAt: Date
+    }
+
+    /// Connects an existing TypeWhisper license to the signed-in account and
+    /// activates this Mac as one of its devices. The key is entered on the
+    /// TypeWhisper web page only; see `AppStoreLicenseLink`.
+    func connectExistingLicense() async throws {
+        guard isSignedIn else { throw AppStoreLicenseLink.Failure.notSignedIn }
+        isWorking = true
+        errorMessage = nil
+        defer { isWorking = false }
+
+        let codeVerifier = try Self.randomBase64URLToken()
+        let start: PolarWebLinkStartResponse = try await request(
+            path: "/v1/entitlements/polar/web/start",
+            method: "POST",
+            body: try encoder.encode([
+                "codeChallenge": Self.sha256Base64URL(codeVerifier),
+                "deviceName": AppStoreLicenseLink.deviceName,
+            ])
+        )
+        guard start.expiresAt > Date(),
+              AppStoreLicenseLink.isValidLinkURL(start.authorizationURL, accountBaseURL: baseURL) else {
+            throw AppStoreLicenseLink.Failure.invalidResponse
+        }
+
+        let callbackURL: URL
+        do {
+            callbackURL = try await appleWebAuthenticator.authenticate(
+                at: start.authorizationURL,
+                callbackScheme: AppStoreLicenseLink.callbackScheme
+            )
+        } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+            throw AppStoreLicenseLink.Failure.cancelled
+        } catch let error as URLError where error.code == .cancelled {
+            throw AppStoreLicenseLink.Failure.cancelled
+        }
+
+        let code = try AppStoreLicenseLink.authorizationCode(from: callbackURL, expectedState: start.state)
+        let response: EntitlementResponse = try await request(
+            path: "/v1/entitlements/polar/web/exchange",
+            method: "POST",
+            body: try encoder.encode([
+                "state": start.state,
+                "code": code,
+                "codeVerifier": codeVerifier,
+            ])
+        )
+        try acceptEntitlement(response.entitlement)
+        guard hasPremiumEntitlement else { throw AppStoreLicenseLink.Failure.notConnected }
+        defaults.set(Date(), forKey: Keys.lastRefresh)
+    }
 }
 #endif
 

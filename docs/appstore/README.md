@@ -223,9 +223,24 @@ commercial term packs) and cloud sync follow it.
   `POST /v1/entitlements/storekit/sync` with `"app": "ios"`, the shared App
   Store record, and the `X-TypeWhisper-Platform: macos` header. Sandbox and Xcode
   transactions are not sent.
-- The License page, Polar license keys, supporter tiers, the Discord claim, the
+- The License page, license key entry, supporter tiers, the Discord claim, the
   welcome and post-update license prompts and the work-usage card are not part
   of this edition (guideline 3.1.1). Purchases happen on the Premium page.
+- **Connect Existing TypeWhisper License** on the Premium page (shown without
+  Premium access, enabled only while signed in with Apple) links a Polar
+  license through the account, as in the iOS app (guideline 3.1.3(b): the same
+  Premium features are also sold in the app). The app starts
+  `POST /v1/entitlements/polar/web/start` with a PKCE challenge and the device
+  name `Mac`, opens the returned `app.typewhisper.com/premium/polar/link` page
+  in `ASWebAuthenticationSession` and exchanges the
+  `typewhisper://premium-license/callback` code with
+  `POST /v1/entitlements/polar/web/exchange`. The key is entered only on that
+  page and never reaches the app; the Mac uses one device slot of the license.
+  The account entitlement then unlocks Premium without a restart. The wording
+  stays about connecting an existing license: no prices, checkout links or
+  hints to buy outside the App Store. The server must accept the `macos`
+  platform for this flow (`POLAR_WEB_FLOW_PLATFORMS` in `app.typewhisper.com`).
+  Code: `AppStoreLicenseLink`, `PremiumAccountService.connectExistingLicense()`.
 - The scheme uses `AppStore/Resources/TypeWhisperAppStore.storekit` for local
   StoreKit testing in Xcode.
 
@@ -237,7 +252,7 @@ commercial term packs) and cloud sync follow it.
 | Media pause | MediaRemote is private API and stays disabled (`MediaPlaybackService`). |
 | CLI | Not shipped; the local HTTP API stays available (`network.server`). |
 | Keychain | Own service names (`com.typewhisper.typewhisper-app.*`), never the direct app's items. |
-| Licensing | StoreKit Premium instead of Polar license keys and supporter tiers. |
+| Licensing | StoreKit Premium instead of license key entry and supporter tiers. An existing Polar license connects through the TypeWhisper account web page. |
 | iCloud | The app uses the iCloud container directly instead of the iCloud bridge XPC service. |
 | Browser URL | No AppleScript or `osascript`: browsers report no URL and no open tabs, so the Website workflow trigger is hidden and meeting detection relies on native apps. |
 
@@ -273,7 +288,7 @@ Differences to the direct app, which uses the Accessibility API and an event-sup
 ## Open work
 
 1. Test text insertion, hotkeys and permissions in a sandboxed build ([checklist](manual-test-checklist.md)).
-2. Test purchase, restore, trial and refund in Sandbox and TestFlight, including the account sync of Mac transactions with `app.typewhisper.com`.
+2. Test purchase, restore, trial and refund in Sandbox and TestFlight, including the account sync of Mac transactions with `app.typewhisper.com` and connecting an existing license.
 3. Test iCloud sync, the widget and the Finder action with a provisioned build.
 4. First signed TestFlight upload (workflow, audit and universal Release build are in place).
 5. App size: each MLX plugin links its own copy of MLX.

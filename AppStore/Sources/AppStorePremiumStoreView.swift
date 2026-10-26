@@ -5,16 +5,26 @@ import SwiftUI
 /// The App Store part of the Premium settings page. It replaces the license
 /// page of the direct-distribution app: products with their localized App
 /// Store prices, the free trial when the customer is eligible, renewal terms,
-/// Restore Purchases, subscription management and the legal links.
+/// connecting an existing TypeWhisper license, Restore Purchases, subscription
+/// management and the legal links.
 @MainActor
 struct AppStorePremiumStoreView: View {
     @ObservedObject private var store: AppStorePremiumService
+    @ObservedObject private var premiumAccount: PremiumAccountService
     @Environment(\.purchase) private var purchaseAction
     @Environment(\.openURL) private var openURL
     @State private var confirmingLifetimeUpgrade = false
 
-    init(store: AppStorePremiumService = ServiceContainer.shared.appStorePremiumService) {
+    private let windowPresenter: any PremiumSettingsWindowPresenting
+
+    init(
+        store: AppStorePremiumService = ServiceContainer.shared.appStorePremiumService,
+        premiumAccount: PremiumAccountService = ServiceContainer.shared.premiumAccountService,
+        windowPresenter: any PremiumSettingsWindowPresenting = PremiumSettingsWindowManager.shared
+    ) {
         self.store = store
+        self.premiumAccount = premiumAccount
+        self.windowPresenter = windowPresenter
     }
 
     var body: some View {
@@ -35,6 +45,8 @@ struct AppStorePremiumStoreView: View {
                     AppStorePremiumBenefitsList()
                     Divider()
                     purchaseOptions
+                    Divider()
+                    existingLicense
                 } else if store.canUpgradeToLifetime, let lifetime = store.product(for: .lifetime) {
                     Button(lifetimePurchaseTitle(lifetime)) {
                         confirmingLifetimeUpgrade = true
@@ -157,6 +169,40 @@ struct AppStorePremiumStoreView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var existingLicense: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(AppStoreLicenseLinkCopy.sectionTitle)
+                .font(.headline)
+
+            Button {
+                Task { await store.connectExistingLicense() }
+            } label: {
+                Label(AppStoreLicenseLinkCopy.connectButton, systemImage: "key")
+            }
+            .disabled(!premiumAccount.isSignedIn || store.isWorking || premiumAccount.isWorking)
+            .accessibilityIdentifier("premium.store.connectExistingLicense")
+
+            if !premiumAccount.isSignedIn {
+                HStack(spacing: 6) {
+                    Label(AppStoreLicenseLinkCopy.signInFirst, systemImage: "person.crop.circle.badge.exclamationmark")
+                        .foregroundStyle(.secondary)
+                    Button(String(localized: "premium.hub.access.manage")) {
+                        windowPresenter.present(.access)
+                    }
+                    .buttonStyle(.link)
+                    .accessibilityIdentifier("premium.store.connectExistingLicense.signIn")
+                }
+                .font(.caption)
+            }
+
+            Text(AppStoreLicenseLinkCopy.footer)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var accountActions: some View {

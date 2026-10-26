@@ -52,7 +52,7 @@ struct PremiumSettingsView: View {
                     )
 
                     #if APPSTORE
-                    AppStorePremiumStoreView()
+                    AppStorePremiumStoreView(premiumAccount: premiumAccount, windowPresenter: windowPresenter)
                     #endif
 
                     if access.hasAnyPremiumAccess {
