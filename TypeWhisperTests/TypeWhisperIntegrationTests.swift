@@ -7683,6 +7683,75 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testPreserveClipboardWaitsForLateAccessibilityValueInsteadOfPastingAgain() async throws {
+        // Telegram and Safari web editors applied the AX write but showed it in AXValue only
+        // a little later, so a paste right after the first read inserted the text twice (#1732).
+        let harness = makeAccessibilityInsertionHarness { readsAfterWrite in
+            readsAfterWrite <= 3
+                ? (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+                : (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testPreserveClipboardDoesNotPasteAgainWhenFieldBecomesUnreadableAfterAccessibilityWrite() async throws {
+        let harness = makeAccessibilityInsertionHarness { _ in
+            (value: nil, selectedText: nil, selectedRange: nil)
+        }
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    /// A service whose focused field reads empty until the AX write reports success, and then
+    /// reads `stateAfterWrite` for the 1-based read count after the write.
+    @MainActor
+    private func makeAccessibilityInsertionHarness(
+        stateAfterWrite: @escaping (Int) -> TextInsertionService.FocusedTextSnapshot
+    ) -> (service: TextInsertionService, pasteboard: NSPasteboard, pasteCount: () -> Int) {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Telegram", "ru.keepcoder.Telegram", nil) }
+        service.accessibilityInsertionVerificationPollingDelay = .milliseconds(1)
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+
+        var didWrite = false
+        var readsAfterWrite = 0
+        service.focusedTextStateOverride = { _ in
+            guard didWrite else {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            readsAfterWrite += 1
+            return stateAfterWrite(readsAfterWrite)
+        }
+        service.insertTextAtOverride = { _, _ in
+            didWrite = true
+            return true
+        }
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+        return (service, pasteboard, { pasteCount })
+    }
+
+    @MainActor
     func testPreserveClipboardFallsBackToPasteboardWhenVerifiedAccessibilityInsertionFails() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
