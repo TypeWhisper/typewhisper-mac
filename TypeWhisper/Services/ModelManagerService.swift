@@ -1222,6 +1222,11 @@ final class ModelManagerService: ObservableObject {
         let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
         let prompt = promptTextAllowed ? prompt : nil
         let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
+        let languageSelection = await spokenLanguageSelection(
+            for: languageSelection,
+            plugin: plugin,
+            audioSamples: audioSamples
+        )
 
         beginAutoUnloadProtectedUse(of: plugin)
         var overrideRestoreId: String?
@@ -1393,6 +1398,11 @@ final class ModelManagerService: ObservableObject {
         let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
         let prompt = promptTextAllowed ? prompt : nil
         let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
+        let languageSelection = await spokenLanguageSelection(
+            for: languageSelection,
+            plugin: plugin,
+            audioSamples: audioSamples
+        )
 
         beginAutoUnloadProtectedUse(of: plugin)
         var overrideRestoreId: String?
@@ -1745,6 +1755,31 @@ final class ModelManagerService: ObservableObject {
 
     private static func diagnosticIdentifier(for key: ObjectIdentifier) -> String {
         String(describing: key)
+    }
+
+    /// Engines without language hints otherwise get the first selected language. When the user
+    /// selected several and a language detection plugin is enabled, it picks the one spoken.
+    private func spokenLanguageSelection(
+        for languageSelection: LanguageSelection,
+        plugin: TranscriptionEnginePlugin,
+        audioSamples: [Float]
+    ) async -> LanguageSelection {
+        guard !plugin.acceptsLanguageHints,
+              case .hints(let codes) = languageSelection.normalizedForSupportedLanguages(plugin.supportedLanguages),
+              codes.count > 1,
+              let provider = PluginManager.shared?.spokenLanguageIdentificationProviders.first else {
+            return languageSelection
+        }
+        do {
+            guard let identification = try await provider.identifySpokenLanguage(samples: audioSamples, among: codes),
+                  codes.contains(identification.language) else {
+                return languageSelection
+            }
+            return .exact(identification.language)
+        } catch {
+            // Detection is an improvement on top; any failure keeps the old behavior.
+            return languageSelection
+        }
     }
 
     private func runtimeLanguageSelection(

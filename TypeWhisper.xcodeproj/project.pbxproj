@@ -225,6 +225,11 @@
 		C50700000000000000000001 /* MemoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50700000000000000000002 /* MemoryServiceTests.swift */; };
 		928A1F1B7A0D4C62A2B90761 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000034 /* TypeWhisperPluginSDK */; };
 		A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */; };
+		1D7E00000000000000000001 /* LanguageDetectionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D7E0000000000000000000A /* LanguageDetectionPlugin.swift */; };
+		1D7E00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1D7E0000000000000000000B /* manifest.json */; };
+		1D7E00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 1D7E00000000000000000025 /* TypeWhisperPluginSDK */; };
+		1D7E00000000000000000004 /* TypeWhisperEar.mlmodelc in Resources */ = {isa = PBXBuildFile; fileRef = 1D7E0000000000000000000D /* TypeWhisperEar.mlmodelc */; };
+		1D7E00000000000000000005 /* THIRD_PARTY_LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1D7E0000000000000000000E /* THIRD_PARTY_LICENSE.txt */; };
 		F18A00000000000000000001 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
 		F18A00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000011 /* manifest.json */; };
 		F18A00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = F18A00000000000000000037 /* TypeWhisperPluginSDK */; };
@@ -1376,6 +1381,12 @@
 		E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchIndicatorLayoutTests.swift; sourceTree = "<group>"; };
 		E5A1B2C3D4F5061728394A6E /* AudioWaveformBarModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioWaveformBarModelTests.swift; sourceTree = "<group>"; };
 		E808D246301E36546EEB811F /* TestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		1D7E0000000000000000000A /* LanguageDetectionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageDetectionPlugin.swift; sourceTree = "<group>"; };
+		1D7E0000000000000000000B /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		1D7E0000000000000000000C /* LanguageDetectionPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LanguageDetectionPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		1D7E0000000000000000000D /* TypeWhisperEar.mlmodelc */ = {isa = PBXFileReference; lastKnownFileType = folder; path = TypeWhisperEar.mlmodelc; sourceTree = "<group>"; };
+		1D7E0000000000000000000E /* THIRD_PARTY_LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = THIRD_PARTY_LICENSE.txt; sourceTree = "<group>"; };
+		1D7E0000000000000000000F /* MODEL.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MODEL.md; sourceTree = "<group>"; };
 		F18A00000000000000000010 /* FillerWordsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerWordsPlugin.swift; sourceTree = "<group>"; };
 		F18A00000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		F18A00000000000000000012 /* FillerWordsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FillerWordsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1753,6 +1764,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1D7E00000000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D7E00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F18A00000000000000000032 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -2051,6 +2070,7 @@
 				C07D00000000000000000001 /* ContributorPlugin */,
 				CC00000000000000000031 /* ScriptPlugin */,
 				F18A00000000000000000020 /* FillerWordsPlugin */,
+				1D7E00000000000000000014 /* LanguageDetectionPlugin */,
 				F48400000000000000000020 /* FileJobScriptPlugin */,
 				CC00000000000000000032 /* LiveTranscriptPlugin */,
 				CC00000000000000000033 /* GranitePlugin */,
@@ -2827,6 +2847,19 @@
 			path = TypeWhisperPluginSDK/Plugins/FileJobScriptPlugin;
 			sourceTree = "<group>";
 		};
+		1D7E00000000000000000014 /* LanguageDetectionPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				1D7E0000000000000000000A /* LanguageDetectionPlugin.swift */,
+				1D7E0000000000000000000B /* manifest.json */,
+				1D7E0000000000000000000D /* TypeWhisperEar.mlmodelc */,
+				1D7E0000000000000000000E /* THIRD_PARTY_LICENSE.txt */,
+				1D7E0000000000000000000F /* MODEL.md */,
+			);
+			name = LanguageDetectionPlugin;
+			path = TypeWhisperPluginSDK/Plugins/LanguageDetectionPlugin;
+			sourceTree = "<group>";
+		};
 		F18A00000000000000000020 /* FillerWordsPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -3165,6 +3198,7 @@
 				C07B00000000000000000007 /* ContributorPlugin.bundle */,
 				BB00000000000000000215 /* ScriptPlugin.bundle */,
 				F18A00000000000000000012 /* FillerWordsPlugin.bundle */,
+				1D7E0000000000000000000C /* LanguageDetectionPlugin.bundle */,
 				F48400000000000000000012 /* FileJobScriptPlugin.bundle */,
 				BB00000000000000000219 /* LiveTranscriptPlugin.bundle */,
 				BB00000000000000000224 /* GranitePlugin.bundle */,
@@ -4015,6 +4049,26 @@
 			productReference = F48400000000000000000012 /* FileJobScriptPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		1D7E0000000000000000001E /* LanguageDetectionPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1D7E00000000000000000024 /* Build configuration list for PBXNativeTarget "LanguageDetectionPlugin" */;
+			buildPhases = (
+				1D7E0000000000000000001F /* Sources */,
+				1D7E00000000000000000020 /* Frameworks */,
+				1D7E00000000000000000021 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LanguageDetectionPlugin;
+			packageProductDependencies = (
+				1D7E00000000000000000025 /* TypeWhisperPluginSDK */,
+			);
+			productName = LanguageDetectionPlugin;
+			productReference = 1D7E0000000000000000000C /* LanguageDetectionPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		F18A00000000000000000030 /* FillerWordsPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F18A00000000000000000036 /* Build configuration list for PBXNativeTarget "FillerWordsPlugin" */;
@@ -4649,6 +4703,7 @@
 				C07E00000000000000000001 /* ContributorPlugin */,
 				DD00000000000000000019 /* ScriptPlugin */,
 				F18A00000000000000000030 /* FillerWordsPlugin */,
+				1D7E0000000000000000001E /* LanguageDetectionPlugin */,
 				F48400000000000000000030 /* FileJobScriptPlugin */,
 				DD00000000000000000020 /* LiveTranscriptPlugin */,
 				DD00000000000000000021 /* GranitePlugin */,
@@ -4966,6 +5021,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				F48400000000000000000002 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1D7E00000000000000000021 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D7E00000000000000000002 /* manifest.json in Resources */,
+				1D7E00000000000000000004 /* TypeWhisperEar.mlmodelc in Resources */,
+				1D7E00000000000000000005 /* THIRD_PARTY_LICENSE.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5901,6 +5966,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				F48400000000000000000001 /* FileJobScriptPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1D7E0000000000000000001F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D7E00000000000000000001 /* LanguageDetectionPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -7917,6 +7990,52 @@
 			};
 			name = Release;
 		};
+		1D7E00000000000000000022 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Language Detection";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = LanguageDetectionPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.language-detection";
+				PRODUCT_NAME = LanguageDetectionPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		1D7E00000000000000000023 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Language Detection";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = LanguageDetectionPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.language-detection";
+				PRODUCT_NAME = LanguageDetectionPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		F18A00000000000000000034 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -9558,6 +9677,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		1D7E00000000000000000024 /* Build configuration list for PBXNativeTarget "LanguageDetectionPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D7E00000000000000000022 /* Debug */,
+				1D7E00000000000000000023 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		F18A00000000000000000036 /* Build configuration list for PBXNativeTarget "FillerWordsPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -10052,6 +10180,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000026 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		1D7E00000000000000000025 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

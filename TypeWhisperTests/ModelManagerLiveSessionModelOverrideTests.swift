@@ -414,6 +414,45 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertFalse(DictationViewModel.engineSupportsPreview(plugin), "The batch model follows the preview policy")
     }
 
+    func testLanguageDetectionPicksTheSpokenLanguageForEnginesWithoutLanguageHints() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let engine = SingleLanguageModelManagerPlugin()
+        let modelManager = installBatchPlugin(engine, appSupportDirectory: appSupportDirectory)
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe
+        )
+        XCTAssertEqual(engine.receivedLanguages, ["de"], "Without a detector the first selected language wins")
+
+        let detector = FixedLanguageDetectionPlugin(answer: "en")
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: FixedLanguageDetectionPlugin.pluginId,
+                    name: FixedLanguageDetectionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "FixedLanguageDetectionPlugin"
+                ),
+                instance: detector,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe
+        )
+        XCTAssertEqual(engine.receivedLanguages, ["de", "en"])
+        XCTAssertEqual(detector.receivedCandidates, [["de", "en"]])
+    }
+
     private func installLivePlugin(
         _ plugin: LiveModelOverrideTranscriptionPlugin,
         appSupportDirectory: URL
@@ -1032,5 +1071,65 @@ private final class ConfiguredImportingModelManagerPlugin: NSObject, Transcripti
     }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "")
+    }
+}
+
+private final class SingleLanguageModelManagerPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.single-language-engine"
+    static let pluginName = "Single Language Engine Mock"
+
+    private(set) var receivedLanguages: [String?] = []
+
+    var providerId: String { "mock-single-language-engine" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? { nil }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var supportsTranslation: Bool { false }
+    var supportedLanguages: [String] { ["de", "en", "fr"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        receivedLanguages.append(language)
+        return PluginTranscriptionResult(text: "done", detectedLanguage: language)
+    }
+}
+
+private final class FixedLanguageDetectionPlugin: NSObject, SpokenLanguageIdentificationProviderPlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.language-detection"
+    static let pluginName = "Language Detection Mock"
+
+    let answer: String
+    private(set) var receivedCandidates: [[String]] = []
+
+    init(answer: String) {
+        self.answer = answer
+        super.init()
+    }
+
+    required override init() {
+        answer = ""
+        super.init()
+    }
+
+    var spokenLanguageIdentificationProviderId: String { "mock-language-detection" }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func identifySpokenLanguage(
+        samples: [Float],
+        among candidates: [String]
+    ) async throws -> PluginSpokenLanguageIdentification? {
+        receivedCandidates.append(candidates)
+        return PluginSpokenLanguageIdentification(language: answer, confidence: 0.9, margin: 0.8)
     }
 }

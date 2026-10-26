@@ -257,6 +257,10 @@ targets:
         embed: true
         copy:
           destination: plugins
+      - target: LanguageDetectionPlugin
+        embed: true
+        copy:
+          destination: plugins
       - target: LiveTranscriptPlugin
         embed: true
         copy:
@@ -549,6 +553,10 @@ targets:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.filler-words
+  LanguageDetectionPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.language-detection
   LiveTranscriptPlugin:
     templates: [AppStorePlugin]
     templateAttributes:

@@ -444,6 +444,12 @@ final class PluginManager: ObservableObject {
             .compactMap { $0.instance as? any SpeakerDiarizationProviderPlugin }
     }
 
+    var spokenLanguageIdentificationProviders: [any SpokenLanguageIdentificationProviderPlugin] {
+        loadedPlugins
+            .filter { $0.isEnabled && permits($0, .audio) }
+            .compactMap { $0.instance as? any SpokenLanguageIdentificationProviderPlugin }
+    }
+
     var memoryStoragePlugins: [MemoryStoragePlugin] {
         loadedPlugins
             .filter { $0.isEnabled && permitsText($0) }

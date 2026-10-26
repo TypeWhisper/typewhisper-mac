@@ -1,0 +1,115 @@
+[
+  {
+    "metadataOutputVersion" : "3.0",
+    "shortDescription" : "TypeWhisper spoken language ID: 16 kHz mono audio (zero padded to 30 s) -> language logits",
+    "outputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 117)",
+        "shortDescription" : "",
+        "shape" : "[1, 117]",
+        "name" : "own_logprobs",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 117)",
+        "shortDescription" : "",
+        "shape" : "[1, 117]",
+        "name" : "whisper_logprobs",
+        "type" : "MultiArray"
+      }
+    ],
+    "storagePrecision" : "Mixed (Float16, Float32, Palettized (8 bits))",
+    "modelParameters" : [
+
+    ],
+    "specificationVersion" : 8,
+    "mlProgramOperationTypeHistogram" : {
+      "Ios17.exp" : 2,
+      "Ios17.reshape" : 31,
+      "Ios16.softmax" : 8,
+      "Ios17.matmul" : 17,
+      "Ios17.transpose" : 32,
+      "Ios17.maximum" : 6,
+      "Ios17.expandDims" : 7,
+      "Ios17.add" : 22,
+      "Ios16.reduceMax" : 3,
+      "Ios17.sliceByIndex" : 4,
+      "Ios16.reduceSum" : 13,
+      "Pad" : 1,
+      "Ios17.log" : 3,
+      "Ios17.layerNorm" : 21,
+      "Ios17.less" : 1,
+      "Ios17.sqrt" : 5,
+      "Ios17.sub" : 10,
+      "Ios17.conv" : 3,
+      "Ios17.clip" : 1,
+      "Ios16.constexprLutToDense" : 61,
+      "Ios17.linear" : 58,
+      "Ios17.concat" : 5,
+      "Ios17.realDiv" : 1,
+      "Ios16.gelu" : 11,
+      "Ios17.cast" : 5,
+      "Ios17.mul" : 37
+    },
+    "computePrecision" : "Mixed (Float16, Float32, Int32)",
+    "isUpdatable" : "0",
+    "stateSchema" : [
+
+    ],
+    "availability" : {
+      "macOS" : "14.0",
+      "tvOS" : "17.0",
+      "visionOS" : "1.0",
+      "watchOS" : "10.0",
+      "iOS" : "17.0",
+      "macCatalyst" : "17.0"
+    },
+    "modelType" : {
+      "name" : "MLModelType_pipeline",
+      "structure" : [
+        {
+          "name" : "MLModelType_mlProgram"
+        },
+        {
+          "name" : "MLModelType_mlProgram"
+        }
+      ]
+    },
+    "inputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 480000)",
+        "shortDescription" : "",
+        "shape" : "[1, 480000]",
+        "name" : "audio",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 1)",
+        "shortDescription" : "",
+        "shape" : "[1, 1]",
+        "name" : "valid_frames",
+        "type" : "MultiArray"
+      }
+    ],
+    "userDefinedMetadata" : {
+      "whisper_languages" : "af,am,ar,as,az,ba,be,bg,bn,bo,br,bs,ca,cs,cy,da,de,el,en,es,et,eu,fa,fi,fil,fo,fr,gl,gu,ha,haw,he,hi,hr,ht,hu,hy,id,is,it,ja,jv,ka,kk,km,kn,ko,lb,ln,lo,lt,lv,mg,mi,mk,ml,mn,mr,ms,mt,my,ne,nl,no,oc,pa,pl,ps,pt,ro,ru,sa,sd,si,sk,sl,sn,so,sq,sr,su,sv,sw,ta,te,tg,th,tk,tr,tt,uk,ur,uz,vi,yi,yo,zh",
+      "base_model" : "openai\/whisper-tiny (Apache-2.0)",
+      "fusion_beta" : "1.0",
+      "languages" : "af,am,ar,as,ast,az,ba,be,bg,bn,bo,br,bs,ca,ceb,ckb,cs,cy,da,de,el,en,es,et,eu,fa,ff,fi,fil,fo,fr,ga,gl,gu,ha,haw,he,hi,hr,ht,hu,hy,id,ig,is,it,ja,jv,ka,kam,kea,kk,km,kn,ko,ky,lb,lg,ln,lo,lt,luo,lv,mg,mi,mk,ml,mn,mr,ms,mt,my,ne,nl,no,nso,ny,oc,om,or,pa,pl,ps,pt,ro,ru,sa,sd,si,sk,sl,sn,so,sq,sr,su,sv,sw,ta,te,tg,th,tk,tr,tt,uk,umb,ur,uz,vi,wo,xh,yi,yo,yue,zh,zu"
+    },
+    "generatedClassName" : "TypeWhisperEar",
+    "method" : "predict"
+  }
+]
