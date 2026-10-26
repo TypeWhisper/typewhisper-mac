@@ -1491,6 +1491,12 @@ final class TextInsertionService {
             return .insertedViaAccessibility
         }
 
+        // Waiting for the AX write suspended this call. A cancelled insertion must not paste
+        // text the write may have inserted already, and a paste that another insertion posted
+        // meanwhile has to land before this one replaces the clipboard.
+        try Task.checkCancellation()
+        try await settlePendingPaste()
+
         let pasteboard = pasteboardProvider()
         // Resolve an earlier restore before touching the clipboard so this insertion never
         // saves a previous dictation's payload as the user's original clipboard.

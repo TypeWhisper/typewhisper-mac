@@ -7712,6 +7712,27 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
     }
 
+    @MainActor
+    func testCancelledInsertionDoesNotPasteAfterUnverifiedAccessibilityWrite() async throws {
+        // The write may still show up late, so a cancelled insertion must not paste it again.
+        let harness = makeAccessibilityInsertionHarness { _ in
+            (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+        harness.service.accessibilityInsertionVerificationPollingDelay = .seconds(60)
+
+        let insertion = Task { @MainActor in
+            try await harness.service.insertText("Hello", preserveClipboard: true)
+        }
+        insertion.cancel()
+
+        do {
+            _ = try await insertion.value
+            XCTFail("A cancelled insertion must not paste")
+        } catch is CancellationError {}
+        XCTAssertEqual(harness.pasteCount(), 0)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
     /// A service whose focused field reads empty until the AX write reports success, and then
     /// reads `stateAfterWrite` for the 1-based read count after the write.
     @MainActor
