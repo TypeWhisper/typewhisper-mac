@@ -26,6 +26,9 @@ struct LocalLLMSettingsView: View {
         !storedHfToken.isEmpty
     }
 
+    private let hostMemoryGB = LocalLLMPlugin.hostMemoryGB
+    private let recommendedModel = LocalLLMPlugin.recommendedModel()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(LocalLLMPlugin.pluginName)
@@ -152,9 +155,11 @@ struct LocalLLMSettingsView: View {
                 }
             }
 
-            Text("Gemma 4 E2B/E4B 4-bit models are recommended. Smaller models need less memory but follow instructions less reliably. Larger variants may fail depending on hardware.", bundle: bundle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let recommendedModel {
+                Text("For this Mac with \(hostMemoryGB) GB of memory, \(recommendedModel.displayName) is recommended. Smaller models respond faster but follow instructions less reliably.", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if case .error(let message) = modelState {
                 HStack(spacing: 4) {
@@ -203,11 +208,31 @@ struct LocalLLMSettingsView: View {
     private func modelRow(_ modelDef: LocalLLMModelDef) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(modelDef.displayName)
-                    .font(.body)
+                HStack(spacing: 6) {
+                    Text(modelDef.displayName)
+                        .font(.body)
+                    if modelDef.id == recommendedModel?.id {
+                        Text("Recommended for this Mac", bundle: bundle)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.blue.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.blue)
+                    }
+                }
+                if !modelDef.usageHint.isEmpty {
+                    Text(LocalizedStringKey(modelDef.usageHint), bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(modelDef.minimumMemoryGB > hostMemoryGB ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                if modelDef.minimumMemoryGB > hostMemoryGB {
+                    Text("This Mac has \(hostMemoryGB) GB of memory, less than this model needs.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
             // The taller experimental column would otherwise be read before the model name.
             .accessibilitySortPriority(1)

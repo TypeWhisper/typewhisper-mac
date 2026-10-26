@@ -1197,8 +1197,9 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             displayName: "Gemma 4 E2B (4-bit)",
             repoId: "mlx-community/gemma-4-e2b-it-4bit",
             sizeDescription: "~3.6 GB",
-            ramRequirement: "8 GB+",
+            minimumMemoryGB: 8,
             availability: .supported,
+            usageHint: "Fastest. Good for cleanup and short texts, less reliable with inline commands and notes.",
             extraEOSTokens: gemmaEOSTokens
         ),
         LocalLLMModelDef(
@@ -1206,8 +1207,9 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             displayName: "Gemma 4 E4B (4-bit)",
             repoId: "mlx-community/gemma-4-e4b-it-4bit",
             sizeDescription: "~5.2 GB",
-            ramRequirement: "16 GB+",
+            minimumMemoryGB: 16,
             availability: .supported,
+            usageHint: "Balanced speed and quality for every workflow.",
             extraEOSTokens: gemmaEOSTokens
         ),
         LocalLLMModelDef(
@@ -1215,8 +1217,9 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             displayName: "Gemma 4 E4B (8-bit)",
             repoId: "mlx-community/gemma-4-e4b-it-8bit",
             sizeDescription: "~8 GB",
-            ramRequirement: "16 GB+",
-            availability: .experimental(warning: experimentalModelWarning),
+            minimumMemoryGB: 16,
+            availability: .supported,
+            usageHint: "Slightly more accurate than the 4-bit version, but needs more memory and runs slower.",
             extraEOSTokens: gemmaEOSTokens
         ),
         LocalLLMModelDef(
@@ -1224,7 +1227,8 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             displayName: "Gemma 4 26B-A4B (4-bit, MoE)",
             repoId: "mlx-community/gemma-4-26b-a4b-it-4bit",
             sizeDescription: "~15.6 GB",
-            ramRequirement: "32 GB+",
+            minimumMemoryGB: 32,
+            // mlx-swift-lm 3.31 cannot load the Gemma 4 MoE weights yet ("Unhandled keys [experts, router, ...]").
             availability: .experimental(warning: experimentalModelWarning),
             extraEOSTokens: gemmaEOSTokens
         ),
@@ -1233,7 +1237,7 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             displayName: "Qwen3.5 2B (4-bit)",
             repoId: "mlx-community/Qwen3.5-2B-4bit",
             sizeDescription: "~1.8 GB",
-            ramRequirement: "8 GB+",
+            minimumMemoryGB: 8,
             availability: .experimental(warning: qwen35ModelWarning)
         ),
         LocalLLMModelDef(
@@ -1241,13 +1245,30 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             displayName: "LFM2.5 2.6B (4-bit)",
             repoId: "LiquidAI/LFM2.5-2.6B-MLX-4bit",
             sizeDescription: "~1.6 GB",
-            ramRequirement: "8 GB+",
+            minimumMemoryGB: 8,
             availability: .experimental(warning: lfm25ModelWarning)
         ),
     ]
 
     static var supportedModelDefinitions: [LocalLLMModelDef] {
         availableModels.filter(\.isSupported)
+    }
+
+    /// Installed memory of this Mac in GB, rounded the way Apple advertises it.
+    static var hostMemoryGB: Int {
+        Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded())
+    }
+
+    /// The largest supported model this Mac has enough memory for. On a tie the
+    /// model listed first wins, so a 4-bit variant beats its 8-bit sibling.
+    /// Macs below every requirement get the smallest supported model.
+    static func recommendedModel(forMemoryGB memoryGB: Int = hostMemoryGB) -> LocalLLMModelDef? {
+        let supported = supportedModelDefinitions
+        let fitting = supported.filter { $0.minimumMemoryGB <= memoryGB }
+        guard let largest = fitting.map(\.minimumMemoryGB).max() else {
+            return supported.min { $0.minimumMemoryGB < $1.minimumMemoryGB }
+        }
+        return fitting.first { $0.minimumMemoryGB == largest }
     }
 
     static func modelDefinition(for id: String?) -> LocalLLMModelDef? {
@@ -1257,7 +1278,7 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
 
     static func sanitizedSelectedModelId(_ id: String?) -> String? {
         guard let modelDef = modelDefinition(for: id) else {
-            return supportedModelDefinitions.first?.id
+            return recommendedModel()?.id
         }
         return modelDef.id
     }
@@ -1381,9 +1402,14 @@ struct LocalLLMModelDef: Identifiable {
     let displayName: String
     let repoId: String
     let sizeDescription: String
-    let ramRequirement: String
+    /// Installed memory a Mac needs for this model, in GB as Apple advertises it.
+    let minimumMemoryGB: Int
     let availability: LocalLLMModelAvailability
+    /// Short guidance shown under the model name; empty for models with a warning instead.
+    var usageHint: String = ""
     var extraEOSTokens: Set<String> = []
+
+    var ramRequirement: String { "\(minimumMemoryGB) GB+" }
 
     var isSupported: Bool {
         if case .supported = availability {

@@ -70,7 +70,7 @@ final class PromptAction {
         [
             PromptAction(
                 name: String(localized: "preset.translate"),
-                prompt: "Translate the following text to English. If it's already in English, translate it to German. Only return the translation, nothing else.",
+                prompt: "Translate the following text. If it is written in English, translate it into German; otherwise translate it into English. Only return the translation, nothing else.",
                 icon: "globe",
                 isPreset: true,
                 sortOrder: 0,
@@ -124,7 +124,7 @@ final class PromptAction {
             ),
             PromptAction(
                 name: String(localized: "preset.draftEmail"),
-                prompt: "Draft a complete, professional email from the following notes. Include an appropriate subject line, greeting, body paragraphs, and closing. Respond in the same language as the input text. Only return the email.",
+                prompt: "Draft a complete, professional email from the following notes. Include an appropriate subject line, greeting, body paragraphs, and closing. Use only facts from the notes and do not invent details. Respond in the same language as the input text. Only return the email.",
                 icon: "envelope.badge",
                 isPreset: true,
                 sortOrder: 6,

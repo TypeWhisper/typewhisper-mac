@@ -1451,6 +1451,16 @@ final class WorkflowServiceTests: XCTestCase {
         assertNoAllCapsWorkflowSafetyProse(prompt)
     }
 
+    func testSystemPromptNamesTheDetectedLanguage() throws {
+        let workflow = Workflow(name: "Clean", template: .cleanedText, trigger: .manual())
+
+        let detected = try XCTUnwrap(workflow.systemPrompt(detectedLanguage: "de"))
+        let unknown = try XCTUnwrap(workflow.systemPrompt(configuredLanguage: "auto"))
+
+        XCTAssertTrue(detected.contains("Detected source language: German (de)."))
+        XCTAssertTrue(unknown.contains("Configured source language: auto."))
+    }
+
     func testStoredTranslationWorkflowWithoutProcessorKeepsLLMPrompt() throws {
         let workflow = Workflow(
             name: "Stored Translate",
@@ -1827,7 +1837,7 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(result, "Friendly email")
         let prompt = try XCTUnwrap(capturedPrompt)
         XCTAssertTrue(prompt.contains("may contain a spoken transformation instruction"))
-        XCTAssertTrue(prompt.contains("If found, remove the instruction and apply the transformation."))
+        XCTAssertTrue(prompt.contains("If found, remove the instruction and apply the transformation to the rest of the text"))
         XCTAssertTrue(prompt.contains("Also apply this style context: Keep it polished."))
         XCTAssertTrue(prompt.contains("Return the result as json."))
         XCTAssertFalse(prompt.contains("Input boundary:"))

@@ -520,7 +520,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
         // The downloader rejects this repository ID offline, before any MLX work.
         let undownloadable = LocalLLMModelDef(
             id: "fixture-undownloadable", displayName: "Fixture", repoId: "not-a-repository",
-            sizeDescription: "", ramRequirement: "", availability: .supported)
+            sizeDescription: "", minimumMemoryGB: 8, availability: .supported)
 
         do {
             try await gemma.loadModel(undownloadable)
@@ -541,7 +541,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
         gemma.activate(host: MockHostServices(pluginDataDirectory: fixture.root, modelDownloadRefusal: reason))
         let model = LocalLLMModelDef(
             id: "fixture-refused", displayName: "Fixture", repoId: "mlx-community/fixture-refused",
-            sizeDescription: "", ramRequirement: "", availability: .supported)
+            sizeDescription: "", minimumMemoryGB: 8, availability: .supported)
 
         do {
             try await gemma.loadModel(model)
@@ -658,6 +658,22 @@ final class MLXPluginModelStorageTests: XCTestCase {
 
         XCTAssertEqual(messages.map(\.role), [.system, .user])
         XCTAssertEqual(messages.map(\.content), ["Translate the following text to English.", "Hallo Welt"])
+    }
+
+    func testLocalLLMRecommendationFollowsInstalledMemory() {
+        let recommendations = [4, 8, 16, 24, 32, 48, 64].map {
+            LocalLLMPlugin.recommendedModel(forMemoryGB: $0)?.id
+        }
+
+        XCTAssertEqual(recommendations, [
+            "gemma-4-e2b-it-4bit",
+            "gemma-4-e2b-it-4bit",
+            "gemma-4-e4b-it-4bit",
+            "gemma-4-e4b-it-4bit",
+            "gemma-4-e4b-it-4bit",
+            "gemma-4-e4b-it-4bit",
+            "gemma-4-e4b-it-4bit",
+        ])
     }
 
     func testGemma4NetworkPolicyAllowsNormalRuntime() {

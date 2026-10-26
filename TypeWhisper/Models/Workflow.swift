@@ -872,7 +872,7 @@ extension Workflow {
             return nil
         case .cleanedText:
             return """
-            Clean up the dictated text for readability. Fix punctuation, grammar, and formatting while preserving the original meaning and language. Return only the cleaned text.
+            Clean up the dictated text for readability. Fix punctuation, capitalization, grammar, and formatting. Remove filler words (such as um, uh, äh, ähm) and stutters. If the speaker corrects themselves, keep only the correction. Do not add, drop, or reword anything else, and keep the original language. Return only the cleaned text.
             \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         case .translation:
@@ -883,17 +883,17 @@ extension Workflow {
                 ?? fallbackTranslationTarget
                 ?? "English"
             return """
-            Translate the dictated text into \(targetLanguage). Preserve meaning, names, and domain-specific terminology. Return only the translated text.
+            Translate the dictated text into \(targetLanguage). Write natural, correctly punctuated \(targetLanguage). Preserve meaning, names, and domain-specific terminology. Return only the translated text.
             \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         case .emailReply:
             return """
-            Turn the dictated text into a complete reply email. Use an appropriate greeting and closing, keep the same language as the source unless instructed otherwise, and return only the email body.
+            Turn the dictated text into a complete reply email, written in the same language as the dictated text unless instructed otherwise. If the speaker describes what to tell someone (for example "tell Tom that ..." or "reply to Ms. Lee ..."), write the email directly to that person. Start with an appropriate greeting, end with a closing, and match the formality the speaker implies. Do not add a subject line, placeholders such as [Name], or facts that are not in the dictated text. Return only the email body.
             \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         case .meetingNotes:
             return """
-            Restructure the dictated text into clear meeting notes with concise sections, decisions, and action items where applicable. Return only the final notes.
+            Restructure the dictated text into clear meeting notes. Write the notes and all headings in the same language as the dictated text. Use concise sections for participants, decisions, and action items with owners and due dates where the text mentions them. Keep every date, deadline, and number. Refer to the speaker in the first person, leave out sections without content, and do not add placeholders or facts that are not in the dictated text. Return only the final notes.
             \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         case .checklist:
@@ -908,7 +908,7 @@ extension Workflow {
             """
         case .summary:
             return """
-            Summarize the dictated text into a concise, accurate summary. Preserve important facts and keep the source language unless instructed otherwise. Return only the summary.
+            Summarize the dictated text into a concise, accurate summary, written in the same language as the dictated text unless instructed otherwise. Preserve important facts and numbers, and do not add information. Return only the summary.
             \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         case .custom:
@@ -995,12 +995,21 @@ extension Workflow {
 
     private func workflowLanguageHint(detectedLanguage: String?, configuredLanguage: String?) -> String {
         if let detectedLanguage, !detectedLanguage.isEmpty {
-            return "\nDetected source language: \(detectedLanguage)."
+            return "\nDetected source language: \(Self.languageHintName(detectedLanguage))."
         }
         if let configuredLanguage, !configuredLanguage.isEmpty {
-            return "\nConfigured source language: \(configuredLanguage)."
+            return "\nConfigured source language: \(Self.languageHintName(configuredLanguage))."
         }
         return ""
+    }
+
+    /// Small local models follow "German (de)" far more reliably than a bare "de".
+    static func languageHintName(_ identifier: String) -> String {
+        guard let name = Locale(identifier: "en_US").localizedString(forIdentifier: identifier),
+              name.caseInsensitiveCompare(identifier) != .orderedSame else {
+            return identifier
+        }
+        return "\(name) (\(identifier))"
     }
 }
 
