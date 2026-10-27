@@ -165,6 +165,24 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
         }
     }
 
+    func testAutomaticAppleSpeechPreviewKeepsTheLoadedLocale() {
+        let plugin = LivePreviewReadinessPlugin(
+            providerId: AppleSpeechModelSelection.providerId,
+            isConfigured: true,
+            selectedModelId: "speechanalyzer-en_US",
+            availableModels: [
+                PluginModelInfo(id: "speechanalyzer-en_US", displayName: "English (US)"),
+                PluginModelInfo(id: "speechanalyzer-en_GB", displayName: "English (UK)"),
+            ]
+        )
+
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: "en"), ["en_US"])
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: "en-US"), ["en_US"])
+        // en-GB would switch the loaded model and might download one.
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: "en-GB"), [])
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: nil), [])
+    }
+
     func testAutomaticPreviewEngineIsLoadedLocalStreamingEngineForPreviewLanguage() {
         typealias Candidate = DictationViewModel.AutomaticPreviewEngineCandidate
         let candidates = [
