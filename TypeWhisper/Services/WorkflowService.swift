@@ -98,13 +98,11 @@ final class WorkflowService: ObservableObject {
     }
 
     func shouldSkipAIProcessingForShortDictation(text: String) -> Bool {
-        guard shortTranscriptionMinimumWords > 0 else { return false }
+        guard shortTranscriptionMinimumWords > 0,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
 
-        let wordCount = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: \.isWhitespace)
-            .count
-        return wordCount > 0 && wordCount < shortTranscriptionMinimumWords
+        // Punctuation-only text counts as zero words and stays short.
+        return WordCount.count(in: text) < shortTranscriptionMinimumWords
     }
 
     @discardableResult

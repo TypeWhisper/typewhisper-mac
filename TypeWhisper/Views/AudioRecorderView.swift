@@ -581,6 +581,7 @@ private struct RecordingRow: View {
     @ObservedObject var viewModel: AudioRecorderViewModel
     @State private var showTranscript = false
     @State private var showRetranscriptionConfirmation = false
+    @State private var showDeletionConfirmation = false
 
     /// The transcript is being made, or waits in the queue.
     private var transcriptionStatus: AudioRecorderViewModel.PendingTranscription.Status? {
@@ -736,7 +737,7 @@ private struct RecordingRow: View {
                     ))
 
                     Button(role: .destructive) {
-                        viewModel.deleteRecording(item)
+                        showDeletionConfirmation = true
                     } label: {
                         Image(systemName: "trash")
                     }
@@ -804,7 +805,7 @@ private struct RecordingRow: View {
             .disabled(viewModel.isRetranscribing(item))
             Divider()
             Button(String(localized: "recorder.delete"), role: .destructive) {
-                viewModel.deleteRecording(item)
+                showDeletionConfirmation = true
             }
             .disabled(transcriptionStatus != nil)
         }
@@ -824,6 +825,18 @@ private struct RecordingRow: View {
                     item.fileName
                 )
             )
+        }
+        .confirmationDialog(
+            String(format: String(localized: "recorder.deleteConfirmation.title"), item.fileName),
+            isPresented: $showDeletionConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "recorder.moveToTrash"), role: .destructive) {
+                viewModel.deleteRecording(item)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "recorder.deleteConfirmation.message"))
         }
     }
 

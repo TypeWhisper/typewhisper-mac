@@ -459,6 +459,7 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
 
         let engine = HostDetectedLanguageModelManagerPlugin()
         let modelManager = installBatchPlugin(engine, appSupportDirectory: appSupportDirectory)
+        modelManager.preferredLanguages = { ["fr-FR"] }
         let detector = FixedLanguageDetectionPlugin(answer: "de-DE")
         PluginManager.shared.loadedPlugins.append(
             LoadedPlugin(
@@ -487,11 +488,86 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
 
         XCTAssertEqual(
             engine.receivedLanguages, ["de-DE", nil, nil],
-            "Unclear answers and languages the engine lacks keep the engine's own fallback"
+            "Unclear answers and languages the engine lacks keep the engine's own behavior when it lacks the user's macOS languages too"
         )
         let candidates = try XCTUnwrap(detector.receivedCandidates.first)
         XCTAssertEqual(Array(candidates.prefix(2)), ["en-US", "de-DE"], "Engine spellings come first")
         XCTAssertTrue(candidates.contains("fr"), "Other languages compete, so French speech is not forced onto German")
+    }
+
+    func testUnclearDetectionFallsBackToThePreferredMacOSLanguageUnlessTheEngineHasItsOwnDefault() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let engine = HostDetectedLanguageModelManagerPlugin()
+        let modelManager = installBatchPlugin(engine, appSupportDirectory: appSupportDirectory)
+        modelManager.preferredLanguages = { ["fr-CA", "de-AT", "en-US"] }
+        let detector = FixedLanguageDetectionPlugin(answer: "en-US")
+        detector.margin = 0.1
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: FixedLanguageDetectionPlugin.pluginId,
+                    name: FixedLanguageDetectionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "FixedLanguageDetectionPlugin"
+                ),
+                instance: detector,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .auto,
+            task: .transcribe
+        )
+
+        let engineEntry = PluginManager.shared.loadedPlugins[0]
+        PluginManager.shared.loadedPlugins[0] = LoadedPlugin(
+            manifest: PluginManifest(
+                id: engineEntry.manifest.id,
+                name: engineEntry.manifest.name,
+                version: engineEntry.manifest.version,
+                principalClass: engineEntry.manifest.principalClass,
+                capabilities: [PluginCapability.defaultSpokenLanguage.rawValue]
+            ),
+            instance: engine,
+            bundle: engineEntry.bundle,
+            sourceURL: engineEntry.sourceURL,
+            isEnabled: true
+        )
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .auto,
+            task: .transcribe
+        )
+
+        XCTAssertEqual(
+            engine.receivedLanguages, ["de-DE", nil],
+            "French is unsupported, so the engine gets its spelling of German; an engine with its own default keeps it"
+        )
+    }
+
+    func testPreferredMacOSLanguageFallbackUsesTheLanguagesOfTheOverrideModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let engine = HostDetectedLanguageModelManagerPlugin()
+        let modelManager = installBatchPlugin(engine, appSupportDirectory: appSupportDirectory)
+        modelManager.preferredLanguages = { ["el-GR", "de-DE"] }
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: "greek"
+        )
+
+        XCTAssertEqual(engine.receivedLanguages, ["el"], "Greek is only a language of the override model")
+        XCTAssertEqual(engine.selectedModelId, "default")
     }
 
     private func installLivePlugin(
@@ -1185,15 +1261,20 @@ private final class HostDetectedLanguageModelManagerPlugin: NSObject, HostLangua
     var providerId: String { "mock-host-detected-language-engine" }
     var providerDisplayName: String { Self.pluginName }
     var isConfigured: Bool { true }
-    var selectedModelId: String? { nil }
+    private(set) var selectedModelId: String? = "default"
     var transcriptionModels: [PluginModelInfo] { [] }
     var supportsTranslation: Bool { false }
-    var supportedLanguages: [String] { ["en-US", "en-GB", "de-DE"] }
-    var languagesForHostDetection: [String] { ["en-US", "de-DE"] }
+    /// The "greek" model speaks other languages, like Canary's Greek/English model.
+    var supportedLanguages: [String] {
+        selectedModelId == "greek" ? ["el", "en-US"] : ["en-US", "en-GB", "de-DE"]
+    }
+    var languagesForHostDetection: [String] {
+        selectedModelId == "greek" ? ["el", "en-US"] : ["en-US", "de-DE"]
+    }
 
     func activate(host: HostServices) {}
     func deactivate() {}
-    func selectModel(_ modelId: String) {}
+    func selectModel(_ modelId: String) { selectedModelId = modelId }
 
     func transcribe(
         audio: AudioData,

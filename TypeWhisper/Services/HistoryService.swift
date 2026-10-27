@@ -596,7 +596,7 @@ final class HistoryService: ObservableObject {
             record.finalText = text
             record.renderedDocument = nil
             record.synchronizedStructuredDocument = nil
-            record.wordsCount = text.split(separator: " ").count
+            record.wordsCount = WordCount.count(in: text)
             record.contentUpdatedAt = Date()
         }
         save()
@@ -761,7 +761,7 @@ final class HistoryService: ObservableObject {
         record.finalText = finalText
         record.renderedDocument = nil
         record.synchronizedStructuredDocument = nil
-        record.wordsCount = finalText.split(separator: " ").count
+        record.wordsCount = WordCount.count(in: finalText)
         record.contentUpdatedAt = Date()
         save()
         refreshRecentRecords()
@@ -1421,7 +1421,7 @@ final class HistoryService: ObservableObject {
                 record.language = content.detectedLanguage
                 record.engineUsed = content.engineDisplayName
                 record.modelUsed = content.modelDisplayName
-                record.wordsCount = content.finalText.split(whereSeparator: \.isWhitespace).count
+                record.wordsCount = WordCount.count(in: content.finalText)
                 record.originDeviceID = content.originDeviceID
                 record.originPlatformRaw = content.originPlatform
                 record.sourceRaw = content.source
@@ -1709,7 +1709,7 @@ final class HistoryService: ObservableObject {
         }
         var needsSave = false
         for record in candidates {
-            record.wordsCount = record.finalText.split(separator: " ").count
+            record.wordsCount = WordCount.count(in: record.finalText)
             needsSave = true
         }
         if needsSave {
@@ -1927,7 +1927,7 @@ final class HistoryService: ObservableObject {
         record.transcriptionVersionsData = try JSONEncoder().encode(versions)
         version.apply(to: record)
         record.activeTranscriptionVersionID = id
-        record.wordsCount = version.finalText.split(whereSeparator: \.isWhitespace).count
+        record.wordsCount = WordCount.count(in: version.finalText)
         let now = Date()
         record.contentUpdatedAt = now
         record.speakerTranscriptUpdatedAt = now

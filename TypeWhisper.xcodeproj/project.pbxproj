@@ -200,6 +200,7 @@
 		AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000001 /* UsageStatisticsDay.swift */; };
 		AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000002 /* UsageStatisticsMetadata.swift */; };
 		3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */; };
+		0C4E20E9760AF36FB947A65E /* WordCount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44E5C031667F742A0D9D0205 /* WordCount.swift */; };
 		AA8390000000000000000003 /* UsageStatisticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000003 /* UsageStatisticsService.swift */; };
 		AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */; };
 		A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000001 /* SelectionPalettePanel.swift */; };
@@ -1016,6 +1017,7 @@
 		BB8390000000000000000001 /* UsageStatisticsDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsDay.swift; sourceTree = "<group>"; };
 		BB8390000000000000000002 /* UsageStatisticsMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsMetadata.swift; sourceTree = "<group>"; };
 		91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsKeys.swift; sourceTree = "<group>"; };
+		44E5C031667F742A0D9D0205 /* WordCount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordCount.swift; sourceTree = "<group>"; };
 		BB00000000000000000061 /* HistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryService.swift; sourceTree = "<group>"; };
 		BB8390000000000000000003 /* UsageStatisticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsService.swift; sourceTree = "<group>"; };
 		BB00000000000000000062 /* TextDiffService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDiffService.swift; sourceTree = "<group>"; };
@@ -2158,6 +2160,7 @@
 				BB8390000000000000000001 /* UsageStatisticsDay.swift */,
 				BB8390000000000000000002 /* UsageStatisticsMetadata.swift */,
 				91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */,
+				44E5C031667F742A0D9D0205 /* WordCount.swift */,
 				BB00000000000000000065 /* Profile.swift */,
 				BB00000000000000000356 /* Workflow.swift */,
 				BB00000000000000000077 /* DictionaryEntry.swift */,
@@ -5559,6 +5562,7 @@
 				AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */,
 				AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */,
 				3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */,
+				0C4E20E9760AF36FB947A65E /* WordCount.swift in Sources */,
 				AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */,
 				AA00000000000000000061 /* HistoryService.swift in Sources */,
 				EE93DC8E11070DD3985DE3A3 /* HistoryRetranscriptionEnvironment.swift in Sources */,

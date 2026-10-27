@@ -6755,6 +6755,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         service.focusedTextElementOverride = { webArea }
         service.accessibilityRoleOverride = { $0 == webArea ? "AXWebArea" : "AXWindow" }
         service.accessibilityParentOverride = { $0 == webArea ? window : nil }
+        // A web page without a focused field: WebKit does not let anyone set its value.
+        service.accessibilityValueSettableOverride = { _ in false }
         service.focusedTextStateOverride = { _ in
             (value: nil, selectedText: "", selectedRange: nil)
         }
@@ -6765,6 +6767,40 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextUnchanged)))
         XCTAssertTrue(result.missedTextField)
+    }
+
+    @MainActor
+    func testFocusedEditableWebDocumentDoesNotReportMissedTextField() async throws {
+        // Mail's message body is a focused AXWebArea with a settable value that stays "" while
+        // the pasted text lands in its children.
+        let service = TextInsertionService()
+        let webArea = AXUIElementCreateApplication(1)
+        let scrollArea = AXUIElementCreateApplication(2)
+        let window = AXUIElementCreateApplication(3)
+        let pasteboard = NSPasteboard.withUniqueName()
+        var pastedText: String?
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Mail", "com.apple.mail", nil) }
+        service.focusedTextElementOverride = { webArea }
+        service.accessibilityRoleOverride = {
+            $0 == webArea ? "AXWebArea" : ($0 == window ? "AXWindow" : "AXScrollArea")
+        }
+        service.accessibilityParentOverride = {
+            $0 == webArea ? scrollArea : ($0 == scrollArea ? window : nil)
+        }
+        service.accessibilityValueSettableOverride = { $0 == webArea }
+        service.focusedTextStateOverride = { _ in
+            (value: "", selectedText: nil, selectedRange: nil)
+        }
+        service.pasteVerificationAttempts = 0
+        service.pasteSimulatorOverride = { pastedText = pasteboard.string(forType: .string) }
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        XCTAssertEqual(pastedText, "Hello")
+        XCTAssertEqual(result, .pasted(verification: .unverified(.webContentUnchanged)))
+        XCTAssertFalse(result.missedTextField)
     }
 
     @MainActor
@@ -11114,7 +11150,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(value, snapshot.rawTranscript)
         let restoredSession = context.dictationViewModel.apiDictationSession(id: sessionID)
         XCTAssertEqual(restoredSession?.transcription?.text, value)
-        XCTAssertEqual(restoredSession?.transcription?.wordsCount, value.split(whereSeparator: \.isWhitespace).count)
+        XCTAssertEqual(restoredSession?.transcription?.wordsCount, WordCount.count(in: value))
         XCTAssertEqual(context.recentTranscriptionStore.latestEntry(historyRecords: [])?.finalText, value)
         XCTAssertEqual(context.dictationViewModel.lastTranscribedText, value)
         if historyEnabled {

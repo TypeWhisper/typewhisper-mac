@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.google-cloud-stt",
     "name": "Google Cloud Speech-to-Text",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "minHostVersion": "1.8.1",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -13,6 +13,9 @@
         "ja": "サービスアカウントJSONキーを使うGoogle Cloud Speech-to-Textのクラウド文字起こしです。長時間録音は音声を分割して複数の認識リクエストで処理します。"
     },
     "category": "transcription",
+    "capabilities": [
+        "default-spoken-language"
+    ],
     "iconSystemName": "globe.badge.chevron.backward",
     "iconURL": "https://www.typewhisper.com/brand-logos/google-cloud/logo.svg",
     "principalClass": "GoogleCloudSTTPlugin",

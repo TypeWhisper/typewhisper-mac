@@ -27,10 +27,13 @@ enum LanguageSelectionHintBehavior: Equatable {
 /// How "auto-detect" works for an engine that cannot detect the spoken language itself.
 enum LanguageAutoDetectionBehavior: Equatable {
     case engineDetects
-    /// A language detection plugin picks among the engine's languages.
-    case detectedByPlugin
-    /// Nothing picks the language; the engine falls back to its own default or fails.
-    case unavailable
+    /// A language detection plugin picks among the engine's languages. When it is unsure, the
+    /// engine gets the user's preferred macOS language or, with `preferredLanguageFallback` false,
+    /// keeps its own default.
+    case detectedByPlugin(preferredLanguageFallback: Bool)
+    /// No plugin picks the language; the engine gets the user's preferred macOS language or, with
+    /// `preferredLanguageFallback` false, keeps its own default.
+    case unavailable(preferredLanguageFallback: Bool)
 
     @MainActor
     init(engine: TranscriptionEnginePlugin?) {
@@ -39,9 +42,10 @@ enum LanguageAutoDetectionBehavior: Equatable {
             self = .engineDetects
             return
         }
+        let fallback = ModelManagerService.fallsBackToPreferredLanguage(engine)
         self = PluginManager.shared?.spokenLanguageIdentificationProviders.isEmpty == false
-            ? .detectedByPlugin
-            : .unavailable
+            ? .detectedByPlugin(preferredLanguageFallback: fallback)
+            : .unavailable(preferredLanguageFallback: fallback)
     }
 }
 
@@ -114,10 +118,14 @@ struct LanguageSelectionEditor: View {
         switch autoDetectionBehavior {
         case .engineDetects:
             return nil
-        case .detectedByPlugin:
+        case .detectedByPlugin(preferredLanguageFallback: false):
             return localizedAppText("This engine cannot detect the language itself. The Language Detection plugin picks it from the engine's languages.", de: "Diese Engine erkennt die Sprache nicht selbst. Das Plugin „Language Detection“ wählt sie aus den Sprachen der Engine.")
-        case .unavailable:
+        case .detectedByPlugin(preferredLanguageFallback: true):
+            return localizedAppText("This engine cannot detect the language itself. The Language Detection plugin picks it from the engine's languages. When the plugin is unsure, the engine uses the first of your preferred macOS languages it supports.", de: "Diese Engine erkennt die Sprache nicht selbst. Das Plugin „Language Detection“ wählt sie aus den Sprachen der Engine. Ist das Plugin unsicher, verwendet die Engine die erste deiner bevorzugten macOS-Sprachen, die sie unterstützt.")
+        case .unavailable(preferredLanguageFallback: false):
             return localizedAppText("This engine cannot detect the language itself. Select its language, or enable the Language Detection plugin.", de: "Diese Engine erkennt die Sprache nicht selbst. Wähle ihre Sprache aus oder aktiviere das Plugin „Language Detection“.")
+        case .unavailable(preferredLanguageFallback: true):
+            return localizedAppText("This engine cannot detect the language itself. It uses the first of your preferred macOS languages it supports. Select its language, or enable the Language Detection plugin.", de: "Diese Engine erkennt die Sprache nicht selbst. Sie verwendet die erste deiner bevorzugten macOS-Sprachen, die sie unterstützt. Wähle ihre Sprache aus oder aktiviere das Plugin „Language Detection“.")
         }
     }
 

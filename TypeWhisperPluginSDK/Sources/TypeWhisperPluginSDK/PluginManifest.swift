@@ -29,6 +29,10 @@ public enum PluginCapability: String, Codable, Sendable, CaseIterable {
     /// The engine's live session produces the final dictation result, so the host
     /// streams dictation through it even when no transcript preview is shown.
     case liveDictation = "live-dictation"
+    /// Without a language the engine uses a default language of its own, such as one set in its
+    /// settings. For a `HostLanguageDetectionEnginePlugin`, the host then passes no language when
+    /// detection cannot pick one, instead of the user's preferred macOS language.
+    case defaultSpokenLanguage = "default-spoken-language"
 }
 
 public struct PluginManifest: Codable, Equatable, Sendable {
