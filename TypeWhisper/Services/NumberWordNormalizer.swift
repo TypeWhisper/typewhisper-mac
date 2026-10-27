@@ -1,7 +1,13 @@
 import Foundation
 
 enum NumberWordNormalizer {
-    private static let supportedLanguageCodes: Set<String> = ["en", "de", "fr", "es", "nl", "zh", "ja"]
+    private static let supportedLanguageCodes: Set<String> = ["en", "de", "fr", "es", "nl", "pl", "zh", "ja"]
+
+    /// Ordinary words in a language that another language's parser reads as a number,
+    /// such as Polish `ten` ("this") and `one` ("they") for English.
+    private static let ordinaryWordsByLanguage: [String: Set<String>] = [
+        "pl": ["ten", "one"],
+    ]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
     static func supports(language: String?) -> Bool {
@@ -9,7 +15,19 @@ enum NumberWordNormalizer {
         return supportedLanguageCodes.contains(languageCode)
     }
 
-    static func normalize(text: String, language: String?, minimumValue: Int = 0) -> String {
+    static func ordinaryWords(forLanguage language: String?) -> Set<String> {
+        guard let languageCode = PunctuationLanguageNormalizer.normalize(language) else { return [] }
+        return ordinaryWordsByLanguage[languageCode] ?? []
+    }
+
+    /// - Parameter preservedStandaloneWords: Lowercased words that stay unchanged when they
+    ///   form a number on their own. Longer expressions that contain them still convert.
+    static func normalize(
+        text: String,
+        language: String?,
+        minimumValue: Int = 0,
+        preservedStandaloneWords: Set<String> = []
+    ) -> String {
         guard let languageCode = PunctuationLanguageNormalizer.normalize(language),
               supportedLanguageCodes.contains(languageCode),
               !text.isEmpty else {
@@ -27,7 +45,9 @@ enum NumberWordNormalizer {
                 index = decimal.endIndex
             } else if tokens[index].isWord,
                let parsed = parseNumber(startingAt: index, in: tokens, languageCode: languageCode) {
-                if parsed.words.shouldNormalize(minimumValue: minimumValue) {
+                let isPreservedWord = parsed.endIndex == index + 1
+                    && preservedStandaloneWords.contains(tokens[index].text.lowercased())
+                if !isPreservedWord, parsed.words.shouldNormalize(minimumValue: minimumValue) {
                     result.append(parsed.words.value)
                 } else {
                     // Consume the entire expression even when keeping its original spelling.
@@ -167,6 +187,8 @@ enum NumberWordNormalizer {
             parsed = SpanishNumberWordParser.parse(wordTexts)
         case "nl":
             parsed = DutchNumberWordParser.parse(wordTexts)
+        case "pl":
+            parsed = PolishNumberWordParser.parse(wordTexts)
         case "zh":
             parsed = ChineseNumberWordParser.parse(wordTexts)
         case "ja":

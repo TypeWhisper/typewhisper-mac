@@ -294,6 +294,32 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "een komma vijf seconden", language: "nl"), "1,5 seconden")
     }
 
+    func testPolishNumbersNormalizeToDigits() {
+        for (spoken, expected) in [
+            ("mam dziesięć plików", "mam 10 plików"),
+            ("dwadzieścia trzy", "23"),
+            ("sto dwadzieścia", "120"),
+            ("tysiąc", "1000"),
+            ("dwa tysiące pięćset", "2500"),
+            ("Dziewiętnaście, dwieście, milion", "19, 200, 1000000"),
+            ("dwa przecinek pięć", "2,5"),
+            ("minus jeden przecinek pięć", "-1,5")
+        ] {
+            XCTAssertEqual(NumberWordNormalizer.normalize(text: spoken, language: "pl"), expected, spoken)
+        }
+    }
+
+    func testPolishKeepsDeclinedFormsLoneOneAndPluralScales() {
+        for text in [
+            "dla dziesięciu osób",
+            "jeden z nich",
+            "tysiące ludzi",
+            "piec jest gorący"
+        ] {
+            XCTAssertEqual(NumberWordNormalizer.normalize(text: text, language: "pl"), text)
+        }
+    }
+
     func testChineseHanNumbersNormalizeToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "我有二十三个文件", language: "zh"), "我有23个文件")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "一千二百三十四", language: "zh"), "1234")
