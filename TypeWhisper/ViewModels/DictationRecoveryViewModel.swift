@@ -241,7 +241,7 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     var supportsTranslation: Bool {
-        resolvedEngine?.supportsTranslation ?? false
+        resolvedEngine?.supportsTranslation(forModel: selectedModel) ?? false
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -327,7 +327,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         guard selectedEngine != primaryEngineId else { return nil }
         guard let engine = resolvedEngine else { return nil }
         guard modelManager.canUseForTranscription(engine), engine.isConfigured else { return nil }
-        guard task != .translate || engine.supportsTranslation else { return nil }
+        guard task != .translate || engine.supportsTranslation(forModel: selectedModel) else { return nil }
 
         if let selectedModel {
             let modelIds = Set((engine.modelCatalog + engine.transcriptionModels).map(\.id))

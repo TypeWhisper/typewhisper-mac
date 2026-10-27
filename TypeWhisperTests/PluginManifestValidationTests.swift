@@ -2898,6 +2898,18 @@ final class GranitePluginPromptTests: XCTestCase {
         XCTAssertNil(GranitePlugin.resolvePrompt(translate: true, language: "de", prompt: " "))
     }
 
+    func testHostResolvesGraniteTranslationForModelOverride() {
+        let plugin = GranitePlugin()
+        plugin.selectModel("granite-speech-5.0-470m-turboctc")
+        let engine: any TranscriptionEnginePlugin = plugin
+
+        XCTAssertFalse(engine.supportsTranslation(forModel: nil))
+        XCTAssertTrue(engine.supportsTranslation(forModel: "granite-speech-5.0-2b"))
+        XCTAssertTrue(engine.supportsTranslation(forModel: "granite-1b-speech-8bit"))
+        XCTAssertTrue(engine.supportedLanguages(forModel: "granite-speech-5.0-470m-turboctc").contains("it"))
+        XCTAssertFalse(engine.supportedLanguages(forModel: "granite-speech-5.0-2b").contains("it"))
+    }
+
     func testGranite5UsesPunctuationInstructionsAndTurboCTCTakesNoPrompt() {
         XCTAssertEqual(
             GranitePlugin.resolvePrompt(family: .granite5, translate: false, language: nil, prompt: nil),

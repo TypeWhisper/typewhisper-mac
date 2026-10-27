@@ -241,7 +241,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     var supportsTranslation: Bool {
-        resolvedEngine?.supportsTranslation ?? false
+        resolvedEngine?.supportsTranslation(forModel: availableSelectedModel) ?? false
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {

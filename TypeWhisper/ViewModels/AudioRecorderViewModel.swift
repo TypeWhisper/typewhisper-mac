@@ -437,7 +437,7 @@ final class AudioRecorderViewModel: ObservableObject {
         guard modelManager.canUseForTranscription(engine) else { return false }
         return engine.isConfigured
     }
-    var supportsTranslation: Bool { resolvedEngine?.supportsTranslation ?? false }
+    var supportsTranslation: Bool { resolvedEngine?.supportsTranslation(forModel: effectiveModelId) ?? false }
     /// The Recorder's own engine while its plugin is loaded. A plugin that is
     /// gone for now, as during an update, keeps the choice saved; recordings
     /// use the default engine until it is back.
@@ -1605,7 +1605,7 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         livePreviewStartObserver?()
-        let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
+        let task = (selectedTask == .translate && !plugin.supportsTranslation(forModel: engine.modelId)) ? .transcribe : selectedTask
         streamingHandler.start(
             streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId) ?? "",
             dictionaryTermHints: dictionaryService.getTermHints(providerId: providerId),
@@ -2138,7 +2138,7 @@ final class AudioRecorderViewModel: ObservableObject {
         guard request.task == .translate,
               let providerId = request.providerId,
               let plugin = PluginManager.shared?.transcriptionEngine(for: providerId),
-              !plugin.supportsTranslation else {
+              !plugin.supportsTranslation(forModel: request.modelOverrideId) else {
             return request.task
         }
         return .transcribe

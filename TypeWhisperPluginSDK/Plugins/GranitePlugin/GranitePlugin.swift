@@ -251,10 +251,30 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
     }
 
-    var supportedLanguages: [String] {
-        activeFamily == .turboCTC
+    var supportedLanguages: [String] { Self.supportedLanguages(for: activeFamily) }
+
+    static func supportedLanguages(for family: GraniteModelFamily?) -> [String] {
+        family == .turboCTC
             ? ["en", "fr", "de", "es", "pt", "it", "ja"]
             : ["en", "fr", "de", "es", "pt", "ja"]
+    }
+
+    private func family(ofModel modelId: String?) -> GraniteModelFamily? {
+        guard let modelId else { return activeFamily }
+        return allModelDefinitions.first { $0.id == modelId }?.family ?? activeFamily
+    }
+
+    // Let the host resolve capabilities for a per-flow model override, such as the Recorder's or
+    // file transcription's own model. Looked up through the Objective-C runtime, so the plugin
+    // stays loadable by hosts that do not know about them.
+    @objc(supportedLanguagesForModelId:)
+    func supportedLanguages(forModelId modelId: String?) -> [String] {
+        Self.supportedLanguages(for: family(ofModel: modelId))
+    }
+
+    @objc(supportsTranslationForModelId:)
+    func supportsTranslation(forModelId modelId: String?) -> NSNumber {
+        NSNumber(value: family(ofModel: modelId) != .turboCTC)
     }
 
     var selectedModelId: String? { _selectedModelId }

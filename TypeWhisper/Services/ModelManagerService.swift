@@ -91,6 +91,7 @@ enum ModelLifecycleError: LocalizedError {
 }
 
 private let supportedLanguagesForModelSelector = NSSelectorFromString("supportedLanguagesForModelId:")
+private let supportsTranslationForModelSelector = NSSelectorFromString("supportsTranslationForModelId:")
 
 extension TranscriptionEnginePlugin {
     var acceptsLanguageHints: Bool {
@@ -111,6 +112,20 @@ extension TranscriptionEnginePlugin {
             return supportedLanguages
         }
         return languages
+    }
+
+    /// Whether a specific model translates, for flows that override the plugin's selected model.
+    /// Plugins opt in through the Objective-C selector `supportsTranslationForModelId:` returning
+    /// an `NSNumber`; otherwise, and without a model override, the plugin's current answer applies.
+    func supportsTranslation(forModel modelId: String?) -> Bool {
+        guard let modelId,
+              let object = self as? NSObject,
+              object.responds(to: supportsTranslationForModelSelector),
+              let value = object.perform(supportsTranslationForModelSelector, with: modelId)?
+                .takeUnretainedValue() as? NSNumber else {
+            return supportsTranslation
+        }
+        return value.boolValue
     }
 }
 
