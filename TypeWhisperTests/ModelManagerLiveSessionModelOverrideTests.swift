@@ -551,6 +551,25 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         )
     }
 
+    func testPreferredMacOSLanguageFallbackUsesTheLanguagesOfTheOverrideModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let engine = HostDetectedLanguageModelManagerPlugin()
+        let modelManager = installBatchPlugin(engine, appSupportDirectory: appSupportDirectory)
+        modelManager.preferredLanguages = { ["el-GR", "de-DE"] }
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: "greek"
+        )
+
+        XCTAssertEqual(engine.receivedLanguages, ["el"], "Greek is only a language of the override model")
+        XCTAssertEqual(engine.selectedModelId, "default")
+    }
+
     private func installLivePlugin(
         _ plugin: LiveModelOverrideTranscriptionPlugin,
         appSupportDirectory: URL
@@ -1242,15 +1261,20 @@ private final class HostDetectedLanguageModelManagerPlugin: NSObject, HostLangua
     var providerId: String { "mock-host-detected-language-engine" }
     var providerDisplayName: String { Self.pluginName }
     var isConfigured: Bool { true }
-    var selectedModelId: String? { nil }
+    private(set) var selectedModelId: String? = "default"
     var transcriptionModels: [PluginModelInfo] { [] }
     var supportsTranslation: Bool { false }
-    var supportedLanguages: [String] { ["en-US", "en-GB", "de-DE"] }
-    var languagesForHostDetection: [String] { ["en-US", "de-DE"] }
+    /// The "greek" model speaks other languages, like Canary's Greek/English model.
+    var supportedLanguages: [String] {
+        selectedModelId == "greek" ? ["el", "en-US"] : ["en-US", "en-GB", "de-DE"]
+    }
+    var languagesForHostDetection: [String] {
+        selectedModelId == "greek" ? ["el", "en-US"] : ["en-US", "de-DE"]
+    }
 
     func activate(host: HostServices) {}
     func deactivate() {}
-    func selectModel(_ modelId: String) {}
+    func selectModel(_ modelId: String) { selectedModelId = modelId }
 
     func transcribe(
         audio: AudioData,

@@ -1224,8 +1224,10 @@ final class ModelManagerService: ObservableObject {
         let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
         let prompt = promptTextAllowed ? prompt : nil
         let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
-        let languageSelection = await spokenLanguageSelection(
-            for: languageSelection,
+        let requestedLanguageSelection = languageSelection
+        let languagesBeforePreparation = plugin.supportedLanguages
+        var languageSelection = await spokenLanguageSelection(
+            for: requestedLanguageSelection,
             plugin: plugin,
             audioSamples: audioSamples
         )
@@ -1248,6 +1250,14 @@ final class ModelManagerService: ObservableObject {
             requestedLanguage: preparationLanguage,
             cloudModelOverride: cloudModelOverride
         )
+        if plugin.supportedLanguages != languagesBeforePreparation {
+            // The override model speaks other languages; pick among the ones that will transcribe.
+            languageSelection = await spokenLanguageSelection(
+                for: requestedLanguageSelection,
+                plugin: plugin,
+                audioSamples: audioSamples
+            )
+        }
 
         guard plugin.isConfigured else {
             throw modelNotLoadedError(for: plugin)
@@ -1400,8 +1410,10 @@ final class ModelManagerService: ObservableObject {
         let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
         let prompt = promptTextAllowed ? prompt : nil
         let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
-        let languageSelection = await spokenLanguageSelection(
-            for: languageSelection,
+        let requestedLanguageSelection = languageSelection
+        let languagesBeforePreparation = plugin.supportedLanguages
+        var languageSelection = await spokenLanguageSelection(
+            for: requestedLanguageSelection,
             plugin: plugin,
             audioSamples: audioSamples
         )
@@ -1424,6 +1436,14 @@ final class ModelManagerService: ObservableObject {
             requestedLanguage: preparationLanguage,
             cloudModelOverride: cloudModelOverride
         )
+        if plugin.supportedLanguages != languagesBeforePreparation {
+            // The override model speaks other languages; pick among the ones that will transcribe.
+            languageSelection = await spokenLanguageSelection(
+                for: requestedLanguageSelection,
+                plugin: plugin,
+                audioSamples: audioSamples
+            )
+        }
 
         guard plugin.isConfigured else {
             throw modelNotLoadedError(for: plugin)
