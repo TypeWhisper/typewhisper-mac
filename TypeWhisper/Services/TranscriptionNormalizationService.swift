@@ -78,6 +78,9 @@ enum TranscriptionNormalizationService {
 
         let minimumValue = numberNormalizationMinimumValue(defaults: defaults)
         for language in prioritizedLanguages(primary: nil, candidates: languages) {
+            // A language without a number parser may be the one that was spoken, so a later
+            // candidate must not reinterpret its words (Polish "ten" means "this", not 10).
+            guard NumberWordNormalizer.supports(language: language) else { break }
             let normalized = NumberWordNormalizer.normalize(text: text, language: language, minimumValue: minimumValue)
             if normalized != text {
                 return normalized
