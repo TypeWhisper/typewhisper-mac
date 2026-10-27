@@ -431,6 +431,8 @@ final class FileTranscriptionViewModel: ObservableObject {
             }
         }
 
+        // Every file in the batch translates into the same language.
+        let translationTarget = translationTarget
         activeBatchTask = Task { [weak self] in
             guard let self else { return }
             for i in files.indices {

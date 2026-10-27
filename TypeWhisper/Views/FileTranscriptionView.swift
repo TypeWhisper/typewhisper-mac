@@ -525,15 +525,10 @@ struct FileTranscriptionView: View {
                 autoDetectionBehavior: LanguageAutoDetectionBehavior(engine: viewModel.resolvedEngine)
             )
 
-            HStack {
-                Button(String(localized: "Add Files...")) {
-                    showFilePicker = true
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(viewModel.batchState == .processing)
-
-                if viewModel.supportsTranslation {
+            // A row of its own: with a target language picker, the pickers and the
+            // buttons would not fit the window's minimum width in one row.
+            if viewModel.supportsTranslation {
+                HStack {
                     TranscriptionTaskPicker(
                         task: $viewModel.selectedTask,
                         translationTarget: $viewModel.translationTarget,
@@ -542,6 +537,15 @@ struct FileTranscriptionView: View {
                     )
                     .controlSize(.small)
                 }
+            }
+
+            HStack {
+                Button(String(localized: "Add Files...")) {
+                    showFilePicker = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(viewModel.batchState == .processing)
 
                 Spacer(minLength: 12)
 
