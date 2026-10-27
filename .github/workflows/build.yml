@@ -45,11 +45,14 @@ jobs:
           ruby scripts/test_dependency_coverage.rb
 
   # Pull requests that leave the Plugin SDK package alone skip its macOS test job.
+  # Pull requests that only touch documentation (docs/ and Markdown files at the
+  # repository root) skip the macOS build and test jobs.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       plugin_sdk: ${{ steps.diff.outputs.plugin_sdk }}
+      app: ${{ steps.diff.outputs.app }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,7 +79,22 @@ jobs:
           fi
           echo "plugin_sdk=$plugin_sdk" | tee -a "$GITHUB_OUTPUT"
 
+          app=true
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # In glob magic, * does not cross directories, so only root-level Markdown counts.
+            status=0
+            git diff --quiet HEAD^1 HEAD -- . ':(exclude)docs/' ':(exclude,glob)*.md' || status=$?
+            case "$status" in
+              0) app=false ;;
+              1) ;;
+              *) echo "::error::git diff failed with exit code $status"; exit "$status" ;;
+            esac
+          fi
+          echo "app=$app" | tee -a "$GITHUB_OUTPUT"
+
   release-build:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: xcode-27
     steps:
       - name: Checkout
@@ -187,6 +205,8 @@ jobs:
           retention-days: 14
 
   app-tests:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: xcode-27
     steps:
       - name: Checkout
@@ -290,6 +310,8 @@ jobs:
   # A Debug arm64 build keeps pull requests fast; the nightly TestFlight workflow
   # builds the universal Release binary and audits it. See docs/appstore/README.md.
   appstore:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
     env:
@@ -363,12 +385,15 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          # plugin-sdk-tests may be skipped only when the changes job ruled it out.
+          # A job may be skipped only when the changes job ruled it out: plugin-sdk-tests when
+          # the Plugin SDK is unchanged, the macOS build and test jobs for documentation-only changes.
           failed="$(jq -r '
             (.changes.outputs.plugin_sdk == "false") as $sdk_unchanged
+            | (.changes.outputs.app == "false") as $docs_only
             | to_entries[]
             | select(.value.result != "success")
             | select((.key == "plugin-sdk-tests" and .value.result == "skipped" and $sdk_unchanged) | not)
+            | select((.key as $k | ["release-build", "app-tests", "appstore"] | index($k)) and .value.result == "skipped" and $docs_only | not)
             | "\(.key): \(.value.result)"' <<<"$NEEDS")"
           if [ -n "$failed" ]; then
             echo "::error::Not every CI job succeeded"
