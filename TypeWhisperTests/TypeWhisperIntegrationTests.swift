@@ -11114,7 +11114,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(value, snapshot.rawTranscript)
         let restoredSession = context.dictationViewModel.apiDictationSession(id: sessionID)
         XCTAssertEqual(restoredSession?.transcription?.text, value)
-        XCTAssertEqual(restoredSession?.transcription?.wordsCount, value.split(whereSeparator: \.isWhitespace).count)
+        XCTAssertEqual(restoredSession?.transcription?.wordsCount, WordCount.count(in: value))
         XCTAssertEqual(context.recentTranscriptionStore.latestEntry(historyRecords: [])?.finalText, value)
         XCTAssertEqual(context.dictationViewModel.lastTranscribedText, value)
         if historyEnabled {

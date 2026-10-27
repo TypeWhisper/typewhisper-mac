@@ -282,7 +282,7 @@ final class TranscriptionRecord {
         self.language = language
         self.engineUsed = engineUsed
         self.modelUsed = modelUsed
-        self.wordsCount = finalText.split(separator: " ").count
+        self.wordsCount = WordCount.count(in: finalText)
         self.audioFileName = audioFileName
         sourceRaw = RecordingSource.mac.rawValue
         processingStateRaw = RecordingProcessingState.ready.rawValue
