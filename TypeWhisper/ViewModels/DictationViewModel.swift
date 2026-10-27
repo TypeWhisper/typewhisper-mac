@@ -3969,7 +3969,7 @@ final class DictationViewModel: ObservableObject {
             logger.warning(
                 "Primary transcription failed; retrying with recovery fallback engine \(configuration.engineId, privacy: .public): \(primaryError.localizedDescription, privacy: .public)"
             )
-            let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId)
+            let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId, modelId: configuration.modelId)
             let fallbackDictionaryTermHints = dictionaryService.getTermHints(providerId: configuration.engineId)
 
             do {
@@ -4120,7 +4120,7 @@ final class DictationViewModel: ObservableObject {
         configuration: DictationRecoveryFallbackConfiguration,
         threshold: TimeInterval
     ) async throws -> FinalTranscriptionOutput {
-        let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId)
+        let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId, modelId: configuration.modelId)
         let fallbackDictionaryTermHints = dictionaryService.getTermHints(providerId: configuration.engineId)
 
         let primaryOperation: @MainActor () async throws -> TranscriptionResult = { [primaryTranscriptionRunner] in
