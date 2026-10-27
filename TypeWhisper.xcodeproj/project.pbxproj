@@ -8135,6 +8135,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/GranitePlugin/GranitePlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -8158,6 +8159,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/GranitePlugin/GranitePlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
