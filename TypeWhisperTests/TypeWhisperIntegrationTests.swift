@@ -6597,21 +6597,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertFalse(result.missedTextField)
     }
 
-    @MainActor
-    func testDetectMissedTextFieldIgnoresEmacsWithoutTextElement() async throws {
-        // GNU Emacs names its frame window as the focused element, so no text element shows.
-        let service = TextInsertionService()
-        let pasteboard = NSPasteboard.withUniqueName()
-        service.accessibilityGrantedOverride = true
-        service.pasteboardProvider = { pasteboard }
-        service.captureActiveAppOverride = { ("Emacs", "org.gnu.Emacs", nil) }
-        service.focusedTextElementOverride = { nil }
-        service.pasteSimulatorOverride = {}
-
-        let result = try await service.insertText("Hello", detectMissedTextField: true)
-
-        XCTAssertEqual(result, .pasted(verification: .notAwaited))
-        XCTAssertFalse(result.missedTextField)
+    func testFocusedWindowDoesNotShowKeyboardTarget() {
+        // GNU Emacs names its frame window as the focused element, although its buffer takes
+        // the paste. A native app without a text field focuses a control inside the window.
+        XCTAssertFalse(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXWindow"))
+        XCTAssertTrue(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXGroup"))
+        XCTAssertTrue(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXOutline"))
     }
 
     @MainActor

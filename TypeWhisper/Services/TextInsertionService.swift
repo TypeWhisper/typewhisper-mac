@@ -184,12 +184,6 @@ final class TextInsertionService {
         "com.mitchellh.ghostty",
         "com.cmuxterm.app"
     ]
-    /// Editors that take a paste although accessibility shows no focused text element. GNU Emacs
-    /// and Aquamacs name their frame window as the focused element (#1750).
-    private let pasteWithoutTextElementBundleIdentifiers: Set<String> = [
-        "org.gnu.Emacs",
-        "org.gnu.Aquamacs"
-    ]
     private static let geckoBundleIdentifiers =
         SupportedMeetingBrowser.reminderOnlyBundleIdentifiers.union([
             "org.mozilla.thunderbird"
@@ -666,7 +660,20 @@ final class TextInsertionService {
         if isLiveFieldTextRole(element) {
             return (element, true)
         }
-        return (findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout), true)
+        if let descendant = findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout) {
+            return (descendant, true)
+        }
+        return (nil, Self.focusedElementShowsKeyboardTarget(
+            role: stringAttribute(kAXRoleAttribute as CFString, from: element)
+        ))
+    }
+
+    /// Whether a focused element without a text element shows where typing goes. Native apps
+    /// focus a control inside the window, such as a list in Finder. Apps that draw their own
+    /// content name the window itself: GNU Emacs, Qt apps such as OBS, and remote desktop
+    /// clients such as Parsec. A paste can still land there (#1750).
+    nonisolated static func focusedElementShowsKeyboardTarget(role: String?) -> Bool {
+        role != kAXWindowRole
     }
 
     /// Apps that build their accessibility tree on demand, such as Chromium browsers and Electron
@@ -1535,10 +1542,7 @@ final class TextInsertionService {
             : []
         let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
             || detectMissedTextField
-            ? capturePasteVerificationState(
-                acceptsPasteWithoutTextElement: isTerminalApp
-                    || bundleId.map { pasteWithoutTextElementBundleIdentifiers.contains($0) } == true
-            )
+            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
             || (detectMissedTextField && pasteVerificationState?.canVerifyPaste == true)
