@@ -4438,18 +4438,15 @@ final class DictationViewModel: ObservableObject {
         lastPreviewFollowsDictationEngine = previewFollowsDictationEngine
         lastStreamingPreviewHidden = streamsDictationWithoutPreview
         let dictionaryProviderId = previewEngineOverrideId ?? params.providerId
-        // A preview engine or model that can't translate still previews the speech —
+        // A distinct preview engine that can't translate still previews the speech —
         // as a transcription. The final (translating) result comes from the dictation
         // engine anyway; keeping .translate here would make its sessions fail outright.
-        // When the preview follows the dictation engine, a workflow's model override
-        // decides, since one engine can have models with and without translation.
         var previewTask = params.task
-        if previewTask == .translate,
-           let previewProviderId = previewEngineOverrideId ?? params.providerId,
+        if !previewFollowsDictationEngine,
+           previewTask == .translate,
+           let previewProviderId = previewEngineOverrideId,
            let previewPlugin = PluginManager.shared?.transcriptionEngine(for: previewProviderId),
-           !previewPlugin.supportsTranslation(
-               forModel: previewFollowsDictationEngine ? params.cloudModelOverride : nil
-           ) {
+           !previewPlugin.supportsTranslation {
             previewTask = .transcribe
         }
         streamingHandler.start(
