@@ -9957,10 +9957,10 @@
 		};
 		RR00000000000000000006 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
+			repositoryURL = "https://github.com/TypeWhisper/mlx-audio-swift.git";
 			requirement = {
 				kind = revision;
-				revision = 01dec7c9bdce3088a6b6b7ab9f2e403458195efb;
+				revision = 1fb13b441c1ad8aae4a23f6a2223e03e5e5b1738;
 			};
 		};
 		RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {
