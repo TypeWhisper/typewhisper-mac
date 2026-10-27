@@ -4,6 +4,11 @@ enum NumberWordNormalizer {
     private static let supportedLanguageCodes: Set<String> = ["en", "de", "fr", "es", "nl", "zh", "ja"]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
+    static func supports(language: String?) -> Bool {
+        guard let languageCode = PunctuationLanguageNormalizer.normalize(language) else { return false }
+        return supportedLanguageCodes.contains(languageCode)
+    }
+
     static func normalize(text: String, language: String?, minimumValue: Int = 0) -> String {
         guard let languageCode = PunctuationLanguageNormalizer.normalize(language),
               supportedLanguageCodes.contains(languageCode),

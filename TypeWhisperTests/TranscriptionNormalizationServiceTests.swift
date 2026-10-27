@@ -107,6 +107,55 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
         XCTAssertEqual(result.segments.first?.text, "23")
     }
 
+    @MainActor
+    func testUnsupportedHigherPriorityLanguageBlocksLaterCandidate() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defaults.set(0, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        defer { defaults.removePersistentDomain(forName: #function) }
+
+        let text = "ten dokument mam od dziesięciu dni, one też"
+        let result = TranscriptionNormalizationService.normalizeResult(
+            text: text,
+            detectedLanguage: nil,
+            configuredLanguage: nil,
+            configuredLanguageCandidates: ["pl", "en"],
+            duration: 1,
+            processingTime: 0.1,
+            engineUsed: "test",
+            segments: [
+                TranscriptionSegment(text: text, start: 0, end: 1)
+            ],
+            task: .transcribe,
+            defaults: defaults
+        )
+
+        XCTAssertEqual(result.text, text)
+        XCTAssertEqual(result.segments.first?.text, text)
+    }
+
+    @MainActor
+    func testDetectedSupportedLanguageStillNormalizesWithUnsupportedCandidate() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer { defaults.removePersistentDomain(forName: #function) }
+
+        let result = TranscriptionNormalizationService.normalizeResult(
+            text: "Set the value to twenty three",
+            detectedLanguage: "en",
+            configuredLanguage: nil,
+            configuredLanguageCandidates: ["pl", "en"],
+            duration: 1,
+            processingTime: 0.1,
+            engineUsed: "test",
+            segments: [],
+            task: .transcribe,
+            defaults: defaults
+        )
+
+        XCTAssertEqual(result.text, "Set the value to 23")
+    }
+
     func testMinimumValueDefaultsAndInvalidSettings() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
