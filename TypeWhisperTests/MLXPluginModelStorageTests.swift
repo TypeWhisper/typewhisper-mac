@@ -9,6 +9,8 @@ import TypeWhisperPluginSDK
 
 final class MLXPluginModelStorageTests: XCTestCase {
     private let commit = String(repeating: "b", count: 40)
+    /// Granite 4.0 follows `main` and has a legacy layout; the 5.0 models are pinned to a commit.
+    private let graniteLegacyModel = GranitePlugin.availableModels.first { $0.id == "granite-1b-speech-4bit" }!
 
     @MainActor
     func testExplicitLoadHandlerAcceptsImportedModelIDs() async throws {
@@ -171,7 +173,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
         try await assertSupersededImport(qwen, gate: qwen.modelLoadGate,
             replacementID: Qwen3Plugin.availableModels[0].id, currentTask: { qwen.explicitModelLoadTask })
         try await assertSupersededImport(granite, gate: granite.modelLoadGate,
-            replacementID: GranitePlugin.availableModels[0].id, currentTask: { granite.explicitModelLoadTask })
+            replacementID: graniteLegacyModel.id, currentTask: { granite.explicitModelLoadTask })
         try await assertSupersededImport(voxtral, gate: voxtral.modelLoadGate,
             replacementID: VoxtralPlugin.availableModels[0].id, currentTask: { voxtral.explicitModelLoadTask })
         try await assertSupersededImport(canary, gate: canary.modelLoadGate,
@@ -398,7 +400,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
                 modelID: Qwen3Plugin.availableModels[0].id, repositoryID: Qwen3Plugin.availableModels[0].repoId,
                 task: { explicit ? qwen.explicitModelLoadTask : qwen.genericModelLoadTask })
             try await assertDeletionCancelsQueuedLoad(granite, gate: granite.modelLoadGate, explicit: explicit,
-                modelID: GranitePlugin.availableModels[0].id, repositoryID: GranitePlugin.availableModels[0].repoId,
+                modelID: graniteLegacyModel.id, repositoryID: graniteLegacyModel.repoId,
                 task: { explicit ? granite.explicitModelLoadTask : granite.genericModelLoadTask })
             try await assertDeletionCancelsQueuedLoad(voxtral, gate: voxtral.modelLoadGate, explicit: explicit,
                 modelID: VoxtralPlugin.availableModels[0].id, repositoryID: VoxtralPlugin.availableModels[0].repoId,
@@ -829,8 +831,8 @@ final class MLXPluginModelStorageTests: XCTestCase {
         )
         try assertCatalogRecognizesBothLayouts(
             plugin: GranitePlugin(),
-            modelID: GranitePlugin.availableModels[0].id,
-            repositoryID: GranitePlugin.availableModels[0].repoId,
+            modelID: graniteLegacyModel.id,
+            repositoryID: graniteLegacyModel.repoId,
             requiredFiles: ["config.json", "tokenizer.json"]
         )
         try assertCatalogRecognizesBothLayouts(
@@ -858,6 +860,27 @@ final class MLXPluginModelStorageTests: XCTestCase {
         XCTAssertEqual(gemma.downloadedModels.map(\.id), [gemmaModel.id])
     }
 
+    func testGraniteRecognizesPinnedSnapshotsWithoutARef() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let plugin = GranitePlugin()
+        plugin.activate(host: MockHostServices(pluginDataDirectory: fixture.root))
+        let model = try XCTUnwrap(GranitePlugin.availableModels.first { $0.id == "granite-speech-5.0-470m-turboctc" })
+        let revision = try XCTUnwrap(model.revision)
+        // A download pinned to a commit writes the snapshot but no refs/ entry.
+        let snapshot = fixture.repositoryDirectory(repositoryID: model.repoId)
+            .appendingPathComponent("snapshots/\(revision)", isDirectory: true)
+        try fixture.writeModel(at: snapshot, requiredFiles: ["config.json", "tokenizer.json"])
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+
+        // Another commit of the same repository is not the pinned model.
+        try FileManager.default.moveItem(
+            at: snapshot,
+            to: snapshot.deletingLastPathComponent().appendingPathComponent(commit, isDirectory: true)
+        )
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [])
+    }
+
     func testActivationRemovesVerifiedDuplicateCopiesForAllPlugins() throws {
         try assertActivationRemovesDuplicate(
             plugin: Qwen3Plugin(),
@@ -867,7 +890,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
         )
         try assertActivationRemovesDuplicate(
             plugin: GranitePlugin(),
-            repositoryID: GranitePlugin.availableModels[0].repoId,
+            repositoryID: graniteLegacyModel.repoId,
             requiredFiles: ["config.json", "tokenizer.json"],
             usesMLXAudio: true
         )
@@ -897,8 +920,8 @@ final class MLXPluginModelStorageTests: XCTestCase {
         )
         try await assertDeletionRemovesAllArtifacts(
             plugin: GranitePlugin(),
-            modelID: GranitePlugin.availableModels[0].id,
-            repositoryID: GranitePlugin.availableModels[0].repoId,
+            modelID: graniteLegacyModel.id,
+            repositoryID: graniteLegacyModel.repoId,
             requiredFiles: ["config.json", "tokenizer.json"],
             usesMLXAudio: true
         )
@@ -953,7 +976,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
         defer { fixture.remove() }
 
         let qwen = Qwen3Plugin.availableModels[0]
-        let granite = GranitePlugin.availableModels[0]
+        let granite = graniteLegacyModel
         let voxtral = VoxtralPlugin.availableModels[0]
         let gemma = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
         let plugins: [(TypeWhisperPlugin, MockHostServices)] = [

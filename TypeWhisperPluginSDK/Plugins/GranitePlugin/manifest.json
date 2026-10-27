@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.granite",
     "name": "Granite Speech",
-    "version": "1.0.16",
+    "version": "1.1.0",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1-model-import",
     "minOSVersion": "14.0",
@@ -9,11 +9,11 @@
         "arm64"
     ],
     "author": "TypeWhisper",
-    "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
+    "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. Granite 5.0 TurboCTC transcribes 7 languages with punctuation; Granite 5.0 2B also translates.",
     "descriptions": {
-        "de": "Lokale Spracherkennung und Übersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Übersetzung.",
-        "es": "Voz a texto y traducción locales de IBM, con MLX en Apple Silicon. 6 idiomas con traducción en ambas direcciones.",
-        "ja": "Apple Silicon上のMLXで動作するIBMのローカル音声認識と翻訳です。6言語の双方向翻訳に対応します。"
+        "de": "Lokale Spracherkennung und Übersetzung von IBM mit MLX auf Apple Silicon. Granite 5.0 TurboCTC erkennt 7 Sprachen mit Satzzeichen; Granite 5.0 2B übersetzt auch.",
+        "es": "Voz a texto y traducción locales de IBM, con MLX en Apple Silicon. Granite 5.0 TurboCTC transcribe 7 idiomas con puntuación; Granite 5.0 2B también traduce.",
+        "ja": "Apple Silicon上のMLXで動作するIBMのローカル音声認識と翻訳です。Granite 5.0 TurboCTCは7言語を句読点付きで書き起こし、Granite 5.0 2Bは翻訳にも対応します。"
     },
     "category": "transcription",
     "iconSystemName": "cpu",

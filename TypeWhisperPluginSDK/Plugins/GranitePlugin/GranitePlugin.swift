@@ -16,7 +16,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     fileprivate var host: HostServices?
     fileprivate var _selectedModelId: String?
-    fileprivate var model: GraniteSpeechModel?
+    fileprivate var model: GraniteRuntime?
     fileprivate var loadedModelId: String?
     private let activationLock = NSRecursiveLock()
     private var _activationID = UUID()
@@ -29,11 +29,10 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     fileprivate var modelState: GraniteModelState = .notLoaded
 
-    private static let modelRequirements = PluginHuggingFaceModelStore.Requirements(
+    fileprivate static let modelRequirements = PluginHuggingFaceModelStore.Requirements(
         requiredFiles: ["config.json", "tokenizer.json"],
         weightFileExtensions: ["safetensors"]
     )
-    private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
@@ -103,10 +102,11 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     private static func importedDefinition(_ model: PluginCustomModelStore.Model) -> GraniteModelDef {
         GraniteModelDef(id: model.id, displayName: model.displayName, repoId: model.id,
-            sizeDescription: model.sizeDescription, ramRequirement: "—")
+            sizeDescription: model.sizeDescription, ramRequirement: "—",
+            family: model.modelType == GraniteModelFamily.turboCTCModelType ? .turboCTC : .granite4)
     }
 
-    var supportedImportModelTypes: Set<String> { ["granite_speech"] }
+    var supportedImportModelTypes: Set<String> { ["granite_speech", GraniteModelFamily.turboCTCModelType] }
 
     @MainActor
     func importModel(_ candidate: PluginModelImportCandidate, token: String?) async throws -> PluginModelInfo {
@@ -242,8 +242,19 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
     }
 
+    /// The family of the loaded model, or of the selected one before it loads.
+    private var activeFamily: GraniteModelFamily? {
+        activationLock.withLock {
+            if let model { return model.family }
+            guard let id = _selectedModelId else { return nil }
+            return allModelDefinitions.first { $0.id == id }?.family
+        }
+    }
+
     var supportedLanguages: [String] {
-        ["en", "fr", "de", "es", "pt", "ja"]
+        activeFamily == .turboCTC
+            ? ["en", "fr", "de", "es", "pt", "it", "ja"]
+            : ["en", "fr", "de", "es", "pt", "ja"]
     }
 
     var selectedModelId: String? { _selectedModelId }
@@ -269,9 +280,10 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
     }
 
-    var supportsTranslation: Bool { true }
+    // TurboCTC is a CTC encoder without a prompt: it can neither translate nor take keywords.
+    var supportsTranslation: Bool { activeFamily != .turboCTC }
     var supportsStreaming: Bool { true }
-    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsSupport: DictionaryTermsSupport { activeFamily == .turboCTC ? .unsupported : .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 4_000) }
 
     func transcribe(
@@ -284,16 +296,25 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             guard let model else {
                 throw PluginTranscriptionError.notConfigured
             }
+            if translate, model.family == .turboCTC { throw Self.turboCTCTranslationError }
+            guard !audio.samples.isEmpty else {
+                return PluginTranscriptionResult(text: "", detectedLanguage: language)
+            }
 
             let audioArray = MLXArray(audio.samples)
-            let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
-            let output = model.generate(
-                audio: audioArray,
-                maxTokens: 4096,
-                temperature: 0.0,
-                prompt: resolvedPrompt,
-                language: translate ? (language ?? "en") : nil
-            )
+            let output: STTOutput
+            switch model {
+            case .turboCTC(let ctc):
+                output = ctc.generate(audio: audioArray, generationParameters: ctc.defaultGenerationParameters)
+            case .speech(let speech, let family):
+                output = speech.generate(
+                    audio: audioArray,
+                    maxTokens: 4096,
+                    temperature: 0.0,
+                    prompt: Self.resolvePrompt(family: family, translate: translate, language: language, prompt: prompt),
+                    language: translate ? (language ?? "en") : nil
+                )
+            }
             let text = Self.normalizeTranscript(output.text)
 
             return PluginTranscriptionResult(text: text, detectedLanguage: language)
@@ -311,14 +332,25 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             guard let model else {
                 throw PluginTranscriptionError.notConfigured
             }
+            if translate, model.family == .turboCTC { throw Self.turboCTCTranslationError }
+            guard !audio.samples.isEmpty else {
+                return PluginTranscriptionResult(text: "", detectedLanguage: language)
+            }
 
             let audioArray = MLXArray(audio.samples)
-            let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
-            let stream = model.generateStream(
+            guard case .speech(let speech, let family) = model else {
+                // TurboCTC decodes the whole buffer in one pass, in milliseconds.
+                guard case .turboCTC(let ctc) = model else { throw PluginTranscriptionError.notConfigured }
+                let output = ctc.generate(audio: audioArray, generationParameters: ctc.defaultGenerationParameters)
+                let text = Self.normalizeTranscript(output.text)
+                _ = onProgress(text)
+                return PluginTranscriptionResult(text: text, detectedLanguage: language)
+            }
+            let stream = speech.generateStream(
                 audio: audioArray,
                 maxTokens: 4096,
                 temperature: 0.0,
-                prompt: resolvedPrompt,
+                prompt: Self.resolvePrompt(family: family, translate: translate, language: language, prompt: prompt),
                 language: translate ? (language ?? "en") : nil
             )
 
@@ -392,7 +424,8 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 }
                 let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
                     repositoryID: modelDef.repoId,
-                    matching: Self.modelDownloadPatterns,
+                    revision: modelDef.revision ?? "main",
+                    matching: modelDef.downloadPatterns,
                     token: _hfToken,
                     destination: modelsDir,
                     trackedDirectory: PluginHuggingFaceModelStore(modelsDirectory: modelsDir)
@@ -410,11 +443,12 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 do {
                     modelDirectory = try await client.downloadSnapshot(
                         of: repoID,
-                        matching: Self.modelDownloadPatterns
+                        revision: modelDef.revision ?? "main",
+                        matching: modelDef.downloadPatterns
                     )
                     guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
                         modelDirectory,
-                        requirements: Self.modelRequirements
+                        requirements: modelDef.requirements
                     ) else {
                         throw NSError(
                             domain: "GranitePlugin",
@@ -442,7 +476,11 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             }
             try Task.checkCancellation()
             guard generation == activationID, host != nil else { throw CancellationError() }
-            let loaded = try await GraniteSpeechModel.fromModelDirectory(modelDirectory)
+            let loaded: GraniteRuntime = switch modelDef.family {
+            case .turboCTC: .turboCTC(try GraniteSpeech5CTCModel.fromModelDirectory(modelDirectory))
+            case .granite4, .granite5:
+                .speech(try await GraniteSpeechModel.fromModelDirectory(modelDirectory), modelDef.family)
+            }
 
             try activationLock.withLock {
                 try Task.checkCancellation()
@@ -580,7 +618,16 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                     directory, requirements: Self.modelRequirements) else { return nil }
             return directory
         }
-        return PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        if let revision = modelDef.revision {
+            // A download pinned to a commit writes no refs/ entry, so look up its snapshot directly.
+            guard let snapshot = store.repositoryCacheDirectory(for: modelDef.repoId)?
+                    .appendingPathComponent("snapshots", isDirectory: true)
+                    .appendingPathComponent(revision, isDirectory: true),
+                  store.isUsableModelDirectory(snapshot, requirements: modelDef.requirements) else { return nil }
+            return snapshot
+        }
+        return store.usableModelDirectory(
             for: modelDef.repoId,
             legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
             requirements: Self.modelRequirements
@@ -606,7 +653,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     private func cleanupRedundantModelCopies() {
         guard let modelsDirectory = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
         let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
-        for modelDef in Self.availableModels {
+        for modelDef in Self.availableModels where modelDef.revision == nil {
             _ = try? store.removeRedundantLegacyDirectories(
                 for: modelDef.repoId,
                 legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
@@ -650,24 +697,45 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     // MARK: - Model Definitions
 
+    // The first entry is the default for users who have not picked a model yet. Granite 4.0
+    // users keep their selected or downloaded model, its id is unchanged.
     static let availableModels: [GraniteModelDef] = [
         GraniteModelDef(
+            id: "granite-speech-5.0-470m-turboctc",
+            displayName: "Granite 5.0 TurboCTC (470M)",
+            repoId: "ibm-granite/granite-speech-5.0-470m-turboctc",
+            // Multilingual release of 2026-10-21 (EN, FR, DE, ES, PT, IT, JA).
+            revision: "1dd23f46f6d4e6eae2531982ba2e33220086dd97",
+            sizeDescription: "~950 MB",
+            ramRequirement: "8 GB+",
+            family: .turboCTC
+        ),
+        GraniteModelDef(
+            id: "granite-speech-5.0-2b",
+            displayName: "Granite 5.0 2B",
+            repoId: "ibm-granite/granite-speech-5.0-2b",
+            revision: "c684620bb54fc89d14ba27256b23bbc9e09ba764",
+            sizeDescription: "~4.6 GB",
+            ramRequirement: "16 GB+",
+            family: .granite5
+        ),
+        GraniteModelDef(
             id: "granite-1b-speech-4bit",
-            displayName: "Granite 1B (4-bit)",
+            displayName: "Granite 4.0 1B (4-bit)",
             repoId: "mlx-community/granite-4.0-1b-speech-4bit",
             sizeDescription: "~2 GB",
             ramRequirement: "8 GB+"
         ),
         GraniteModelDef(
             id: "granite-1b-speech-5bit",
-            displayName: "Granite 1B (5-bit)",
+            displayName: "Granite 4.0 1B (5-bit)",
             repoId: "mlx-community/granite-4.0-1b-speech-5bit",
             sizeDescription: "~2.2 GB",
             ramRequirement: "8 GB+"
         ),
         GraniteModelDef(
             id: "granite-1b-speech-8bit",
-            displayName: "Granite 1B (8-bit)",
+            displayName: "Granite 4.0 1B (8-bit)",
             repoId: "mlx-community/granite-4.0-1b-speech-8bit",
             sizeDescription: "~2.9 GB",
             ramRequirement: "16 GB+"
@@ -676,7 +744,12 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     // MARK: - Helpers
 
+    fileprivate static let turboCTCTranslationError = PluginTranscriptionError.apiError(
+        "Granite 5.0 TurboCTC cannot translate. To translate, select Granite 5.0 2B or Granite 4.0 in the Granite settings."
+    )
+
     static let transcribeInstruction = "can you transcribe the speech into a written format?"
+    static let granite5TranscribeInstruction = "transcribe the speech with proper punctuation and capitalization."
 
     private static let translationLanguageNames: [String: String] = [
         "en": "English",
@@ -684,25 +757,40 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         "de": "German",
         "es": "Spanish",
         "pt": "Portuguese",
+        "it": "Italian",
         "ja": "Japanese",
+        "zh": "Mandarin",
     ]
 
     /// Resolve the instruction for Granite. The host's prompt carries dictionary terms
     /// ("A, B"), and mlx-audio uses a non-nil prompt as the whole instruction and then
     /// ignores `language`. Granite expects the terms after the task instruction, so the
     /// terms are appended as "Keywords: A, B" to the transcribe or translate instruction.
-    /// Without terms, nil keeps mlx-audio's built-in instructions.
-    static func resolvePrompt(translate: Bool, language: String?, prompt: String?) -> String? {
-        guard let keywords = prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !keywords.isEmpty else { return nil }
+    ///
+    /// Granite 4.0 without terms gets nil, which keeps mlx-audio's built-in instructions.
+    /// Granite 5.0 always gets the model card's instructions for punctuated, truecased output.
+    /// TurboCTC takes no prompt.
+    static func resolvePrompt(
+        family: GraniteModelFamily = .granite4,
+        translate: Bool,
+        language: String?,
+        prompt: String?
+    ) -> String? {
+        let keywords = prompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let target = translationLanguageNames[(language ?? "en").lowercased()] ?? (language ?? "en")
         let instruction: String
-        if translate {
-            let code = (language ?? "en").lowercased()
-            instruction = "Translate the speech to \(translationLanguageNames[code] ?? code)."
-        } else {
-            instruction = transcribeInstruction
+        switch family {
+        case .turboCTC:
+            return nil
+        case .granite4:
+            guard !keywords.isEmpty else { return nil }
+            instruction = translate ? "Translate the speech to \(target)." : transcribeInstruction
+        case .granite5:
+            instruction = translate
+                ? "translate the speech to \(target) with proper punctuation and capitalization."
+                : granite5TranscribeInstruction
         }
-        return "\(instruction) Keywords: \(keywords)"
+        return keywords.isEmpty ? instruction : "\(instruction) Keywords: \(keywords)"
     }
 
     fileprivate static func normalizeTranscript(_ text: String) -> String {
@@ -714,12 +802,60 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
 // MARK: - Model Types
 
+enum GraniteModelFamily: Equatable {
+    /// Granite Speech 4.0: lowercase output, translation and keywords through the prompt.
+    case granite4
+    /// Granite Speech 5.0 2B: YaRN decoder, punctuated output, translation and keywords.
+    case granite5
+    /// Granite Speech 5.0 TurboCTC: CTC encoder without a prompt. Punctuated output, 7 languages.
+    case turboCTC
+
+    static let turboCTCModelType = "granite_speech5_ctc"
+}
+
 struct GraniteModelDef: Identifiable {
     let id: String
     let displayName: String
     let repoId: String
+    /// A pinned commit. nil follows `main`, as Granite 4.0 always has.
+    var revision: String? = nil
     let sizeDescription: String
     let ramRequirement: String
+    var family: GraniteModelFamily = .granite4
+
+    var downloadPatterns: [String] {
+        switch family {
+        case .granite4: ["*.safetensors", "*.json", "*.txt", "*.wav"]
+        // The 2B repo also has out_llm.safetensors (411 MB), which transcription does not use.
+        case .granite5: ["model*.safetensors", "*.json", "*.txt", "*.jinja"]
+        case .turboCTC: ["*.safetensors", "*.json"]
+        }
+    }
+
+    var requirements: PluginHuggingFaceModelStore.Requirements {
+        switch family {
+        case .granite4, .turboCTC:
+            GranitePlugin.modelRequirements
+        case .granite5:
+            // Without chat_template.jinja the prompt falls back to a different format.
+            PluginHuggingFaceModelStore.Requirements(
+                requiredFiles: ["config.json", "tokenizer.json", "tokenizer_config.json", "chat_template.jinja"],
+                weightFileExtensions: ["safetensors"]
+            )
+        }
+    }
+}
+
+enum GraniteRuntime {
+    case speech(GraniteSpeechModel, GraniteModelFamily)
+    case turboCTC(GraniteSpeech5CTCModel)
+
+    var family: GraniteModelFamily {
+        switch self {
+        case .speech(_, let family): family
+        case .turboCTC: .turboCTC
+        }
+    }
 }
 
 enum GraniteModelState: Equatable {
@@ -772,7 +908,7 @@ private struct GraniteSettingsView: View {
             Text("Granite Speech (MLX)")
                 .font(.headline)
 
-            Text("Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.", bundle: bundle)
+            Text("Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. Granite 5.0 TurboCTC transcribes 7 languages with punctuation; Granite 5.0 2B also translates.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -924,6 +1060,11 @@ private struct GraniteSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
                     .font(.body)
+                if let note = note(for: modelDef) {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -971,6 +1112,18 @@ private struct GraniteSettingsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func note(for modelDef: GraniteModelDef) -> String? {
+        guard !modelDef.id.hasPrefix("custom-") else { return nil }
+        switch modelDef.family {
+        case .turboCTC:
+            return String(localized: "Fastest. 7 languages with punctuation and capitalization. No translation or dictionary terms.", bundle: bundle)
+        case .granite5:
+            return String(localized: "Translation and dictionary terms. 6 languages with punctuation and capitalization. Slower.", bundle: bundle)
+        case .granite4:
+            return String(localized: "Older model. Writes mostly lowercase with little punctuation.", bundle: bundle)
+        }
     }
 
     private func validateAndSaveHuggingFaceToken() {

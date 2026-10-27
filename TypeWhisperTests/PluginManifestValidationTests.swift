@@ -195,7 +195,7 @@ final class PluginManifestValidationTests: XCTestCase {
             ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.14", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/CanaryPlugin/manifest.json", "1.1.0", "1.8.1"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.19", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.16", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.1.0", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/manifest.json", "1.0.6", "1.8.0"),
         ]
 
@@ -2896,6 +2896,18 @@ final class GranitePluginPromptTests: XCTestCase {
             "can you transcribe the speech into a written format? Keywords: TypeWhisper, MLX"
         )
         XCTAssertNil(GranitePlugin.resolvePrompt(translate: true, language: "de", prompt: " "))
+    }
+
+    func testGranite5UsesPunctuationInstructionsAndTurboCTCTakesNoPrompt() {
+        XCTAssertEqual(
+            GranitePlugin.resolvePrompt(family: .granite5, translate: false, language: nil, prompt: nil),
+            "transcribe the speech with proper punctuation and capitalization."
+        )
+        XCTAssertEqual(
+            GranitePlugin.resolvePrompt(family: .granite5, translate: true, language: "en", prompt: "TypeWhisper"),
+            "translate the speech to English with proper punctuation and capitalization. Keywords: TypeWhisper"
+        )
+        XCTAssertNil(GranitePlugin.resolvePrompt(family: .turboCTC, translate: false, language: "de", prompt: "TypeWhisper"))
     }
 }
 
