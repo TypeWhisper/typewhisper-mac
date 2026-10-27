@@ -24,6 +24,16 @@ enum TestSupport {
         return directory
     }
 
+    /// Moves deleted recording files into `trash`, so tests leave the user's Trash alone.
+    @MainActor
+    static func recordingFileTrasher(into trash: URL) -> AudioRecorderViewModel.RecordingFileTrasher {
+        { url in
+            let trashedURL = trash.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
+            try FileManager.default.moveItem(at: url, to: trashedURL)
+            return trashedURL
+        }
+    }
+
     static func remove(_ directory: URL) {
         guard FileManager.default.fileExists(atPath: directory.path) else { return }
 
