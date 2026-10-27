@@ -676,13 +676,33 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     // MARK: - Helpers
 
-    /// Resolve the prompt for Granite. When translate=true, language is passed separately
-    /// so prompt is only used for keyword biasing. For transcription, a custom prompt
-    /// overrides the default; otherwise nil lets the model use its built-in prompt.
-    private static func resolvePrompt(translate: Bool, language: String?, prompt: String?) -> String? {
-        if let prompt, !prompt.isEmpty { return prompt }
-        if translate { return nil }
-        return nil
+    static let transcribeInstruction = "can you transcribe the speech into a written format?"
+
+    private static let translationLanguageNames: [String: String] = [
+        "en": "English",
+        "fr": "French",
+        "de": "German",
+        "es": "Spanish",
+        "pt": "Portuguese",
+        "ja": "Japanese",
+    ]
+
+    /// Resolve the instruction for Granite. The host's prompt carries dictionary terms
+    /// ("A, B"), and mlx-audio uses a non-nil prompt as the whole instruction and then
+    /// ignores `language`. Granite expects the terms after the task instruction, so the
+    /// terms are appended as "Keywords: A, B" to the transcribe or translate instruction.
+    /// Without terms, nil keeps mlx-audio's built-in instructions.
+    static func resolvePrompt(translate: Bool, language: String?, prompt: String?) -> String? {
+        guard let keywords = prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !keywords.isEmpty else { return nil }
+        let instruction: String
+        if translate {
+            let code = (language ?? "en").lowercased()
+            instruction = "Translate the speech to \(translationLanguageNames[code] ?? code)."
+        } else {
+            instruction = transcribeInstruction
+        }
+        return "\(instruction) Keywords: \(keywords)"
     }
 
     fileprivate static func normalizeTranscript(_ text: String) -> String {
