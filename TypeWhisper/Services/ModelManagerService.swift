@@ -265,6 +265,8 @@ final class ModelManagerService: ObservableObject {
     private var pluginConfiguredPollInterval: Duration = .milliseconds(100)
     /// A warm model loads in well under a second; reporting that would only flash a label.
     private var dictationModelLoadingRevealDelay: Duration = .milliseconds(750)
+    /// The user's preferred macOS languages in order; see `spokenLanguageSelection`.
+    var preferredLanguages: () -> [String] = { Locale.preferredLanguages }
 
     private var passiveRestoreSelection: (providerId: String, instance: ObjectIdentifier)?
     private var dictationPrewarm: (key: ObjectIdentifier, plugin: any TranscriptionEnginePlugin)?
@@ -1762,16 +1764,52 @@ final class ModelManagerService: ObservableObject {
     /// chooses among all languages it knows, and only an engine language counts. Measured on
     /// held-out speech with 0.25: whole utterances get a language 89 % (Cohere Transcribe, 14
     /// languages) and 83 % (Canary, 25) of the time, 98.9 % to 99.8 % of them correct; speech in a
-    /// language the engine lacks gets one 0.2 % to 0.4 % of the time. Otherwise the engine keeps its
-    /// old behavior instead of a likely wrong language.
+    /// language the engine lacks gets one 0.2 % to 0.4 % of the time. Short dictations get one less
+    /// often (58 % of short Common Voice clips in English), so instead of a likely wrong language the
+    /// engine then gets the first of the user's preferred macOS languages it supports, as without a
+    /// detector. An engine with a default language of its own
+    /// (`PluginCapability.defaultSpokenLanguage`) or without any of the user's languages gets none
+    /// and keeps its old behavior.
     static let hostLanguageDetectionMinimumMargin = 0.25
 
     private static let allLanguageCodes = Locale.LanguageCode.isoLanguageCodes.map(\.identifier)
 
+    /// Whether an engine that cannot detect languages gets the user's preferred macOS language
+    /// when nothing else picks one. Engines with a default language of their own keep it.
+    static func fallsBackToPreferredLanguage(_ engine: TranscriptionEnginePlugin) -> Bool {
+        PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?
+            .manifest.supportsCapability(.defaultSpokenLanguage) != true
+    }
+
+    /// The engine's code for the first of `preferredLanguages` it lists, compared by language, so
+    /// "de-DE" finds "de" and "zh-Hans-CN" finds "zh".
+    private static func firstPreferredLanguage(_ preferredLanguages: [String], in engineLanguages: [String]) -> String? {
+        for preferred in preferredLanguages {
+            let language = baseLanguageCode(preferred)
+            if let match = engineLanguages.first(where: { baseLanguageCode($0) == language }) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    /// Codes that name the same language, as the Language Detection plugin compares them.
+    private static let languageCodeAliases = [
+        "nb": "no", "nn": "no", "iw": "he", "tl": "fil", "jw": "jv", "in": "id",
+    ]
+
+    private static func baseLanguageCode(_ code: String) -> String {
+        let lowered = code.lowercased()
+        let base = lowered.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? lowered
+        return languageCodeAliases[base] ?? base
+    }
+
     /// A language detection plugin, when enabled, picks the spoken language for engines that would
     /// otherwise get the wrong one or none: among the user's selected languages for engines without
     /// language hints (they used the first one), and among the engine's languages when the user asked
-    /// for automatic detection but the engine cannot detect languages itself.
+    /// for automatic detection but the engine cannot detect languages itself. When nothing picks a
+    /// language for such an engine, it gets the first of the user's preferred macOS languages it
+    /// supports.
     private func spokenLanguageSelection(
         for languageSelection: LanguageSelection,
         plugin: TranscriptionEnginePlugin,
@@ -1780,6 +1818,7 @@ final class ModelManagerService: ObservableObject {
         let accepted: [String]
         let candidates: [String]
         let minimumMargin: Double
+        var undetected = languageSelection
         switch languageSelection.normalizedForSupportedLanguages(plugin.supportedLanguages) {
         case .hints(let codes) where !plugin.acceptsLanguageHints:
             accepted = codes
@@ -1794,23 +1833,27 @@ final class ModelManagerService: ObservableObject {
             // the first code per language, so the engine's spelling (such as "de-DE") wins.
             candidates = accepted + Self.allLanguageCodes
             minimumMargin = Self.hostLanguageDetectionMinimumMargin
+            if Self.fallsBackToPreferredLanguage(plugin),
+               let preferred = Self.firstPreferredLanguage(preferredLanguages(), in: accepted) {
+                undetected = .exact(preferred)
+            }
         default:
             return languageSelection
         }
         guard accepted.count > 1,
               let provider = PluginManager.shared?.spokenLanguageIdentificationProviders.first else {
-            return languageSelection
+            return undetected
         }
         do {
             guard let identification = try await provider.identifySpokenLanguage(samples: audioSamples, among: candidates),
                   accepted.contains(identification.language),
                   identification.margin >= minimumMargin else {
-                return languageSelection
+                return undetected
             }
             return .exact(identification.language)
         } catch {
-            // Detection is an improvement on top; any failure keeps the old behavior.
-            return languageSelection
+            // Detection is an improvement on top; any failure falls back like an unclear answer.
+            return undetected
         }
     }
 
