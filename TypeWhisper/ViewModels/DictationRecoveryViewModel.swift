@@ -241,7 +241,7 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     var supportsTranslation: Bool {
-        resolvedEngine?.supportsTranslation(forModel: selectedModel) ?? false
+        resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(selectedModel)) ?? false
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -361,7 +361,8 @@ final class DictationRecoveryViewModel: ObservableObject {
                 let result = try await transcriptionRunner(
                     samples,
                     languageSelection,
-                    resolvedEngine?.supportsTranslation(forModel: selectedModel) == false ? .transcribe : selectedTask,
+                    resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(selectedModel)) == false
+                        ? .transcribe : selectedTask,
                     selectedEngine,
                     selectedModel
                 )

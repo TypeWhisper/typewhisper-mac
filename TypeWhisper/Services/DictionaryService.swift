@@ -711,6 +711,9 @@ final class DictionaryService: ObservableObject {
             return PluginDictionaryTerms.prompt(from: terms)
         }
 
+        // An enforced engine and model replace any override, and the enforced model is
+        // the plugin's current one, so its own answer applies.
+        let modelId = PluginManager.shared?.enforcedTranscriptionResolution == nil ? modelId : nil
         // Terms stay out of the prompt until the plugin setting enables them, so a
         // caller-supplied prompt can still reach the plugin on its own.
         if let modelSupportsTerms = plugin.supportsDictionaryTerms(forModel: modelId) {

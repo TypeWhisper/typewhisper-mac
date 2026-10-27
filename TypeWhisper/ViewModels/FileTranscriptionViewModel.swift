@@ -241,7 +241,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     var supportsTranslation: Bool {
-        resolvedEngine?.supportsTranslation(forModel: availableSelectedModel) ?? false
+        resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(availableSelectedModel)) ?? false
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -529,7 +529,8 @@ final class FileTranscriptionViewModel: ObservableObject {
             let result = try await transcriptionRunner(
                 samples,
                 languageSelection,
-                resolvedEngine?.supportsTranslation(forModel: modelOverride) == false ? .transcribe : selectedTask,
+                resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(modelOverride)) == false
+                    ? .transcribe : selectedTask,
                 availableSelectedEngine,
                 modelOverride,
                 { [weak self] text in
