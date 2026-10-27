@@ -55,6 +55,13 @@ enum PolishNumberWordParser {
             return nil
         }
         index = integer.nextIndex
+
+        // `zero point five` is English. Leave it to a later English candidate
+        // instead of converting only the shared word `zero`.
+        if index < normalizedWords.count, normalizedWords[index] == "point" {
+            return nil
+        }
+
         var replacement = "\(integer.value)"
         var kind = NumberWordNormalizer.ParsedWords.Kind.number
 

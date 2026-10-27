@@ -92,6 +92,8 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
         for (text, candidates, expected) in [
             // Polish has a parser, so English text still falls back to English.
             ("Set the value to twenty three", ["pl", "en"], "Set the value to 23"),
+            // Polish shares "zero" with English but must not split an English decimal.
+            ("zero point five", ["pl", "en"], "0.5"),
             // Without a parser for the first language, English must not take over.
             ("ten soubor je důležitý", ["cs", "en"], "ten soubor je důležitý")
         ] {
