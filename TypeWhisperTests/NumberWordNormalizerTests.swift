@@ -306,6 +306,7 @@ final class NumberWordNormalizerTests: XCTestCase {
             ("dwa przecinek dwadzieścia pięć", "2,25"),
             ("trzy przecinek czternaście", "3,14"),
             ("zero przecinek zero pięć", "0,05"),
+            ("zero przecinek zero dwadzieścia pięć", "0,025"),
             ("minus jeden przecinek pięć", "-1,5")
         ] {
             XCTAssertEqual(NumberWordNormalizer.normalize(text: spoken, language: "pl"), expected, spoken)
