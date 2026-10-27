@@ -802,6 +802,7 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: ""))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "   "))
         XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "..."))
         XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank you"))
         XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank\nyou!"))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open new tab"))
