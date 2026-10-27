@@ -213,6 +213,7 @@ final class TextInsertionService {
     var focusedElementHiddenOverride: (() -> Bool)?
     var accessibilityRoleOverride: ((AXUIElement) -> String?)?
     var accessibilityParentOverride: ((AXUIElement) -> AXUIElement?)?
+    var accessibilityValueSettableOverride: ((AXUIElement) -> Bool)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
     var generatedTextRangesOverride: ((AXUIElement) -> [NSRange])?
@@ -2599,8 +2600,10 @@ final class TextInsertionService {
     }
 
     /// Web terminals can consume a paste without exposing a text change. A failed or incomplete
-    /// walk cannot rule out such an input. A focused web area alone does not establish one.
+    /// walk cannot rule out such an input. A focused web area alone does not establish one,
+    /// unless the web area is an editable document itself.
     private func textFieldAncestry(of element: AXUIElement) -> TextFieldAncestry {
+        if isEditableWebDocument(element) { return .web }
         var ancestor = accessibilityParentOverride.map { $0(element) }
             ?? axElementAttribute(kAXParentAttribute as CFString, from: element)
         var visited: Set<AXUIElement> = [element]
@@ -2617,6 +2620,22 @@ final class TextInsertionService {
                 ?? axElementAttribute(kAXParentAttribute as CFString, from: current)
         }
         return .unknown
+    }
+
+    /// A focused web area whose whole document is editable, such as the message body in Mail.
+    /// Its value stays empty while pasted text lands in its children. A web page without a
+    /// focused field exposes the same empty value, but WebKit only makes it settable for an
+    /// editable document.
+    private func isEditableWebDocument(_ element: AXUIElement) -> Bool {
+        let role = accessibilityRoleOverride.map { $0(element) }
+            ?? stringAttribute(kAXRoleAttribute as CFString, from: element)
+        guard role == "AXWebArea" else { return false }
+        if let accessibilityValueSettableOverride {
+            return accessibilityValueSettableOverride(element)
+        }
+        var settable = DarwinBoolean(false)
+        return AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success
+            && settable.boolValue
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {
