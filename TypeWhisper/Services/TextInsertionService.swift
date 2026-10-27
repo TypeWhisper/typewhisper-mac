@@ -184,6 +184,12 @@ final class TextInsertionService {
         "com.mitchellh.ghostty",
         "com.cmuxterm.app"
     ]
+    /// Editors that take a paste although accessibility shows no focused text element. GNU Emacs
+    /// and Aquamacs name their frame window as the focused element (#1750).
+    private let pasteWithoutTextElementBundleIdentifiers: Set<String> = [
+        "org.gnu.Emacs",
+        "org.gnu.Aquamacs"
+    ]
     private static let geckoBundleIdentifiers =
         SupportedMeetingBrowser.reminderOnlyBundleIdentifiers.union([
             "org.mozilla.thunderbird"
@@ -1529,7 +1535,10 @@ final class TextInsertionService {
             : []
         let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
             || detectMissedTextField
-            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
+            ? capturePasteVerificationState(
+                acceptsPasteWithoutTextElement: isTerminalApp
+                    || bundleId.map { pasteWithoutTextElementBundleIdentifiers.contains($0) } == true
+            )
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
             || (detectMissedTextField && pasteVerificationState?.canVerifyPaste == true)
