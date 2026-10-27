@@ -850,6 +850,105 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(versions, [.v3])
     }
 
+    /// The host switches models per request with `selectModel` and transcribes as soon as the
+    /// plugin reports the new selection as configured. The previous model must not count.
+    func testSelectingAnotherModelUnloadsTheLoadedOneImmediately() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "parakeet-ultra", "selectedVersion": "ultra"],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = makePlugin()
+        let loaded = LoadedVersions()
+        plugin.asrModelLoadOverrideForTests = { version in await loaded.append(version) }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        await plugin.loadModel()
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-ultra")
+
+        plugin.selectModel("parakeet-tdt-0.6b-v3")
+
+        XCTAssertEqual(plugin.selectedModelId, "parakeet-tdt-0.6b-v3")
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertNil(plugin.loadedModelId)
+        XCTAssertEqual(plugin.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
+        XCTAssertEqual(host.userDefault(forKey: "selectedVersion") as? String, "v3")
+
+        for _ in 0..<200 where plugin.loadedModelId == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-tdt-0.6b-v3")
+        XCTAssertTrue(plugin.isConfigured)
+        let versions = await loaded.versions
+        XCTAssertEqual(versions, [.ultra, .v3])
+    }
+
+    /// A model that finishes loading after another was selected must not become the loaded
+    /// one: the host, waiting for the new model, would see the old one ready and fail.
+    func testLoadThatFinishesAfterAnotherModelWasSelectedIsDropped() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "parakeet-ultra", "selectedVersion": "ultra"],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = makePlugin()
+        let loads = HeldLoads()
+        plugin.asrModelLoadOverrideForTests = { version in await loads.load(version) }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        // The host restores Ultra, as after a request that used another model.
+        plugin.triggerRestoreModel(forModel: "parakeet-ultra" as NSString)
+        await loads.waitForLoads(1)
+
+        plugin.selectModel("parakeet-tdt-0.6b-v3")
+        await loads.releaseNext()
+        await loads.waitForLoads(2)
+
+        XCTAssertNil(plugin.loadedModelId, "Ultra finished loading after v3 was selected")
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(plugin.selectedModelId, "parakeet-tdt-0.6b-v3")
+
+        await loads.releaseNext()
+        for _ in 0..<200 where plugin.loadedModelId == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-tdt-0.6b-v3")
+        XCTAssertEqual(plugin.selectedModelId, "parakeet-tdt-0.6b-v3")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "parakeet-tdt-0.6b-v3")
+        let versions = await loads.versions
+        XCTAssertEqual(versions, [.ultra, .v3])
+    }
+
+    func testLoadForAnOlderSelectionDoesNotReplaceTheNewestOne() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "parakeet-ultra", "selectedVersion": "ultra"],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = makePlugin()
+        let loads = HeldLoads()
+        plugin.asrModelLoadOverrideForTests = { version in await loads.load(version) }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        let ultraLoad = Task { await plugin.loadModel() }
+        await loads.waitForLoads(1)
+
+        plugin.selectModel("parakeet-tdt-0.6b-v3")
+        plugin.selectModel("parakeet-ultra")
+        await loads.releaseNext()
+        await ultraLoad.value
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-ultra", "Ultra is the newest selection")
+
+        // The v3 selection's load still runs but must not install v3, so Ultra needs no reload.
+        for _ in 0..<20 {
+            await loads.releaseNext()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await plugin.loadModel(version: .ultra)
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-ultra")
+        XCTAssertEqual(plugin.selectedModelId, "parakeet-ultra")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "parakeet-ultra")
+        let versions = await loads.versions
+        XCTAssertEqual(versions, [.ultra, .v3])
+    }
+
     // MARK: - Unknown tokens
 
     func testUnknownTokensBecomeAmpersandsBetweenCapitalsAndAreDroppedElsewhere() {
@@ -1083,6 +1182,33 @@ final class ParakeetPluginTests: XCTestCase {
     private actor LoadedVersions {
         private(set) var versions: [ParakeetVersion] = []
         func append(_ version: ParakeetVersion) { versions.append(version) }
+    }
+
+    /// Holds every model load until the test releases it.
+    private actor HeldLoads {
+        private(set) var versions: [ParakeetVersion] = []
+        private var held: [CheckedContinuation<Void, Never>] = []
+        private var countWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+        func load(_ version: ParakeetVersion) async {
+            versions.append(version)
+            countWaiters.removeAll { count, waiter in
+                guard versions.count >= count else { return false }
+                waiter.resume()
+                return true
+            }
+            await withCheckedContinuation { held.append($0) }
+        }
+
+        func waitForLoads(_ count: Int) async {
+            guard versions.count < count else { return }
+            await withCheckedContinuation { countWaiters.append((count, $0)) }
+        }
+
+        func releaseNext() {
+            guard !held.isEmpty else { return }
+            held.removeFirst().resume()
+        }
     }
 
     func testEnsureVocabularyAssetSkipsExistingFile() async throws {
