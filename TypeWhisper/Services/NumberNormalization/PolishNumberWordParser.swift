@@ -146,6 +146,8 @@ enum PolishNumberWordParser {
         return (value, index)
     }
 
+    /// Reads the decimal part either digit by digit (`pięć zero` -> `50`) or, as Polish
+    /// speakers often do, as one cardinal group (`dwadzieścia pięć` -> `25`).
     private static func parseDecimalDigits(_ words: [String], startingAt startIndex: Int) -> (digits: String, nextIndex: Int) {
         var digits = ""
         var index = startIndex
@@ -153,6 +155,10 @@ enum PolishNumberWordParser {
         while index < words.count, let digit = words[index] == "zero" ? 0 : unitValues[words[index]] {
             digits += "\(digit)"
             index += 1
+        }
+
+        if digits.isEmpty, let group = parseGroup(words, startingAt: startIndex) {
+            return ("\(group.value)", group.nextIndex)
         }
 
         return (digits, index)

@@ -303,6 +303,9 @@ final class NumberWordNormalizerTests: XCTestCase {
             ("dwa tysiące pięćset", "2500"),
             ("Dziewiętnaście, dwieście, milion", "19, 200, 1000000"),
             ("dwa przecinek pięć", "2,5"),
+            ("dwa przecinek dwadzieścia pięć", "2,25"),
+            ("trzy przecinek czternaście", "3,14"),
+            ("zero przecinek zero pięć", "0,05"),
             ("minus jeden przecinek pięć", "-1,5")
         ] {
             XCTAssertEqual(NumberWordNormalizer.normalize(text: spoken, language: "pl"), expected, spoken)
