@@ -304,11 +304,11 @@ struct AudioRecorderView: View {
                 .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
 
                 if viewModel.supportsTranslation {
-                    Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
-                        ForEach(TranscriptionTask.allCases) { task in
-                            Text(task.displayName).tag(task)
-                        }
-                    }
+                    TranscriptionTaskPicker(
+                        task: $viewModel.selectedTask,
+                        translationTarget: $viewModel.translationTarget,
+                        translationTargets: viewModel.translationTargets
+                    )
                     .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
                 }
 

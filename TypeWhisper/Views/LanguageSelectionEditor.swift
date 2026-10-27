@@ -506,3 +506,43 @@ struct LanguageCodeBadge: View {
         .accessibilityLabel(descriptor.accessibilityLabel)
     }
 }
+
+/// The Transcribe or Translate picker. For an engine that translates into more than English,
+/// Translate names the chosen target and a second picker chooses it.
+struct TranscriptionTaskPicker: View {
+    @Binding var task: TranscriptionTask
+    @Binding var translationTarget: String
+    /// The model's translation targets; empty when it translates to English only.
+    let translationTargets: [String]
+    /// A fixed width for each picker, for a row of controls.
+    var pickerWidth: CGFloat? = nil
+
+    private var resolvedTarget: String? {
+        TranscriptionTranslationTarget.resolve(translationTarget, among: translationTargets)
+    }
+
+    var body: some View {
+        Picker(String(localized: "Task"), selection: $task) {
+            ForEach(TranscriptionTask.allCases) { task in
+                Text(task.displayName(translationTarget: resolvedTarget)).tag(task)
+            }
+        }
+        .frame(width: pickerWidth)
+
+        if task == .translate, let resolvedTarget {
+            Picker(String(localized: "Target language"), selection: Binding(
+                get: { resolvedTarget },
+                set: { translationTarget = $0 }
+            )) {
+                ForEach(
+                    localizedAppLanguageOptions(for: translationTargets)
+                        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending },
+                    id: \.code
+                ) { option in
+                    Text(option.name).tag(option.code)
+                }
+            }
+            .frame(width: pickerWidth)
+        }
+    }
+}

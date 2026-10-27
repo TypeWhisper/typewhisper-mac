@@ -195,7 +195,7 @@ final class PluginManifestValidationTests: XCTestCase {
             ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.14", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/CanaryPlugin/manifest.json", "1.1.0", "1.8.1"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.19", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.1.0", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.2.0", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/manifest.json", "1.0.6", "1.8.0"),
         ]
 
@@ -2911,6 +2911,9 @@ final class GranitePluginPromptTests: XCTestCase {
         XCTAssertEqual(engine.supportsDictionaryTerms(forModel: "granite-speech-5.0-2b"), true)
         XCTAssertEqual(engine.supportsDictionaryTerms(forModel: "granite-speech-5.0-470m-turboctc"), false)
         XCTAssertNil(engine.supportsDictionaryTerms(forModel: nil))
+        XCTAssertEqual(engine.translationTargetLanguages(forModel: "granite-speech-5.0-470m-turboctc"), [])
+        XCTAssertEqual(engine.translationTarget(for: "fr", forModel: "granite-speech-5.0-2b"), "fr")
+        XCTAssertEqual(engine.translationTarget(for: "ko", forModel: "granite-1b-speech-8bit"), "en")
     }
 
     func testGranite5UsesPunctuationInstructionsAndTurboCTCTakesNoPrompt() {

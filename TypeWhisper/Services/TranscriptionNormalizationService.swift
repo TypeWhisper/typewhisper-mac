@@ -144,11 +144,13 @@ enum TranscriptionNormalizationService {
         engineUsed: String,
         segments: [TranscriptionSegment],
         task: TranscriptionTask,
+        translationTarget: String? = nil,
         normalizeNumbers: Bool? = nil,
         defaults: UserDefaults = .standard
     ) -> TranscriptionResult {
         let languages = normalizationLanguages(
             task: task,
+            translationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
             configuredLanguage: configuredLanguage,
             configuredLanguageCandidates: configuredLanguageCandidates
@@ -196,12 +198,13 @@ enum TranscriptionNormalizationService {
 
     static func normalizationLanguages(
         task: TranscriptionTask,
+        translationTarget: String? = nil,
         detectedLanguage: String?,
         configuredLanguage: String?,
         configuredLanguageCandidates: [String] = []
     ) -> [String] {
         if task == .translate {
-            return ["en"]
+            return [PunctuationLanguageNormalizer.normalize(translationTarget ?? "en") ?? "en"]
         }
 
         return prioritizedLanguages(

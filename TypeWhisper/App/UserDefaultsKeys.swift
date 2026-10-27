@@ -176,6 +176,8 @@ enum UserDefaultsKeys {
     static let recorderTranscriptionEngine = "recorderTranscriptionEngine"
     static let recorderTranscriptionModel = "recorderTranscriptionModel"
     static let recorderTranscriptionLanguage = "recorderTranscriptionLanguage"
+    /// The language the Recorder translates into, for engines with a choice of target.
+    static let recorderTranslationTarget = "recorderTranslationTarget"
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
     static let recorderDetectSpeakers = "recorderDetectSpeakers"
@@ -191,11 +193,13 @@ enum UserDefaultsKeys {
     static let fileTranscriptionEngine = "fileTranscriptionEngine"
     static let fileTranscriptionModel = "fileTranscriptionModel"
     static let fileTranscriptionLanguage = "fileTranscriptionLanguage"
+    static let fileTranscriptionTranslationTarget = "fileTranscriptionTranslationTarget"
 
     // MARK: - Dictation Recovery
     static let dictationRecoveryEngine = "dictationRecoveryEngine"
     static let dictationRecoveryModel = "dictationRecoveryModel"
     static let dictationRecoveryLanguage = "dictationRecoveryLanguage"
+    static let dictationRecoveryTranslationTarget = "dictationRecoveryTranslationTarget"
     static let dictationRecoveryAutomaticFallbackEnabled = "dictationRecoveryAutomaticFallbackEnabled"
     static let dictationRecoveryHedgeEnabled = "dictationRecoveryHedgeEnabled"
     static let dictationRecoveryHedgeThresholdSeconds = "dictationRecoveryHedgeThresholdSeconds"

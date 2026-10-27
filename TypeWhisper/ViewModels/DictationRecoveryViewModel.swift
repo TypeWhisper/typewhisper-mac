@@ -60,6 +60,10 @@ final class DictationRecoveryViewModel: ObservableObject {
         }
     }
     @Published var selectedTask: TranscriptionTask = .transcribe
+    /// The language to translate into, for engines with a choice of target.
+    @Published var translationTarget: String = "en" {
+        didSet { defaults.set(translationTarget, forKey: UserDefaultsKeys.dictationRecoveryTranslationTarget) }
+    }
     @Published var selectedEngine: String? {
         didSet {
             defaults.set(selectedEngine, forKey: UserDefaultsKeys.dictationRecoveryEngine)
@@ -171,6 +175,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         )
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryModel)
+        self.translationTarget = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryTranslationTarget) ?? "en"
         self.automaticFallbackEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         self.hedgeEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
         self.hedgeThresholdSeconds = Self.clampedHedgeThreshold(
@@ -242,6 +247,10 @@ final class DictationRecoveryViewModel: ObservableObject {
 
     var supportsTranslation: Bool {
         resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(selectedModel)) ?? false
+    }
+
+    var translationTargets: [String] {
+        resolvedEngine?.translationTargetLanguages(forModel: modelManager.effectiveModelOverride(selectedModel)) ?? []
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -358,14 +367,11 @@ final class DictationRecoveryViewModel: ObservableObject {
                 }
                 // Translate is hidden for a model that cannot translate; a choice made for
                 // an earlier model must not make the recovery fail.
-                let result = try await transcriptionRunner(
-                    samples,
-                    languageSelection,
-                    resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(selectedModel)) == false
-                        ? .transcribe : selectedTask,
-                    selectedEngine,
-                    selectedModel
-                )
+                let task = resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(selectedModel)) == false
+                    ? TranscriptionTask.transcribe : selectedTask
+                let result = try await TranscriptionTranslationTarget.$requested.withValue(translationTarget) {
+                    try await transcriptionRunner(samples, languageSelection, task, selectedEngine, selectedModel)
+                }
 
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else {

@@ -282,6 +282,18 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         NSNumber(value: family(ofModel: modelId) != .turboCTC)
     }
 
+    /// Languages the user can translate into. Hosts that know this selector let the user pick
+    /// one and pass it as `language` when `translate` is true. Older hosts pass the spoken
+    /// language there, which Granite then also uses as the target.
+    @objc(translationTargetLanguagesForModelId:)
+    func translationTargetLanguages(forModelId modelId: String?) -> [String] {
+        family(ofModel: modelId) == .turboCTC ? [] : Self.translationTargetLanguages
+    }
+
+    /// The model card's translation targets: to and from English for the six speech
+    /// languages, plus English to Italian and Mandarin.
+    static let translationTargetLanguages = ["en", "fr", "de", "es", "pt", "ja", "it", "zh"]
+
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
@@ -337,7 +349,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                     maxTokens: 4096,
                     temperature: 0.0,
                     prompt: Self.resolvePrompt(family: family, translate: translate, language: language, prompt: prompt),
-                    language: translate ? (language ?? "en") : nil
+                    language: Self.translationTarget(translate: translate, language: language)
                 )
             }
             let text = Self.normalizeTranscript(output.text)
@@ -376,7 +388,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 maxTokens: 4096,
                 temperature: 0.0,
                 prompt: Self.resolvePrompt(family: family, translate: translate, language: language, prompt: prompt),
-                language: translate ? (language ?? "en") : nil
+                language: Self.translationTarget(translate: translate, language: language)
             )
 
             var accumulated = ""
@@ -786,6 +798,12 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         "ja": "Japanese",
         "zh": "Mandarin",
     ]
+
+    /// When translating, `language` names the target: the host passes the language the user
+    /// picked from `translationTargetLanguages`. Without one, Granite translates to English.
+    static func translationTarget(translate: Bool, language: String?) -> String? {
+        translate ? (language ?? "en") : nil
+    }
 
     /// Resolve the instruction for Granite. The host's prompt carries dictionary terms
     /// ("A, B"), and mlx-audio uses a non-nil prompt as the whole instruction and then

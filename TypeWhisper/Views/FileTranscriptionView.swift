@@ -534,12 +534,12 @@ struct FileTranscriptionView: View {
                 .disabled(viewModel.batchState == .processing)
 
                 if viewModel.supportsTranslation {
-                    Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
-                        ForEach(TranscriptionTask.allCases) { task in
-                            Text(task.displayName).tag(task)
-                        }
-                    }
-                    .frame(width: 180)
+                    TranscriptionTaskPicker(
+                        task: $viewModel.selectedTask,
+                        translationTarget: $viewModel.translationTarget,
+                        translationTargets: viewModel.translationTargets,
+                        pickerWidth: 180
+                    )
                     .controlSize(.small)
                 }
 

@@ -93,6 +93,23 @@ enum ModelLifecycleError: LocalizedError {
 private let supportedLanguagesForModelSelector = NSSelectorFromString("supportedLanguagesForModelId:")
 private let supportsTranslationForModelSelector = NSSelectorFromString("supportsTranslationForModelId:")
 private let supportsDictionaryTermsForModelSelector = NSSelectorFromString("supportsDictionaryTermsForModelId:")
+private let translationTargetLanguagesForModelSelector = NSSelectorFromString("translationTargetLanguagesForModelId:")
+
+/// The language the user picked to translate into, for engines that translate into more
+/// than English. The Recorder, file transcription, recovery and the local API set it
+/// around a transcription; without it such an engine translates to English.
+enum TranscriptionTranslationTarget {
+    @TaskLocal static var requested: String?
+
+    /// The requested target when the model offers it, otherwise English.
+    static func resolve(_ requested: String?, among targets: [String]) -> String? {
+        guard !targets.isEmpty else { return nil }
+        if let requested = requested?.lowercased(), targets.contains(requested) {
+            return requested
+        }
+        return targets.contains("en") ? "en" : targets.first
+    }
+}
 
 extension TranscriptionEnginePlugin {
     var acceptsLanguageHints: Bool {
@@ -142,6 +159,26 @@ extension TranscriptionEnginePlugin {
             return nil
         }
         return value.boolValue
+    }
+
+    /// Languages a model translates into, for engines where the user picks the target.
+    /// Plugins opt in through the Objective-C selector `translationTargetLanguagesForModelId:`
+    /// and then receive the target as `language` when translating. Empty means the engine
+    /// translates to English and receives the spoken language, as before.
+    func translationTargetLanguages(forModel modelId: String?) -> [String] {
+        guard let object = self as? NSObject,
+              object.responds(to: translationTargetLanguagesForModelSelector),
+              let languages = object.perform(translationTargetLanguagesForModelSelector, with: modelId)?
+                .takeUnretainedValue() as? [String] else {
+            return []
+        }
+        return languages
+    }
+
+    /// The language a model translates into for the requested target: the request when the
+    /// model offers it, otherwise English. Nil for engines without a choice of target.
+    func translationTarget(for requested: String?, forModel modelId: String?) -> String? {
+        TranscriptionTranslationTarget.resolve(requested, among: translationTargetLanguages(forModel: modelId))
     }
 }
 
@@ -250,6 +287,8 @@ final class ModelManagerService: ObservableObject {
         fileprivate let autoUnloadProtectionLease: AutoUnloadProtectionLease
         fileprivate let cloudModelOverridePlugin: (any TranscriptionEnginePlugin)?
         fileprivate let cloudModelOverrideRestoreId: String?
+        /// The language the session translates into, for engines with a choice of target.
+        fileprivate var translationTarget: String? = nil
     }
 
     private final class AutoUnloadTarget {
@@ -1105,7 +1144,9 @@ final class ModelManagerService: ObservableObject {
 
         // A cloud model override can change the supported languages, so normalize
         // against the model that will actually transcribe.
-        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let translationTarget = resolvedTranslationTarget(for: task, plugin: plugin)
+        let runtimeSelection = translationTarget.map { PluginLanguageSelection(requestedLanguage: $0) }
+            ?? runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         // Preparation selected the model that transcribes, so nil asks about that model.
         guard let livePlugin = plugin.liveTranscriptionPlugin(forModelId: nil) else {
@@ -1160,7 +1201,8 @@ final class ModelManagerService: ObservableObject {
             session: session,
             autoUnloadProtectionLease: AutoUnloadProtectionLease(plugin: plugin),
             cloudModelOverridePlugin: overrideRestoreId == nil ? nil : plugin,
-            cloudModelOverrideRestoreId: overrideRestoreId
+            cloudModelOverrideRestoreId: overrideRestoreId,
+            translationTarget: translationTarget
         )
         transfersAutoUnloadProtection = true
         return handle
@@ -1193,6 +1235,7 @@ final class ModelManagerService: ObservableObject {
             engineUsed: handle.providerId,
             segments: Self.transcriptionSegments(from: result.segments),
             task: task,
+            translationTarget: handle.translationTarget,
             normalizeNumbers: normalizeNumbers
         )
     }
@@ -1296,7 +1339,9 @@ final class ModelManagerService: ObservableObject {
 
         // A cloud model override can change the supported languages, so normalize
         // against the model that will actually transcribe.
-        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let translationTarget = resolvedTranslationTarget(for: task, plugin: plugin)
+        let runtimeSelection = translationTarget.map { PluginLanguageSelection(requestedLanguage: $0) }
+            ?? runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
@@ -1330,6 +1375,7 @@ final class ModelManagerService: ObservableObject {
             engineUsed: providerId,
             segments: Self.transcriptionSegments(from: result.segments),
             task: task,
+            translationTarget: translationTarget,
             normalizeNumbers: normalizeNumbers
         )
         normalized.words = wordTimings.words.map {
@@ -1482,7 +1528,9 @@ final class ModelManagerService: ObservableObject {
 
         // A cloud model override can change the supported languages, so normalize
         // against the model that will actually transcribe.
-        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let translationTarget = resolvedTranslationTarget(for: task, plugin: plugin)
+        let runtimeSelection = translationTarget.map { PluginLanguageSelection(requestedLanguage: $0) }
+            ?? runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
@@ -1517,6 +1565,7 @@ final class ModelManagerService: ObservableObject {
             engineUsed: providerId,
             segments: Self.transcriptionSegments(from: result.segments),
             task: task,
+            translationTarget: translationTarget,
             normalizeNumbers: normalizeNumbers
         )
         normalized.words = wordTimings.words.map {
@@ -1906,6 +1955,13 @@ final class ModelManagerService: ObservableObject {
             // Detection is an improvement on top; any failure falls back like an unclear answer.
             return undetected
         }
+    }
+
+    /// An engine with a choice of translation target receives the target as its language.
+    private func resolvedTranslationTarget(for task: TranscriptionTask, plugin: TranscriptionEnginePlugin) -> String? {
+        guard task == .translate else { return nil }
+        // Preparation selected the model that transcribes, so nil asks about that model.
+        return plugin.translationTarget(for: TranscriptionTranslationTarget.requested, forModel: nil)
     }
 
     private func runtimeLanguageSelection(

@@ -120,6 +120,10 @@ final class FileTranscriptionViewModel: ObservableObject {
         }
     }
     @Published var selectedTask: TranscriptionTask = .transcribe
+    /// The language to translate into, for engines with a choice of target.
+    @Published var translationTarget: String = "en" {
+        didSet { defaults.set(translationTarget, forKey: UserDefaultsKeys.fileTranscriptionTranslationTarget) }
+    }
     @Published private(set) var isHistoryRetranscribing = false
     @Published var selectedEngine: String? {
         didSet {
@@ -228,6 +232,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         )
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionModel)
+        self.translationTarget = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionTranslationTarget) ?? "en"
         self.isInitialized = true
         HistoryRetranscriptionActivity.recordIDPublisher
             .map { $0 != nil }
@@ -242,6 +247,10 @@ final class FileTranscriptionViewModel: ObservableObject {
 
     var supportsTranslation: Bool {
         resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(availableSelectedModel)) ?? false
+    }
+
+    var translationTargets: [String] {
+        resolvedEngine?.translationTargetLanguages(forModel: modelManager.effectiveModelOverride(availableSelectedModel)) ?? []
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -429,7 +438,9 @@ final class FileTranscriptionViewModel: ObservableObject {
                 guard files[i].state == .pending else { continue }
 
                 currentIndex = i
-                await transcribeFile(at: i, cancellationFlag: cancellationFlag)
+                await TranscriptionTranslationTarget.$requested.withValue(translationTarget) {
+                    await transcribeFile(at: i, cancellationFlag: cancellationFlag)
+                }
             }
 
             if cancellationFlag.isCancelled {
