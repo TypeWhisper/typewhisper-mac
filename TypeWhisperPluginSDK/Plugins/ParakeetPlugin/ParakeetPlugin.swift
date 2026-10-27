@@ -158,6 +158,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// `_selectedModelId` and `selectedVersion` follow it while it lasts.
     let transientSelection = PluginTransientModelSelection()
     private var versionBeforeTransientSelection: ParakeetVersion?
+    /// The newest explicit model request: a selection, a restore of a model or a load from the
+    /// settings. A load for an older request, or a passive load while this one is pending, of
+    /// another model is dropped when it finishes: the host would otherwise see that model as
+    /// ready, with the newer selection, and fail the request it waits for.
+    private var latestModelRequest: (id: Int, modelId: String, isPending: Bool)?
+    private var modelRequestCount = 0
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -198,6 +204,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     func deactivate() {
         transientSelection.end()
         versionBeforeTransientSelection = nil
+        latestModelRequest = nil
         passiveRestoreController.cancel()
         modelPrewarm.cancel()
         clearVocabularyBoostingState(resetModelState: true)
@@ -285,18 +292,23 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
         if version == selectedVersion && loadedModelId == modelId { return }
+        // Unload at once: while the previous model stayed loaded, the host saw the new
+        // selection as configured, transcribed without waiting for the load and failed
+        // once the previous model was gone.
+        if loadedModelId != nil, loadedModelId != modelId {
+            unloadModel(clearPersistence: false)
+        }
+        selectedVersion = version
+        host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+        let request = beginModelRequest(modelId)
         Task {
             // A transient selection that began meanwhile keeps its model in use.
             guard transientSelection.revision == revision else {
+                endModelRequest(request)
                 saveUserSelection(version)
                 return
             }
-            unloadModel(clearPersistence: false)
-            selectedVersion = version
-            _selectedModelId = modelId
-            host?.setUserDefault(modelId, forKey: "selectedModel")
-            host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
-            await loadModel(requestedAt: revision)
+            await loadModel(version: version, requestedAt: revision, request: request)
         }
     }
 
@@ -528,6 +540,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// Feeds the recording through a fresh Nemotron stream, in blocks so a long file
     /// reports its progress and stops soon after cancellation. FluidAudio reports no token
     /// confidence for Nemotron, so the short-clip confidence gate does not apply.
+    ///
+    /// The stream drops the first word and the last syllables of a tightly cut clip, so the
+    /// recording is surrounded by `nemotronBatchPaddingSamples` of silence on each side. Word
+    /// timings are moved back to the recording. Live sessions get no padding.
     private func transcribeWithNemotron(
         audio: AudioData,
         streams: ParakeetNemotronStreamFactory,
@@ -539,6 +555,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let samples = audio.samples
         let totalDuration = Double(samples.count) / 16_000
         var reportsSourceProgress = Self.shouldObserveSourceProgress(sampleCount: samples.count)
+        let silence = [Float](repeating: 0, count: Self.nemotronBatchPaddingSamples)
+        try await stream.process(silence)
         var offset = 0
         while offset < samples.count {
             try Task.checkCancellation()
@@ -554,7 +572,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             }
         }
         try Task.checkCancellation()
-        let result = Self.nemotronResult(from: try await stream.finish())
+        try await stream.process(silence)
+        try Task.checkCancellation()
+        let result = Self.nemotronResult(
+            from: try await stream.finish(),
+            leadingPadding: Double(Self.nemotronBatchPaddingSamples) / 16_000,
+            duration: totalDuration
+        )
         _ = onProgress(result.text)
         return result
     }
@@ -562,10 +586,26 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// 10 seconds of 16 kHz audio per Nemotron call during batch transcription.
     private static let nemotronBlockSampleCount = 160_000
 
+    /// One second of 16 kHz silence before and after a batch transcription. In the ASR
+    /// benchmark it brought back the words at the edges of tightly cut clips and lowered
+    /// the word error rate from 19.0 to 17.6 % in English and from 29.6 to 26.9 % in German.
+    static let nemotronBatchPaddingSamples = 16_000
+
     /// Builds the transcription result of a finished Nemotron stream and reports its word timings.
-    static func nemotronResult(from output: ParakeetNemotronStreamOutput) -> PluginTranscriptionResult {
+    /// With `leadingPadding`, the stream decoded that much silence before the recording; word
+    /// timings move back by it and stay within the recording's `duration`.
+    static func nemotronResult(
+        from output: ParakeetNemotronStreamOutput,
+        leadingPadding: TimeInterval = 0,
+        duration: TimeInterval? = nil
+    ) -> PluginTranscriptionResult {
         let text = removingUnknownTokens(from: output.text).trimmingCharacters(in: .whitespacesAndNewlines)
-        let words = groupTokensIntoWords(output.tokenTimings)
+        var words = groupTokensIntoWords(output.tokenTimings)
+        if leadingPadding > 0 || duration != nil {
+            let upperBound = duration ?? .infinity
+            func shifted(_ time: Double) -> Double { min(max(time - leadingPadding, 0), upperBound) }
+            words = words.map { PluginWordTiming(text: $0.text, start: shifted($0.start), end: shifted($0.end)) }
+        }
         if !words.isEmpty {
             PluginWordTimings.report(words)
         }
@@ -1108,20 +1148,26 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     // MARK: - Model Management
 
+    /// `request` is the model request this load serves; an explicit load without one starts its own.
     func loadModel(
         version: ParakeetVersion? = nil,
         passively: Bool = false,
-        requestedAt revision: Int? = nil
+        requestedAt revision: Int? = nil,
+        request: Int? = nil
     ) async {
         let revision = revision ?? transientSelection.revision
         let version = version ?? selectedVersion
         if !passively, let transientModelId = transientSelection.modelId, version.modelDef.id != transientModelId {
             // Chosen in the settings while a transient model is in use: saved for later, not loaded.
+            endModelRequest(request)
             saveUserSelection(version)
             selectedVersion = ParakeetVersion.from(modelId: transientModelId) ?? selectedVersion
             requestPassiveRestoreOfSelection()
             return
         }
+        let request = request ?? (passively || transientSelection.modelId != nil
+            ? nil
+            : beginModelRequest(version.modelDef.id))
         let didLoad = (try? await modelLoadGate.withLock { [self] () -> Bool in
             guard host != nil else { return false }
             guard transientSelection.permitsLoad(of: version.modelDef.id, requestedAt: revision) else { return false }
@@ -1130,8 +1176,14 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                       isModelInstalled(version: version) else { return false }
             }
             guard !(isConfigured && loadedModelId == version.modelDef.id) else { return false }
-            return await performModelLoad(version: version, allowDownloads: !passively, requestedAt: revision)
+            return await performModelLoad(
+                version: version,
+                allowDownloads: !passively,
+                requestedAt: revision,
+                request: request
+            )
         }) ?? false
+        endModelRequest(request)
 
         // Optional vocabulary preparation remains on the explicit/first-use path;
         // FluidAudio's CTC loader may repair its cache by downloading assets.
@@ -1142,8 +1194,34 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
     }
 
+    private func beginModelRequest(_ modelId: String) -> Int {
+        modelRequestCount += 1
+        latestModelRequest = (modelRequestCount, modelId, true)
+        return modelRequestCount
+    }
+
+    private func endModelRequest(_ request: Int?) {
+        guard let request, latestModelRequest?.id == request else { return }
+        latestModelRequest?.isPending = false
+    }
+
+    private var hasPendingModelRequest: Bool { latestModelRequest?.isPending == true }
+
+    /// Whether a newer request asked for another model than this load of `modelId`.
+    private func isSuperseded(_ modelId: String, request: Int?) -> Bool {
+        guard transientSelection.modelId == nil, let latest = latestModelRequest,
+              latest.modelId != modelId else { return false }
+        guard let request else { return latest.isPending }
+        return latest.id != request
+    }
+
     /// Returns whether the model was loaded.
-    private func performModelLoad(version: ParakeetVersion, allowDownloads: Bool, requestedAt revision: Int) async -> Bool {
+    private func performModelLoad(
+        version: ParakeetVersion,
+        allowDownloads: Bool,
+        requestedAt revision: Int,
+        request: Int?
+    ) async -> Bool {
         modelState = .downloading
         downloadProgress = 0.1
 
@@ -1207,6 +1285,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
             try Task.checkCancellation()
             guard host != nil else { return false }
+            if isSuperseded(version.modelDef.id, request: request) {
+                // Another model was requested while this one loaded; its load follows.
+                modelState = isConfigured ? .ready : .notLoaded
+                downloadProgress = 0
+                return false
+            }
             var isTransient = false
             let installed = transientSelection.installIfPermitted(version.modelDef.id, requestedAt: revision) { transient in
                 isTransient = transient
@@ -1454,8 +1538,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
         markRestoreInFlight()
         guard !suppressAsyncRestoreForTests else { return }
+        let request = transientModelId == nil ? beginModelRequest(modelId) : nil
         Task {
-            await loadModel(version: version, requestedAt: revision)
+            await loadModel(version: version, requestedAt: revision, request: request)
             finishRestoreTrigger()
         }
     }
@@ -1478,7 +1563,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// host surfaces it instead of polling a stale activity until its wait
     /// expires.
     private func finishRestoreTrigger() {
-        guard host != nil else { return }
+        // A newer model request owns the state while its load is pending.
+        guard host != nil, !hasPendingModelRequest else { return }
         switch modelState {
         case .ready, .error:
             return

@@ -213,6 +213,7 @@ final class TextInsertionService {
     var focusedElementHiddenOverride: (() -> Bool)?
     var accessibilityRoleOverride: ((AXUIElement) -> String?)?
     var accessibilityParentOverride: ((AXUIElement) -> AXUIElement?)?
+    var accessibilityValueSettableOverride: ((AXUIElement) -> Bool)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
     var generatedTextRangesOverride: ((AXUIElement) -> [NSRange])?
@@ -660,7 +661,20 @@ final class TextInsertionService {
         if isLiveFieldTextRole(element) {
             return (element, true)
         }
-        return (findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout), true)
+        if let descendant = findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout) {
+            return (descendant, true)
+        }
+        return (nil, Self.focusedElementShowsKeyboardTarget(
+            role: stringAttribute(kAXRoleAttribute as CFString, from: element)
+        ))
+    }
+
+    /// Whether a focused element without a text element shows where typing goes. Native apps
+    /// focus a control inside the window, such as a list in Finder. Apps that draw their own
+    /// content name the window itself: GNU Emacs, Qt apps such as OBS, and remote desktop
+    /// clients such as Parsec. A paste can still land there (#1750).
+    nonisolated static func focusedElementShowsKeyboardTarget(role: String?) -> Bool {
+        role != kAXWindowRole
     }
 
     /// Apps that build their accessibility tree on demand, such as Chromium browsers and Electron
@@ -2586,8 +2600,10 @@ final class TextInsertionService {
     }
 
     /// Web terminals can consume a paste without exposing a text change. A failed or incomplete
-    /// walk cannot rule out such an input. A focused web area alone does not establish one.
+    /// walk cannot rule out such an input. A focused web area alone does not establish one,
+    /// unless the web area is an editable document itself.
     private func textFieldAncestry(of element: AXUIElement) -> TextFieldAncestry {
+        if isEditableWebDocument(element) { return .web }
         var ancestor = accessibilityParentOverride.map { $0(element) }
             ?? axElementAttribute(kAXParentAttribute as CFString, from: element)
         var visited: Set<AXUIElement> = [element]
@@ -2604,6 +2620,22 @@ final class TextInsertionService {
                 ?? axElementAttribute(kAXParentAttribute as CFString, from: current)
         }
         return .unknown
+    }
+
+    /// A focused web area whose whole document is editable, such as the message body in Mail.
+    /// Its value stays empty while pasted text lands in its children. A web page without a
+    /// focused field exposes the same empty value, but WebKit only makes it settable for an
+    /// editable document.
+    private func isEditableWebDocument(_ element: AXUIElement) -> Bool {
+        let role = accessibilityRoleOverride.map { $0(element) }
+            ?? stringAttribute(kAXRoleAttribute as CFString, from: element)
+        guard role == "AXWebArea" else { return false }
+        if let accessibilityValueSettableOverride {
+            return accessibilityValueSettableOverride(element)
+        }
+        var settable = DarwinBoolean(false)
+        return AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success
+            && settable.boolValue
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {

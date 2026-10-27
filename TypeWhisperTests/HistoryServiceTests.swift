@@ -5,6 +5,15 @@ import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class HistoryServiceTests: XCTestCase {
+    func testRecordCountsWordsInLanguagesWithoutSpaces() {
+        let english = TranscriptionRecord(rawText: "", finalText: "thank\nyou!", durationSeconds: 1, engineUsed: "e")
+        XCTAssertEqual(english.wordsCount, 2)
+
+        // A Chinese sentence has no spaces and used to count as one word (#1752).
+        let chinese = TranscriptionRecord(rawText: "", finalText: "我今天要去超市买一些水果和蔬菜", durationSeconds: 1, engineUsed: "e")
+        XCTAssertGreaterThan(chinese.wordsCount, 5)
+    }
+
     @MainActor
     func testOpeningRecentRecordClearsFiltersThatHideIt() async throws {
         let fixture = try makeRecordNavigationFixture(startDate: Date().addingTimeInterval(-10 * 86_400))

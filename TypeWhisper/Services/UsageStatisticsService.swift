@@ -177,7 +177,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
             for record in records {
                 let wordsCount = record.wordsCount > 0
                     ? record.wordsCount
-                    : record.finalText.split(separator: " ").count
+                    : WordCount.count(in: record.finalText)
                 guard wordsCount > 0,
                       record.durationSeconds.isFinite,
                       record.durationSeconds >= 0 else {
@@ -224,7 +224,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
             for record in records {
                 let wordsCount = record.wordsCount > 0
                     ? record.wordsCount
-                    : record.finalText.split(separator: " ").count
+                    : WordCount.count(in: record.finalText)
                 guard wordsCount > 0,
                       record.durationSeconds.isFinite,
                       record.durationSeconds >= 0 else {
