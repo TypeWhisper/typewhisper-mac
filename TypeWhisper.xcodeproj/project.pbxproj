@@ -6935,6 +6935,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/Qwen3Plugin/Qwen3Plugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Qwen3 ASR (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -6958,6 +6959,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/Qwen3Plugin/Qwen3Plugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Qwen3 ASR (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -7369,6 +7371,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/VoxtralPlugin/VoxtralPlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Voxtral (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -7392,6 +7395,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/VoxtralPlugin/VoxtralPlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Voxtral (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -9073,6 +9077,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/LocalLLMPlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Local LLM (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -9097,6 +9102,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/LocalLLMPlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Local LLM (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -9265,6 +9271,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/CanaryPlugin/CanaryPlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Canary Speech (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -9288,6 +9295,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/CanaryPlugin/CanaryPlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Canary Speech (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
