@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import SwiftData
 import Combine
 import os.log
@@ -100,11 +101,16 @@ final class WorkflowService: ObservableObject {
     func shouldSkipAIProcessingForShortDictation(text: String) -> Bool {
         guard shortTranscriptionMinimumWords > 0 else { return false }
 
-        let wordCount = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: \.isWhitespace)
-            .count
+        let wordCount = Self.wordCount(in: text)
         return wordCount > 0 && wordCount < shortTranscriptionMinimumWords
+    }
+
+    /// Counts words with linguistic segmentation, so languages written without
+    /// spaces (Chinese, Japanese, Thai) are not counted as a single word.
+    static func wordCount(in text: String) -> Int {
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = text
+        return tokenizer.tokens(for: text.startIndex..<text.endIndex).count
     }
 
     @discardableResult

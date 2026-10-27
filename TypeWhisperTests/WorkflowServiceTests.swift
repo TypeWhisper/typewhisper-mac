@@ -810,6 +810,12 @@ final class WorkflowServiceTests: XCTestCase {
         service.shortTranscriptionMinimumWords = 1
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
 
+        // Languages without spaces between words must not count as a single word (#1752).
+        service.shortTranscriptionMinimumWords = 5
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "谢谢"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "我今天要去超市买一些水果和蔬菜"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "今日はとても良い天気ですね"))
+
         service.shortTranscriptionMinimumWords = 0
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "thank you"))
