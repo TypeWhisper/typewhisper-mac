@@ -178,7 +178,7 @@ let package = Package(
                 .product(name: "MLXAudioSTT", package: "mlx-audio-swift"),
             ],
             path: "Plugins/Qwen3Plugin",
-            exclude: ["Tests"],
+            exclude: ["Tests", "Qwen3Plugin.exp"],
             resources: [
                 .process("Localizable.xcstrings"),
                 .process("manifest.json"),
@@ -195,7 +195,7 @@ let package = Package(
                 .product(name: "MLXAudioSTT", package: "mlx-audio-swift"),
             ],
             path: "Plugins/CanaryPlugin",
-            exclude: ["Tests"],
+            exclude: ["Tests", "CanaryPlugin.exp"],
             resources: [
                 .process("Localizable.xcstrings"),
                 .process("manifest.json"),

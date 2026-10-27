@@ -79,6 +79,7 @@ targetTemplates:
           - "Tests"
           - "Tests/**"
           - "*.md"
+          - "*.exp"
     dependencies:
       - package: TypeWhisperPluginSDK
         product: TypeWhisperPluginSDK
@@ -479,6 +480,7 @@ targets:
     settings:
       base:
         EXCLUDED_ARCHS: x86_64
+        EXPORTED_SYMBOLS_FILE: TypeWhisperPluginSDK/Plugins/Qwen3Plugin/Qwen3Plugin.exp
   LocalLLMPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
@@ -491,6 +493,7 @@ targets:
     settings:
       base:
         EXCLUDED_ARCHS: x86_64
+        EXPORTED_SYMBOLS_FILE: TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/LocalLLMPlugin.exp
   # One ONNX Runtime for the ONNX plugins (GigaAM, Supertonic). The package
   # ships the runtime as a static library, so every plugin linking it would
   # carry its own copy (about 32 MB) and register the same Objective-C classes
