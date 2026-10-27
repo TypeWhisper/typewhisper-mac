@@ -4371,11 +4371,23 @@
       "downloadCount": 201,
       "descriptions": {
         "de": "Lokales LLM auf Apple Silicon via MLX mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Key erforderlich.",
+        "es": "LLM local en Apple Silicon con MLX y modelos Gemma 4, Qwen3.5 y LFM2.5. No necesita clave de API.",
         "ja": "Apple Silicon\u4e0a\u3067MLX\u7d4c\u7531\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebLLM\u3002Gemma 4\u3001Qwen3.5\u3001LFM2.5\u30e2\u30c7\u30eb\u306b\u5bfe\u5fdc\u3002API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
       },
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/local-llm-mlx/",
       "releases": [
+        {
+          "version": "1.0.7",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 15956713,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-local-llm-mlx-v1.0.7/LocalLLMPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
         {
           "version": "1.0.3",
           "minHostVersion": "1.8.0",
