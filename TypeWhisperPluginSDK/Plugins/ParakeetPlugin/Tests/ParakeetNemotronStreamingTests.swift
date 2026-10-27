@@ -350,7 +350,7 @@ final class ParakeetNemotronStreamingTests: XCTestCase {
         )
 
         let stream = try XCTUnwrap(streams.opened.first)
-        XCTAssertEqual(stream.samples.map(\.count), [160_000, 160_000, 80_000])
+        XCTAssertEqual(stream.samples.map(\.count), [16_000, 160_000, 160_000, 80_000, 16_000], "One second of silence on each side")
         XCTAssertEqual(stream.languagePrompt, "en-US")
         XCTAssertTrue(stream.didFinish)
         XCTAssertEqual(result.text, "Long recording.")
@@ -361,6 +361,39 @@ final class ParakeetNemotronStreamingTests: XCTestCase {
         _ = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
         XCTAssertEqual(streams.opened.count, 2, "Every transcription decodes from a fresh stream")
         XCTAssertNil(streams.opened[1].languagePrompt)
+    }
+
+    func testBatchTranscriptionPadsTheClipWithSilenceAndKeepsWordTimesInTheClip() async throws {
+        // Times as the stream reports them, including the leading second of silence.
+        let timings = [
+            TokenTiming(token: "\u{2581}Ich", tokenId: 1, startTime: 1.1, endTime: 1.3, confidence: 1),
+            TokenTiming(token: "\u{2581}muss", tokenId: 2, startTime: 1.4, endTime: 1.7, confidence: 1),
+            TokenTiming(token: "\u{2581}los.", tokenId: 3, startTime: 2.4, endTime: 2.9, confidence: 1),
+        ]
+        let streams = StreamRecorder(
+            output: ParakeetNemotronStreamOutput(text: "Ich muss los.", tokenTimings: timings, detectedLanguage: "de-DE"),
+            partials: []
+        )
+        let plugin = try await loadedNemotronPlugin(streams: streams)
+        defer { plugin.deactivate() }
+        let clip: [Float] = (0..<24_000).map { _ in 0.25 }
+        let audio = AudioData(samples: clip, wavData: Data(), duration: 1.5)
+
+        let collector = PluginWordTimingCollector()
+        let result = try await PluginWordTimings.$collector.withValue(collector) {
+            try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: nil)
+        }
+
+        let fed = try XCTUnwrap(streams.opened.first).samples.flatMap { $0 }
+        XCTAssertEqual(fed, [Float](repeating: 0, count: 16_000) + clip + [Float](repeating: 0, count: 16_000))
+        let words = collector.words
+        XCTAssertEqual(words.map(\.text), ["Ich", "muss", "los."])
+        for (word, expected) in zip(words, [(0.1, 0.3), (0.4, 0.7), (1.4, 1.5)]) {
+            XCTAssertEqual(word.start, expected.0, accuracy: 1e-9, word.text)
+            XCTAssertEqual(word.end, expected.1, accuracy: 1e-9, "\(word.text) ends within the clip")
+        }
+        XCTAssertEqual(result.segments.first?.start ?? -1, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(result.segments.last?.end ?? -1, 1.5, accuracy: 1e-9)
     }
 
     func testBatchTranscriptionStopsWhenCancelled() async throws {
@@ -440,11 +473,14 @@ final class ParakeetNemotronStreamingTests: XCTestCase {
             prompt: nil,
             onProgress: { progress.append($0); return true }
         )
-        // 100 ms of audio per call, as the host appends while recording.
+        // 100 ms of audio per call, as the host appends while recording, with the silence
+        // the batch transcription adds around the recording.
+        let silence = [Float](repeating: 0, count: ParakeetPlugin.nemotronBatchPaddingSamples)
+        let recording = silence + samples + silence
         var offset = 0
-        while offset < samples.count {
-            let end = min(offset + 1_600, samples.count)
-            try await session.appendAudio(samples: Array(samples[offset..<end]))
+        while offset < recording.count {
+            let end = min(offset + 1_600, recording.count)
+            try await session.appendAudio(samples: Array(recording[offset..<end]))
             offset = end
         }
         let live = try await session.finish()

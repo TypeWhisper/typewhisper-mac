@@ -1695,6 +1695,32 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: markdownURL.path))
     }
 
+    func testDeleteRecordingMovesAudioAndTranscriptToTheTrash() async throws {
+        try preserveStandardDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let trash = makeTemporaryDirectory()
+        let audioURL = recordingsDirectory.appendingPathComponent("Interview.wav")
+        let transcriptURL = recordingsDirectory.appendingPathComponent("Interview.txt")
+        try Data("audio".utf8).write(to: audioURL)
+        try Data("transcript".utf8).write(to: transcriptURL)
+        let viewModel = makeViewModel(
+            defaults: try makeDefaults(),
+            recorderService: makeRecorderService(recordingsDirectory: recordingsDirectory),
+            trash: trash
+        )
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+
+        viewModel.deleteRecording(try XCTUnwrap(viewModel.recordings.first))
+
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertTrue(viewModel.recordings.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: transcriptURL.path))
+        let trashedContents = try FileManager.default.contentsOfDirectory(at: trash, includingPropertiesForKeys: nil)
+            .map { try String(contentsOf: $0, encoding: .utf8) }
+        XCTAssertEqual(Set(trashedContents), ["audio", "transcript"])
+    }
+
     func testDeleteRecordingRetainsAudioWhenCalendarMetadataCannotBeDeleted() async throws {
         try preserveStandardDefaults()
         let defaults = try makeDefaults()
@@ -3298,6 +3324,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         speechRegionDetector: any SpeechRegionDetecting = WholeRecordingSpeechDetector(),
         recordingsLoader: AudioRecorderViewModel.RecordingsLoader? = nil,
         recorderCompletionsLoader: AudioRecorderViewModel.RecorderCompletionsLoader? = nil,
+        trash: URL? = nil,
         livePreviewStartObserver: (() -> Void)? = nil,
         accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
     ) -> AudioRecorderViewModel {
@@ -3318,6 +3345,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             speechRegionDetector: speechRegionDetector,
             recordingsLoader: recordingsLoader,
             recorderCompletionsLoader: recorderCompletionsLoader,
+            recordingFileTrasher: TestSupport.recordingFileTrasher(into: trash ?? makeTemporaryDirectory()),
             livePreviewStartObserver: livePreviewStartObserver,
             accessibilityAnnouncementService: accessibilityAnnouncementService
         )

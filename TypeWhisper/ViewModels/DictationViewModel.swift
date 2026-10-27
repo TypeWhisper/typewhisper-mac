@@ -3637,7 +3637,7 @@ final class DictationViewModel: ObservableObject {
                 // before the next recording replaces the active file, without blocking here.
                 audioRecordingService.preserveActiveRecoveryRecordingInBackground(successful: true)
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
-                let wordCount = text.split(separator: " ").count
+                let wordCount = WordCount.count(in: text)
                 let detectedLang = result.detectedLanguage ?? language
                 accessibilityAnnouncementService.announceTranscriptionComplete(wordCount: wordCount)
                 if let actionResultAnnouncement {
@@ -5279,7 +5279,7 @@ final class DictationViewModel: ObservableObject {
         guard let session = dictationSessions[id], session.status == .completed,
               var transcription = session.transcription else { return }
         transcription.text = text
-        transcription.wordsCount = text.split(whereSeparator: \.isWhitespace).count
+        transcription.wordsCount = WordCount.count(in: text)
         storeDictationSession(DictationSessionSnapshot(
             id: session.id, status: session.status, transcription: transcription, error: session.error
         ))

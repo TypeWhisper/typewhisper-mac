@@ -504,7 +504,8 @@ final class RecorderFolderStoreTests: XCTestCase {
             modelManager: ModelManagerService(),
             dictionaryService: DictionaryService(appSupportDirectory: try makeFolder("App Support")),
             defaults: try makeDefaults(),
-            speechRegionDetector: WholeRecordingSpeechDetector()
+            speechRegionDetector: WholeRecordingSpeechDetector(),
+            recordingFileTrasher: TestSupport.recordingFileTrasher(into: try makeFolder("Trash"))
         )
     }
 
