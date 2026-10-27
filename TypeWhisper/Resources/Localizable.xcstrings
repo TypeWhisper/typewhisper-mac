@@ -49898,6 +49898,62 @@
         }
       }
     },
+    "This engine cannot detect the language itself. It uses the first of your preferred macOS languages it supports. Select its language, or enable the Language Detection plugin." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Engine erkennt die Sprache nicht selbst. Sie verwendet die erste deiner bevorzugten macOS-Sprachen, die sie unterstützt. Wähle ihre Sprache aus oder aktiviere das Plugin „Language Detection“."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este motor no detecta el idioma por sí mismo. Usa el primero de tus idiomas preferidos de macOS que admita. Selecciona su idioma o activa el plugin Language Detection."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このエンジンは言語を自動で判別できません。macOS の優先する言語のうち、対応している最初の言語を使います。言語を選択するか、Language Detection プラグインを有効にしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此引擎无法自行识别语言。它会使用你的 macOS 偏好语言中第一个受支持的语言。请选择其语言，或启用 Language Detection 插件。"
+          }
+        }
+      }
+    },
+    "This engine cannot detect the language itself. The Language Detection plugin picks it from the engine's languages. When the plugin is unsure, the engine uses the first of your preferred macOS languages it supports." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Engine erkennt die Sprache nicht selbst. Das Plugin „Language Detection“ wählt sie aus den Sprachen der Engine. Ist das Plugin unsicher, verwendet die Engine die erste deiner bevorzugten macOS-Sprachen, die sie unterstützt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este motor no detecta el idioma por sí mismo. El plugin Language Detection lo elige entre los idiomas del motor. Si el plugin no está seguro, el motor usa el primero de tus idiomas preferidos de macOS que admita."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このエンジンは言語を自動で判別できません。Language Detection プラグインがエンジンの対応言語から選びます。プラグインが判断できない場合は、macOS の優先する言語のうち、エンジンが対応している最初の言語を使います。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此引擎无法自行识别语言。Language Detection 插件会从该引擎支持的语言中进行选择。插件无法确定时，引擎会使用你的 macOS 偏好语言中第一个受支持的语言。"
+          }
+        }
+      }
+    },
     "This engine cannot detect the language itself. Select its language, or enable the Language Detection plugin." : {
       "localizations" : {
         "de" : {

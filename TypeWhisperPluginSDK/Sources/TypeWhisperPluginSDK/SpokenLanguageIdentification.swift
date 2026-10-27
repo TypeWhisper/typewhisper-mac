@@ -43,8 +43,9 @@ public protocol SpokenLanguageIdentificationProviderPlugin: TypeWhisperPlugin {
 ///
 /// When the user asks for automatic detection and a ``SpokenLanguageIdentificationProviderPlugin``
 /// is enabled, the host picks one of these languages before the transcription and passes it as
-/// `language`. Without such a provider, or when its answer is not clear enough, the engine gets no
-/// language, as before.
+/// `language`. Without such a provider, or when its answer is not clear enough, the engine gets the
+/// first of the user's preferred macOS languages among these, or no language when none of them is.
+/// Engines whose manifest declares `PluginCapability.defaultSpokenLanguage` get no language then.
 public protocol HostLanguageDetectionEnginePlugin: TranscriptionEnginePlugin {
     /// One code per language, each listed in `supportedLanguages` and written the way
     /// `transcribe(language:)` expects it (for example the user's preferred region of a language).
