@@ -4290,6 +4290,17 @@
       "iconSystemName": "cpu",
       "releases": [
         {
+          "version": "1.1.1",
+          "minHostVersion": "1.8.1",
+          "sdkCompatibilityVersion": "v1-model-import",
+          "size": 20094451,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-canary-v1.1.1/CanaryPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.1.0",
           "minHostVersion": "1.8.1",
           "sdkCompatibilityVersion": "v1-model-import",
