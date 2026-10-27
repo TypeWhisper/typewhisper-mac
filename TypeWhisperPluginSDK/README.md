@@ -437,7 +437,11 @@ func identifySpokenLanguage(
 
 A transcription engine that cannot detect the spoken language itself adopts
 `HostLanguageDetectionEnginePlugin`. When the user leaves the language on automatic detection and a
-provider is enabled, the host picks one of these languages and passes it as `language`:
+provider is enabled, the host picks one of these languages and passes it as `language`. When no
+provider is enabled or it is unsure, the host passes the first of the user's preferred macOS
+languages that is among them (compared by language, so `de-DE` finds `de`), and no language when
+none is. An engine with a default language of its own declares the `default-spoken-language`
+manifest capability and keeps getting no language in that case:
 
 ```swift
 // One code per language, as transcribe(language:) expects it; empty when the model detects itself.
@@ -671,7 +675,7 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `principalClass` | Yes | Objective-C class name, must match `@objc(Name)` |
 | `category` | No | Primary/legacy marketplace category: `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`. |
 | `categories` | No | Optional list of all plugin capabilities. Use this for plugins that cover multiple surfaces, for example `["transcription", "llm"]`. |
-| `capabilities` | No | Optional list of feature-level capability identifiers for overview/filter UI. Use `source-footage-progress` for engines that report real source-audio progress during file transcription. Use `live-dictation` for live-capable engines whose live session should produce the final dictation result: TypeWhisper then streams dictation through it even when the transcript preview is hidden, instead of sending one batch request after recording stops. Older hosts ignore it. |
+| `capabilities` | No | Optional list of feature-level capability identifiers for overview/filter UI. Use `source-footage-progress` for engines that report real source-audio progress during file transcription. Use `live-dictation` for live-capable engines whose live session should produce the final dictation result: TypeWhisper then streams dictation through it even when the transcript preview is hidden, instead of sending one batch request after recording stops. Use `default-spoken-language` for a `HostLanguageDetectionEnginePlugin` that uses a default language of its own when it gets none: TypeWhisper then leaves the language to it when automatic detection cannot pick one, instead of passing the user's preferred macOS language. Older hosts ignore them. |
 | `hosting` | No | Marketplace hosting classification: `local` or `cloud`. If omitted, TypeWhisper falls back to `requiresAPIKey == true` as cloud and otherwise local. |
 | `requiresAPIKey` | No | Whether the plugin specifically needs an API key credential. This is not the Local/Cloud category; use `hosting` for that. |
 | `iconSystemName` | No | SF Symbol name for marketplace and settings UI. |
