@@ -106,6 +106,7 @@ jobs:
             whisperkit) TARGET="WhisperKitPlugin" ;;
             parakeet) TARGET="ParakeetPlugin" ;;
             local-llm-mlx) TARGET="LocalLLMPlugin" ;;
+            local-llm-llamacpp) TARGET="LlamaCppPlugin" ;;
             speechanalyzer) TARGET="SpeechAnalyzerPlugin" ;;
             openai-compatible) TARGET="OpenAICompatiblePlugin" ;;
             voxtral) TARGET="VoxtralPlugin" ;;
