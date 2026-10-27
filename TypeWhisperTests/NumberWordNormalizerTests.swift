@@ -313,12 +313,13 @@ final class NumberWordNormalizerTests: XCTestCase {
         }
     }
 
-    func testPolishKeepsDeclinedFormsLoneOneAndPluralScales() {
+    func testPolishKeepsDeclinedFormsLoneOneOrZeroAndPluralScales() {
         for text in [
             "dla dziesięciu osób",
             "jeden z nich",
             "tysiące ludzi",
-            "piec jest gorący"
+            "piec jest gorący",
+            "zero błędów"
         ] {
             XCTAssertEqual(NumberWordNormalizer.normalize(text: text, language: "pl"), text)
         }

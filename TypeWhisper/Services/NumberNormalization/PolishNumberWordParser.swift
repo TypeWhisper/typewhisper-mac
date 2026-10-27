@@ -55,13 +55,6 @@ enum PolishNumberWordParser {
             return nil
         }
         index = integer.nextIndex
-
-        // `zero point five` is English. Leave it to a later English candidate
-        // instead of converting only the shared word `zero`.
-        if index < normalizedWords.count, normalizedWords[index] == "point" {
-            return nil
-        }
-
         var replacement = "\(integer.value)"
         var kind = NumberWordNormalizer.ParsedWords.Kind.number
 
@@ -80,6 +73,13 @@ enum PolishNumberWordParser {
             return nil
         }
 
+        // `zero` is also an English word. Converting it on its own would block
+        // a later English candidate, as in `zero point five`, so only Polish
+        // decimals such as `zero przecinek pięć` convert it.
+        if integer.isBareZero, kind == .number {
+            return nil
+        }
+
         if isNegative {
             replacement = "-" + replacement
         }
@@ -90,11 +90,11 @@ enum PolishNumberWordParser {
     private static func parseInteger(
         _ words: [String],
         startingAt startIndex: Int
-    ) -> (value: Int, nextIndex: Int, isBareOne: Bool)? {
+    ) -> (value: Int, nextIndex: Int, isBareOne: Bool, isBareZero: Bool)? {
         guard startIndex < words.count else { return nil }
 
         if words[startIndex] == "zero" {
-            return (0, startIndex + 1, false)
+            return (0, startIndex + 1, false, true)
         }
 
         var total = 0
@@ -124,7 +124,7 @@ enum PolishNumberWordParser {
 
         guard index > startIndex else { return nil }
         let isBareOne = index == startIndex + 1 && unitValues[words[startIndex]] == 1
-        return (total, index, isBareOne)
+        return (total, index, isBareOne, false)
     }
 
     /// Parses one group below 1000 in spoken order: hundreds, then tens, then a unit or teen.

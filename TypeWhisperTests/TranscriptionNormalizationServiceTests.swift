@@ -94,6 +94,7 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
             ("Set the value to twenty three", ["pl", "en"], "Set the value to 23"),
             // Polish shares "zero" with English but must not split an English decimal.
             ("zero point five", ["pl", "en"], "0.5"),
+            ("zero point five and zero", ["pl", "en"], "0.5 and 0"),
             // Without a parser for the first language, English must not take over.
             ("ten soubor je důležitý", ["cs", "en"], "ten soubor je důležitý")
         ] {
