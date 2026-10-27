@@ -49487,6 +49487,34 @@
         }
       }
     },
+    "Your dictation engine has no live stream. So that your audio is not uploaded again every few seconds, the preview uses a loaded local engine for your language, such as Apple Speech. Without one, no preview is shown." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Diktat-Engine hat keinen Live-Stream. Damit dein Audio nicht alle paar Sekunden erneut hochgeladen wird, nutzt die Vorschau eine geladene lokale Engine für deine Sprache, etwa Apple Speech. Ohne eine solche Engine erscheint keine Vorschau."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu motor de dictado no tiene transmisión en vivo. Para que tu audio no se vuelva a subir cada pocos segundos, la vista previa usa un motor local cargado para tu idioma, como Apple Speech. Sin uno, no se muestra ninguna vista previa."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディクテーションエンジンはライブストリームに対応していません。音声が数秒ごとに再アップロードされないよう、プレビューには Apple Speech など、お使いの言語に対応した読み込み済みのローカルエンジンが使われます。該当するエンジンがない場合、プレビューは表示されません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的听写引擎不支持实时流式传输。为避免每隔几秒重新上传音频，预览会使用已加载且支持你所用语言的本地引擎，例如 Apple Speech。如果没有这样的引擎，则不显示预览。"
+          }
+        }
+      }
+    },
     "The notch indicator extends the MacBook notch area to show recording status." : {
       "localizations" : {
         "de" : {

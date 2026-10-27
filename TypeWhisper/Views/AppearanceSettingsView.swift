@@ -138,6 +138,11 @@ struct AppearanceSettingsView: View {
                             Text(String(localized: "The live preview runs on this engine while the final transcription still uses your dictation engine. A fast local engine avoids extra network requests while you speak."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        } else if dictation.indicatorTranscriptPreviewEnabled,
+                                  dictation.livePreviewUsesLocalEngineInsteadOfDictationEngine {
+                            Text(String(localized: "Your dictation engine has no live stream. So that your audio is not uploaded again every few seconds, the preview uses a loaded local engine for your language, such as Apple Speech. Without one, no preview is shown."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
                         LabeledContent(String(localized: "Live transcript size")) {

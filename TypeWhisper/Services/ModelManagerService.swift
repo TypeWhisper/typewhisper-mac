@@ -682,6 +682,31 @@ final class ModelManagerService: ObservableObject {
         return plugin.liveTranscriptionPlugin(forModelId: effectiveModelOverride(cloudModelOverride)) != nil
     }
 
+    /// Whether the engine sends audio to its vendor's service, as its manifest declares.
+    /// Engines with a user-configured endpoint do not count.
+    func isCloudTranscriptionEngine(_ providerId: String) -> Bool {
+        guard let manifest = PluginManager.shared?.loadedTranscriptionPlugin(for: providerId)?.manifest else {
+            return false
+        }
+        if let locality = manifest.resolvedLocality {
+            return locality == .cloud
+        }
+        return manifest.resolvedHosting == .cloud
+    }
+
+    /// Whether the engine declares that no audio it receives leaves the Mac.
+    func isLocalTranscriptionEngine(_ providerId: String) -> Bool {
+        PluginManager.shared?.loadedTranscriptionPlugin(for: providerId)?.manifest.resolvedLocality == .local
+    }
+
+    /// Whether a live preview that follows this engine would upload the last seconds of audio
+    /// to a cloud service again every few seconds, because the model has no live session.
+    func livePreviewReuploadsCloudAudio(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> Bool {
+        guard let providerId = effectiveEngineId(engineOverrideId) else { return false }
+        return isCloudTranscriptionEngine(providerId)
+            && !supportsLiveTranscriptionSession(engineOverrideId: providerId, cloudModelOverride: cloudModelOverride)
+    }
+
     func usesMeteredStreamingFallback(engineOverrideId: String? = nil) -> Bool {
         guard let providerId = effectiveEngineId(engineOverrideId),
               let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
