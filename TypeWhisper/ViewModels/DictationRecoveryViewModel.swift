@@ -356,10 +356,12 @@ final class DictationRecoveryViewModel: ObservableObject {
                 updateRecovery(id: recoveryID) { item in
                     item.state = .transcribing
                 }
+                // Translate is hidden for a model that cannot translate; a choice made for
+                // an earlier model must not make the recovery fail.
                 let result = try await transcriptionRunner(
                     samples,
                     languageSelection,
-                    selectedTask,
+                    resolvedEngine?.supportsTranslation(forModel: selectedModel) == false ? .transcribe : selectedTask,
                     selectedEngine,
                     selectedModel
                 )

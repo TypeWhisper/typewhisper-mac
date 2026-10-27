@@ -1034,7 +1034,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 let liveSessionResult = keepsLiveSession ? liveResultFromStart : nil
                 if !keepsLiveSession { partialText = "" }
                 let providerId = engine.providerId
-                let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
+                let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId, modelId: engine.modelId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
                 let detectsSpeakers = wantsSpeakerRecord(calendarEvent: calendarEvent)
                 // The engine and a speaker record need the audio; a live session's
@@ -1426,7 +1426,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 task: self.selectedTask,
                 providerId: providerId,
                 modelOverrideId: self.availableSelectedModel,
-                prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId),
+                prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId, modelId: self.availableSelectedModel),
                 dictionaryTermHints: self.dictionaryService.getTermHints(providerId: providerId),
                 liveSessionResult: nil,
                 liveSessionFailed: false,
@@ -1607,7 +1607,7 @@ final class AudioRecorderViewModel: ObservableObject {
         livePreviewStartObserver?()
         let task = (selectedTask == .translate && !plugin.supportsTranslation(forModel: engine.modelId)) ? .transcribe : selectedTask
         streamingHandler.start(
-            streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId) ?? "",
+            streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId, modelId: engine.modelId) ?? "",
             dictionaryTermHints: dictionaryService.getTermHints(providerId: providerId),
             engineOverrideId: providerId,
             selectedProviderId: modelManager.selectedProviderId,

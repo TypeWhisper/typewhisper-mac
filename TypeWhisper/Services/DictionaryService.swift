@@ -700,7 +700,9 @@ final class DictionaryService: ObservableObject {
         }
     }
 
-    func getTermsForPrompt(providerId: String?) -> String? {
+    /// `modelId` is a per-request model override, for engines whose models differ in
+    /// dictionary terms support.
+    func getTermsForPrompt(providerId: String?, modelId: String? = nil) -> String? {
         let terms = enabledTerms()
         guard !terms.isEmpty else { return nil }
 
@@ -711,11 +713,15 @@ final class DictionaryService: ObservableObject {
 
         // Terms stay out of the prompt until the plugin setting enables them, so a
         // caller-supplied prompt can still reach the plugin on its own.
-        switch (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport {
-        case .unsupported, .requiresPluginSetting:
-            return nil
-        case .supported, nil:
-            break
+        if let modelSupportsTerms = plugin.supportsDictionaryTerms(forModel: modelId) {
+            guard modelSupportsTerms else { return nil }
+        } else {
+            switch (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport {
+            case .unsupported, .requiresPluginSetting:
+                return nil
+            case .supported, nil:
+                break
+            }
         }
 
         guard let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {

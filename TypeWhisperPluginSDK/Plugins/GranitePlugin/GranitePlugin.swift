@@ -277,6 +277,11 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         NSNumber(value: family(ofModel: modelId) != .turboCTC)
     }
 
+    @objc(supportsDictionaryTermsForModelId:)
+    func supportsDictionaryTerms(forModelId modelId: String?) -> NSNumber {
+        NSNumber(value: family(ofModel: modelId) != .turboCTC)
+    }
+
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {

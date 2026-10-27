@@ -2028,7 +2028,8 @@ private final class FileTranscriptionLanguageSelectionPlugin: NSObject, Transcri
     let isConfigured = true
     let transcriptionModels: [PluginModelInfo] = []
     let selectedModelId: String? = nil
-    let supportsTranslation = false
+    // The override tests pass a Translate task through, as for an engine that translates.
+    let supportsTranslation = true
     let supportsStreaming = false
 
     required override init() {

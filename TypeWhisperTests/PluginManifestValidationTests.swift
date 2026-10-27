@@ -2908,6 +2908,9 @@ final class GranitePluginPromptTests: XCTestCase {
         XCTAssertTrue(engine.supportsTranslation(forModel: "granite-1b-speech-8bit"))
         XCTAssertTrue(engine.supportedLanguages(forModel: "granite-speech-5.0-470m-turboctc").contains("it"))
         XCTAssertFalse(engine.supportedLanguages(forModel: "granite-speech-5.0-2b").contains("it"))
+        XCTAssertEqual(engine.supportsDictionaryTerms(forModel: "granite-speech-5.0-2b"), true)
+        XCTAssertEqual(engine.supportsDictionaryTerms(forModel: "granite-speech-5.0-470m-turboctc"), false)
+        XCTAssertNil(engine.supportsDictionaryTerms(forModel: nil))
     }
 
     func testGranite5UsesPunctuationInstructionsAndTurboCTCTakesNoPrompt() {
