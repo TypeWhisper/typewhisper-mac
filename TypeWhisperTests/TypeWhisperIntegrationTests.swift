@@ -6597,6 +6597,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertFalse(result.missedTextField)
     }
 
+    func testFocusedWindowDoesNotShowKeyboardTarget() {
+        // GNU Emacs names its frame window as the focused element, although its buffer takes
+        // the paste. A native app without a text field focuses a control inside the window.
+        XCTAssertFalse(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXWindow"))
+        XCTAssertTrue(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXGroup"))
+        XCTAssertTrue(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXOutline"))
+    }
+
     @MainActor
     func testDetectMissedTextFieldIgnoresAppThatHidesFocusedElement() async throws {
         // Chromium and Electron apps name no focused element until their accessibility tree is

@@ -660,7 +660,20 @@ final class TextInsertionService {
         if isLiveFieldTextRole(element) {
             return (element, true)
         }
-        return (findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout), true)
+        if let descendant = findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout) {
+            return (descendant, true)
+        }
+        return (nil, Self.focusedElementShowsKeyboardTarget(
+            role: stringAttribute(kAXRoleAttribute as CFString, from: element)
+        ))
+    }
+
+    /// Whether a focused element without a text element shows where typing goes. Native apps
+    /// focus a control inside the window, such as a list in Finder. Apps that draw their own
+    /// content name the window itself: GNU Emacs, Qt apps such as OBS, and remote desktop
+    /// clients such as Parsec. A paste can still land there (#1750).
+    nonisolated static func focusedElementShowsKeyboardTarget(role: String?) -> Bool {
+        role != kAXWindowRole
     }
 
     /// Apps that build their accessibility tree on demand, such as Chromium browsers and Electron
