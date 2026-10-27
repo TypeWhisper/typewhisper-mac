@@ -158,6 +158,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// `_selectedModelId` and `selectedVersion` follow it while it lasts.
     let transientSelection = PluginTransientModelSelection()
     private var versionBeforeTransientSelection: ParakeetVersion?
+    /// The newest explicit model request: a selection, a restore of a model or a load from the
+    /// settings. A load for an older request, or a passive load while this one is pending, of
+    /// another model is dropped when it finishes: the host would otherwise see that model as
+    /// ready, with the newer selection, and fail the request it waits for.
+    private var latestModelRequest: (id: Int, modelId: String, isPending: Bool)?
+    private var modelRequestCount = 0
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -198,6 +204,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     func deactivate() {
         transientSelection.end()
         versionBeforeTransientSelection = nil
+        latestModelRequest = nil
         passiveRestoreController.cancel()
         modelPrewarm.cancel()
         clearVocabularyBoostingState(resetModelState: true)
@@ -285,18 +292,23 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
         if version == selectedVersion && loadedModelId == modelId { return }
+        // Unload at once: while the previous model stayed loaded, the host saw the new
+        // selection as configured, transcribed without waiting for the load and failed
+        // once the previous model was gone.
+        if loadedModelId != nil, loadedModelId != modelId {
+            unloadModel(clearPersistence: false)
+        }
+        selectedVersion = version
+        host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+        let request = beginModelRequest(modelId)
         Task {
             // A transient selection that began meanwhile keeps its model in use.
             guard transientSelection.revision == revision else {
+                endModelRequest(request)
                 saveUserSelection(version)
                 return
             }
-            unloadModel(clearPersistence: false)
-            selectedVersion = version
-            _selectedModelId = modelId
-            host?.setUserDefault(modelId, forKey: "selectedModel")
-            host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
-            await loadModel(requestedAt: revision)
+            await loadModel(version: version, requestedAt: revision, request: request)
         }
     }
 
@@ -1108,20 +1120,26 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     // MARK: - Model Management
 
+    /// `request` is the model request this load serves; an explicit load without one starts its own.
     func loadModel(
         version: ParakeetVersion? = nil,
         passively: Bool = false,
-        requestedAt revision: Int? = nil
+        requestedAt revision: Int? = nil,
+        request: Int? = nil
     ) async {
         let revision = revision ?? transientSelection.revision
         let version = version ?? selectedVersion
         if !passively, let transientModelId = transientSelection.modelId, version.modelDef.id != transientModelId {
             // Chosen in the settings while a transient model is in use: saved for later, not loaded.
+            endModelRequest(request)
             saveUserSelection(version)
             selectedVersion = ParakeetVersion.from(modelId: transientModelId) ?? selectedVersion
             requestPassiveRestoreOfSelection()
             return
         }
+        let request = request ?? (passively || transientSelection.modelId != nil
+            ? nil
+            : beginModelRequest(version.modelDef.id))
         let didLoad = (try? await modelLoadGate.withLock { [self] () -> Bool in
             guard host != nil else { return false }
             guard transientSelection.permitsLoad(of: version.modelDef.id, requestedAt: revision) else { return false }
@@ -1130,8 +1148,14 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                       isModelInstalled(version: version) else { return false }
             }
             guard !(isConfigured && loadedModelId == version.modelDef.id) else { return false }
-            return await performModelLoad(version: version, allowDownloads: !passively, requestedAt: revision)
+            return await performModelLoad(
+                version: version,
+                allowDownloads: !passively,
+                requestedAt: revision,
+                request: request
+            )
         }) ?? false
+        endModelRequest(request)
 
         // Optional vocabulary preparation remains on the explicit/first-use path;
         // FluidAudio's CTC loader may repair its cache by downloading assets.
@@ -1142,8 +1166,34 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
     }
 
+    private func beginModelRequest(_ modelId: String) -> Int {
+        modelRequestCount += 1
+        latestModelRequest = (modelRequestCount, modelId, true)
+        return modelRequestCount
+    }
+
+    private func endModelRequest(_ request: Int?) {
+        guard let request, latestModelRequest?.id == request else { return }
+        latestModelRequest?.isPending = false
+    }
+
+    private var hasPendingModelRequest: Bool { latestModelRequest?.isPending == true }
+
+    /// Whether a newer request asked for another model than this load of `modelId`.
+    private func isSuperseded(_ modelId: String, request: Int?) -> Bool {
+        guard transientSelection.modelId == nil, let latest = latestModelRequest,
+              latest.modelId != modelId else { return false }
+        guard let request else { return latest.isPending }
+        return latest.id != request
+    }
+
     /// Returns whether the model was loaded.
-    private func performModelLoad(version: ParakeetVersion, allowDownloads: Bool, requestedAt revision: Int) async -> Bool {
+    private func performModelLoad(
+        version: ParakeetVersion,
+        allowDownloads: Bool,
+        requestedAt revision: Int,
+        request: Int?
+    ) async -> Bool {
         modelState = .downloading
         downloadProgress = 0.1
 
@@ -1207,6 +1257,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
             try Task.checkCancellation()
             guard host != nil else { return false }
+            if isSuperseded(version.modelDef.id, request: request) {
+                // Another model was requested while this one loaded; its load follows.
+                modelState = isConfigured ? .ready : .notLoaded
+                downloadProgress = 0
+                return false
+            }
             var isTransient = false
             let installed = transientSelection.installIfPermitted(version.modelDef.id, requestedAt: revision) { transient in
                 isTransient = transient
@@ -1454,8 +1510,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
         markRestoreInFlight()
         guard !suppressAsyncRestoreForTests else { return }
+        let request = transientModelId == nil ? beginModelRequest(modelId) : nil
         Task {
-            await loadModel(version: version, requestedAt: revision)
+            await loadModel(version: version, requestedAt: revision, request: request)
             finishRestoreTrigger()
         }
     }
@@ -1478,7 +1535,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// host surfaces it instead of polling a stale activity until its wait
     /// expires.
     private func finishRestoreTrigger() {
-        guard host != nil else { return }
+        // A newer model request owns the state while its load is pending.
+        guard host != nil, !hasPendingModelRequest else { return }
         switch modelState {
         case .ready, .error:
             return
