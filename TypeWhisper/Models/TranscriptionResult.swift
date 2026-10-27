@@ -84,4 +84,17 @@ enum TranscriptionTask: String, CaseIterable, Identifiable {
         case .translate: String(localized: "Translate to English")
         }
     }
+
+    /// The task as its picker shows it: Translate names the target an engine translates into.
+    func displayName(translationTarget: String?) -> String {
+        guard self == .translate, let translationTarget, translationTarget != "en" else { return displayName }
+        let language = localizedAppLanguageName(for: translationTarget)
+        return localizedAppText(
+            "Translate to \(language)",
+            de: "Übersetzen nach \(language)",
+            ja: "\(language)に翻訳",
+            zh: "翻译为\(language)",
+            es: "Traducir al \(language)"
+        )
+    }
 }

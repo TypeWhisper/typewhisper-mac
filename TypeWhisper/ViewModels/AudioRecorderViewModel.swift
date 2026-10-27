@@ -197,6 +197,8 @@ final class AudioRecorderViewModel: ObservableObject {
         var buffer: [Float]
         let languageSelection: LanguageSelection
         let task: TranscriptionTask
+        /// The language to translate into, for engines with a choice of target.
+        var translationTarget: String? = nil
         let providerId: String?
         let modelOverrideId: String?
         let prompt: String?
@@ -413,6 +415,10 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
     @Published var selectedTask: TranscriptionTask = .transcribe
+    /// The language to translate into, for engines with a choice of target.
+    @Published var translationTarget: String = "en" {
+        didSet { defaults.set(translationTarget, forKey: UserDefaultsKeys.recorderTranslationTarget) }
+    }
     @Published var recordings: [RecordingItem] = []
     @Published var errorMessage: String?
     @Published var systemAudioWarningMessage: String?
@@ -438,6 +444,7 @@ final class AudioRecorderViewModel: ObservableObject {
         return engine.isConfigured
     }
     var supportsTranslation: Bool { resolvedEngine?.supportsTranslation(forModel: effectiveModelId) ?? false }
+    var translationTargets: [String] { resolvedEngine?.translationTargetLanguages(forModel: effectiveModelId) ?? [] }
     /// The Recorder's own engine while its plugin is loaded. A plugin that is
     /// gone for now, as during an update, keeps the choice saved; recordings
     /// use the default engine until it is back.
@@ -664,6 +671,7 @@ final class AudioRecorderViewModel: ObservableObject {
             storedValue: defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionLanguage),
             nilBehavior: .auto
         )
+        self.translationTarget = defaults.string(forKey: UserDefaultsKeys.recorderTranslationTarget) ?? "en"
 
         recorderService.micDuckingMode = micDuckingMode
         recorderService.trackMode = trackMode
@@ -1053,6 +1061,7 @@ final class AudioRecorderViewModel: ObservableObject {
                         buffer: [],
                         languageSelection: languageSelection,
                         task: selectedTask,
+                        translationTarget: translationTarget,
                         providerId: providerId,
                         modelOverrideId: engine.modelId,
                         prompt: dictionaryPrompt,
@@ -1424,6 +1433,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 buffer: samples,
                 languageSelection: self.languageSelection,
                 task: self.selectedTask,
+                translationTarget: self.translationTarget,
                 providerId: providerId,
                 modelOverrideId: self.availableSelectedModel,
                 prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId, modelId: self.availableSelectedModel),
@@ -1606,17 +1616,20 @@ final class AudioRecorderViewModel: ObservableObject {
 
         livePreviewStartObserver?()
         let task = (selectedTask == .translate && !plugin.supportsTranslation(forModel: engine.modelId)) ? .transcribe : selectedTask
-        streamingHandler.start(
-            streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId, modelId: engine.modelId) ?? "",
-            dictionaryTermHints: dictionaryService.getTermHints(providerId: providerId),
-            engineOverrideId: providerId,
-            selectedProviderId: modelManager.selectedProviderId,
-            languageSelection: languageSelection,
-            task: task,
-            cloudModelOverride: engine.modelId,
-            allowLiveTranscription: true,
-            stateCheck: { [weak self] in self?.state == .recording }
-        )
+        // The preview's task inherits the target.
+        TranscriptionTranslationTarget.$requested.withValue(translationTarget) {
+            streamingHandler.start(
+                streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId, modelId: engine.modelId) ?? "",
+                dictionaryTermHints: dictionaryService.getTermHints(providerId: providerId),
+                engineOverrideId: providerId,
+                selectedProviderId: modelManager.selectedProviderId,
+                languageSelection: languageSelection,
+                task: task,
+                cloudModelOverride: engine.modelId,
+                allowLiveTranscription: true,
+                stateCheck: { [weak self] in self?.state == .recording }
+            )
+        }
     }
 
     private func startDeferredLivePreviewIfPossible() {
@@ -2049,17 +2062,19 @@ final class AudioRecorderViewModel: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint]
     ) async throws -> FinalTranscriptionPass {
         let progressCapture = RecorderTranscriptionSourceProgressCapture()
-        let result = try await modelManager.transcribe(
-            audioSamples: samples,
-            languageSelection: request.languageSelection,
-            task: task,
-            engineOverrideId: request.providerId,
-            cloudModelOverride: request.modelOverrideId,
-            prompt: prompt,
-            dictionaryTermHints: dictionaryTermHints,
-            onProgress: { _ in true },
-            onSourceProgress: progressCapture.record
-        )
+        let result = try await TranscriptionTranslationTarget.$requested.withValue(request.translationTarget) {
+            try await modelManager.transcribe(
+                audioSamples: samples,
+                languageSelection: request.languageSelection,
+                task: task,
+                engineOverrideId: request.providerId,
+                cloudModelOverride: request.modelOverrideId,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                onProgress: { _ in true },
+                onSourceProgress: progressCapture.record
+            )
+        }
         let summary = result.diagnosticSummary(
             audioDuration: Double(samples.count) / AudioRecorderService.transcriptionSampleRate
         )

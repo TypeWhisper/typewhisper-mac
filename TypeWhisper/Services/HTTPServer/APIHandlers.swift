@@ -497,16 +497,30 @@ final class APIHandlers: @unchecked Sendable {
             } else {
                 languageSelection = .auto
             }
-            let result = try await modelManager.transcribe(
-                audioSamples: samples,
-                languageSelection: languageSelection,
-                task: options.task,
-                engineOverrideId: resolvedOverride.engineId,
-                cloudModelOverride: resolvedOverride.modelId,
-                prompt: prompt,
-                dictionaryTermHints: dictionaryTermHints,
-                normalizeNumbers: options.normalizeNumbers
-            )
+            // An engine that translates into the requested language does so itself;
+            // otherwise it translates to English and Apple Translate takes over below.
+            let engineTranslationTarget: String? = await MainActor.run {
+                guard options.task == .translate,
+                      let target = PunctuationLanguageNormalizer.normalize(options.targetLanguage),
+                      let effectiveProviderId,
+                      let plugin = PluginManager.shared?.transcriptionEngine(for: effectiveProviderId),
+                      plugin.translationTargetLanguages(forModel: resolvedOverride.modelId).contains(target) else {
+                    return nil
+                }
+                return target
+            }
+            let result = try await TranscriptionTranslationTarget.$requested.withValue(engineTranslationTarget) {
+                try await modelManager.transcribe(
+                    audioSamples: samples,
+                    languageSelection: languageSelection,
+                    task: options.task,
+                    engineOverrideId: resolvedOverride.engineId,
+                    cloudModelOverride: resolvedOverride.modelId,
+                    prompt: prompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    normalizeNumbers: options.normalizeNumbers
+                )
+            }
 
             var sourceSegments = result.segments
             if options.detectSpeakers {
@@ -533,7 +547,7 @@ final class APIHandlers: @unchecked Sendable {
             var finalText = result.text
             var responseLanguage = result.detectedLanguage
             var responseSegments = sourceSegments
-            if let targetCode = options.targetLanguage {
+            if let targetCode = options.targetLanguage, engineTranslationTarget == nil {
                 #if canImport(Translation)
                 if #available(macOS 15, *), let ts = translationService as? TranslationService {
                     if let translation = APITranslation.resolve(

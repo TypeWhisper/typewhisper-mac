@@ -382,8 +382,8 @@ curl -X POST http://localhost:8978/v1/transcribe \
 Optional parameters:
 - `language` - ISO 639-1 code (e.g., `en`, `de`). Omit for full auto-detection.
 - `language_hint` - Repeatable, ordered language hint for restricted auto-detection. Hint-aware engines receive the full list; other engines use the first hint as the requested language. Do not combine with `language`.
-- `task` - `transcribe` (default) or `translate` (translates to English, WhisperKit only).
-- `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
+- `task` - `transcribe` (default) or `translate` (translates to English with engines that support it; Granite Speech translates into `target_language` when it supports that language).
+- `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate, unless `task` is `translate` and the engine translates into this language itself, as Granite Speech 5.0 2B and 4.0 do for `en`, `fr`, `de`, `es`, `pt`, `ja`, `it` and `zh`.
 - `apply_corrections` - Boolean, default `true`. Set to `false` to return raw transcription text without Dictionary Corrections. For raw body uploads, send `x-apply-corrections: false`.
 - `detect_speakers` - Boolean, default `false`. Adds a `speaker` (`Speaker 1`, `Speaker 2`, …) to each segment of a `verbose_json` response. Needs Premium. For raw body uploads, send `x-detect-speakers: true`.
 - `speaker_count` - Number of speakers, when known. Omit it to detect the number. For raw body uploads, send `x-speaker-count`.

@@ -117,6 +117,31 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         await modelManager.cancelLiveTranscriptionSession(defaultHandle)
     }
 
+    func testTranslationPassesTheRequestedTargetAsLanguage() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = TranslationTargetModelManagerPlugin()
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        let result = try await TranscriptionTranslationTarget.$requested.withValue("it") {
+            try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 16_000),
+                languageSelection: .exact("de"),
+                task: .translate
+            )
+        }
+        // Without a requested target the engine translates to English, as the task picker says.
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .exact("de"),
+            task: .translate
+        )
+
+        XCTAssertEqual(plugin.receivedLanguages, ["it", "en"])
+        XCTAssertEqual(result.detectedLanguage, "it")
+    }
+
     func testBatchTranscriptionNormalizesLanguageForOverrideModel() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1019,6 +1044,39 @@ private final class ModelScopedLanguageModelManagerPlugin: NSObject, Transcripti
     ) async throws -> PluginTranscriptionResult {
         receivedLanguages.append(language)
         return PluginTranscriptionResult(text: "done", detectedLanguage: language)
+    }
+}
+
+private final class TranslationTargetModelManagerPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.translation-target"
+    static let pluginName = "Translation Target Mock"
+
+    private(set) var receivedLanguages: [String?] = []
+
+    var providerId: String { "mock-translation-target" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? { "alpha" }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "alpha", displayName: "Alpha")] }
+    var supportsTranslation: Bool { true }
+    var supportedLanguages: [String] { ["en", "de"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    @objc(translationTargetLanguagesForModelId:)
+    func translationTargetLanguages(forModelId modelId: String?) -> [String] { ["en", "de", "it"] }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        XCTAssertTrue(translate)
+        receivedLanguages.append(language)
+        return PluginTranscriptionResult(text: "fatto", detectedLanguage: language)
     }
 }
 

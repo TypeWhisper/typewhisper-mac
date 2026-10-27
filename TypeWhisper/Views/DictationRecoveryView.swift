@@ -209,11 +209,11 @@ struct DictationRecoveryView: View {
 
                 if viewModel.hasRecovery {
                     if viewModel.supportsTranslation {
-                        Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
-                            ForEach(TranscriptionTask.allCases) { task in
-                                Text(task.displayName).tag(task)
-                            }
-                        }
+                        TranscriptionTaskPicker(
+                            task: $viewModel.selectedTask,
+                            translationTarget: $viewModel.translationTarget,
+                            translationTargets: viewModel.translationTargets
+                        )
                         .disabled(viewModel.isProcessing)
                     }
 
