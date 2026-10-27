@@ -8139,6 +8139,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/GranitePlugin/GranitePlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -8162,6 +8163,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
+				EXPORTED_SYMBOLS_FILE = TypeWhisperPluginSDK/Plugins/GranitePlugin/GranitePlugin.exp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -9961,10 +9963,10 @@
 		};
 		RR00000000000000000006 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
+			repositoryURL = "https://github.com/TypeWhisper/mlx-audio-swift.git";
 			requirement = {
 				kind = revision;
-				revision = 01dec7c9bdce3088a6b6b7ab9f2e403458195efb;
+				revision = 1fb13b441c1ad8aae4a23f6a2223e03e5e5b1738;
 			};
 		};
 		RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {

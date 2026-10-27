@@ -2752,7 +2752,10 @@ final class DictationViewModel: ObservableObject {
             return nil
         }
         let dictionaryProviderId = engineOverrideId ?? providerId
-        let streamPrompt = dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? ""
+        let streamPrompt = dictionaryService.getTermsForPrompt(
+            providerId: dictionaryProviderId,
+            modelId: effectiveCloudModelOverride
+        ) ?? ""
         let dictionaryTermHints = dictionaryService.getTermHints(providerId: dictionaryProviderId)
         let languageSelection = effectiveLanguageSelection
         let task = effectiveTask
@@ -3221,7 +3224,10 @@ final class DictationViewModel: ObservableObject {
                 let translationTarget = effectiveTranslationTarget
                 let primaryEngineId = engineOverride ?? modelManager.selectedProviderId
                 let dictionaryProviderId = primaryEngineId
-                let termsPrompt = dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId)
+                let termsPrompt = dictionaryService.getTermsForPrompt(
+                    providerId: dictionaryProviderId,
+                    modelId: cloudModelOverride
+                )
                 let termHints = dictionaryService.getTermHints(providerId: dictionaryProviderId)
 
                 let transcription = if let liveSessionResult {
@@ -3963,7 +3969,7 @@ final class DictationViewModel: ObservableObject {
             logger.warning(
                 "Primary transcription failed; retrying with recovery fallback engine \(configuration.engineId, privacy: .public): \(primaryError.localizedDescription, privacy: .public)"
             )
-            let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId)
+            let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId, modelId: configuration.modelId)
             let fallbackDictionaryTermHints = dictionaryService.getTermHints(providerId: configuration.engineId)
 
             do {
@@ -4114,7 +4120,7 @@ final class DictationViewModel: ObservableObject {
         configuration: DictationRecoveryFallbackConfiguration,
         threshold: TimeInterval
     ) async throws -> FinalTranscriptionOutput {
-        let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId)
+        let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId, modelId: configuration.modelId)
         let fallbackDictionaryTermHints = dictionaryService.getTermHints(providerId: configuration.engineId)
 
         let primaryOperation: @MainActor () async throws -> TranscriptionResult = { [primaryTranscriptionRunner] in
@@ -4450,7 +4456,10 @@ final class DictationViewModel: ObservableObject {
             previewTask = .transcribe
         }
         streamingHandler.start(
-            streamPrompt: dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? "",
+            streamPrompt: dictionaryService.getTermsForPrompt(
+                providerId: dictionaryProviderId,
+                modelId: previewFollowsDictationEngine ? params.cloudModelOverride : nil
+            ) ?? "",
             dictionaryTermHints: dictionaryService.getTermHints(providerId: dictionaryProviderId),
             engineOverrideId: previewEngineOverrideId,
             selectedProviderId: params.providerId,

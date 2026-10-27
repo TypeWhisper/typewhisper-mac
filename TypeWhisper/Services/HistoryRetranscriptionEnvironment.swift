@@ -158,7 +158,7 @@ enum HistoryRetranscriptionEnvironment {
         let configuration = try frozenWorkflow.map {
             try JSONEncoder().encode(WorkflowConfiguration(template: $0.template, behavior: $0.behavior, output: $0.output))
         }
-        let dictionaryPrompt = dictionary.getTermsForPrompt(providerId: request.engineID)
+        let dictionaryPrompt = dictionary.getTermsForPrompt(providerId: request.engineID, modelId: request.modelID)
         let dictionaryHints = dictionary.getTermHints(providerId: request.engineID)
         let vocabulary = dictionary.vocabularyForPrompt()
         let workflowProcessor = WorkflowTextProcessingService(

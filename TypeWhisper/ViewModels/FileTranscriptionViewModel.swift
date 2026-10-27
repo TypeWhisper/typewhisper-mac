@@ -241,7 +241,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     var supportsTranslation: Bool {
-        resolvedEngine?.supportsTranslation ?? false
+        resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(availableSelectedModel)) ?? false
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -524,10 +524,13 @@ final class FileTranscriptionViewModel: ObservableObject {
 
             // The chosen engine can come back while this file runs on the default.
             let modelOverride = availableSelectedModel
+            // The task picker hides Translate for a model that cannot translate; a choice
+            // made for an earlier model must not make every file fail.
             let result = try await transcriptionRunner(
                 samples,
                 languageSelection,
-                selectedTask,
+                resolvedEngine?.supportsTranslation(forModel: modelManager.effectiveModelOverride(modelOverride)) == false
+                    ? .transcribe : selectedTask,
                 availableSelectedEngine,
                 modelOverride,
                 { [weak self] text in

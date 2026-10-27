@@ -437,7 +437,7 @@ final class AudioRecorderViewModel: ObservableObject {
         guard modelManager.canUseForTranscription(engine) else { return false }
         return engine.isConfigured
     }
-    var supportsTranslation: Bool { resolvedEngine?.supportsTranslation ?? false }
+    var supportsTranslation: Bool { resolvedEngine?.supportsTranslation(forModel: effectiveModelId) ?? false }
     /// The Recorder's own engine while its plugin is loaded. A plugin that is
     /// gone for now, as during an update, keeps the choice saved; recordings
     /// use the default engine until it is back.
@@ -1034,7 +1034,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 let liveSessionResult = keepsLiveSession ? liveResultFromStart : nil
                 if !keepsLiveSession { partialText = "" }
                 let providerId = engine.providerId
-                let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
+                let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId, modelId: engine.modelId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
                 let detectsSpeakers = wantsSpeakerRecord(calendarEvent: calendarEvent)
                 // The engine and a speaker record need the audio; a live session's
@@ -1426,7 +1426,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 task: self.selectedTask,
                 providerId: providerId,
                 modelOverrideId: self.availableSelectedModel,
-                prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId),
+                prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId, modelId: self.availableSelectedModel),
                 dictionaryTermHints: self.dictionaryService.getTermHints(providerId: providerId),
                 liveSessionResult: nil,
                 liveSessionFailed: false,
@@ -1605,9 +1605,9 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         livePreviewStartObserver?()
-        let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
+        let task = (selectedTask == .translate && !plugin.supportsTranslation(forModel: engine.modelId)) ? .transcribe : selectedTask
         streamingHandler.start(
-            streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId) ?? "",
+            streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId, modelId: engine.modelId) ?? "",
             dictionaryTermHints: dictionaryService.getTermHints(providerId: providerId),
             engineOverrideId: providerId,
             selectedProviderId: modelManager.selectedProviderId,
@@ -2138,7 +2138,7 @@ final class AudioRecorderViewModel: ObservableObject {
         guard request.task == .translate,
               let providerId = request.providerId,
               let plugin = PluginManager.shared?.transcriptionEngine(for: providerId),
-              !plugin.supportsTranslation else {
+              !plugin.supportsTranslation(forModel: request.modelOverrideId) else {
             return request.task
         }
         return .transcribe

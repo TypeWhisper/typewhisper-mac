@@ -483,7 +483,7 @@ final class APIHandlers: @unchecked Sendable {
                 effectiveProviderId = await modelManager.selectedProviderId
             }
             let dictionaryPrompt = await MainActor.run {
-                dictionaryService.getTermsForPrompt(providerId: effectiveProviderId)
+                dictionaryService.getTermsForPrompt(providerId: effectiveProviderId, modelId: resolvedOverride.modelId)
             }
             let dictionaryTermHints = await MainActor.run {
                 dictionaryService.getTermHints(providerId: effectiveProviderId)

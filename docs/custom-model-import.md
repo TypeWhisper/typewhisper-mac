@@ -15,6 +15,7 @@ architecture before downloading weights. The current import providers are:
 | `canary` | Canary ASR |
 | `qwen3_asr` | Qwen3 ASR |
 | `granite_speech` | Granite Speech |
+| `granite_speech5_ctc` | Granite Speech (TurboCTC) |
 | `voxtral_realtime` | Voxtral |
 
 The files must be compatible with the plugin's MLX loader. The engine loads the

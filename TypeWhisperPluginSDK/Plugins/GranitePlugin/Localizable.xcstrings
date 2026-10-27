@@ -982,34 +982,6 @@
         }
       }
     },
-    "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lokale Spracherkennung und Übersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Übersetzung."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Voz a texto y traducción locales de IBM, con MLX en Apple Silicon. 6 idiomas con traducción en ambas direcciones."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple Silicon向けMLXによるIBMのローカル音声認識および翻訳。6言語に対応し、双方向翻訳が可能です。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "IBM 本地语音转文字和翻译，基于 Apple Silicon 上的 MLX。支持 6 种语言的双向翻译。"
-          }
-        }
-      }
-    },
     "Model": {
       "localizations": {
         "de": {
@@ -1316,6 +1288,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "你可以在听写设置中选择引擎，在集成中管理模型。"
+          }
+        }
+      }
+    },
+    "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. Granite 5.0 TurboCTC transcribes 7 languages with punctuation; Granite 5.0 2B also translates.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale Spracherkennung und Übersetzung von IBM mit MLX auf Apple Silicon. Granite 5.0 TurboCTC erkennt 7 Sprachen mit Satzzeichen; Granite 5.0 2B übersetzt auch."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voz a texto y traducción locales de IBM, con MLX en Apple Silicon. Granite 5.0 TurboCTC transcribe 7 idiomas con puntuación; Granite 5.0 2B también traduce."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Silicon上のMLXで動作するIBMのローカル音声認識と翻訳です。Granite 5.0 TurboCTCは7言語を句読点付きで書き起こし、Granite 5.0 2Bは翻訳にも対応します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IBM 本地语音转文字和翻译，基于 Apple Silicon 上的 MLX。Granite 5.0 TurboCTC 可转写 7 种语言并添加标点；Granite 5.0 2B 还支持翻译。"
+          }
+        }
+      }
+    },
+    "Fastest. 7 languages with punctuation and capitalization. No translation or dictionary terms.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Am schnellsten. 7 Sprachen mit Satzzeichen und Groß-/Kleinschreibung. Keine Übersetzung und keine Wörterbuch-Begriffe."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La más rápida. 7 idiomas con puntuación y mayúsculas. Sin traducción ni términos del diccionario."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最速。7言語で句読点と大文字・小文字に対応します。翻訳と辞書の用語には対応しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度最快。支持 7 种语言，带标点和大小写。不支持翻译和词典词条。"
+          }
+        }
+      }
+    },
+    "Translation and dictionary terms. 6 languages with punctuation and capitalization. Slower.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersetzung und Wörterbuch-Begriffe. 6 Sprachen mit Satzzeichen und Groß-/Kleinschreibung. Langsamer."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traducción y términos del diccionario. 6 idiomas con puntuación y mayúsculas. Más lenta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "翻訳と辞書の用語に対応。6言語で句読点と大文字・小文字に対応します。処理は遅めです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支持翻译和词典词条。支持 6 种语言，带标点和大小写。速度较慢。"
+          }
+        }
+      }
+    },
+    "Older model. Writes mostly lowercase with little punctuation.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Älteres Modell. Schreibt meist klein und mit wenigen Satzzeichen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo anterior. Escribe casi todo en minúsculas y con poca puntuación."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "旧モデル。ほぼ小文字で、句読点はあまり付きません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "旧版模型。输出多为小写，标点较少。"
           }
         }
       }

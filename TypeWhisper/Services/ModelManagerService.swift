@@ -91,6 +91,8 @@ enum ModelLifecycleError: LocalizedError {
 }
 
 private let supportedLanguagesForModelSelector = NSSelectorFromString("supportedLanguagesForModelId:")
+private let supportsTranslationForModelSelector = NSSelectorFromString("supportsTranslationForModelId:")
+private let supportsDictionaryTermsForModelSelector = NSSelectorFromString("supportsDictionaryTermsForModelId:")
 
 extension TranscriptionEnginePlugin {
     var acceptsLanguageHints: Bool {
@@ -111,6 +113,35 @@ extension TranscriptionEnginePlugin {
             return supportedLanguages
         }
         return languages
+    }
+
+    /// Whether a specific model translates, for flows that override the plugin's selected model.
+    /// Plugins opt in through the Objective-C selector `supportsTranslationForModelId:` returning
+    /// an `NSNumber`; otherwise, and without a model override, the plugin's current answer applies.
+    func supportsTranslation(forModel modelId: String?) -> Bool {
+        guard let modelId,
+              let object = self as? NSObject,
+              object.responds(to: supportsTranslationForModelSelector),
+              let value = object.perform(supportsTranslationForModelSelector, with: modelId)?
+                .takeUnretainedValue() as? NSNumber else {
+            return supportsTranslation
+        }
+        return value.boolValue
+    }
+
+    /// Whether a specific model takes dictionary terms, for flows that override the plugin's
+    /// selected model. Plugins opt in through the Objective-C selector
+    /// `supportsDictionaryTermsForModelId:` returning an `NSNumber`; nil means the plugin's
+    /// current dictionary terms support applies.
+    func supportsDictionaryTerms(forModel modelId: String?) -> Bool? {
+        guard let modelId,
+              let object = self as? NSObject,
+              object.responds(to: supportsDictionaryTermsForModelSelector),
+              let value = object.perform(supportsDictionaryTermsForModelSelector, with: modelId)?
+                .takeUnretainedValue() as? NSNumber else {
+            return nil
+        }
+        return value.boolValue
     }
 }
 
