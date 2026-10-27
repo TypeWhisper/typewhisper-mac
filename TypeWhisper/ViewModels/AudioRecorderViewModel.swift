@@ -139,6 +139,8 @@ final class AudioRecorderViewModel: ObservableObject {
         [String: RecordingTranscriptionFailure]
     ) -> [RecordingItem]
     typealias RecorderCompletionsLoader = @Sendable (URL, Date?) throws -> [RecorderTranscriptReadyPayload]
+    /// Moves a recording file to the Trash and returns where it ended up there.
+    typealias RecordingFileTrasher = @MainActor (URL) throws -> URL?
 
     nonisolated(unsafe) static var _shared: AudioRecorderViewModel?
     static var shared: AudioRecorderViewModel {
@@ -527,6 +529,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let speechRegionDetector: any SpeechRegionDetecting
     private let recordingsLoader: RecordingsLoader
     private let recorderCompletionsLoader: RecorderCompletionsLoader
+    private let recordingFileTrasher: RecordingFileTrasher
     private let defaults: UserDefaults
     private let streamingHandler: StreamingHandler
     private let livePreviewStartObserver: (() -> Void)?
@@ -572,6 +575,7 @@ final class AudioRecorderViewModel: ObservableObject {
         speechRegionDetector: (any SpeechRegionDetecting)? = nil,
         recordingsLoader: RecordingsLoader? = nil,
         recorderCompletionsLoader: RecorderCompletionsLoader? = nil,
+        recordingFileTrasher: RecordingFileTrasher? = nil,
         livePreviewStartObserver: (() -> Void)? = nil,
         accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
     ) {
@@ -590,6 +594,11 @@ final class AudioRecorderViewModel: ObservableObject {
             Self.readRecordings(from: directory, transientFailures: transientFailures)
         }
         self.recorderCompletionsLoader = recorderCompletionsLoader ?? readRecorderTranscriptCompletions
+        self.recordingFileTrasher = recordingFileTrasher ?? { url in
+            var trashedURL: NSURL?
+            try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
+            return trashedURL as URL?
+        }
         self.defaults = defaults
         self.livePreviewStartObserver = livePreviewStartObserver
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
@@ -1343,59 +1352,38 @@ final class AudioRecorderViewModel: ObservableObject {
             transcriptionFailureURL(for: item.url)
         ]
 
+        // The files go to the Trash, so a recording deleted by mistake can be restored.
+        var trashedFiles: [(original: URL, trashed: URL)] = []
         do {
-            let sidecarSnapshots = try sidecarURLs.map(makeRecordingFileSnapshot(at:))
-            do {
-                for url in sidecarURLs {
-                    try removeRecordingFileIfPresent(at: url)
+            for url in sidecarURLs + [item.url] {
+                if let trashedURL = try trashRecordingFileIfPresent(at: url) {
+                    trashedFiles.append((url, trashedURL))
                 }
-                try removeRecordingFileIfPresent(at: item.url)
-            } catch {
-                do {
-                    try restoreRecordingFileSnapshots(sidecarSnapshots)
-                } catch {
-                    logger.error(
-                        "Failed to restore recording sidecars after deletion failed: \(error.localizedDescription, privacy: .public)"
-                    )
-                }
-                throw error
             }
             transientTranscriptionFailures.removeValue(
                 forKey: transcriptionFailureKey(for: item.url)
             )
             recordings.removeAll { $0.id == item.id }
         } catch {
+            // Keep the recording complete: move the files trashed so far back.
+            for file in trashedFiles.reversed() {
+                do {
+                    try FileManager.default.moveItem(at: file.trashed, to: file.original)
+                } catch {
+                    logger.error(
+                        "Failed to restore a recording file from the Trash after deletion failed: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            }
             errorMessage = error.localizedDescription
         }
     }
 
-    private func removeRecordingFileIfPresent(at url: URL) throws {
+    private func trashRecordingFileIfPresent(at url: URL) throws -> URL? {
         do {
-            try FileManager.default.removeItem(at: url)
+            return try recordingFileTrasher(url)
         } catch let error as CocoaError where error.code == .fileNoSuchFile {
-            return
-        }
-    }
-
-    private struct RecordingFileSnapshot {
-        let url: URL
-        let data: Data?
-    }
-
-    private func makeRecordingFileSnapshot(at url: URL) throws -> RecordingFileSnapshot {
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return RecordingFileSnapshot(url: url, data: nil)
-        }
-        return RecordingFileSnapshot(url: url, data: try Data(contentsOf: url))
-    }
-
-    private func restoreRecordingFileSnapshots(_ snapshots: [RecordingFileSnapshot]) throws {
-        for snapshot in snapshots {
-            guard let data = snapshot.data,
-                  !FileManager.default.fileExists(atPath: snapshot.url.path) else {
-                continue
-            }
-            try data.write(to: snapshot.url, options: .atomic)
+            return nil
         }
     }
 
