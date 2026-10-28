@@ -7,7 +7,7 @@
       "author": "TypeWhisper",
       "description": "Local Canary speech recognition on Apple Silicon. Supports Sophea for Greek and English and compatible imported models.",
       "category": "transcription",
-      "downloadCount": 24,
+      "downloadCount": 27,
       "descriptions": {
         "de": "Lokale Canary-Spracherkennung auf Apple Silicon. Unterst\u00fctzt Sophea f\u00fcr Griechisch und Englisch sowie kompatible importierte Modelle.",
         "es": "Reconocimiento de voz local con Canary en Apple Silicon. Admite Sophea para griego e ingl\u00e9s y modelos importados compatibles.",
@@ -24,7 +24,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 2
         },
         {
           "version": "1.1.0",
@@ -47,7 +48,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 4
+          "downloadCount": 5
         },
         {
           "version": "1.0.2",
@@ -94,7 +95,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. Granite 5.0 TurboCTC transcribes 7 languages with punctuation; Granite 5.0 2B also translates.",
       "category": "transcription",
-      "downloadCount": 1061,
+      "downloadCount": 1068,
       "descriptions": {
         "de": "Lokale Spracherkennung und \u00dcbersetzung von IBM mit MLX auf Apple Silicon. Granite 5.0 TurboCTC erkennt 7 Sprachen mit Satzzeichen; Granite 5.0 2B \u00fcbersetzt auch.",
         "es": "Voz a texto y traducci\u00f3n locales de IBM, con MLX en Apple Silicon. Granite 5.0 TurboCTC transcribe 7 idiomas con puntuaci\u00f3n; Granite 5.0 2B tambi\u00e9n traduce.",
@@ -112,7 +113,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 4
         },
         {
           "version": "1.1.0",
@@ -123,7 +125,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 1
         },
         {
           "version": "1.0.13",
@@ -135,7 +138,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 4
+          "downloadCount": 5
         },
         {
           "version": "1.0.12",
@@ -147,7 +150,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 48
+          "downloadCount": 49
         },
         {
           "version": "1.0.11",
@@ -170,7 +173,7 @@
       "author": "TypeWhisper",
       "description": "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
       "category": "transcription",
-      "downloadCount": 5222,
+      "downloadCount": 5255,
       "descriptions": {
         "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key n\u00f6tig.",
         "es": "Voz a texto local con Qwen3-ASR y MLX en Apple Silicon. 30 idiomas m\u00e1s dialectos del chino, no necesita clave de API.",
@@ -188,7 +191,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 23
         },
         {
           "version": "1.1.12",
@@ -200,7 +204,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 57
+          "downloadCount": 62
         },
         {
           "version": "1.1.11",
@@ -224,7 +228,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 326
+          "downloadCount": 329
         },
         {
           "version": "1.1.9",
@@ -247,7 +251,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by Voxtral MLX on Apple Silicon. Fast and accurate.",
       "category": "transcription",
-      "downloadCount": 2172,
+      "downloadCount": 2189,
       "descriptions": {
         "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und pr\u00e4zise.",
         "es": "Voz a texto local con Voxtral MLX en Apple Silicon. R\u00e1pido y preciso.",
@@ -265,7 +269,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 11
         },
         {
           "version": "1.0.17",
@@ -277,7 +282,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 15
+          "downloadCount": 18
         },
         {
           "version": "1.0.16",
@@ -289,7 +294,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 88
+          "downloadCount": 90
         },
         {
           "version": "1.0.15",
