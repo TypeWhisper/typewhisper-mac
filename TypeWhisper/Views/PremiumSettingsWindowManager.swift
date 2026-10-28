@@ -370,7 +370,8 @@ private struct PremiumPairedDevicesSettingsWindow: View {
                     "Using this Mac from your iPhone or iPad is part of TypeWhisper Premium.",
                     de: "Diesen Mac vom iPhone oder iPad aus zu nutzen, ist Teil von TypeWhisper Premium.",
                     ja: "iPhone や iPad からこの Mac を使う機能は TypeWhisper Premium に含まれます。",
-                    zh: "从 iPhone 或 iPad 使用这台 Mac 是 TypeWhisper Premium 的功能。"
+                    zh: "从 iPhone 或 iPad 使用这台 Mac 是 TypeWhisper Premium 的功能。",
+                    zhHant: "從 iPhone 或 iPad 使用這台 Mac 是 TypeWhisper Premium 的功能。"
                 ),
                 onManageAccess: onManageAccess
             )

@@ -34,6 +34,12 @@
             "state" : "translated",
             "value" : "使用 TypeWhisper 转录"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 TypeWhisper 轉錄"
+          }
         }
       }
     },
@@ -69,6 +75,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 TypeWhisper 转录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 TypeWhisper 轉錄"
           }
         }
       }

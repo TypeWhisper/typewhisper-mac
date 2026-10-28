@@ -279,6 +279,7 @@ struct AppStorePremiumStoreView: View {
                 return localizedAppText(
                     "Your monthly subscription unlocks all Premium features. Current period until \(date).",
                     de: "Dein Monatsabo schaltet alle Premium-Funktionen frei. Aktueller Zeitraum bis \(date).",
+                    zhHant: "你的月訂閱可解鎖所有 Premium 功能。目前週期至 \(date)。",
                     es: "Tu suscripción mensual desbloquea todas las funciones Premium. Periodo actual hasta: \(date)."
                 )
             }
@@ -302,12 +303,14 @@ struct AppStorePremiumStoreView: View {
             return localizedAppText(
                 "Try Free for \(trial.durationText)",
                 de: "\(trial.durationText) kostenlos testen",
+                zhHant: "免費試用 \(trial.durationText)",
                 es: "Prueba gratis durante \(trial.durationText)"
             )
         }
         return localizedAppText(
             "Subscribe for \(product.displayPrice) per Month",
             de: "Für \(product.displayPrice) pro Monat abonnieren",
+            zhHant: "以每月 \(product.displayPrice) 訂閱",
             es: "Suscríbete por \(product.displayPrice) al mes"
         )
     }
@@ -319,12 +322,14 @@ struct AppStorePremiumStoreView: View {
             renewal = localizedAppText(
                 "\(trial.durationText) free, then \(price) per month. Renews automatically until canceled.",
                 de: "\(trial.durationText) kostenlos, danach \(price) pro Monat. Verlängert sich automatisch, bis du kündigst.",
+                zhHant: "免費 \(trial.durationText)，之後每月 \(price)。在取消前會自動續訂。",
                 es: "\(trial.durationText) gratis y luego \(price) al mes. Se renueva automáticamente hasta que la canceles."
             )
         } else {
             renewal = localizedAppText(
                 "One month. Renews automatically for \(price) per month until canceled.",
                 de: "Ein Monat. Verlängert sich automatisch für \(price) pro Monat, bis du kündigst.",
+                zhHant: "一個月。在取消前會以每月 \(price) 自動續訂。",
                 es: "Un mes. Se renueva automáticamente por \(price) al mes hasta que la canceles."
             )
         }
@@ -339,6 +344,7 @@ struct AppStorePremiumStoreView: View {
         localizedAppText(
             "Buy Lifetime for \(product.displayPrice)",
             de: "Lifetime für \(product.displayPrice) kaufen",
+            zhHant: "以 \(product.displayPrice) 購買終身版",
             es: "Comprar acceso vitalicio por \(product.displayPrice)"
         )
     }
@@ -428,7 +434,8 @@ enum AppStorePremiumCopy {
             "Record scheduled meetings automatically, retry failed dictations with a second engine, and keep your dictionary and snippets in sync.",
             de: "Nimm geplante Meetings automatisch auf, wiederhole fehlgeschlagene Diktate mit einer zweiten Engine und halte Wörterbuch und Snippets synchron.",
             ja: "予定されたミーティングを自動で録音し、失敗した音声入力を別のエンジンで再試行し、辞書とスニペットを同期します。",
-            zh: "自动录制已安排的会议，用第二个引擎重试失败的听写，并同步你的词典和片段。"
+            zh: "自动录制已安排的会议，用第二个引擎重试失败的听写，并同步你的词典和片段。",
+            zhHant: "自動錄製已安排的會議，用第二個引擎重試失敗的聽寫，並同步你的詞典和片段。"
         )
     }
 }

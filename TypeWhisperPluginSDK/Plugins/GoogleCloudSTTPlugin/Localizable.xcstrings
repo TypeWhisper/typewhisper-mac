@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "移除凭据"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除憑證"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "此 Google Cloud 项目未启用 Cloud Speech-to-Text API。请在 Google Cloud 中启用 speech.googleapis.com，等待几分钟后重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 Google Cloud 專案未啟用 Cloud Speech-to-Text API。請在 Google Cloud 中啟用 speech.googleapis.com，等待幾分鐘後重試。"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "凭据有效，Speech-to-Text 可访问。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證有效，Speech-to-Text 可存取。"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "默认语言"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預設語言"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "此项目未启用 Google Cloud 结算功能。请为项目启用结算后重试。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此專案未啟用 Google Cloud 結算功能。請為專案啟用結算後重試。"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google Cloud 对请求进行了速率限制。请稍候重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Cloud 對請求進行了速率限制。請稍候重試。"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "Google 拒绝对 Speech-to-Text 的访问。请确保 API 已启用且服务账户具有 Cloud Speech Client 角色。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 拒絕對 Speech-to-Text 的存取。請確保 API 已啟用且服務帳戶具有 Cloud Speech Client 角色。"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google 拒绝了服务账户凭据。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 拒絕了服務帳戶憑證。"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "Google 拒绝了服务账户凭据。请确认您粘贴了正确项目的完整 JSON 密钥文件。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 拒絕了服務帳戶憑證。請確認您貼上了正確專案的完整 JSON 金鑰檔案。"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google Speech-to-Text 不接受简单的 API 密钥。请在此粘贴 Google Cloud 服务账户 JSON 密钥。凭据将存储在 macOS 钥匙串中。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Speech-to-Text 不接受簡單的 API 金鑰。請在此貼上 Google Cloud 服務帳戶 JSON 金鑰。憑證將儲存在 macOS 鑰匙圈中。"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "如果 TypeWhisper 已传递口语语言，则使用该值。否则，此 BCP-47 代码将用于 Google 识别请求。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果 TypeWhisper 已傳遞口語語言，則使用該值。否則，此 BCP-47 程式碼將用於 Google 辨識請求。"
+          }
         }
       }
     },
@@ -330,6 +396,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "未选择 Google 识别模型。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未選擇 Google 辨識模型。"
+          }
         }
       }
     },
@@ -390,6 +468,12 @@
             "state": "translated",
             "value": "尚未配置服务账户 JSON。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未設定服務帳戶 JSON。"
+          }
         }
       }
     },
@@ -414,6 +498,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -446,6 +536,12 @@
             "state": "translated",
             "value": "替换凭据"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "替換憑證"
+          }
         }
       }
     },
@@ -473,6 +569,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存凭据"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存憑證"
           }
         }
       }
@@ -502,6 +604,12 @@
             "state": "translated",
             "value": "服务账户 JSON"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服務帳戶 JSON"
+          }
         }
       }
     },
@@ -529,6 +637,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已存储的凭据有效。请在上面粘贴新的 JSON 密钥以替换。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存的憑證有效。請在上面貼上新的 JSON 金鑰以替換。"
           }
         }
       }
@@ -558,6 +672,12 @@
             "state": "translated",
             "value": "测试已存储的凭据"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試已儲存的憑證"
+          }
         }
       }
     },
@@ -585,6 +705,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无法解析 JSON。请粘贴完整的 Google 服务账户 JSON 文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法解析 JSON。請貼上完整的 Google 服務帳戶 JSON 檔案。"
           }
         }
       }
@@ -614,6 +740,12 @@
             "state": "translated",
             "value": "验证音频因过大被拒绝。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證音訊因過大被拒絕。"
+          }
         }
       }
     },
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "使用 `default` 或 `command_and_search` 获得最广泛的语言覆盖。较新的 `latest_*` 模型可能因语言支持而更受限制。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 `default` 或 `command_and_search` 獲得最廣泛的語言覆蓋。較新的 `latest_*` 模型可能因語言支援而更受限制。"
+          }
         }
       }
     },
@@ -669,6 +807,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "验证中..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證中..."
           }
         }
       }

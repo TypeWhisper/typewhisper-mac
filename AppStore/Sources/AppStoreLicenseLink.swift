@@ -31,18 +31,21 @@ enum AppStoreLicenseLink {
                 localizedAppText(
                     "Connecting the license was canceled.",
                     de: "Das Verbinden der Lizenz wurde abgebrochen.",
+                    zhHant: "已取消連結授權。",
                     es: "Se canceló la conexión de la licencia."
                 )
             case .invalidResponse:
                 localizedAppText(
                     "The response of the TypeWhisper license page could not be verified. Please try again.",
                     de: "Die Antwort der TypeWhisper-Lizenzseite konnte nicht überprüft werden. Bitte versuche es erneut.",
+                    zhHant: "無法驗證 TypeWhisper 授權頁面的回應，請再試一次。",
                     es: "No se pudo verificar la respuesta de la página de licencias de TypeWhisper. Inténtalo de nuevo."
                 )
             case .notConnected:
                 localizedAppText(
                     "The existing TypeWhisper license could not be connected.",
                     de: "Die vorhandene TypeWhisper-Lizenz konnte nicht verbunden werden.",
+                    zhHant: "無法連結現有的 TypeWhisper 授權。",
                     es: "No se pudo conectar la licencia de TypeWhisper existente."
                 )
             }
@@ -85,13 +88,14 @@ enum AppStoreLicenseLink {
 /// outside the App Store.
 enum AppStoreLicenseLinkCopy {
     static var sectionTitle: String {
-        localizedAppText("Existing License", de: "Vorhandene Lizenz", es: "Licencia existente")
+        localizedAppText("Existing License", de: "Vorhandene Lizenz", zhHant: "現有授權", es: "Licencia existente")
     }
 
     static var connectButton: String {
         localizedAppText(
             "Connect Existing TypeWhisper License",
             de: "Vorhandene TypeWhisper-Lizenz verbinden",
+            zhHant: "連結現有的 TypeWhisper 授權",
             es: "Conectar licencia de TypeWhisper existente"
         )
     }
@@ -100,6 +104,7 @@ enum AppStoreLicenseLinkCopy {
         localizedAppText(
             "You enter the license key only on a secure TypeWhisper web page, never in the app. This Mac then uses one device slot of the license.",
             de: "Den Lizenzschlüssel gibst du nur auf einer sicheren TypeWhisper-Webseite ein, nie in der App. Dieser Mac belegt danach einen Geräteplatz der Lizenz.",
+            zhHant: "你只會在安全的 TypeWhisper 網頁上輸入授權金鑰，絕不會在 App 中輸入。這台 Mac 隨後會佔用授權的一個裝置名額。",
             es: "Solo introduces la clave de licencia en una página web segura de TypeWhisper, nunca en la app. Después, este Mac ocupa una plaza de dispositivo de la licencia."
         )
     }
@@ -108,6 +113,7 @@ enum AppStoreLicenseLinkCopy {
         localizedAppText(
             "Sign in with Apple first to connect an existing license.",
             de: "Melde dich zuerst mit Apple an, um eine vorhandene Lizenz zu verbinden.",
+            zhHant: "請先使用 Apple 登入，才能連結現有授權。",
             es: "Primero inicia sesión con Apple para conectar una licencia existente."
         )
     }
@@ -116,6 +122,7 @@ enum AppStoreLicenseLinkCopy {
         localizedAppText(
             "Your TypeWhisper license is connected. Premium is active on this Mac.",
             de: "Deine TypeWhisper-Lizenz ist verbunden. Premium ist auf diesem Mac aktiv.",
+            zhHant: "你的 TypeWhisper 授權已連結。這台 Mac 已啟用 Premium。",
             es: "Tu licencia de TypeWhisper está conectada. Premium está activo en este Mac."
         )
     }

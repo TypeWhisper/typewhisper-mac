@@ -119,7 +119,8 @@ struct BackupImportSheet: View {
                                 "Replace existing items",
                                 de: "Vorhandene Einträge ersetzen",
                                 ja: "既存の項目を置き換える",
-                                zh: "替换现有项目"
+                                zh: "替换现有项目",
+                                zhHant: "替換現有項目"
                             ),
                             isOn: $replaceExisting
                         )
@@ -127,7 +128,8 @@ struct BackupImportSheet: View {
                             "Overwrites workflows, profiles, and prompt actions with the same name, and replaces hotkeys with the ones in this file. Nothing is deleted. When off, only new items are added and only empty hotkey slots are filled.",
                             de: "Überschreibt Workflows, Profile und Prompt-Aktionen mit gleichem Namen und ersetzt die Tastenkürzel durch die aus dieser Datei. Es wird nichts gelöscht. Ausgeschaltet kommen nur neue Einträge hinzu, und nur leere Tastenkürzel-Plätze werden belegt.",
                             ja: "同じ名前のワークフロー、プロファイル、プロンプトアクションを上書きし、ホットキーをこのファイルの内容に置き換えます。削除される項目はありません。オフの場合は新しい項目のみを追加し、未設定のホットキーにのみ適用します。",
-                            zh: "覆盖同名的工作流、配置文件和提示词操作，并用此文件中的快捷键替换当前快捷键。不会删除任何内容。关闭时仅添加新项目，并且只填充空白的快捷键位置。"
+                            zh: "覆盖同名的工作流、配置文件和提示词操作，并用此文件中的快捷键替换当前快捷键。不会删除任何内容。关闭时仅添加新项目，并且只填充空白的快捷键位置。",
+                            zhHant: "覆蓋同名的工作流程、設定檔和提示詞操作，並用此檔案中的快速鍵替換目前快速鍵。不會刪除任何內容。關閉時僅新增新項目，並且只填入空白的快速鍵位置。"
                         ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -264,8 +266,8 @@ private struct BackupCategoryRow: View {
     /// A bare number would be read without context.
     private var itemCountText: String {
         count == 1
-            ? localizedAppText("1 item", de: "1 Eintrag", ja: "1件", zh: "1 项")
-            : localizedAppText("\(count) items", de: "\(count) Einträge", ja: "\(count)件", zh: "\(count) 项", es: "\(count) elementos")
+            ? localizedAppText("1 item", de: "1 Eintrag", ja: "1件", zh: "1 项", zhHant: "1 項")
+            : localizedAppText("\(count) items", de: "\(count) Einträge", ja: "\(count)件", zh: "\(count) 项", zhHant: "\(count) 項", es: "\(count) elementos")
     }
 }
 

@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "清除快捷键"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除快速鍵"
+          }
         }
       }
     },
@@ -50,6 +56,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景不透明度"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "背景不透明度"
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "高度"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高度"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "数值越低，越能看清转录窗口后面的应用内容。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "數值越低，越能看清轉錄視窗後面的應用內容。"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "宽度"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "寬度"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "窗口大小"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "視窗大小"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "录音时自动打开"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音時自動開啟"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "新文本"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新文字"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "字号"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字號"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "按下组合键..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按下組合鍵..."
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "录制快捷键"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄製快速鍵"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用键盘快捷键显示或隐藏转录窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用鍵盤快速鍵顯示或隱藏轉錄視窗。"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "录音开始时自动显示转录窗口。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音開始時自動顯示轉錄視窗。"
+          }
         }
       }
     },
@@ -389,6 +467,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "切换快捷键"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換快速鍵"
           }
         }
       }

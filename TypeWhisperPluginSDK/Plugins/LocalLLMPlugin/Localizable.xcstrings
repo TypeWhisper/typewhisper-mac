@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "取消加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消載入 %@"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除 %@ 的缓存模型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除 %@ 的快取模型"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "下载并加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入 %@"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在下载 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載 %@"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "错误"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入 %@"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已載入"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "正在加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入 %@"
+          }
         }
       }
     },
@@ -274,6 +328,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 %@"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除 %@"
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "移除 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 Hugging Face 權杖"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "仍要尝试 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仍要嘗試 %@"
+          }
         }
       }
     },
@@ -389,6 +467,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "卸载 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載 %@"
           }
         }
       }
@@ -418,6 +502,12 @@
             "state": "translated",
             "value": "温度模式"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度模式"
+          }
         }
       }
     },
@@ -445,6 +535,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "创意"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "創意"
           }
         }
       }
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "自定义"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂"
+          }
         }
       }
     },
@@ -498,6 +600,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "生成"
@@ -530,6 +638,12 @@
             "state": "translated",
             "value": "加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入"
+          }
         }
       }
     },
@@ -557,6 +671,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "严谨"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "嚴謹"
           }
         }
       }
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "提供商默认"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "供應商預設"
+          }
         }
       }
     },
@@ -614,6 +740,12 @@
             "state": "translated",
             "value": "温度"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度"
+          }
         }
       }
     },
@@ -635,6 +767,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用模型内置的默认温度。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用模型內建的預設溫度。"
           }
         },
         "ja": {
@@ -670,6 +808,12 @@
             "state": "translated",
             "value": "下载并加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入"
+          }
         }
       }
     },
@@ -694,6 +838,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "取消"
@@ -726,6 +876,12 @@
             "state": "translated",
             "value": "删除缓存的模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除快取的模型"
+          }
         }
       }
     },
@@ -753,6 +909,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "从 Hugging Face 下载模型超时。请重试。在此插件中添加可选的 HuggingFace 令牌也可以提高下载速率限制。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從 Hugging Face 下載模型超時。請重試。在此外掛中新增可選的 HuggingFace 權杖也可以提高下載速率限制。"
           }
         }
       }
@@ -782,6 +944,12 @@
             "state": "translated",
             "value": "下载 %1$@ 在 %2$@ 处停滞，因为五分钟内未收到更多字节。请重试。如果问题仍然存在，请删除缓存模型并重新下载。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載 %1$@ 在 %2$@ 處停滯，因為五分鐘內未收到更多位元組。請重試。如果問題仍然存在，請刪除快取模型並重新下載。"
+          }
         }
       }
     },
@@ -809,6 +977,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "准备 %1$@ 在 15 分钟后超时（上次下载进度：%2$@）。已保留下载的模型，请尝试重新加载。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備 %1$@ 在 15 分鐘後超時（上次下載進度：%2$@）。已保留下載的模型，請嘗試重新載入。"
           }
         }
       }
@@ -838,6 +1012,12 @@
             "state": "translated",
             "value": "已下载的模型缓存似乎不完整或不兼容。请删除缓存的模型并重新下载。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已下載的模型快取似乎不完整或不相容。請刪除快取的模型並重新下載。"
+          }
         }
       }
     },
@@ -865,6 +1045,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HuggingFace 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFace 權杖"
           }
         }
       }
@@ -894,6 +1080,12 @@
             "state": "translated",
             "value": "在用于提示词之前，请先在集成中加载本地模型。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在用於提示詞之前，請先在整合中載入本機模型。"
+          }
         }
       }
     },
@@ -922,6 +1114,12 @@
             "state": "translated",
             "value": "在 Apple Silicon 上运行 Gemma 4、Qwen3.5 和 LFM2.5 模型的本地 LLM。无需 API 密钥。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Apple Silicon 上執行 Gemma 4、Qwen3.5 和 LFM2.5 模型的本機 LLM。無需 API 金鑰。"
+          }
         }
       }
     },
@@ -946,6 +1144,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -978,6 +1182,12 @@
             "state": "translated",
             "value": "无效的 HuggingFace 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 HuggingFace 權杖"
+          }
         }
       }
     },
@@ -1005,6 +1215,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "实验性"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "實驗性"
           }
         }
       }
@@ -1034,6 +1250,12 @@
             "state": "translated",
             "value": "实验性功能。您可以自行尝试，风险自负。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "實驗性功能。您可以自行嘗試，風險自負。"
+          }
         }
       }
     },
@@ -1061,6 +1283,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "实验性。比 Gemma 4 占用更少内存，但翻译和重组文本的可靠性较低。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "實驗性。比 Gemma 4 佔用更少記憶體，但翻譯和重組文字的可靠性較低。"
           }
         }
       }
@@ -1090,6 +1318,12 @@
             "state": "translated",
             "value": "实验性。模型会先推理再回答，因此结果需要几秒钟。LFM Open License：仅年收入低于 1000 万美元时可免费商用。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "實驗性。模型會先推理再回答，因此結果需要幾秒鐘。LFM Open License：僅年收入低於 1000 萬美元時可免費商用。"
+          }
         }
       }
     },
@@ -1117,6 +1351,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "有效的 HuggingFace 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 HuggingFace 權杖"
           }
         }
       }
@@ -1146,6 +1386,12 @@
             "state": "translated",
             "value": "正在验证令牌..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在驗證權杖..."
+          }
         }
       }
     },
@@ -1174,6 +1420,12 @@
             "state": "translated",
             "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選。提高下載速率限制。在 huggingface.co/settings/tokens 免費取得。"
+          }
         }
       }
     },
@@ -1198,6 +1450,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -1230,6 +1488,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -1257,6 +1521,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "仍要尝试"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仍要嘗試"
           }
         }
       }
@@ -1286,6 +1556,12 @@
             "state": "translated",
             "value": "卸载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載"
+          }
         }
       }
     },
@@ -1313,6 +1589,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "按需加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需載入"
           }
         }
       }
@@ -1342,6 +1624,12 @@
             "state": "translated",
             "value": "“自动卸载模型”已设为“立即”。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動卸載模型」已設為「立即」。"
+          }
         }
       }
     },
@@ -1369,6 +1657,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "推荐用于此 Mac"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建議用於此 Mac"
           }
         }
       }
@@ -1398,6 +1692,12 @@
             "state": "translated",
             "value": "此 Mac 的内存为 %lld GB，低于此模型的需求。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 Mac 的記憶體為 %lld GB，低於此模型的需求。"
+          }
         }
       }
     },
@@ -1425,6 +1725,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "对于这台内存为 %1$lld GB 的 Mac，推荐使用 %2$@。较小的模型响应更快，但遵循指令的可靠性较低。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對於這台記憶體為 %1$lld GB 的 Mac，建議使用 %2$@。較小的模型回應更快，但遵循指令的可靠性較低。"
           }
         }
       }
@@ -1454,6 +1760,12 @@
             "state": "translated",
             "value": "速度最快。适合清理和短文本，处理内联命令和笔记时可靠性较低。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度最快。適合清理和短文字，處理內聯命令和筆記時可靠性較低。"
+          }
         }
       }
     },
@@ -1482,6 +1794,12 @@
             "state": "translated",
             "value": "在所有工作流中兼顾速度与质量。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在所有工作流程中兼顧速度與品質。"
+          }
         }
       }
     },
@@ -1509,6 +1827,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "比 4-bit 版本略准确，但需要更多内存且速度更慢。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "比 4-bit 版本略準確，但需要更多記憶體且速度更慢。"
           }
         }
       }

@@ -215,6 +215,7 @@ final class PromptPaletteController: PromptPaletteControlling {
             de: "\(count) letzte Transkriptionen",
             ja: "最近の文字起こし\(count)件",
             zh: "\(count) 条最近转录",
+            zhHant: "\(count) 條最近轉錄",
             es: "\(count) transcripciones recientes"
         )
     }

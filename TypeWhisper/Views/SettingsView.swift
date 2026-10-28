@@ -835,10 +835,10 @@ private struct SettingsSidebarRow: View {
     private var accessibilityStatus: String {
         var parts: [String] = []
         if destination.isDimmed {
-            parts.append(localizedAppText("Disabled", de: "Deaktiviert", ja: "無効", zh: "已停用"))
+            parts.append(localizedAppText("Disabled", de: "Deaktiviert", ja: "無効", zh: "已停用", zhHant: "已停用"))
         }
         if destination.hasUpdate {
-            parts.append(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります", zh: "有可用更新"))
+            parts.append(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります", zh: "有可用更新", zhHant: "有可用更新"))
         }
         if let badge = destination.badge {
             parts.append(localizedAppText(
@@ -846,6 +846,7 @@ private struct SettingsSidebarRow: View {
                 de: "\(badge) Updates",
                 ja: "\(badge)件の更新",
                 zh: "\(badge) 个更新",
+                zhHant: "\(badge) 個更新",
                 es: "\(badge) actualizaciones"
             ))
         }
@@ -1144,6 +1145,7 @@ struct RecordingSettingsView: View {
                 de: "\(deviceName) entfernen",
                 ja: "\(deviceName)を削除",
                 zh: "移除\(deviceName)",
+                zhHant: "移除\(deviceName)",
                 es: "Quitar \(deviceName)"
             ))
         }
@@ -1181,6 +1183,7 @@ struct RecordingSettingsView: View {
             de: "Priorität \(index + 1) von \(audioDevice.inputDevicePriorityList.count)",
             ja: "優先順位 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
             zh: "优先级 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
+            zhHant: "優先順序 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
             es: "Prioridad \(index + 1) de \(audioDevice.inputDevicePriorityList.count)"
         )
         guard !isAvailable else { return position }
@@ -1477,7 +1480,8 @@ struct RecordingSettingsView: View {
                                 "Volume during recording",
                                 de: "Lautstärke während der Aufnahme",
                                 ja: "録音中の音量",
-                                zh: "录音期间的音量"
+                                zh: "录音期间的音量",
+                                zhHant: "錄音期間的音量"
                             ))
                             .accessibilityValue(
                                 dictation.audioDuckingLevel.formatted(.percent.precision(.fractionLength(0)))
@@ -1695,6 +1699,7 @@ private struct SoundEventPicker: View {
                 de: "Sound für „\(event.displayName)“ abspielen",
                 ja: "「\(event.displayName)」の音を再生",
                 zh: "预览“\(event.displayName)”的声音",
+                zhHant: "預覽「\(event.displayName)」的聲音",
                 es: "Escuchar el sonido de \(event.displayName)"
             ))
 
@@ -1710,6 +1715,7 @@ private struct SoundEventPicker: View {
                 de: "Eigenen Sound für „\(event.displayName)“ hinzufügen",
                 ja: "「\(event.displayName)」にカスタム音を追加",
                 zh: "为“\(event.displayName)”添加自定义声音",
+                zhHant: "為「\(event.displayName)」新增自訂聲音",
                 es: "Agregar un sonido personalizado para \(event.displayName)"
             ))
         }

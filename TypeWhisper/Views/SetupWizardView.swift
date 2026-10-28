@@ -119,6 +119,7 @@ struct SetupWizardView: View {
             de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
             ja: "\(currentWizardStep.title)。\(SetupWizardStep.allCases.count)ステップ中\(currentStep + 1)。\(currentWizardStep.subtitle)",
             zh: "\(currentWizardStep.title)。第 \(currentStep + 1) 步，共 \(SetupWizardStep.allCases.count) 步。\(currentWizardStep.subtitle)",
+            zhHant: "\(currentWizardStep.title)。第 \(currentStep + 1) 步，共 \(SetupWizardStep.allCases.count) 步。\(currentWizardStep.subtitle)",
             es: "\(currentWizardStep.title). Paso \(currentStep + 1) de \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)"
         ))
     }
@@ -132,6 +133,7 @@ struct SetupWizardView: View {
             de: "Schritt \(index) von \(count)",
             ja: "ステップ \(index)/\(count)",
             zh: "第 \(index) 步，共 \(count) 步",
+            zhHant: "第 \(index) 步，共 \(count) 步",
             es: "Paso \(index) de \(count)"
         )
     }
@@ -171,7 +173,8 @@ struct SetupWizardView: View {
                 "Setup progress",
                 de: "Setup-Fortschritt",
                 ja: "セットアップの進行状況",
-                zh: "设置进度"
+                zh: "设置进度",
+                zhHant: "設定進度"
             ))
             .accessibilityValue(currentStepPositionText)
         }
@@ -210,6 +213,7 @@ struct SetupWizardView: View {
             de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)",
             ja: "\(SetupWizardStep.allCases.count)ステップ中\(step.rawValue + 1)、\(step.progressTitle)",
             zh: "第 \(step.rawValue + 1) 步，共 \(SetupWizardStep.allCases.count) 步，\(step.progressTitle)",
+            zhHant: "第 \(step.rawValue + 1) 步，共 \(SetupWizardStep.allCases.count) 步，\(step.progressTitle)",
             es: "Paso \(step.rawValue + 1) de \(SetupWizardStep.allCases.count), \(step.progressTitle)"
         ))
         .accessibilityValue(progressAccessibilityStatus(for: step))
@@ -225,12 +229,12 @@ struct SetupWizardView: View {
 
     private func progressAccessibilityStatus(for step: SetupWizardStep) -> String {
         if step.rawValue < currentStep {
-            return localizedAppText("Completed", de: "Abgeschlossen", ja: "完了", zh: "已完成")
+            return localizedAppText("Completed", de: "Abgeschlossen", ja: "完了", zh: "已完成", zhHant: "已完成")
         }
         if step == currentWizardStep {
-            return localizedAppText("Current", de: "Aktuell", ja: "現在のステップ", zh: "当前")
+            return localizedAppText("Current", de: "Aktuell", ja: "現在のステップ", zh: "当前", zhHant: "目前")
         }
-        return localizedAppText("Upcoming", de: "Ausstehend", ja: "未完了", zh: "待完成")
+        return localizedAppText("Upcoming", de: "Ausstehend", ja: "未完了", zh: "待完成", zhHant: "待完成")
     }
 
     private var stepContent: some View {
@@ -560,7 +564,7 @@ struct SetupWizardView: View {
                             )
                         } else {
                             statusPill(
-                                localizedAppText("Optional", de: "Optional", ja: "任意", zh: "可选"),
+                                localizedAppText("Optional", de: "Optional", ja: "任意", zh: "可选", zhHant: "可選"),
                                 systemImage: "circle",
                                 color: .secondary
                             )
@@ -589,7 +593,8 @@ struct SetupWizardView: View {
                 "Requests access. macOS shows a permission prompt or opens System Settings.",
                 de: "Fordert den Zugriff an. macOS zeigt eine Abfrage oder öffnet die Systemeinstellungen.",
                 ja: "アクセスを要求します。macOS が確認ダイアログを表示するか、システム設定を開きます。",
-                zh: "请求访问权限。macOS 会显示权限提示或打开系统设置。"
+                zh: "请求访问权限。macOS 会显示权限提示或打开系统设置。",
+                zhHant: "請求存取權限。macOS 會顯示權限提示或開啟系統設定。"
             ),
             perform: action
         )
@@ -597,7 +602,7 @@ struct SetupWizardView: View {
 
     private func permissionAccessibilityLabel(title: String, description: String, isRequired: Bool) -> String {
         guard !isRequired else { return "\(title). \(description)" }
-        let optional = localizedAppText("Optional", de: "Optional", ja: "任意", zh: "可选")
+        let optional = localizedAppText("Optional", de: "Optional", ja: "任意", zh: "可选", zhHant: "可選")
         return "\(title), \(optional). \(description)"
     }
 
@@ -803,6 +808,7 @@ struct SetupWizardView: View {
             let message = localizedAppText(
                 "\(recommendedName) will be set when you continue. Click the shortcut to record another one.",
                 de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen.",
+                zhHant: "繼續後將設定為 \(recommendedName)。按一下快速鍵可錄製其他快速鍵。",
                 es: "Se configurará \(recommendedName) al continuar. Haz clic en el atajo para grabar otro."
             )
             #else
@@ -822,6 +828,7 @@ struct SetupWizardView: View {
                     "\(recommendedName) is already used by \(hotkeyModeTitle(for: slot)). Record another shortcut to continue.",
                     de: "\(recommendedName) wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren.",
                     ja: "\(recommendedName)はすでに\(hotkeyModeTitle(for: slot))で使用されています。続行するには別のショートカットを録音してください。",
+                    zhHant: "\(recommendedName) 已被「\(hotkeyModeTitle(for: slot))」使用。請錄製其他快速鍵以繼續。",
                     es: "\(hotkeyModeTitle(for: slot)) ya usa \(recommendedName). Graba otro atajo para continuar."
                 ),
                 "exclamationmark.triangle.fill",
@@ -1201,7 +1208,7 @@ struct SetupWizardView: View {
             } else {
                 ProgressView()
                     .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Activating", de: "Wird aktiviert", ja: "有効化中", zh: "正在激活"))
+                    .accessibilityLabel(localizedAppText("Activating", de: "Wird aktiviert", ja: "有効化中", zh: "正在激活", zhHant: "正在啟用"))
             }
         } else {
             switch availability {
@@ -1220,7 +1227,7 @@ struct SetupWizardView: View {
                 case .extracting:
                     ProgressView()
                         .controlSize(.small)
-                        .accessibilityLabel(localizedAppText("Installing", de: "Wird installiert", ja: "インストール中", zh: "正在安装"))
+                        .accessibilityLabel(localizedAppText("Installing", de: "Wird installiert", ja: "インストール中", zh: "正在安装", zhHant: "正在安裝"))
                 case .restartRequired:
                     statusPill(localizedAppText("Restart", de: "Neustart"), systemImage: "arrow.clockwise.circle.fill", color: .orange)
                 case .error:
@@ -1231,7 +1238,7 @@ struct SetupWizardView: View {
             case .loading:
                 ProgressView()
                     .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Loading", de: "Wird geladen", ja: "読み込み中", zh: "正在加载"))
+                    .accessibilityLabel(localizedAppText("Loading", de: "Wird geladen", ja: "読み込み中", zh: "正在加载", zhHant: "正在載入"))
             case .unavailable(let reason):
                 statusPill(reason.title, systemImage: "exclamationmark.triangle.fill", color: .orange)
                     .help(reason.message)
@@ -1252,8 +1259,8 @@ struct SetupWizardView: View {
                 .frame(width: 32, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(localizedAppText("Download progress", de: "Download-Fortschritt", ja: "ダウンロードの進行状況", zh: "下载进度"))
-        .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)", es: "\(percent) por ciento"))
+        .accessibilityLabel(localizedAppText("Download progress", de: "Download-Fortschritt", ja: "ダウンロードの進行状況", zh: "下载进度", zhHant: "下載進度"))
+        .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)", zhHant: "百分之 \(percent)", es: "\(percent) por ciento"))
         .accessibilityAddTraits([.isStaticText, .updatesFrequently])
     }
 
@@ -1466,7 +1473,7 @@ struct SetupWizardView: View {
             } else if isPreparingAppleSpeechFallback {
                 ProgressView()
                     .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Preparing", de: "Wird vorbereitet", ja: "準備中", zh: "正在准备"))
+                    .accessibilityLabel(localizedAppText("Preparing", de: "Wird vorbereitet", ja: "準備中", zh: "正在准备", zhHant: "正在準備"))
             } else if modelManager.selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
                 statusPill(localizedAppText("Active", de: "Aktiv"), systemImage: "checkmark.circle.fill", color: .blue)
             } else if let appleSpeechEngine, modelManager.canUseForTranscription(appleSpeechEngine) {
@@ -1543,7 +1550,7 @@ struct SetupWizardView: View {
             }
             .font(.callout)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(localizedAppText("Your hotkey", de: "Dein Hotkey", ja: "現在のショートカットキー", zh: "你的快捷键"))
+            .accessibilityLabel(localizedAppText("Your hotkey", de: "Dein Hotkey", ja: "現在のショートカットキー", zh: "你的快捷键", zhHant: "你的快速鍵"))
             .accessibilityValue(primaryHotkeyLabel)
             .accessibilityAddTraits(.isStaticText)
 
@@ -1673,7 +1680,8 @@ struct SetupWizardView: View {
                     "Device Control and Data Access permission is required to paste text into other apps.",
                     de: "Die Berechtigung „Gerätesteuerung und Datenzugriff“ wird benötigt, um Text in andere Apps einzufügen.",
                     ja: "他のアプリへテキストを貼り付けるには、「デバイスの制御とデータへのアクセス」の権限が必要です。",
-                    zh: "需要“设备控制和数据访问”权限才能将文本粘贴到其他应用。"
+                    zh: "需要“设备控制和数据访问”权限才能将文本粘贴到其他应用。",
+                    zhHant: "需要「裝置控制和資料存取」權限才能將文字貼上到其他應用。"
                 )
             )
         }

@@ -26,6 +26,12 @@
             "state" : "translated",
             "value" : "隐藏 API 密钥"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱藏 API 金鑰"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除 API 密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 API 金鑰"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state" : "translated",
             "value" : "显示 API 密钥"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示 API 金鑰"
+          }
         }
       }
     },
@@ -95,7 +113,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "APIキー" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "API 金鑰" } }
       }
     },
     "Connected" : {
@@ -108,7 +127,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続済み" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已連線" } }
       }
     },
     "Connection Failed" : {
@@ -121,7 +141,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続に失敗しました" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接失败" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接失败" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線失敗" } }
       }
     },
     "Contributor models may use prompts and completions to train future Meta models." : {
@@ -134,7 +155,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "Contributorモデルでは、将来のMetaモデルの学習にプロンプトと応答が使用される場合があります。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Contributor 模型可能会使用提示词和生成内容来训练未来的 Meta 模型。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Contributor 模型可能会使用提示词和生成内容来训练未来的 Meta 模型。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Contributor 模型可能會使用提示詞和生成內容來訓練未來的 Meta 模型。" } }
       }
     },
     "Meta Model API" : {
@@ -147,7 +169,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "Meta Model API" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Meta Model API" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Meta Model API" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Meta Model API" } }
       }
     },
     "Models are loaded dynamically from Meta and cached for offline settings access." : {
@@ -160,7 +183,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデルはMetaから動的に取得され、オフライン設定用にキャッシュされます。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型从 Meta 动态加载，并会缓存，以便离线访问设置。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型从 Meta 动态加载，并会缓存，以便离线访问设置。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "模型從 Meta 動態載入，並會快取，以便離線存取設定。" } }
       }
     },
     "Prompt Model" : {
@@ -173,7 +197,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロンプトモデル" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提示词模型" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提示词模型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "提示詞模型" } }
       }
     },
     "Remove" : {
@@ -186,7 +211,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "削除" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "移除" } }
       }
     },
     "Realtime transcription streams 16 kHz PCM over Meta's WebSocket API. Speaker diarization applies to both realtime and uploaded audio." : {
@@ -199,7 +225,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "リアルタイム文字起こしはMetaのWebSocket APIを通じて16 kHz PCMをストリーミングします。話者分離はリアルタイム音声とアップロード音声の両方に適用されます。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实时转录通过 Meta 的 WebSocket API 流式传输 16 kHz PCM 音频。说话人分离同时适用于实时音频和上传的音频。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实时转录通过 Meta 的 WebSocket API 流式传输 16 kHz PCM 音频。说话人分离同时适用于实时音频和上传的音频。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "即時轉錄透過 Meta 的 WebSocket API 流式傳輸 16 kHz PCM 音訊。說話者分離同時適用於即時音訊和上傳的音訊。" } }
       }
     },
     "Save and Refresh Models" : {
@@ -212,7 +239,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "保存してモデルを更新" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存并刷新模型" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存并刷新模型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "儲存並重新整理模型" } }
       }
     },
     "The API key is stored securely in the macOS Keychain." : {
@@ -225,7 +253,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "APIキーはmacOSキーチェーンに安全に保存されます。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥安全存储在 macOS 钥匙串中。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥安全存储在 macOS 钥匙串中。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "API 金鑰安全儲存在 macOS 鑰匙圈中。" } }
       }
     },
     "Speaker diarization" : {
@@ -238,7 +267,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "話者分離" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "说话人分离" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "说话人分离" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "說話者分離" } }
       }
     },
     "Transcription Model" : {
@@ -251,7 +281,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こしモデル" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转录模型" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转录模型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉錄模型" } }
       }
     }
   },

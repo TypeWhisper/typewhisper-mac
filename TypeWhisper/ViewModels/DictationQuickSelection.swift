@@ -124,6 +124,7 @@ enum DictationQuickSelection {
                     : localizedAppText(
                         "\(deviceTitle(device)) (unavailable)",
                         de: "\(deviceTitle(device)) (nicht verfügbar)",
+                        zhHant: "\(deviceTitle(device))（無法使用）",
                         es: "\(deviceTitle(device)) (no disponible)"
                     ),
                 isSelected: device.uid == selectedDeviceUID,
@@ -141,6 +142,7 @@ enum DictationQuickSelection {
                 title: localizedAppText(
                     "\(item.name) (disconnected)",
                     de: "\(item.name) (getrennt)",
+                    zhHant: "\(item.name)（已中斷連線）",
                     es: "\(item.name) (desconectado)"
                 ),
                 isEnabled: false
@@ -211,6 +213,7 @@ enum DictationQuickSelection {
                         : localizedAppText(
                             "\(language.name) (not supported by the model)",
                             de: "\(language.name) (vom Modell nicht unterstützt)",
+                            zhHant: "\(language.name)（模型不支援）",
                             es: "\(language.name) (el modelo no lo admite)"
                         ),
                     isSelected: language.code == selectedCode
@@ -281,6 +284,7 @@ enum DictationQuickSelection {
                 title: localizedAppText(
                     "\(engine.displayName) (unavailable)",
                     de: "\(engine.displayName) (nicht verfügbar)",
+                    zhHant: "\(engine.displayName)（無法使用）",
                     es: "\(engine.displayName) (no disponible)"
                 ),
                 isSelected: isSelectedProvider,
@@ -387,13 +391,14 @@ enum DictationQuickSelection {
     /// Dictation fails instead of falling back when a workflow names an engine that is
     /// disabled, uninstalled or lacks access, so the menu says so.
     static func unavailableEngineSummary(engineName: String) -> String {
-        localizedAppText("\(engineName) (unavailable)", de: "\(engineName) (nicht verfügbar)", es: "\(engineName) (no disponible)")
+        localizedAppText("\(engineName) (unavailable)", de: "\(engineName) (nicht verfügbar)", zhHant: "\(engineName)（無法使用）", es: "\(engineName) (no disponible)")
     }
 
     static func workflowNote(workflowName: String, summary: String) -> String {
         localizedAppText(
             "Workflow “\(workflowName)” uses \(summary) here",
             de: "Workflow „\(workflowName)“ verwendet hier \(summary)",
+            zhHant: "工作流程「\(workflowName)」在此使用 \(summary)",
             es: "El flujo de trabajo “\(workflowName)” usa aquí \(summary)"
         )
     }
@@ -520,7 +525,7 @@ enum IndicatorModelMenu {
             if !group.setupRequiredOptions.isEmpty {
                 let count = group.setupRequiredOptions.count
                 entries.append(.moreModels(
-                    title: localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", es: "Más modelos (\(count))"),
+                    title: localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", zhHant: "更多模型（\(count)）", es: "Más modelos (\(count))"),
                     options: group.setupRequiredOptions.map(option)
                 ))
             }

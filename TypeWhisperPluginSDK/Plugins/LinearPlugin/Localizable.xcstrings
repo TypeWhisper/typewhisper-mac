@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "隐藏 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 API 金鑰"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 API 金鑰"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "保存 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 API 金鑰"
+          }
         }
       }
     },
@@ -110,6 +128,12 @@
             "state": "translated",
             "value": "显示 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 API 金鑰"
+          }
         }
       }
     },
@@ -131,6 +155,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "你是一名助手，负责将口述内容转换为结构化的 Linear Issue。请提取：1）简明的标题（最多 100 个字符）；2）Markdown 格式的详细描述；3）优先级（1=紧急、2=高、3=中、4=低），根据上下文推断，默认为 3。仅返回有效的 JSON：{\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你是一名助手，負責將口述內容轉換為結構化的 Linear Issue。請提取：1）簡明的標題（最多 100 個字元）；2）Markdown 格式的詳細描述；3）優先順序（1=緊急、2=高、3=中、4=低），根據上下文推斷，預設為 3。僅返回有效的 JSON：{\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
           }
         }
       }
@@ -160,6 +190,12 @@
             "state": "translated",
             "value": "API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰"
+          }
         }
       }
     },
@@ -187,6 +223,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API 密钥安全存储在钥匙串中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰安全儲存在鑰匙圈中"
           }
         }
       }
@@ -216,6 +258,12 @@
             "state": "translated",
             "value": "复制指令"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製指令"
+          }
         }
       }
     },
@@ -243,6 +291,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "创建自定义工作流，将其粘贴到指令中，并将操作目标设置为「创建 Linear Issue」。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建立自訂工作流程，將其貼上到指令中，並將操作目標設定為「建立 Linear Issue」。"
           }
         }
       }
@@ -272,6 +326,12 @@
             "state": "translated",
             "value": "在 linear.app/settings/api 创建个人 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 linear.app/settings/api 建立個人 API 金鑰"
+          }
         }
       }
     },
@@ -299,6 +359,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "默认值"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預設值"
           }
         }
       }
@@ -328,6 +394,12 @@
             "state": "translated",
             "value": "无效的 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 API 金鑰"
+          }
         }
       }
     },
@@ -355,6 +427,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "标签"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標籤"
           }
         }
       }
@@ -384,6 +462,12 @@
             "state": "translated",
             "value": "正在加载项目和标签..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入專案和標籤..."
+          }
         }
       }
     },
@@ -411,6 +495,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在加载团队..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入團隊..."
           }
         }
       }
@@ -440,6 +530,12 @@
             "state": "translated",
             "value": "无"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無"
+          }
         }
       }
     },
@@ -467,6 +563,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "项目"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "專案"
           }
         }
       }
@@ -496,6 +598,12 @@
             "state": "translated",
             "value": "工作流指令"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流程指令"
+          }
         }
       }
     },
@@ -520,6 +628,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -552,6 +666,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -579,6 +699,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "选择团队..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇團隊..."
           }
         }
       }
@@ -608,6 +734,12 @@
             "state": "translated",
             "value": "团队"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "團隊"
+          }
         }
       }
     },
@@ -636,6 +768,12 @@
             "state": "translated",
             "value": "有效的 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 金鑰"
+          }
         }
       }
     },
@@ -663,6 +801,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "验证中..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證中..."
           }
         }
       }

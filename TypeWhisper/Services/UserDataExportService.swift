@@ -95,18 +95,21 @@ enum UserDataExportService {
                 return localizedAppText(
                     "The ZIP archive could not be created (ditto exit code \(status)).",
                     de: "Das ZIP-Archiv konnte nicht erstellt werden (ditto-Exit-Code \(status)).",
+                    zhHant: "無法建立 ZIP 壓縮檔（ditto 結束代碼 \(status)）。",
                     es: "No se pudo crear el archivo ZIP (código de salida de ditto: \(status))."
                 )
             case .unreadableDirectory(let path):
                 return localizedAppText(
                     "The folder \(path) could not be read.",
                     de: "Der Ordner \(path) konnte nicht gelesen werden.",
+                    zhHant: "無法讀取資料夾 \(path)。",
                     es: "No se pudo leer la carpeta \(path)."
                 )
             case .databaseSnapshotFailed(let name):
                 return localizedAppText(
                     "The database \(name) could not be copied.",
                     de: "Die Datenbank \(name) konnte nicht kopiert werden.",
+                    zhHant: "無法複製資料庫 \(name)。",
                     es: "No se pudo copiar la base de datos \(name)."
                 )
             }

@@ -171,6 +171,7 @@ final class DictationViewModel: ObservableObject {
             return localizedAppText(
                 "Primary transcription failed: \(primaryDescription). Recovery fallback failed: \(fallbackDescription)",
                 de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)",
+                zhHant: "主要轉錄失敗：\(primaryDescription)。恢復備用方案也失敗：\(fallbackDescription)",
                 es: "Falló la transcripción principal: \(primaryDescription). Falló el respaldo de recuperación: \(fallbackDescription)"
             )
         }
@@ -187,6 +188,7 @@ final class DictationViewModel: ObservableObject {
             return localizedAppText(
                 "Transcription timed out after \(rounded) seconds.",
                 de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten.",
+                zhHant: "轉錄在 \(rounded) 秒後逾時。",
                 es: "Se agotó el tiempo de espera de la transcripción después de \(rounded) segundos."
             )
         }
@@ -2910,7 +2912,8 @@ final class DictationViewModel: ObservableObject {
                 "Enter submission is unavailable. Check the Device Control and Data Access permission and restart TypeWhisper, or choose another Enter option.",
                 de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Berechtigung „Gerätesteuerung und Datenzugriff“ und starte TypeWhisper neu oder wähle eine andere Enter-Option.",
                 ja: "Enter キーで送信できません。「デバイスの制御とデータへのアクセス」の権限を確認して TypeWhisper を再起動するか、別の Enter オプションを選択してください。",
-                zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 TypeWhisper，或选择其他 Enter 选项。"
+                zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 TypeWhisper，或选择其他 Enter 选项。",
+                zhHant: "無法使用 Enter 傳送。請檢查「裝置控制和資料存取」權限並重新啟動 TypeWhisper，或選擇其他 Enter 選項。"
             )
         )
         abortActiveRecordingImmediately(sessionMessage: message)
@@ -3366,6 +3369,7 @@ final class DictationViewModel: ObservableObject {
                         message: localizedAppText(
                             "\(postProcessingFallback.failedStep) post-processing failed. Raw transcription fallback selected. \(postProcessingFallback.reason)",
                             de: "\(postProcessingFallback.failedStep)-Nachbearbeitung fehlgeschlagen. Rohtext-Fallback ausgewählt. \(postProcessingFallback.reason)",
+                            zhHant: "\(postProcessingFallback.failedStep)後處理失敗，已改用原始轉錄。\(postProcessingFallback.reason)",
                             es: "Falló el posprocesamiento de \(postProcessingFallback.failedStep). Se eligió el respaldo con la transcripción sin procesar. \(postProcessingFallback.reason)"
                         ),
                         category: "prompt"
@@ -4785,6 +4789,7 @@ final class DictationViewModel: ObservableObject {
                     "This workflow applies because \(appDescriptor) was detected together with \(domain).",
                     de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde.",
                     ja: "\(appDescriptor) と \(domain) が一緒に検出されたため、このワークフローが適用されます。",
+                    zhHant: "由於同時偵測到 \(appDescriptor) 和 \(domain)，因此套用此工作流程。",
                     es: "Este flujo de trabajo se aplica porque se detectó \(appDescriptor) junto con \(domain)."
                 )
             } else {
@@ -4800,6 +4805,7 @@ final class DictationViewModel: ObservableObject {
                     "This workflow applies because \(domain) was detected.",
                     de: "Dieser Workflow greift, weil \(domain) erkannt wurde.",
                     ja: "\(domain) が検出されたため、このワークフローが適用されます。",
+                    zhHant: "由於偵測到 \(domain)，因此套用此工作流程。",
                     es: "Este flujo de trabajo se aplica porque se detectó \(domain)."
                 )
             } else {
@@ -4814,6 +4820,7 @@ final class DictationViewModel: ObservableObject {
                 "This workflow applies because \(appDescriptor) was detected.",
                 de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde.",
                 ja: "\(appDescriptor) が検出されたため、このワークフローが適用されます。",
+                zhHant: "由於偵測到 \(appDescriptor)，因此套用此工作流程。",
                 es: "Este flujo de trabajo se aplica porque se detectó \(appDescriptor)."
             )
         case .globalFallback:

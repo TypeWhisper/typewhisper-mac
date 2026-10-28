@@ -902,6 +902,7 @@ private enum ScreenshotFixtureLanguage: String {
     case german = "de"
     case japanese = "ja"
     case simplifiedChinese = "zh-Hans"
+    case traditionalChinese = "zh-Hant"
     case spanish = "es"
 
     static var current: ScreenshotFixtureLanguage {
@@ -911,6 +912,7 @@ private enum ScreenshotFixtureLanguage: String {
         let normalized = preferred.lowercased()
         if normalized.hasPrefix("de") { return .german }
         if normalized.hasPrefix("ja") { return .japanese }
+        if isTraditionalChineseLanguageCode(normalized) { return .traditionalChinese }
         if normalized.hasPrefix("zh") { return .simplifiedChinese }
         if normalized.hasPrefix("es") { return .spanish }
         return .english
@@ -926,6 +928,8 @@ private enum ScreenshotFixtureLanguage: String {
             [("チームカレンダー", "Google Workspace"), ("個人用カレンダー", "iCloud")]
         case .simplifiedChinese:
             [("团队日历", "Google Workspace"), ("个人日历", "iCloud")]
+        case .traditionalChinese:
+            [("團隊行事曆", "Google Workspace"), ("個人行事曆", "iCloud")]
         case .spanish:
             [("Calendario del equipo", "Google Workspace"), ("Calendario personal", "iCloud")]
         }
@@ -1059,6 +1063,35 @@ private enum ScreenshotFixtureLanguage: String {
                     .init(name: "润色听写", template: .cleanedText, trigger: .global(), instruction: "保持表达直接，并保留产品名称。"),
                     .init(name: "会议记录", template: .meetingNotes, trigger: .app("com.apple.Notes"), instruction: "提取决定事项、负责人和后续步骤。"),
                     .init(name: "翻译成英语", template: .translation, trigger: .manual(), instruction: "自然地翻译成英语。"),
+                ]
+            )
+
+        case .traditionalChinese:
+            ScreenshotFixtureContent(
+                history: [
+                    .init(appName: "備忘錄", bundleIdentifier: "com.apple.Notes", text: "完成版本說明，並在發布前檢查所有語言的截圖。"),
+                    .init(appName: "郵件", bundleIdentifier: "com.apple.mail", text: "請在明天審查之前把更新後的發布摘要傳送給團隊。"),
+                    .init(appName: "Safari", bundleIdentifier: "com.apple.Safari", text: "比較所有支援語言的產品頁面，並整理最終回饋。"),
+                    .init(appName: "Xcode", bundleIdentifier: "com.apple.dt.Xcode", text: "執行 macOS 測試並確認發布版本沒有警告。"),
+                    .init(appName: "Slack", bundleIdentifier: "com.tinyspeck.slackmacgap", text: "候選版本已經準備好，如有應阻止發布的問題請及時回報。"),
+                    .init(appName: "Pages", bundleIdentifier: "com.apple.iWork.Pages", text: "把會議記錄整理為決定事項、負責人和後續步驟。"),
+                    .init(appName: "終端機", bundleIdentifier: "com.apple.Terminal", text: "建立最終壓縮檔，驗證簽章並記錄檢查碼。"),
+                ],
+                terms: ["TypeWhisper", "Fastlane", "SwiftUI", "App Store Connect", "候選版本"],
+                corrections: [
+                    .init(original: "因該", replacement: "應該"),
+                    .init(original: "在次", replacement: "再次"),
+                    .init(original: "賬戶", replacement: "帳戶"),
+                ],
+                snippets: [
+                    .init(trigger: "/ganxie", replacement: "感謝你的詳細回饋，我今天會查看。"),
+                    .init(trigger: "/huiyi", replacement: "{date} 會議記錄：\n\n- 決定事項\n- 負責人\n- 後續步驟"),
+                    .init(trigger: "/fabu", replacement: "候選版本已準備好進行最終審查。"),
+                ],
+                workflows: [
+                    .init(name: "潤飾聽寫", template: .cleanedText, trigger: .global(), instruction: "保持表達直接，並保留產品名稱。"),
+                    .init(name: "會議記錄", template: .meetingNotes, trigger: .app("com.apple.Notes"), instruction: "擷取決定事項、負責人和後續步驟。"),
+                    .init(name: "翻譯成英文", template: .translation, trigger: .manual(), instruction: "自然地翻譯成英文。"),
                 ]
             )
 

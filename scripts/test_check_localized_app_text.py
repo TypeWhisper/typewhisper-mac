@@ -5,6 +5,7 @@ from pathlib import Path
 
 from check_localized_app_text import (
     SwiftParseError,
+    catalog_keys,
     catalog_spanish_keys,
     check_calls,
     find_calls,
@@ -111,6 +112,25 @@ class CheckCallsTests(unittest.TestCase):
             'localizedAppText(title, de: "Titel")\n'
         ), self.spanish_keys)
         self.assertEqual(len(problems), 3)
+
+    def test_traditional_chinese_uses_its_own_label_and_catalog_locale(self):
+        catalog = {"strings": {
+            "Save": {"localizations": {"zh-Hant": {"stringUnit": {"state": "translated", "value": "儲存"}}}},
+            "Open": {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "打开"}}}},
+        }}
+        traditional_keys = catalog_keys(catalog, "zh-Hant")
+        self.assertEqual(traditional_keys, {"Save"})
+        problems = check_calls(calls(
+            'localizedAppText("Save", de: "Sichern")\n'
+            'localizedAppText("Open", de: "Öffnen", zh: "打开")\n'
+            'localizedAppText("Hi \\(name)", de: "Hallo \\(name)", zhHant: "你好，\\(name)")\n'
+            'localizedAppText("Hi \\(name)", de: "Hallo \\(name)", es: "Hola \\(name)")\n'
+        ), traditional_keys, "zhHant", "zh-Hant")
+        self.assertEqual(len(problems), 2)
+        self.assertIn("no zh-Hant value", problems[0])
+        self.assertIn("'Open'", problems[0])
+        self.assertIn("Example.swift:4", problems[1])
+        self.assertIn("needs an inline `zhHant:`", problems[1])
 
 
 if __name__ == "__main__":

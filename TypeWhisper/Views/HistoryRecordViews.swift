@@ -301,7 +301,7 @@ struct HistoryRecordDetailView: View {
     static func speakerDetectionAnnouncement(for outcome: SpeakerTranscriptCoordinator.Outcome) -> String {
         switch outcome {
         case .succeeded:
-            localizedAppText("Speakers detected", de: "Sprecher erkannt", ja: "話者を検出しました", zh: "已检测到说话人")
+            localizedAppText("Speakers detected", de: "Sprecher erkannt", ja: "話者を検出しました", zh: "已检测到说话人", zhHant: "已偵測到說話者")
         case .failed:
             String(localized: "speakers.status.failed")
         case .cancelled:
@@ -309,7 +309,8 @@ struct HistoryRecordDetailView: View {
                 "Speaker detection cancelled",
                 de: "Sprechererkennung abgebrochen",
                 ja: "話者の検出をキャンセルしました",
-                zh: "已取消说话人检测"
+                zh: "已取消说话人检测",
+                zhHant: "已取消說話者偵測"
             )
         }
     }
@@ -480,7 +481,8 @@ struct HistoryRecordDetailView: View {
                             "Transcript",
                             de: "Transkript",
                             ja: "文字起こし",
-                            zh: "转写文本"
+                            zh: "转写文本",
+                            zhHant: "轉錄文字"
                         ))
                 }
             case .original:
@@ -548,6 +550,7 @@ struct HistoryRecordDetailView: View {
                     de: "(Entfernt: \(text))",
                     ja: "（削除: \(text)）",
                     zh: "（已删除：\(text)）",
+                    zhHant: "（已刪除：\(text)）",
                     es: "(Eliminado: \(text))"
                 )
             case .added(let text):
@@ -556,6 +559,7 @@ struct HistoryRecordDetailView: View {
                     de: "(Hinzugefügt: \(text))",
                     ja: "（追加: \(text)）",
                     zh: "（已添加：\(text)）",
+                    zhHant: "（已新增：\(text)）",
                     es: "(Agregado: \(text))"
                 )
             }
@@ -644,6 +648,7 @@ enum HistoryAccessibilityText {
             de: "Dauer \(spoken)",
             ja: "長さ \(spoken)",
             zh: "时长 \(spoken)",
+            zhHant: "時長 \(spoken)",
             es: "Duración \(spoken)"
         )
     }

@@ -173,7 +173,8 @@ private struct QRCodeImageView: View {
             "QR code for TypeWhisper in the App Store",
             de: "QR-Code für TypeWhisper im App Store",
             ja: "App Store の TypeWhisper の QR コード",
-            zh: "App Store 中 TypeWhisper 的二维码"
+            zh: "App Store 中 TypeWhisper 的二维码",
+            zhHant: "App Store 中 TypeWhisper 的QR 碼"
         ))
     }
 }

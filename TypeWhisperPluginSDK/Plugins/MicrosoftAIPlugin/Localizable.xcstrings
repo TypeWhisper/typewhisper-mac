@@ -26,6 +26,12 @@
             "state" : "translated",
             "value" : "隐藏 API 密钥"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱藏 API 金鑰"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除 API 密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 API 金鑰"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state" : "translated",
             "value" : "显示 API 密钥"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示 API 金鑰"
+          }
         }
       }
     },
@@ -95,7 +113,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "APIキー" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "API 金鑰" } }
       }
     },
     "Audio is sent to Microsoft Azure for transcription. API keys are stored securely in the Keychain." : {
@@ -108,7 +127,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "音声は文字起こしのためMicrosoft Azureに送信されます。APIキーはキーチェーンに安全に保存されます。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "音频会发送到 Microsoft Azure 进行转录。API 密钥安全存储在钥匙串中。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "音频会发送到 Microsoft Azure 进行转录。API 密钥安全存储在钥匙串中。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "音訊會傳送到 Microsoft Azure 進行轉錄。API 金鑰安全儲存在鑰匙圈中。" } }
       }
     },
     "Azure Speech connection" : {
@@ -121,7 +141,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "Azure Speech接続" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Azure Speech 连接" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Azure Speech 连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Azure Speech 連線" } }
       }
     },
     "Clean" : {
@@ -134,7 +155,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "クリーン" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理" } }
       }
     },
     "Endpoint or resource name" : {
@@ -147,7 +169,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "エンドポイントまたはリソース名" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "端点或资源名称" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "端点或资源名称" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "端點或資源名稱" } }
       }
     },
     "Enter the endpoint shown for your Azure Speech resource, or only its resource name." : {
@@ -160,7 +183,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "Azure Speechリソースに表示されるエンドポイント、またはリソース名のみを入力してください。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入 Azure Speech 资源显示的端点，或仅输入资源名称。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入 Azure Speech 资源显示的端点，或仅输入资源名称。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入 Azure Speech 資源顯示的端點，或僅輸入資源名稱。" } }
       }
     },
     "MAI Transcribe is not available in the Azure region %@. Use a Speech resource in one of these regions: %@." : {
@@ -173,7 +197,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "MAI Transcribe は Azure リージョン %@ では利用できません。次のいずれかのリージョンの Speech リソースを使用してください: %@。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MAI Transcribe 在 Azure 区域 %@ 中不可用。请使用以下区域之一的 Speech 资源：%@。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MAI Transcribe 在 Azure 区域 %@ 中不可用。请使用以下区域之一的 Speech 资源：%@。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "MAI Transcribe 在 Azure 區域 %@ 中不可用。請使用以下區域之一的 Speech 資源：%@。" } }
       }
     },
     "Model" : {
@@ -186,7 +211,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデル" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "模型" } }
       }
     },
     "Models refreshed from Microsoft Foundry." : {
@@ -199,7 +225,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "Microsoft Foundryからモデルを更新しました。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已从 Microsoft Foundry 刷新模型。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已从 Microsoft Foundry 刷新模型。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已從 Microsoft Foundry 重新整理模型。" } }
       }
     },
     "Refresh models" : {
@@ -212,7 +239,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデルを更新" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刷新模型" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刷新模型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重新整理模型" } }
       }
     },
     "Remove" : {
@@ -225,7 +253,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "削除" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "移除" } }
       }
     },
     "Save connection" : {
@@ -238,7 +267,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続を保存" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存连接" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "儲存連線" } }
       }
     },
     "Speaker diarization" : {
@@ -251,7 +281,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "話者分離" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "说话人分离" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "说话人分离" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "說話者分離" } }
       }
     },
     "The Foundry model catalog is unavailable for this Speech resource. Built-in MAI models remain available." : {
@@ -264,7 +295,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "このSpeechリソースではFoundryモデルカタログを利用できません。組み込みのMAIモデルは引き続き利用できます。" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此 Speech 资源无法使用 Foundry 模型目录。内置 MAI 模型仍可使用。" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此 Speech 资源无法使用 Foundry 模型目录。内置 MAI 模型仍可使用。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此 Speech 資源無法使用 Foundry 模型目錄。內建 MAI 模型仍可使用。" } }
       }
     },
     "Transcript style" : {
@@ -277,7 +309,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こしスタイル" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转录样式" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转录样式" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉錄樣式" } }
       }
     },
     "Transcription" : {
@@ -290,7 +323,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こし" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转录" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转录" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "轉錄" } }
       }
     },
     "Update connection" : {
@@ -303,7 +337,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続を更新" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新连接" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "更新連線" } }
       }
     },
     "Verbatim" : {
@@ -316,7 +351,8 @@
           }
         },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "逐語" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "逐字" } }
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "逐字" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "逐字" } }
       }
     }
   },

@@ -35,7 +35,8 @@ enum AccessibilityPermissionPane {
                 "Device Control and Data Access",
                 de: "Gerätesteuerung und Datenzugriff",
                 ja: "デバイスの制御とデータへのアクセス",
-                zh: "设备控制和数据访问"
+                zh: "设备控制和数据访问",
+                zhHant: "裝置控制和資料存取"
             ),
             osVersion: osVersion
         )
@@ -51,7 +52,8 @@ enum AccessibilityPermissionPane {
                 "Device Control and Data Access permission required",
                 de: "Berechtigung „Gerätesteuerung und Datenzugriff“ erforderlich",
                 ja: "「デバイスの制御とデータへのアクセス」の権限が必要です",
-                zh: "需要“设备控制和数据访问”权限"
+                zh: "需要“设备控制和数据访问”权限",
+                zhHant: "需要「裝置控制和資料存取」權限"
             ),
             osVersion: osVersion
         )
@@ -66,13 +68,15 @@ enum AccessibilityPermissionPane {
                 "Accessibility permission not granted. Please enable it in System Settings → Privacy & Security → Accessibility.",
                 de: "Die Berechtigung für Bedienungshilfen wurde nicht erteilt. Bitte aktiviere sie unter Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen.",
                 ja: "アクセシビリティの権限が許可されていません。システム設定 → プライバシーとセキュリティ → アクセシビリティで有効にしてください。",
-                zh: "未授予辅助功能权限。请在“系统设置”→“隐私与安全性”→“辅助功能”中启用。"
+                zh: "未授予辅助功能权限。请在“系统设置”→“隐私与安全性”→“辅助功能”中启用。",
+                zhHant: "未授予輔助使用權限。請在「系統設定」→「隱私權與安全性」→「輔助使用」中啟用。"
             ),
             deviceControl: localizedAppText(
                 "Device Control and Data Access permission not granted. Please enable it in System Settings → Privacy & Security → Device Control and Data Access.",
                 de: "Die Berechtigung „Gerätesteuerung und Datenzugriff“ wurde nicht erteilt. Bitte aktiviere sie unter Systemeinstellungen → Datenschutz & Sicherheit → Gerätesteuerung und Datenzugriff.",
                 ja: "「デバイスの制御とデータへのアクセス」の権限が許可されていません。システム設定 → プライバシーとセキュリティ → デバイスの制御とデータへのアクセスで有効にしてください。",
-                zh: "未授予“设备控制和数据访问”权限。请在“系统设置”→“隐私与安全性”→“设备控制和数据访问”中启用。"
+                zh: "未授予“设备控制和数据访问”权限。请在“系统设置”→“隐私与安全性”→“设备控制和数据访问”中启用。",
+                zhHant: "未授予「裝置控制和資料存取」權限。請在「系統設定」→「隱私權與安全性」→「裝置控制和資料存取」中啟用。"
             ),
             osVersion: osVersion
         )

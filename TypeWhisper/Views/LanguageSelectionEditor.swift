@@ -210,7 +210,7 @@ struct LanguageSelectionEditor: View {
             VStack(alignment: .leading, spacing: 8) {
                 TextField(localizedAppText("Search languages", de: "Sprachen suchen"), text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel(localizedAppText("Search languages", de: "Sprachen suchen", ja: "言語を検索", zh: "搜索语言"))
+                    .accessibilityLabel(localizedAppText("Search languages", de: "Sprachen suchen", ja: "言語を検索", zh: "搜索语言", zhHant: "搜尋語言"))
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -284,7 +284,8 @@ struct LanguageSelectionEditor: View {
             "Selected languages",
             de: "Ausgewählte Sprachen",
             ja: "選択した言語",
-            zh: "已选语言"
+            zh: "已选语言",
+            zhHant: "已選語言"
         ))
     }
 
@@ -408,6 +409,7 @@ struct LanguageChip: View {
                     de: "\(title), Position \(priority)",
                     ja: "\(title)、\(priority)番目",
                     zh: "\(title)，第 \(priority) 位",
+                    zhHant: "\(title)，第 \(priority) 位",
                     es: "\(title), posición \(priority)"
                 ))
                 .accessibilityActions {
@@ -425,12 +427,13 @@ struct LanguageChip: View {
             }
             .buttonStyle(.plain)
             .disabled(!canMoveEarlier)
-            .help(localizedAppText("Move earlier", de: "Nach vorne verschieben", ja: "前に移動", zh: "前移"))
+            .help(localizedAppText("Move earlier", de: "Nach vorne verschieben", ja: "前に移動", zh: "前移", zhHant: "前移"))
             .accessibilityLabel(localizedAppText(
                 "Move \(title) earlier",
                 de: "\(title) nach vorne verschieben",
                 ja: "\(title)を前に移動",
                 zh: "将 \(title) 前移",
+                zhHant: "將 \(title) 前移",
                 es: "Mover \(title) antes"
             ))
 
@@ -440,12 +443,13 @@ struct LanguageChip: View {
             }
             .buttonStyle(.plain)
             .disabled(!canMoveLater)
-            .help(localizedAppText("Move later", de: "Nach hinten verschieben", ja: "後ろに移動", zh: "后移"))
+            .help(localizedAppText("Move later", de: "Nach hinten verschieben", ja: "後ろに移動", zh: "后移", zhHant: "後移"))
             .accessibilityLabel(localizedAppText(
                 "Move \(title) later",
                 de: "\(title) nach hinten verschieben",
                 ja: "\(title)を後ろに移動",
                 zh: "将 \(title) 后移",
+                zhHant: "將 \(title) 後移",
                 es: "Mover \(title) después"
             ))
 

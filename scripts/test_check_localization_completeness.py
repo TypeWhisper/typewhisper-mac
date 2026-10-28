@@ -32,10 +32,11 @@ class FormatSpecifierTests(unittest.TestCase):
 class CheckCatalogTests(unittest.TestCase):
     def test_complete_catalog_passes(self):
         missing, mismatches, checked = check_catalog(catalog(**{
-            "Save": {"localizations": {"zh-Hans": unit("保存"), "es": unit("Guardar")}},
+            "Save": {"localizations": {"zh-Hans": unit("保存"), "zh-Hant": unit("儲存"), "es": unit("Guardar")}},
             "%lld words": {"localizations": {
                 "en": plural(one="%lld word", other="%lld words"),
                 "zh-Hans": unit("%lld 个词"),
+                "zh-Hant": unit("%lld 個詞"),
                 "es": plural(one="%lld palabra", other="%lld palabras"),
             }},
         }))
@@ -43,14 +44,15 @@ class CheckCatalogTests(unittest.TestCase):
 
     def test_reports_missing_and_empty_required_languages(self):
         missing, _, _ = check_catalog(catalog(**{
-            "Save": {"localizations": {"zh-Hans": unit("保存")}},
-            "Open": {"localizations": {"zh-Hans": unit("打开"), "es": unit("")}},
+            "Save": {"localizations": {"zh-Hans": unit("保存"), "zh-Hant": unit("儲存")}},
+            "Open": {"localizations": {"zh-Hans": unit("打开"), "zh-Hant": unit("開啟"), "es": unit("")}},
             "Words": {"localizations": {
                 "zh-Hans": unit("词"),
+                "zh-Hant": unit(""),
                 "es": {"variations": {"plural": {"one": unit("palabra"), "other": unit("")}}},
             }},
         }))
-        self.assertEqual(missing, ["es: Save", "es: Open", "es: Words"])
+        self.assertEqual(missing, ["es: Save", "es: Open", "zh-Hant: Words", "es: Words"])
 
     def test_skips_empty_key_and_untranslatable_keys(self):
         missing, _, checked = check_catalog(catalog(**{
@@ -87,6 +89,7 @@ class CheckCatalogTests(unittest.TestCase):
         ok = check_catalog(catalog(**{"Synced %lld changes.": {"localizations": {
             **source,
             "zh-Hans": plural(one="已同步 %lld 项更改。", other="已同步 %lld 项更改。"),
+            "zh-Hant": plural(one="已同步 %lld 項變更。", other="已同步 %lld 項變更。"),
             "es": plural(one="1 cambio sincronizado.", other="%lld cambios sincronizados."),
         }}}))
         self.assertEqual(ok[:2], ([], []))

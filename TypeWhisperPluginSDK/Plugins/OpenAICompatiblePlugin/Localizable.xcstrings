@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "删除 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除 %@"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "隐藏 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 API 金鑰"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "刷新模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理模型"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 API 金鑰"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "保存%@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存%@"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 API 金鑰"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "温度模式"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度模式"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "添加配置文件"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增設定檔"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "自定义"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "配置文件名称"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定檔名稱"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "配置文件名称"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定檔名稱"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "配置文件"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定檔"
+          }
         }
       }
     },
@@ -389,6 +467,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "选择配置文件"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇設定檔"
           }
         }
       }
@@ -418,6 +502,12 @@
             "state": "translated",
             "value": "温度"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度"
+          }
         }
       }
     },
@@ -446,6 +536,12 @@
             "state": "translated",
             "value": "API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰"
+          }
         }
       }
     },
@@ -470,6 +566,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 版本"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "API 版本"
@@ -502,6 +604,12 @@
             "state": "translated",
             "value": "API 密钥安全存储在钥匙串中"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰安全儲存在鑰匙圈中"
+          }
         }
       }
     },
@@ -529,6 +637,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "自动"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
           }
         }
       }
@@ -558,6 +672,12 @@
             "state": "translated",
             "value": "“自动”仅对已知的实时模型 ID（gpt-live-transcribe、gpt-realtime-whisper）使用实时流式传输，其他模型则使用批量上传。选择“实时”可强制任何支持 /v1/realtime WebSocket API 的 OpenAI 兼容服务器使用流式传输，包括自定义部署别名（例如 Azure OpenAI 或 Microsoft Foundry 的 gpt-live-transcribe 部署）。部分提供商（包括 Azure）需要预览版 API 版本才能进行实时转写。选择“批量”以使用所选的批量转写终结点。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動」僅對已知的即時模型 ID（gpt-live-transcribe、gpt-realtime-whisper）使用即時流式傳輸，其他模型則使用批次上傳。選擇「即時」可強制任何支援 /v1/realtime WebSocket API 的 OpenAI 相容伺服器使用流式傳輸，包括自訂部署別名（例如 Azure OpenAI 或 Microsoft Foundry 的 gpt-live-transcribe 部署）。部分供應商（包括 Azure）需要預覽版 API 版本才能進行即時轉錄。選擇「批次」以使用所選的批次轉錄終結點。"
+          }
         }
       }
     },
@@ -585,6 +705,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "某些服务器需要 API 版本。部署范围的批量终结点需要带日期的版本；实时终结点可能需要预览版本。服务器不需要版本时请留空。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "某些伺服器需要 API 版本。部署範圍的批次終結點需要帶日期的版本；即時終結點可能需要預覽版本。伺服器不需要版本時請留空。"
           }
         }
       }
@@ -614,6 +740,12 @@
             "state": "translated",
             "value": "批量"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批次"
+          }
         }
       }
     },
@@ -641,6 +773,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "批量转录终结点"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批次轉錄終結點"
           }
         }
       }
@@ -670,6 +808,12 @@
             "state": "translated",
             "value": "已连接"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連線"
+          }
         }
       }
     },
@@ -698,6 +842,12 @@
             "state": "translated",
             "value": "连接失败"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線失敗"
+          }
         }
       }
     },
@@ -722,6 +872,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如：http://localhost:11434"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "例如：http://localhost:11434"
@@ -754,6 +910,12 @@
             "state": "translated",
             "value": "LLM 模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
         }
       }
     },
@@ -781,6 +943,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM 请求超时"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 請求超時"
           }
         }
       }
@@ -816,6 +984,12 @@
             "state": "translated",
             "value": "思考模式"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "思考模式"
+          }
         }
       }
     },
@@ -844,6 +1018,12 @@
             "state": "translated",
             "value": "模型名称"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型名稱"
+          }
         }
       }
     },
@@ -868,6 +1048,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -900,6 +1086,12 @@
             "state": "translated",
             "value": "未找到模型。请手动输入模型名称。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到模型。請手動輸入模型名稱。"
+          }
         }
       }
     },
@@ -927,6 +1119,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無"
           }
         }
       }
@@ -956,6 +1154,12 @@
             "state": "translated",
             "value": "可选，用于本地服务器如 Ollama 或 LM Studio"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選，用於本機伺服器如 Ollama 或 LM Studio"
+          }
         }
       }
     },
@@ -983,6 +1187,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "可选，例如 preview"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選，例如 preview"
           }
         }
       }
@@ -1012,6 +1222,12 @@
             "state": "translated",
             "value": "刷新"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理"
+          }
         }
       }
     },
@@ -1040,6 +1256,12 @@
             "state": "translated",
             "value": "实时"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即時"
+          }
         }
       }
     },
@@ -1064,6 +1286,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -1096,6 +1324,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -1120,6 +1354,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "秒"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "秒"
@@ -1152,6 +1392,12 @@
             "state": "translated",
             "value": "等待 LLM 响应的秒数。对于处理大量提示词时较慢的本地服务器（LM Studio、Ollama），请增加此值。值越大，请求失败前等待的时间越长。默认值 30 秒。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待 LLM 回應的秒數。對於處理大量提示詞時較慢的本機伺服器（LM Studio、Ollama），請增加此值。值越大，請求失敗前等待的時間越長。預設值 30 秒。"
+          }
         }
       }
     },
@@ -1179,6 +1425,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务器 URL"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器 URL"
           }
         }
       }
@@ -1208,6 +1460,12 @@
             "state": "translated",
             "value": "测试连接"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試連線"
+          }
         }
       }
     },
@@ -1235,6 +1493,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "测试中..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試中..."
           }
         }
       }
@@ -1264,6 +1528,12 @@
             "state": "translated",
             "value": "转录模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轉錄模型"
+          }
         }
       }
     },
@@ -1291,6 +1561,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "转写传输方式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轉錄傳輸方式"
           }
         }
       }
@@ -1320,6 +1596,12 @@
             "state": "translated",
             "value": "仅在启用时添加非标准的 Chat Completions thinking 字段。除非提供商明确说明支持，否则请保持关闭。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅在啟用時新增非標準的 Chat Completions thinking 欄位。除非供應商明確說明支援，否則請保持關閉。"
+          }
         }
       }
     },
@@ -1347,6 +1629,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "聊天补全"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聊天補全"
           }
         }
       }
@@ -1376,6 +1664,12 @@
             "state": "translated",
             "value": "部署范围"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部署範圍"
+          }
         }
       }
     },
@@ -1403,6 +1697,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "标准 v1"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準 v1"
           }
         }
       }
@@ -1432,6 +1732,12 @@
             "state": "translated",
             "value": "标准 v1 使用 /v1/audio/transcriptions。部署范围使用 /deployments/{model}/audio/transcriptions，并需要带日期的 API 版本。实时转录继续使用 /v1/realtime。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準 v1 使用 /v1/audio/transcriptions。部署範圍使用 /deployments/{model}/audio/transcriptions，並需要帶日期的 API 版本。即時轉錄繼續使用 /v1/realtime。"
+          }
         }
       }
     },
@@ -1456,6 +1762,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "高"
@@ -1488,6 +1800,12 @@
             "state": "translated",
             "value": "LLM API"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM API"
+          }
         }
       }
     },
@@ -1512,6 +1830,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "低"
@@ -1544,6 +1868,12 @@
             "state": "translated",
             "value": "最大"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大"
+          }
         }
       }
     },
@@ -1568,6 +1898,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "中"
@@ -1600,6 +1936,12 @@
             "state": "translated",
             "value": "提供商默认值"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "供應商預設值"
+          }
         }
       }
     },
@@ -1627,6 +1969,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "“提供商默认值”会省略 reasoning。其他值会向 /v1/responses 发送 reasoning: { effort: ... }。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「供應商預設值」會省略 reasoning。其他值會向 /v1/responses 傳送 reasoning: { effort: ... }。"
           }
         }
       }
@@ -1656,6 +2004,12 @@
             "state": "translated",
             "value": "提供商 Thinking 扩展"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "供應商 Thinking 擴充功能"
+          }
         }
       }
     },
@@ -1683,6 +2037,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "推理强度"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推理強度"
           }
         }
       }
@@ -1712,6 +2072,12 @@
             "state": "translated",
             "value": "响应"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回應"
+          }
         }
       }
     },
@@ -1739,6 +2105,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "配置 Responses 推理强度时，将不发送温度覆盖值。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定 Responses 推理強度時，將不傳送溫度覆蓋值。"
           }
         }
       }
@@ -1768,6 +2140,12 @@
             "state": "translated",
             "value": "使用 /v1/chat/completions，以广泛兼容现有提供商。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 /v1/chat/completions，以廣泛相容現有供應商。"
+          }
         }
       }
     },
@@ -1796,6 +2174,12 @@
             "state": "translated",
             "value": "使用 /v1/responses，并采用与 OpenAI 兼容的输入、输出和 reasoning 字段。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 /v1/responses，並採用與 OpenAI 相容的輸入、輸出和 reasoning 欄位。"
+          }
         }
       }
     },
@@ -1820,6 +2204,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超高"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "超高"
@@ -1858,6 +2248,12 @@
             "state": "translated",
             "value": "服务器类型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器型別"
+          }
         }
       }
     },
@@ -1886,6 +2282,12 @@
             "state": "translated",
             "value": "通用"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通用"
+          }
         }
       }
     },
@@ -1904,6 +2306,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollama"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "Ollama"
@@ -1942,6 +2350,12 @@
             "state": "translated",
             "value": "选择 Ollama 可通过服务器原生的 /api/tags 接口发现已安装的模型。通用服务器仅使用 OpenAI 兼容的 /v1/models 接口。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇 Ollama 可透過伺服器原生的 /api/tags 介面發現已安裝的模型。通用伺服器僅使用 OpenAI 相容的 /v1/models 介面。"
+          }
         }
       }
     },
@@ -1969,6 +2383,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务器 URL 无效。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器 URL 無效。"
           }
         }
       }
@@ -2004,6 +2424,12 @@
             "state": "translated",
             "value": "无法连接到 Ollama 服务器。请确认其正在运行且 URL 正确。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法連線到 Ollama 伺服器。請確認其正在執行且 URL 正確。"
+          }
         }
       }
     },
@@ -2031,6 +2457,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务器拒绝了请求（未授权）。请检查 API 密钥。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器拒絕了請求（未授權）。請檢查 API 金鑰。"
           }
         }
       }
@@ -2060,6 +2492,12 @@
             "state": "translated",
             "value": "服务器返回了未知错误。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器返回了未知錯誤。"
+          }
         }
       }
     },
@@ -2087,6 +2525,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务器没有报告任何已安装的模型。请先运行 `ollama pull <model>` 拉取模型。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器沒有報告任何已安裝的模型。請先執行 `ollama pull <model>` 拉取模型。"
           }
         }
       }
@@ -2122,6 +2566,12 @@
             "state": "translated",
             "value": "服务器返回的不是有效的 Ollama /api/tags 响应。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器返回的不是有效的 Ollama /api/tags 回應。"
+          }
         }
       }
     },
@@ -2150,6 +2600,12 @@
             "state": "translated",
             "value": "上传格式"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上傳格式"
+          }
         }
       }
     },
@@ -2174,6 +2630,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WAV"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "WAV"
@@ -2205,6 +2667,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto 将批量上传压缩为 M4A，并在需要时以 WAV 重试。对于不支持 M4A 的服务器，WAV 会直接上传。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto 將批次上傳壓縮為 M4A，並在需要時以 WAV 重試。對於不支援 M4A 的伺服器，WAV 會直接上傳。"
           }
         }
       }

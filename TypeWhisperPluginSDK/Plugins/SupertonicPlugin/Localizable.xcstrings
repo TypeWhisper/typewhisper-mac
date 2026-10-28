@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "正在下载模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載模型"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "移除 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -110,6 +128,12 @@
             "state": "translated",
             "value": "保存 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -134,6 +158,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平衡"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "平衡"
@@ -166,6 +196,12 @@
             "state": "translated",
             "value": "删除缓存的模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除快取的模型"
+          }
         }
       }
     },
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "下载并加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入"
+          }
         }
       }
     },
@@ -218,6 +260,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "快速"
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "高"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "我已阅读并接受 Supertonic 3 模型许可条款"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我已閱讀並接受 Supertonic 3 模型許可條款"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无效的 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 Hugging Face 權杖"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "由 Supertonic 3 ONNX 模型驱动的本地语音合成。模型资源仅在您接受模型许可后下载。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由 Supertonic 3 ONNX 模型驅動的本機語音合成。模型資源僅在您接受模型許可後下載。"
+          }
         }
       }
     },
@@ -386,6 +464,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -418,6 +502,12 @@
             "state": "translated",
             "value": "模型许可"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型許可"
+          }
         }
       }
     },
@@ -445,6 +535,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开 Supertonic 3 OpenRAIL-M 许可"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟 Supertonic 3 OpenRAIL-M 許可"
           }
         }
       }
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "可选。可以提高模型下载的速率限制。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選。可以提高模型下載的速率限制。"
+          }
         }
       }
     },
@@ -501,6 +603,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "质量"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "品質"
           }
         }
       }
@@ -530,6 +638,12 @@
             "state": "translated",
             "value": "就绪"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就緒"
+          }
         }
       }
     },
@@ -554,6 +668,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -610,6 +736,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "速度"
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "Supertonic（实验性）"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic（實驗性）"
+          }
         }
       }
     },
@@ -669,6 +807,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supertonic 3 模型资源采用 OpenRAIL-M 许可，包含使用限制。下载模型前请查看完整许可。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic 3 模型資源採用 OpenRAIL-M 許可，包含使用限制。下載模型前請檢視完整許可。"
           }
         }
       }
@@ -698,6 +842,12 @@
             "state": "translated",
             "value": "有效的 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -725,6 +875,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "声音"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聲音"
           }
         }
       }

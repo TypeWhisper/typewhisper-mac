@@ -200,6 +200,7 @@ private struct MyWorkflowsPage: View {
                         "This removes “\(workflow.name)” from the active workflow list.",
                         de: "Dadurch wird „\(workflow.name)“ aus der aktiven Workflow-Liste entfernt.",
                         ja: "「\(workflow.name)」を有効なワークフロー一覧から削除します。",
+                        zhHant: "這會將「\(workflow.name)」從已啟用的工作流程清單中移除。",
                         es: "Esto quita “\(workflow.name)” de la lista de flujos de trabajo activos."
                     )
                 )
@@ -604,6 +605,7 @@ private struct LLMFallbackPriorityRow: View {
             de: "Fallback \(position) von \(count): \(providerName)",
             ja: "フォールバック \(count)件中\(position)件目: \(providerName)",
             zh: "第 \(position) 个备用项（共 \(count) 个）：\(providerName)",
+            zhHant: "第 \(position) 個備用項（共 \(count) 個）：\(providerName)",
             es: "Respaldo \(position) de \(count): \(providerName)"
         )
         var parts = [name, statusText]
@@ -813,6 +815,7 @@ private struct LLMFallbackPriorityRow: View {
         return localizedAppText(
             "Provider Default (\(displayName))",
             de: "Provider-Standard (\(displayName))",
+            zhHant: "供應商預設（\(displayName)）",
             es: "Predeterminado del proveedor (\(displayName))"
         )
     }
@@ -1140,6 +1143,7 @@ private struct WorkflowRow: View {
                         de: "\(workflow.name) nach oben bewegen",
                         ja: "\(workflow.name)を上へ移動",
                         zh: "上移 \(workflow.name)",
+                        zhHant: "上移 \(workflow.name)",
                         es: "Subir \(workflow.name)"
                     ),
                     downLabel: localizedAppText(
@@ -1147,6 +1151,7 @@ private struct WorkflowRow: View {
                         de: "\(workflow.name) nach unten bewegen",
                         ja: "\(workflow.name)を下へ移動",
                         zh: "下移 \(workflow.name)",
+                        zhHant: "下移 \(workflow.name)",
                         es: "Bajar \(workflow.name)"
                     ),
                     focus: arrowFocus,
@@ -1480,6 +1485,7 @@ private struct WorkflowEditorPage: View {
             description: localizedAppText(
                 "Name the workflow and describe what it should do with your dictation.",
                 de: "Benenne den Workflow und beschreibe, was er mit deinem Diktat machen soll.",
+                zhHant: "為工作流程命名，並描述它要如何處理你的聽寫內容。",
                 es: "Ponle nombre al flujo de trabajo y describe qué debe hacer con tu dictado."
             )
         ) {
@@ -1550,15 +1556,17 @@ private struct WorkflowEditorPage: View {
             description: localizedAppText(
                 "Type or paste a sample dictation and run the workflow with the current settings. Nothing is saved or inserted. The test uses the workflow's AI provider.",
                 de: "Gib ein Beispiel-Diktat ein und führe den Workflow mit den aktuellen Einstellungen aus. Nichts wird gespeichert oder eingefügt. Der Test nutzt den KI-Anbieter des Workflows.",
+                zhHant: "輸入或貼上一段範例聽寫，並以目前設定執行工作流程。不會儲存或插入任何內容。測試會使用此工作流程的 AI 供應商。",
                 es: "Escribe o pega un dictado de ejemplo y ejecuta el flujo de trabajo con los ajustes actuales. No se guarda ni se inserta nada. La prueba usa el proveedor de IA del flujo de trabajo."
             )
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 WorkflowTextEditorField(
-                    title: localizedAppText("Sample dictation", de: "Beispiel-Diktat", es: "Dictado de ejemplo"),
+                    title: localizedAppText("Sample dictation", de: "Beispiel-Diktat", zhHant: "範例聽寫", es: "Dictado de ejemplo"),
                     placeholder: localizedAppText(
                         "What you would say, including filler words and corrections.",
                         de: "Was du sagen würdest, mit Füllwörtern und Korrekturen.",
+                        zhHant: "你會說的內容，包括贅詞和更正。",
                         es: "Lo que dirías, con muletillas y correcciones."
                     ),
                     text: $testInput,
@@ -1576,13 +1584,13 @@ private struct WorkflowEditorPage: View {
                             } else {
                                 Image(systemName: "play.fill")
                             }
-                            Text(localizedAppText("Run Test", de: "Test starten", es: "Ejecutar prueba"))
+                            Text(localizedAppText("Run Test", de: "Test starten", zhHant: "執行測試", es: "Ejecutar prueba"))
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isRunningTest || testInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
-                    .help(localizedAppText("Run the test (⌘↩)", de: "Test starten (⌘↩)", es: "Ejecutar la prueba (⌘↩)"))
+                    .help(localizedAppText("Run the test (⌘↩)", de: "Test starten (⌘↩)", zhHant: "執行測試（⌘↩）", es: "Ejecutar la prueba (⌘↩)"))
 
                     if isRunningTest {
                         Button(localizedAppText("Cancel", de: "Abbrechen")) {
@@ -1590,7 +1598,7 @@ private struct WorkflowEditorPage: View {
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button(localizedAppText("Insert Example", de: "Beispiel einfügen", es: "Insertar ejemplo")) {
+                        Button(localizedAppText("Insert Example", de: "Beispiel einfügen", zhHant: "插入範例", es: "Insertar ejemplo")) {
                             testInput = Self.exampleDictation
                         }
                         .buttonStyle(.bordered)
@@ -1606,8 +1614,8 @@ private struct WorkflowEditorPage: View {
                         } label: {
                             Label(
                                 isShowingTestPrompt
-                                    ? localizedAppText("Hide Prompt", de: "Prompt ausblenden", es: "Ocultar prompt")
-                                    : localizedAppText("Show Prompt", de: "Prompt anzeigen", es: "Mostrar prompt"),
+                                    ? localizedAppText("Hide Prompt", de: "Prompt ausblenden", zhHant: "隱藏提示詞", es: "Ocultar prompt")
+                                    : localizedAppText("Show Prompt", de: "Prompt anzeigen", zhHant: "顯示提示詞", es: "Mostrar prompt"),
                                 systemImage: "text.alignleft"
                             )
                         }
@@ -1621,6 +1629,7 @@ private struct WorkflowEditorPage: View {
                         localizedAppText(
                             "A real dictation this short is inserted without AI processing. The test still runs it.",
                             de: "Ein so kurzes echtes Diktat wird ohne KI-Verarbeitung eingefügt. Der Test führt es trotzdem aus.",
+                            zhHant: "實際聽寫若這麼短，會直接插入而不經 AI 處理。測試仍會處理它。",
                             es: "Un dictado real tan corto se inserta sin procesamiento de IA. La prueba lo ejecuta de todos modos."
                         )
                     )
@@ -1634,6 +1643,7 @@ private struct WorkflowEditorPage: View {
                         localizedAppText(
                             "The test runs without screen context. It is added when you dictate.",
                             de: "Der Test läuft ohne Bildschirminhalt. Er kommt beim Diktieren dazu.",
+                            zhHant: "測試不使用螢幕內容。實際聽寫時才會加入。",
                             es: "La prueba se ejecuta sin el contenido de la pantalla. Se añade al dictar."
                         )
                     )
@@ -1644,7 +1654,7 @@ private struct WorkflowEditorPage: View {
 
                 if isShowingTestPrompt, let testSystemPrompt {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(localizedAppText("System prompt", de: "System-Prompt", es: "Prompt del sistema"))
+                        Text(localizedAppText("System prompt", de: "System-Prompt", zhHant: "系統提示詞", es: "Prompt del sistema"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
 
@@ -1676,7 +1686,7 @@ private struct WorkflowEditorPage: View {
                 if let testOutput {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text(localizedAppText("Result", de: "Ergebnis", es: "Resultado"))
+                            Text(localizedAppText("Result", de: "Ergebnis", zhHant: "結果", es: "Resultado"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
 
@@ -1687,6 +1697,7 @@ private struct WorkflowEditorPage: View {
                                     localizedAppText(
                                         "\(testDurationSeconds) s",
                                         de: "\(testDurationSeconds) s",
+                                        zhHant: "\(testDurationSeconds) 秒",
                                         es: "\(testDurationSeconds) s"
                                     )
                                 )
@@ -1726,6 +1737,7 @@ private struct WorkflowEditorPage: View {
         localizedAppText(
             "um so i think we should move the meeting to thursday at three, no wait, at four, and can you ask anna to bring the slides. thanks",
             de: "ähm also ich denke wir sollten das Meeting auf Donnerstag um drei verschieben, nee warte, um vier, und kannst du Anna bitten die Folien mitzubringen. danke",
+            zhHant: "嗯，我覺得我們應該把會議改到星期四三點，不對，四點，還有可以請安娜帶投影片來嗎，謝謝",
             es: "eh bueno creo que deberíamos mover la reunión al jueves a las tres, no espera, a las cuatro, y puedes pedirle a Anna que traiga las diapositivas. gracias"
         )
     }
@@ -1930,6 +1942,7 @@ private struct WorkflowEditorPage: View {
                 localizedAppText(
                     "Whisper Mode: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)",
                     de: "Whisper-Modus: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)",
+                    zhHant: "Whisper 模式：\(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)",
                     es: "Modo susurro: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)"
                 )
             )
@@ -1961,6 +1974,7 @@ private struct WorkflowEditorPage: View {
                 localizedAppText(
                     "Numbers: \(draft.numberNormalizationMode.displayName)",
                     de: "Zahlen: \(draft.numberNormalizationMode.displayName)",
+                    zhHant: "數字：\(draft.numberNormalizationMode.displayName)",
                     es: "Números: \(draft.numberNormalizationMode.displayName)"
                 )
             )
@@ -1970,6 +1984,7 @@ private struct WorkflowEditorPage: View {
                 localizedAppText(
                     "Enter: \(draft.autoEnterMode.displayName)",
                     de: "Enter: \(draft.autoEnterMode.displayName)",
+                    zhHant: "Enter：\(draft.autoEnterMode.displayName)",
                     es: "Intro: \(draft.autoEnterMode.displayName)"
                 )
             )
@@ -1979,6 +1994,7 @@ private struct WorkflowEditorPage: View {
             return localizedAppText(
                 "Language, engine, provider, and output settings. The defaults work for most workflows.",
                 de: "Sprache, Engine, Provider und Ausgabe. Die Standardwerte passen für die meisten Workflows.",
+                zhHant: "語言、引擎、供應商和輸出設定。預設值適用於大多數工作流程。",
                 es: "Idioma, motor, proveedor y salida. Los valores predeterminados sirven para la mayoría de los flujos de trabajo."
             )
         }
@@ -2070,6 +2086,7 @@ private struct WorkflowEditorPage: View {
                             "Unavailable Action Target (\(targetActionPluginId))",
                             de: "Nicht verfügbares Action-Ziel (\(targetActionPluginId))",
                             ja: "利用できないアクション対象（\(targetActionPluginId)）",
+                            zhHant: "無法使用的操作目標（\(targetActionPluginId)）",
                             es: "Destino de acción no disponible (\(targetActionPluginId))"
                         )
                     )
@@ -2259,7 +2276,7 @@ private struct WorkflowEditorPage: View {
     private var workflowScreenContextSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Toggle(
-                localizedAppText("Use screen context", de: "Bildschirminhalt verwenden",
+                localizedAppText("Use screen context", de: "Bildschirminhalt verwenden", zhHant: "使用螢幕內容",
                     es: "Usar el contenido de la pantalla"),
                 isOn: workflowScreenContextBinding
             )
@@ -2268,6 +2285,7 @@ private struct WorkflowEditorPage: View {
                 localizedAppText(
                     "When recording starts, TypeWhisper reads the text in the front window on your Mac and gives it to the AI as reference, for example the email you are replying to. The screenshot is never saved. The text is sent to the workflow's AI provider.",
                     de: "Beim Start der Aufnahme liest TypeWhisper den Text im vordersten Fenster direkt auf deinem Mac und gibt ihn der KI als Referenz, zum Beispiel die E-Mail, auf die du antwortest. Das Bildschirmfoto wird nie gespeichert. Der Text geht an den KI-Anbieter des Workflows.",
+                    zhHant: "開始錄音時，TypeWhisper 會讀取 Mac 最前方視窗中的文字，並提供給 AI 作為參考，例如你正在回覆的電子郵件。螢幕截圖絕不會被儲存。文字會傳送到此工作流程的 AI 供應商。",
                     es: "Al empezar a grabar, TypeWhisper lee en tu Mac el texto de la ventana delantera y se lo da a la IA como referencia, por ejemplo el correo al que respondes. La captura nunca se guarda. El texto se envía al proveedor de IA del flujo de trabajo."
                 )
             )
@@ -2280,6 +2298,7 @@ private struct WorkflowEditorPage: View {
                     localizedAppText(
                         "Small on-device models such as Gemma E2B or E4B make little use of the screen context. It works best with cloud providers or large local models.",
                         de: "Kleine lokale Modelle wie Gemma E2B oder E4B nutzen den Bildschirminhalt kaum. Am besten funktioniert er mit Cloud-Anbietern oder großen lokalen Modellen.",
+                        zhHant: "Gemma E2B 或 E4B 等小型裝置端模型幾乎無法利用螢幕內容。搭配雲端供應商或大型本機模型效果最佳。",
                         es: "Los modelos locales pequeños como Gemma E2B o E4B apenas aprovechan el contenido de la pantalla. Funciona mejor con proveedores en la nube o modelos locales grandes."
                     )
                 )
@@ -2294,13 +2313,14 @@ private struct WorkflowEditorPage: View {
                         localizedAppText(
                             "Needs Screen Recording permission. After allowing it, quit and reopen TypeWhisper.",
                             de: "Benötigt die Berechtigung „Bildschirmaufnahme“. Beende TypeWhisper danach und öffne es erneut.",
+                            zhHant: "需要「螢幕錄製」權限。允許後請結束並重新開啟 TypeWhisper。",
                             es: "Necesita el permiso de Grabación de pantalla. Después de permitirlo, cierra TypeWhisper y vuelve a abrirlo."
                         )
                     )
                     .font(.caption)
                     .foregroundStyle(.orange)
 
-                    Button(localizedAppText("Open System Settings", de: "Systemeinstellungen öffnen", es: "Abrir Ajustes del Sistema")) {
+                    Button(localizedAppText("Open System Settings", de: "Systemeinstellungen öffnen", zhHant: "開啟系統設定", es: "Abrir Ajustes del Sistema")) {
                         ScreenContextService.openPermissionSettings()
                     }
                     .buttonStyle(.link)
@@ -2576,6 +2596,7 @@ private struct WorkflowEditorPage: View {
             "Use Global Fallback List (starts with \(providerName))",
             de: "Globale Fallback-Liste verwenden (beginnt mit \(providerName))",
             ja: "グローバルフォールバックリストを使用（最初: \(providerName)）",
+            zhHant: "使用全域備用清單（從 \(providerName) 開始）",
             es: "Usar la lista global de respaldos (empieza por \(providerName))"
         )
     }
@@ -2595,6 +2616,7 @@ private struct WorkflowEditorPage: View {
         return localizedAppText(
             "Provider Default (\(displayName))",
             de: "Provider-Standard (\(displayName))",
+            zhHant: "供應商預設（\(displayName)）",
             es: "Predeterminado del proveedor (\(displayName))"
         )
     }
@@ -3120,6 +3142,7 @@ private struct WorkflowEditorPage: View {
                 "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                 de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
                 ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。",
+                zhHant: "此快速鍵已被工作流程「\(conflictWorkflow.name)」使用。",
                 es: "El flujo de trabajo “\(conflictWorkflow.name)” ya usa este atajo de teclado."
             ))
             return
@@ -3130,6 +3153,7 @@ private struct WorkflowEditorPage: View {
                 "This hotkey is already used by the global slot “\(slot.rawValue)”.",
                 de: "Dieser Hotkey wird bereits vom globalen Slot „\(slot.rawValue)“ verwendet.",
                 ja: "このホットキーはすでにグローバルスロット「\(slot.rawValue)」で使用されています。",
+                zhHant: "此快速鍵已被全域位置「\(slot.rawValue)」使用。",
                 es: "El espacio global “\(slot.rawValue)” ya usa este atajo de teclado."
             ))
             return
@@ -3626,8 +3650,8 @@ private struct ValidationBanner: View {
 /// direction of its chevron.
 private func workflowDisclosureState(isExpanded: Bool) -> String {
     isExpanded
-        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
-        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠")
+        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开", zhHant: "已展開")
+        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠", zhHant: "已摺疊")
 }
 
 private struct MissingWorkflowPage: View {
@@ -3939,6 +3963,7 @@ struct WorkflowDraft {
             " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
             de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
             ja: " 話す言語: \(workflowInputLanguageSummary(for: inputLanguageSelection))。",
+            zhHant: " 說話語言：\(workflowInputLanguageSummary(for: inputLanguageSelection))。",
             es: " Idioma hablado: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
         )
         let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: targetActionPluginId)
@@ -3948,6 +3973,7 @@ struct WorkflowDraft {
                 "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)\(outputRouteSentence)",
                 de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)\(outputRouteSentence)",
                 ja: "\(resolvedName)はワークフローパレットから\(template.definition.name)として利用できます。\(languageSentence)\(outputRouteSentence)",
+                zhHant: "\(resolvedName) 可從工作流程面板以 \(template.definition.name) 使用。\(languageSentence)\(outputRouteSentence)",
                 es: "\(resolvedName) está disponible como \(template.definition.name) desde la paleta de flujos de trabajo.\(languageSentence)\(outputRouteSentence)"
             )
         }
@@ -3958,12 +3984,14 @@ struct WorkflowDraft {
                 " \(exclusions).",
                 de: " \(exclusions).",
                 ja: " \(exclusions)。",
+                zhHant: " \(exclusions)。",
                 es: " \(exclusions)."
             )
             return localizedAppText(
                 "\(resolvedName) runs always as \(template.definition.name).\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
                 de: "\(resolvedName) läuft immer als \(template.definition.name).\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
                 ja: "\(resolvedName)は常に\(template.definition.name)として実行されます。\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+                zhHant: "\(resolvedName) 一律以 \(template.definition.name) 執行。\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
                 es: "\(resolvedName) se ejecuta siempre como \(template.definition.name).\(exclusionSentence)\(languageSentence)\(outputRouteSentence)"
             )
         }
@@ -3972,6 +4000,7 @@ struct WorkflowDraft {
             "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
             de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
             ja: "\(resolvedName)は\(triggerReviewText)により\(template.definition.name)として実行されます。\(languageSentence)\(outputRouteSentence)",
+            zhHant: "\(resolvedName) 會透過\(triggerReviewText)以 \(template.definition.name) 執行。\(languageSentence)\(outputRouteSentence)",
             es: "\(resolvedName) se ejecuta como \(template.definition.name) mediante \(triggerReviewText).\(languageSentence)\(outputRouteSentence)"
         )
     }
@@ -4104,6 +4133,7 @@ struct WorkflowDraft {
                             "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                             de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
                             ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。",
+                            zhHant: "此快速鍵已被工作流程「\(conflictWorkflow.name)」使用。",
                             es: "El flujo de trabajo “\(conflictWorkflow.name)” ya usa este atajo de teclado."
                         )
                     }
@@ -4113,6 +4143,7 @@ struct WorkflowDraft {
                             "This hotkey is already used by the global slot “\(conflictSlot.rawValue)”.",
                             de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet.",
                             ja: "このホットキーはすでにグローバルスロット「\(conflictSlot.rawValue)」で使用されています。",
+                            zhHant: "此快速鍵已被全域位置「\(conflictSlot.rawValue)」使用。",
                             es: "El espacio global “\(conflictSlot.rawValue)” ya usa este atajo de teclado."
                         )
                     }
@@ -4296,6 +4327,7 @@ struct WorkflowDraft {
                         "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
                         de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))",
                         ja: "アプリ \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "と"))",
+                        zhHant: "App \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
                         es: "las apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))"
                     ))
                 }
@@ -4309,6 +4341,7 @@ struct WorkflowDraft {
                         "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
                         de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))",
                         ja: "Webサイト \(workflowCompactList(websitePatterns, conjunction: "と"))",
+                        zhHant: "網站 \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
                         es: "los sitios web \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))"
                     ))
                 }
@@ -4328,6 +4361,7 @@ struct WorkflowDraft {
                             "the shortcuts \(shortcuts) to start dictation",
                             de: "die Shortcuts \(shortcuts) zum Starten des Diktats",
                             ja: "音声入力を開始するショートカット \(shortcuts)",
+                            zhHant: "開始聽寫的快速鍵 \(shortcuts)",
                             es: "los atajos \(shortcuts) para iniciar el dictado"
                         ))
                     case .processSelectedText:
@@ -4335,6 +4369,7 @@ struct WorkflowDraft {
                             "the shortcuts \(shortcuts) to process selected text",
                             de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts",
                             ja: "選択テキストを処理するショートカット \(shortcuts)",
+                            zhHant: "處理所選文字的快速鍵 \(shortcuts)",
                             es: "los atajos \(shortcuts) para procesar el texto seleccionado"
                         ))
                     }
@@ -4430,6 +4465,7 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
                     "Apple Translate to \(localizedAppLanguageName(for: targetLanguage))",
                     de: "Apple Translate nach \(localizedAppLanguageName(for: targetLanguage))",
                     ja: "\(localizedAppLanguageName(for: targetLanguage))へのApple Translate",
+                    zhHant: "Apple 翻譯成\(localizedAppLanguageName(for: targetLanguage))",
                     es: "Apple Translate al \(localizedAppLanguageName(for: targetLanguage))"
                 )
             }
@@ -4437,6 +4473,7 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
                 "\(templateName) to \(targetLanguage)",
                 de: "\(templateName) nach \(targetLanguage)",
                 ja: "\(targetLanguage)への\(templateName)",
+                zhHant: "\(templateName)成\(targetLanguage)",
                 es: "\(templateName) a \(targetLanguage)"
             )
         }
@@ -4480,6 +4517,7 @@ func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
             "Auto-detect between \(workflowLanguageNameList(normalizedCodes))",
             de: "Automatische Erkennung zwischen \(workflowLanguageNameList(normalizedCodes))",
             ja: "\(workflowLanguageNameList(normalizedCodes))間で自動検出",
+            zhHant: "在\(workflowLanguageNameList(normalizedCodes))之間自動偵測",
             es: "Detección automática entre \(workflowLanguageNameList(normalizedCodes))"
         )
     }
@@ -4497,6 +4535,7 @@ private func workflowLanguageNameList(_ codes: [String]) -> String {
             "\(names[0]) and \(names[1])",
             de: "\(names[0]) und \(names[1])",
             ja: "\(names[0])と\(names[1])",
+            zhHant: "\(names[0])和\(names[1])",
             es: "\(names[0]) y \(names[1])"
         )
     default:
@@ -4505,6 +4544,7 @@ private func workflowLanguageNameList(_ codes: [String]) -> String {
             "\(allButLast), and \(names[names.count - 1])",
             de: "\(allButLast) und \(names[names.count - 1])",
             ja: "\(allButLast)、\(names[names.count - 1])",
+            zhHant: "\(allButLast)和\(names[names.count - 1])",
             es: "\(allButLast) y \(names[names.count - 1])"
         )
     }
@@ -4551,6 +4591,7 @@ private func workflowExclusionSummary(for trigger: WorkflowTrigger?) -> String {
         de: "Ausgeschlossen: \(list)",
         ja: "除外: \(list)",
         zh: "排除：\(list)",
+        zhHant: "排除：\(list)",
         es: "Excluidos: \(list)"
     )
 }
@@ -4598,6 +4639,7 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         ". Spoken language: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
         de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
         ja: "。話す言語: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
+        zhHant: "。說話語言：\(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
         es: ". Idioma hablado: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
     )
     let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: workflow.output.targetActionPluginId)
@@ -4607,12 +4649,14 @@ private func workflowReviewText(for workflow: Workflow) -> String {
             ". \(triggerDetail)",
             de: ". \(triggerDetail)",
             ja: "。\(triggerDetail)",
+            zhHant: "。\(triggerDetail)",
             es: ". \(triggerDetail)"
         )
         return localizedAppText(
             "\(summary) runs always\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
             de: "\(summary) läuft immer\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
             ja: "\(summary)は常に実行されます\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+            zhHant: "\(summary)一律執行\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
             es: "\(summary) se ejecuta siempre\(exclusionSentence)\(languageSentence)\(outputRouteSentence)"
         )
     }
@@ -4622,6 +4666,7 @@ private func workflowReviewText(for workflow: Workflow) -> String {
             "\(summary) is available from the Workflow Palette\(languageSentence)\(outputRouteSentence)",
             de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)\(outputRouteSentence)",
             ja: "\(summary)はワークフローパレットから利用できます\(languageSentence)\(outputRouteSentence)",
+            zhHant: "\(summary)可從工作流程面板使用\(languageSentence)\(outputRouteSentence)",
             es: "\(summary) está disponible desde la paleta de flujos de trabajo\(languageSentence)\(outputRouteSentence)"
         )
     }
@@ -4631,6 +4676,7 @@ private func workflowReviewText(for workflow: Workflow) -> String {
             "\(summary) via \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
             de: "\(summary) über \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
             ja: "\(summary)は\(triggerSummary)で実行されます\(languageSentence)\(outputRouteSentence)",
+            zhHant: "\(summary)透過\(triggerSummary)執行\(languageSentence)\(outputRouteSentence)",
             es: "\(summary) mediante \(triggerSummary)\(languageSentence)\(outputRouteSentence)"
         )
     }
@@ -4639,6 +4685,7 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
         de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
         ja: "\(summary)は\(triggerSummary): \(triggerDetail)で実行されます\(languageSentence)\(outputRouteSentence)",
+        zhHant: "\(summary)透過\(triggerSummary)：\(triggerDetail)執行\(languageSentence)\(outputRouteSentence)",
         es: "\(summary) mediante \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)"
     )
 }

@@ -120,7 +120,8 @@ struct AdvancedSettingsView: View {
                                 "Importing settings",
                                 de: "Einstellungen werden importiert",
                                 ja: "設定を読み込み中",
-                                zh: "正在导入设置"
+                                zh: "正在导入设置",
+                                zhHant: "正在匯入設定"
                             ))
                     }
 
@@ -132,7 +133,7 @@ struct AdvancedSettingsView: View {
             }
 
                 // MARK: - Your Data
-                Section(localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据")) {
+                Section(localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据", zhHant: "你的資料")) {
                 HStack {
                     Button {
                         exportAllData()
@@ -158,14 +159,14 @@ struct AdvancedSettingsView: View {
                         ProgressView()
                             .controlSize(.small)
                             .accessibilityLabel(isDeletingAllData
-                                ? localizedAppText("Deleting all data", de: "Alle Daten werden gelöscht", ja: "すべてのデータを削除中", zh: "正在删除所有数据")
-                                : localizedAppText("Exporting all data", de: "Alle Daten werden exportiert", ja: "すべてのデータを書き出し中", zh: "正在导出所有数据"))
+                                ? localizedAppText("Deleting all data", de: "Alle Daten werden gelöscht", ja: "すべてのデータを削除中", zh: "正在删除所有数据", zhHant: "正在刪除所有資料")
+                                : localizedAppText("Exporting all data", de: "Alle Daten werden exportiert", ja: "すべてのデータを書き出し中", zh: "正在导出所有数据", zhHant: "正在匯出所有資料"))
                     }
 
                     SettingsInfoButton(text: localizedAppText(
                         "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits TypeWhisper.",
                         de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet TypeWhisper."
-                    ), topic: localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据"))
+                    ), topic: localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据", zhHant: "你的資料"))
                 }
                 .confirmationDialog(
                     localizedAppText("Delete All Data?", de: "Alle Daten löschen?"),
@@ -478,7 +479,8 @@ struct AdvancedSettingsView: View {
                             "Clients must send the API token as a bearer token. The command line tool, the Raycast extension and other local tools read it from api-discovery.json in TypeWhisper's Application Support folder.",
                             de: "Clients müssen den API-Token als Bearer-Token mitschicken. Das Kommandozeilen-Tool, die Raycast-Erweiterung und andere lokale Tools lesen ihn aus api-discovery.json im Application-Support-Ordner von TypeWhisper.",
                             ja: "クライアントは API トークンを Bearer トークンとして送信する必要があります。コマンドラインツール、Raycast 拡張機能、その他のローカルツールは、TypeWhisper の Application Support フォルダにある api-discovery.json からトークンを読み取ります。",
-                            zh: "客户端必须以 Bearer 令牌的形式发送 API 令牌。命令行工具、Raycast 扩展和其他本地工具会从 TypeWhisper 的 Application Support 文件夹中的 api-discovery.json 读取令牌。"
+                            zh: "客户端必须以 Bearer 令牌的形式发送 API 令牌。命令行工具、Raycast 扩展和其他本地工具会从 TypeWhisper 的 Application Support 文件夹中的 api-discovery.json 读取令牌。",
+                            zhHant: "客戶端必須以 Bearer 權杖的形式傳送 API 權杖。命令列工具、Raycast 擴充功能和其他本機工具會從 TypeWhisper 的 Application Support 資料夾中的 api-discovery.json 讀取權杖。"
                         )
                     )
                 }
@@ -489,7 +491,8 @@ struct AdvancedSettingsView: View {
                             "Without a token, any app on this Mac can start dictation and read your history and settings through the API.",
                             de: "Ohne Token kann jede App auf diesem Mac über die API Diktate starten und deinen Verlauf und deine Einstellungen lesen.",
                             ja: "トークンがない場合、この Mac 上のどのアプリでも API を通じて音声入力を開始し、履歴や設定を読み取れます。",
-                            zh: "没有令牌时，这台 Mac 上的任何应用都可以通过 API 开始听写并读取你的历史记录和设置。"
+                            zh: "没有令牌时，这台 Mac 上的任何应用都可以通过 API 开始听写并读取你的历史记录和设置。",
+                            zhHant: "沒有權杖時，這台 Mac 上的任何應用都可以透過 API 開始聽寫並讀取你的歷史記錄和設定。"
                         ),
                         systemImage: "exclamationmark.shield.fill"
                     )
@@ -499,7 +502,7 @@ struct AdvancedSettingsView: View {
 
                 if viewModel.isRunning && viewModel.requiresAuthentication, let apiToken = viewModel.currentAPIToken {
                     HStack {
-                        Button(localizedAppText("Copy API Token", de: "API-Token kopieren", ja: "API トークンをコピー", zh: "复制 API 令牌")) {
+                        Button(localizedAppText("Copy API Token", de: "API-Token kopieren", ja: "API トークンをコピー", zh: "复制 API 令牌", zhHant: "複製 API 權杖")) {
                             copyToPasteboard(apiToken, source: Self.apiTokenCopySource)
                         }
 
@@ -529,7 +532,8 @@ struct AdvancedSettingsView: View {
                         "API server status",
                         de: "Status des API-Servers",
                         ja: "API サーバーの状態",
-                        zh: "API 服务器状态"
+                        zh: "API 服务器状态",
+                        zhHant: "API 伺服器狀態"
                     ))
                     .accessibilityValue(serverStatus)
 
@@ -565,7 +569,8 @@ struct AdvancedSettingsView: View {
                     "Command line tool status",
                     de: "Status des Kommandozeilen-Tools",
                     ja: "コマンドラインツールの状態",
-                    zh: "命令行工具状态"
+                    zh: "命令行工具状态",
+                    zhHant: "命令列工具狀態"
                 ))
                 .accessibilityValue(cliInstalled
                     ? String(localized: "Installed at /usr/local/bin/typewhisper")
@@ -579,7 +584,8 @@ struct AdvancedSettingsView: View {
                         "Uninstall command line tool",
                         de: "Kommandozeilen-Tool deinstallieren",
                         ja: "コマンドラインツールをアンインストール",
-                        zh: "卸载命令行工具"
+                        zh: "卸载命令行工具",
+                        zhHant: "卸載命令列工具"
                     ))
                 } else {
                     HStack {
@@ -637,7 +643,7 @@ struct AdvancedSettingsView: View {
                     }
                 }
 
-                let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung", ja: "ブラウザ拡張機能", zh: "浏览器扩展")
+                let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung", ja: "ブラウザ拡張機能", zh: "浏览器扩展", zhHant: "瀏覽器擴充功能")
                 integrationRow(systemImage: "globe", title: browserExtensionTitle) {
                     HStack {
                         Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
@@ -649,10 +655,10 @@ struct AdvancedSettingsView: View {
                     }
                 }
 
-                let companionAppTitle = localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App", ja: "iPhone・iPad アプリ", zh: "iPhone 和 iPad App")
+                let companionAppTitle = localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App", ja: "iPhone・iPad アプリ", zh: "iPhone 和 iPad App", zhHant: "iPhone 和 iPad App")
                 integrationRow(systemImage: "iphone", title: companionAppTitle) {
                     HStack {
-                        Button(localizedAppText("Show", de: "Anzeigen", ja: "表示", zh: "显示")) {
+                        Button(localizedAppText("Show", de: "Anzeigen", ja: "表示", zh: "显示", zhHant: "顯示")) {
                             IOSCompanionPromoCoordinator.shared.requestManualPresentation()
                         }
                         .accessibilityLabel(localizedAppText(
@@ -660,6 +666,7 @@ struct AdvancedSettingsView: View {
                             de: "Anzeigen: \(companionAppTitle)",
                             ja: "\(companionAppTitle)を表示",
                             zh: "显示\(companionAppTitle)",
+                            zhHant: "顯示\(companionAppTitle)",
                             es: "Mostrar \(companionAppTitle)"
                         ))
 
@@ -750,6 +757,7 @@ struct AdvancedSettingsView: View {
             de: "Mehr erfahren: \(title)",
             ja: "\(title)の詳細を見る",
             zh: "进一步了解\(title)",
+            zhHant: "進一步瞭解\(title)",
             es: "Más información sobre \(title)"
         )
     }
@@ -778,7 +786,7 @@ struct AdvancedSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             if viewModel.requiresAuthentication {
                 exampleRow(
-                    localizedAppText("Read the API token:", de: "API-Token auslesen:", ja: "API トークンを読み取る:", zh: "读取 API 令牌："),
+                    localizedAppText("Read the API token:", de: "API-Token auslesen:", ja: "API トークンを読み取る:", zh: "读取 API 令牌：", zhHant: "讀取 API 權杖："),
                     "export TYPEWHISPER_API_TOKEN=\"$(jq -r .token \"\(apiDiscoveryFilePath)\")\""
                 )
                 Divider()
@@ -833,6 +841,7 @@ struct AdvancedSettingsView: View {
             de: "Befehl „\(name)“ kopieren",
             ja: "「\(name)」のコマンドをコピー",
             zh: "复制“\(name)”命令",
+            zhHant: "複製「\(name)」命令",
             es: "Copiar el comando \(name)"
         )
     }
@@ -997,7 +1006,8 @@ struct AdvancedSettingsView: View {
                 "History: %d skipped (the existing history could not be read)",
                 de: "Verlauf: %d übersprungen (der vorhandene Verlauf konnte nicht gelesen werden)",
                 ja: "履歴: %d件をスキップ（既存の履歴を読み込めませんでした）",
-                zh: "历史记录：已跳过 %d 条（无法读取现有历史记录）"
+                zh: "历史记录：已跳过 %d 条（无法读取现有历史记录）",
+                zhHant: "歷史記錄：已跳過 %d 條（無法讀取現有歷史記錄）"
             ), result.historySkippedUnreadableDestination))
         }
         if result.historySkippedAsDuplicate > 0 {
@@ -1005,7 +1015,8 @@ struct AdvancedSettingsView: View {
                 "History: %d skipped (already present)",
                 de: "Verlauf: %d übersprungen (bereits vorhanden)",
                 ja: "履歴: %d件をスキップ（登録済み）",
-                zh: "历史记录：已跳过 %d 条（已存在）"
+                zh: "历史记录：已跳过 %d 条（已存在）",
+                zhHant: "歷史記錄：已跳過 %d 條（已存在）"
             ), result.historySkippedAsDuplicate))
         }
         if result.updateChannelApplied {
@@ -1023,7 +1034,8 @@ struct AdvancedSettingsView: View {
             "%@: %d updated, %d skipped (already present)",
             de: "%@: %d aktualisiert, %d übersprungen (bereits vorhanden)",
             ja: "%@: %d件を更新、%d件をスキップ（登録済み）",
-            zh: "%@：已更新 %d 个，跳过 %d 个（已存在）"
+            zh: "%@：已更新 %d 个，跳过 %d 个（已存在）",
+            zhHant: "%@：已更新 %d 個，跳過 %d 個（已存在）"
         ), category, updated, skipped))
     }
 
@@ -1190,13 +1202,14 @@ struct SettingsInfoButton: View {
 
     private var infoAccessibilityLabel: String {
         guard let topic = topic?.trimmingCharacters(in: .whitespacesAndNewlines), !topic.isEmpty else {
-            return localizedAppText("More information", de: "Weitere Informationen", ja: "詳細情報", zh: "更多信息")
+            return localizedAppText("More information", de: "Weitere Informationen", ja: "詳細情報", zh: "更多信息", zhHant: "更多資訊")
         }
         return localizedAppText(
             "More information about \(topic)",
             de: "Weitere Informationen zu \(topic)",
             ja: "\(topic)の詳細情報",
             zh: "关于“\(topic)”的更多信息",
+            zhHant: "關於「\(topic)」的更多資訊",
             es: "Más información sobre \(topic)"
         )
     }

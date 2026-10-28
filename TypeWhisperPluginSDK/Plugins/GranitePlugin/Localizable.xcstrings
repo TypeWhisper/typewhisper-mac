@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "下载并加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入 %@"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "错误"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "隐藏 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入 %@"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已載入"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "正在加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入 %@"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 Hugging Face 權杖"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "保存 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 Hugging Face 權杖"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "卸载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載 %@"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅私有或受限模型需要令牌。令牌仅用于此次导入，不会保存。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅私有或受限模型需要權杖。權杖僅用於此次匯入，不會儲存。"
           }
         }
       }
@@ -363,6 +435,12 @@
             "state": "translated",
             "value": "添加与此插件兼容的语音识别模型。导入完成前会检查并加载模型。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增與此外掛相容的語音辨識模型。匯入完成前會檢查並載入模型。"
+          }
         }
       }
     },
@@ -390,6 +468,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "“自动卸载模型”已设为“立即”。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動卸載模型」已設為「立即」。"
           }
         }
       }
@@ -419,6 +503,12 @@
             "state": "translated",
             "value": "Canary 需要明确指定源语言。使用 Sophea 时，请在听写设置中选择希腊语或英语。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canary 需要明確指定來源語言。使用 Sophea 時，請在聽寫設定中選擇希臘語或英語。"
+          }
         }
       }
     },
@@ -443,6 +533,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "取消"
@@ -475,6 +571,12 @@
             "state": "translated",
             "value": "正在取消…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在取消…"
+          }
         }
       }
     },
@@ -502,6 +604,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在检查模型兼容性…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在檢查模型相容性…"
           }
         }
       }
@@ -531,6 +639,12 @@
             "state": "translated",
             "value": "选择文件夹…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇資料夾…"
+          }
         }
       }
     },
@@ -559,6 +673,12 @@
             "state": "translated",
             "value": "选择包含 config.json、分词器文件和权重的文件夹。TypeWhisper 会保存副本，不会修改原始文件。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇包含 config.json、分詞器檔案和權重的資料夾。TypeWhisper 會儲存副本，不會修改原始檔案。"
+          }
         }
       }
     },
@@ -583,6 +703,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "完成"
@@ -615,6 +741,12 @@
             "state": "translated",
             "value": "下载并加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入"
+          }
         }
       }
     },
@@ -642,6 +774,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 模型网址"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 模型網址"
           }
         }
       }
@@ -671,6 +809,12 @@
             "state": "translated",
             "value": "Hugging Face 令牌（可选）"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖（可選）"
+          }
         }
       }
     },
@@ -698,6 +842,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HuggingFace 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFace 權杖"
           }
         }
       }
@@ -727,6 +877,12 @@
             "state": "translated",
             "value": "导入"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入"
+          }
         }
       }
     },
@@ -754,6 +910,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "导入模型…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入模型…"
           }
         }
       }
@@ -783,6 +945,12 @@
             "state": "translated",
             "value": "导入语音识别模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入語音辨識模型"
+          }
         }
       }
     },
@@ -810,6 +978,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已导入并加载：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已匯入並載入：%@"
           }
         }
       }
@@ -839,6 +1013,12 @@
             "state": "translated",
             "value": "已导入的模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已匯入的模型"
+          }
         }
       }
     },
@@ -866,6 +1046,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在使用 %@ 导入并加载…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用 %@ 匯入並載入…"
           }
         }
       }
@@ -895,6 +1081,12 @@
             "state": "translated",
             "value": "无效的 HuggingFace 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 HuggingFace 權杖"
+          }
         }
       }
     },
@@ -922,6 +1114,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入"
           }
         }
       }
@@ -951,6 +1149,12 @@
             "state": "translated",
             "value": "按需加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需載入"
+          }
         }
       }
     },
@@ -979,6 +1183,12 @@
             "state": "translated",
             "value": "本地文件夹"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本機資料夾"
+          }
         }
       }
     },
@@ -1003,6 +1213,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -1035,6 +1251,12 @@
             "state": "translated",
             "value": "未选择文件夹"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未選擇資料夾"
+          }
         }
       }
     },
@@ -1063,6 +1285,12 @@
             "state": "translated",
             "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選。提高下載速率限制。在 huggingface.co/settings/tokens 免費取得。"
+          }
         }
       }
     },
@@ -1087,6 +1315,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -1119,6 +1353,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -1147,6 +1387,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "来源"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "來源"
           }
         }
       }
@@ -1177,6 +1423,12 @@
             "state": "translated",
             "value": "此插件不支持该模型架构。请打开兼容插件的设置进行导入。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此外掛不支援該模型架構。請開啟相容外掛的設定進行匯入。"
+          }
         }
       }
     },
@@ -1204,6 +1456,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "卸载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載"
           }
         }
       }
@@ -1233,6 +1491,12 @@
             "state": "translated",
             "value": "有效的 HuggingFace 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 HuggingFace 權杖"
+          }
         }
       }
     },
@@ -1260,6 +1524,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在验证令牌..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在驗證權杖..."
           }
         }
       }
@@ -1289,6 +1559,12 @@
             "state": "translated",
             "value": "你可以在听写设置中选择引擎，在集成中管理模型。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你可以在聽寫設定中選擇引擎，在整合中管理模型。"
+          }
         }
       }
     },
@@ -1316,6 +1592,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "IBM 本地语音转文字和翻译，基于 Apple Silicon 上的 MLX。Granite 5.0 TurboCTC 可转写 7 种语言并添加标点；Granite 5.0 2B 还支持翻译。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IBM 本機語音轉文字和翻譯，基於 Apple Silicon 上的 MLX。Granite 5.0 TurboCTC 可轉錄 7 種語言並新增標點；Granite 5.0 2B 還支援翻譯。"
           }
         }
       }
@@ -1345,6 +1627,12 @@
             "state": "translated",
             "value": "速度最快。支持 7 种语言，带标点和大小写。不支持翻译和词典词条。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度最快。支援 7 種語言，帶標點和大小寫。不支援翻譯和詞典詞條。"
+          }
         }
       }
     },
@@ -1373,6 +1661,12 @@
             "state": "translated",
             "value": "支持翻译和词典词条。支持 6 种语言，带标点和大小写。速度较慢。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支援翻譯和詞典詞條。支援 6 種語言，帶標點和大小寫。速度較慢。"
+          }
         }
       }
     },
@@ -1400,6 +1694,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "旧版模型。输出多为小写，标点较少。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "舊版模型。輸出多為小寫，標點較少。"
           }
         }
       }

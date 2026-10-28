@@ -55,14 +55,15 @@ enum AppStoreInputAccess {
                 "Device Control and Data Access",
                 de: "Gerätesteuerung und Datenzugriff",
                 ja: "デバイスの制御とデータへのアクセス",
-                zh: "设备控制和数据访问"
+                zh: "设备控制和数据访问",
+                zhHant: "裝置控制和資料存取"
             )
         }
-        return localizedAppText("Accessibility", de: "Bedienungshilfen", ja: "アクセシビリティ", zh: "辅助功能")
+        return localizedAppText("Accessibility", de: "Bedienungshilfen", ja: "アクセシビリティ", zh: "辅助功能", zhHant: "輔助使用")
     }
 
     static var listenEventSettingsName: String {
-        localizedAppText("Input Monitoring", de: "Eingabeüberwachung", ja: "入力監視", zh: "输入监控")
+        localizedAppText("Input Monitoring", de: "Eingabeüberwachung", ja: "入力監視", zh: "输入监控", zhHant: "輸入監控")
     }
 
     /// Feedback after text was copied instead of pasted.
@@ -71,6 +72,7 @@ enum AppStoreInputAccess {
             return localizedAppText(
                 "Copied to clipboard. Press ⌘V to paste, or allow TypeWhisper under \u{201C}\(postEventSettingsName)\u{201D} to paste automatically.",
                 de: "In die Zwischenablage kopiert. Füge den Text mit ⌘V ein oder erlaube TypeWhisper unter „\(postEventSettingsName)“, um automatisch einzufügen.",
+                zhHant: "已複製到剪貼簿。按 ⌘V 貼上，或在「\(postEventSettingsName)」中允許 TypeWhisper 以自動貼上。",
                 es: "Copiado en el portapapeles. Presiona ⌘V para pegar o permite TypeWhisper en “\(postEventSettingsName)” para pegar automáticamente."
             )
         }

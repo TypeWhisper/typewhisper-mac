@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Verify the translations in the bundled string catalogs.
 
-Every key needs a non-empty Simplified Chinese and Spanish value, including each plural
-variation. Every translation, in any language, has to use the format specifiers of its
+Every key needs a non-empty Simplified Chinese, Traditional Chinese and Spanish value,
+including each plural variation. Every translation, in any language, has to use the format specifiers of its
 English text: a missing or different specifier drops an argument or crashes when the
 string is formatted. Keys marked "shouldTranslate": false are skipped.
 """
@@ -18,7 +18,7 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-REQUIRED_LANGUAGES = ("zh-Hans", "es")
+REQUIRED_LANGUAGES = ("zh-Hans", "zh-Hant", "es")
 SOURCE_LANGUAGE = "en"
 
 # printf-style specifiers as Foundation reads them, e.g. %@, %lld, %1$@, %.1f, %%.

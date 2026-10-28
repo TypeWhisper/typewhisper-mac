@@ -146,6 +146,7 @@ struct SpeakerRecordingRow: View {
                 de: "Schritt \(step) von 2: \(stepTitle)",
                 ja: "ステップ \(step)/2: \(stepTitle)",
                 zh: "第 \(step) 步，共 2 步：\(stepTitle)",
+                zhHant: "第 \(step) 步，共 2 步：\(stepTitle)",
                 es: "Paso \(step) de 2: \(stepTitle)"
             )]
             if let fraction {
@@ -428,6 +429,7 @@ struct SpeakerPersonCard: View {
                             de: "\(profile.name) umbenennen",
                             ja: "\(profile.name)の名前を変更",
                             zh: "重命名\(profile.name)",
+                            zhHant: "重新命名\(profile.name)",
                             es: "Renombrar \(profile.name)"
                         ))
                     Text(String.localizedStringWithFormat(
@@ -462,6 +464,7 @@ struct SpeakerPersonCard: View {
                     de: "Sprecherprofil von \(profile.name) löschen",
                     ja: "\(profile.name)の声のプロフィールを削除",
                     zh: "删除\(profile.name)的声音档案",
+                    zhHant: "刪除\(profile.name)的聲音檔案",
                     es: "Eliminar el perfil de voz de \(profile.name)"
                 ))
             }
@@ -489,7 +492,7 @@ struct SpeakerPersonCard: View {
                         .buttonStyle(.plain)
                         // The magnifier badge on the waveform marks a suggested, unconfirmed match.
                         .accessibilityValue(appearance.isSuggestion
-                            ? localizedAppText("Suggested", de: "Vorgeschlagen", ja: "提案", zh: "建议")
+                            ? localizedAppText("Suggested", de: "Vorgeschlagen", ja: "提案", zh: "建议", zhHant: "建議")
                             : "")
                     }
                     if appearances.count > Self.shownRecordings {

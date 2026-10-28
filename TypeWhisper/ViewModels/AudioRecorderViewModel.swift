@@ -934,7 +934,8 @@ final class AudioRecorderViewModel: ObservableObject {
             "Recorder started",
             de: "Recorder gestartet",
             ja: "レコーダーを開始しました",
-            zh: "录音器已开始"
+            zh: "录音器已开始",
+            zhHant: "錄音器已開始"
         ))
 
         if let apiSessionID {
@@ -983,13 +984,15 @@ final class AudioRecorderViewModel: ObservableObject {
                 "Recorder stopped, transcribing",
                 de: "Recorder gestoppt, wird transkribiert",
                 ja: "レコーダーを停止しました。文字起こし中",
-                zh: "录音器已停止，正在转录"
+                zh: "录音器已停止，正在转录",
+                zhHant: "錄音器已停止，正在轉錄"
             )
             : localizedAppText(
                 "Recorder stopped",
                 de: "Recorder gestoppt",
                 ja: "レコーダーを停止しました",
-                zh: "录音器已停止"
+                zh: "录音器已停止",
+                zhHant: "錄音器已停止"
             ))
 
         Task {
@@ -1723,7 +1726,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 "Recorder transcript saved",
                 de: "Recorder-Transkript gespeichert",
                 ja: "レコーダーの文字起こしを保存しました",
-                zh: "录音器转录已保存"
+                zh: "录音器转录已保存",
+                zhHant: "錄音器轉錄已儲存"
             ))
         }
 

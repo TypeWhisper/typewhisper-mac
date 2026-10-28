@@ -68,7 +68,8 @@ struct AudioRecorderView: View {
                             "Recording time",
                             de: "Aufnahmezeit",
                             ja: "録音時間",
-                            zh: "录音时长"
+                            zh: "录音时长",
+                            zhHant: "錄音時長"
                         ))
                         .accessibilityValue(recorderSpokenDuration(viewModel.duration))
                         .accessibilityAddTraits(.updatesFrequently)
@@ -141,6 +142,7 @@ struct AudioRecorderView: View {
                             de: "Warnung: \(warning)",
                             ja: "警告: \(warning)",
                             zh: "警告：\(warning)",
+                            zhHant: "警告：\(warning)",
                             es: "Advertencia: \(warning)"
                         ))
                 }
@@ -421,9 +423,9 @@ struct AudioRecorderView: View {
     private var recorderStateDescription: String {
         switch viewModel.state {
         case .idle:
-            localizedAppText("Stopped", de: "Gestoppt", ja: "停止中", zh: "已停止")
+            localizedAppText("Stopped", de: "Gestoppt", ja: "停止中", zh: "已停止", zhHant: "已停止")
         case .recording:
-            localizedAppText("Recording", de: "Aufnahme läuft", ja: "録音中", zh: "正在录音")
+            localizedAppText("Recording", de: "Aufnahme läuft", ja: "録音中", zh: "正在录音", zhHant: "正在錄音")
         case .finalizing:
             String(localized: "recorder.transcribing")
         }
@@ -491,6 +493,7 @@ private struct LevelMeterRow: View {
             de: "Eingangspegel \(label)",
             ja: "\(label)の入力レベル",
             zh: "\(label)输入电平",
+            zhHant: "\(label)輸入電平",
             es: "Nivel de entrada de \(label)"
         ))
         .accessibilityValue(accessibilityLevelValue)
@@ -505,11 +508,11 @@ private struct LevelMeterRow: View {
     private var accessibilityLevelValue: String {
         let band: String
         if level > 0.7 {
-            band = localizedAppText("High", de: "Hoch", ja: "高", zh: "高")
+            band = localizedAppText("High", de: "Hoch", ja: "高", zh: "高", zhHant: "高")
         } else if level > 0.4 {
-            band = localizedAppText("Medium", de: "Mittel", ja: "中", zh: "中")
+            band = localizedAppText("Medium", de: "Mittel", ja: "中", zh: "中", zhHant: "中")
         } else {
-            band = localizedAppText("Low", de: "Niedrig", ja: "低", zh: "低")
+            band = localizedAppText("Low", de: "Niedrig", ja: "低", zh: "低", zhHant: "低")
         }
         let percent = Double(normalizedLevel).formatted(
             .percent.precision(.fractionLength(0)).locale(Locale(identifier: preferredAppLanguageCode()))
@@ -604,6 +607,7 @@ private struct RecordingRow: View {
                                 de: "Dauer \(recorderSpokenDuration(item.duration))",
                                 ja: "長さ \(recorderSpokenDuration(item.duration))",
                                 zh: "时长 \(recorderSpokenDuration(item.duration))",
+                                zhHant: "時長 \(recorderSpokenDuration(item.duration))",
                                 es: "Duración \(recorderSpokenDuration(item.duration))"
                             ))
                         Label(viewModel.formattedFileSize(item.fileSize), systemImage: "doc")
@@ -638,6 +642,7 @@ private struct RecordingRow: View {
                                 de: "Transkript von \(item.fileName) ausblenden",
                                 ja: "\(item.fileName)の文字起こしを非表示",
                                 zh: "隐藏\(item.fileName)的转录",
+                                zhHant: "隱藏\(item.fileName)的轉錄",
                                 es: "Ocultar la transcripción de \(item.fileName)"
                             )
                             : localizedAppText(
@@ -645,6 +650,7 @@ private struct RecordingRow: View {
                                 de: "Transkript von \(item.fileName) anzeigen",
                                 ja: "\(item.fileName)の文字起こしを表示",
                                 zh: "显示\(item.fileName)的转录",
+                                zhHant: "顯示\(item.fileName)的轉錄",
                                 es: "Mostrar la transcripción de \(item.fileName)"
                             ))
 
@@ -661,6 +667,7 @@ private struct RecordingRow: View {
                             de: "Transkript von \(item.fileName) kopieren",
                             ja: "\(item.fileName)の文字起こしをコピー",
                             zh: "复制\(item.fileName)的转录",
+                            zhHant: "複製\(item.fileName)的轉錄",
                             es: "Copiar la transcripción de \(item.fileName)"
                         ))
                         .accessibilityIdentifier("recorder.recording.copyTranscript")
@@ -716,6 +723,7 @@ private struct RecordingRow: View {
                             de: "\(item.fileName) erneut transkribieren",
                             ja: "\(item.fileName)を再文字起こし",
                             zh: "重新转录\(item.fileName)",
+                            zhHant: "重新轉錄\(item.fileName)",
                             es: "Volver a transcribir \(item.fileName)"
                         ))
                     }
@@ -733,6 +741,7 @@ private struct RecordingRow: View {
                         de: "\(item.fileName) im Finder anzeigen",
                         ja: "\(item.fileName)をFinderで表示",
                         zh: "在访达中显示\(item.fileName)",
+                        zhHant: "在訪達中顯示\(item.fileName)",
                         es: "Mostrar \(item.fileName) en el Finder"
                     ))
 
@@ -750,6 +759,7 @@ private struct RecordingRow: View {
                         de: "\(item.fileName) löschen",
                         ja: "\(item.fileName)を削除",
                         zh: "删除\(item.fileName)",
+                        zhHant: "刪除\(item.fileName)",
                         es: "Eliminar \(item.fileName)"
                     ))
                 }
