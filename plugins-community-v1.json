@@ -4588,6 +4588,35 @@
           "downloadCount": 4
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.local-llm-llamacpp",
+      "name": "Local LLM (llama.cpp)",
+      "author": "TypeWhisper",
+      "description": "Run GGUF models on your Mac with llama.cpp and Metal: Gemma 4, Qwen3.5, LFM2.5, any single-file GGUF model from Hugging Face, or your own .gguf file. No API key required.",
+      "category": "llm",
+      "downloadCount": 0,
+      "descriptions": {
+        "de": "F\u00fchrt GGUF-Modelle mit llama.cpp und Metal auf dem Mac aus: Gemma 4, Qwen3.5, LFM2.5, jedes GGUF-Modell aus einer einzelnen Datei von Hugging Face oder eine eigene .gguf-Datei. Kein API-Key erforderlich.",
+        "es": "Ejecuta modelos GGUF en tu Mac con llama.cpp y Metal: Gemma 4, Qwen3.5, LFM2.5, cualquier modelo GGUF de un solo archivo de Hugging Face o tu propio archivo .gguf. No necesita clave de API.",
+        "ja": "llama.cpp\u3068Metal\u3067GGUF\u30e2\u30c7\u30eb\u3092Mac\u4e0a\u3067\u5b9f\u884c\u3057\u307e\u3059\u3002Gemma 4\u3001Qwen3.5\u3001LFM2.5\u3001Hugging Face\u306e\u5358\u4e00\u30d5\u30a1\u30a4\u30eb\u306eGGUF\u30e2\u30c7\u30eb\u3001\u307e\u305f\u306f\u72ec\u81ea\u306e.gguf\u30d5\u30a1\u30a4\u30eb\u306b\u5bfe\u5fdc\u3002API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
+      },
+      "iconSystemName": "cpu.fill",
+      "detailsURL": "https://www.typewhisper.com/addons/local-llm-llamacpp/",
+      "locality": "local",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 1298002,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-local-llm-llamacpp-v1.0.0/LlamaCppPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ]
     }
   ]
 }
