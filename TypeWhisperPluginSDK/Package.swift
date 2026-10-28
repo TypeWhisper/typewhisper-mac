@@ -240,6 +240,19 @@ let package = Package(
             ]
         ),
         .target(
+            name: "LlamaCppPlugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+            ],
+            path: "Plugins/LlamaCppPlugin",
+            exclude: ["README.md", "Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "FillerWordsPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/FillerWordsPlugin",
@@ -661,6 +674,15 @@ let package = Package(
                 "CohereLocalPlugin",
             ],
             path: "Plugins/CohereLocalPlugin/Tests"
+        ),
+        .testTarget(
+            name: "LlamaCppPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "LlamaCppPlugin",
+            ],
+            path: "Plugins/LlamaCppPlugin/Tests"
         ),
         .testTarget(
             name: "SpeechAnalyzerPluginTests",

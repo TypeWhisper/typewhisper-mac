@@ -1724,6 +1724,7 @@ private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.groq": "groq",
     "com.typewhisper.linear": "linear",
     "com.typewhisper.livetranscript": "live-transcript",
+    "com.typewhisper.local-llm-llamacpp": "local-llm-llamacpp",
     "com.typewhisper.local-llm-mlx": "local-llm-mlx",
     "com.typewhisper.meta": "meta",
     "com.typewhisper.microsoft-ai": "microsoft-ai",

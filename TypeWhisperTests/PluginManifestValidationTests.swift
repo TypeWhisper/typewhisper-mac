@@ -61,7 +61,8 @@ final class PluginManifestValidationTests: XCTestCase {
             "com.typewhisper.canary": .local, "com.typewhisper.cohere-transcribe": .local,
             "com.typewhisper.filler-words": .local, "com.typewhisper.gigaam": .local, "com.typewhisper.granite": .local,
             "com.typewhisper.language-detection": .local,
-            "com.typewhisper.livetranscript": .local, "com.typewhisper.local-llm-mlx": .local,
+            "com.typewhisper.livetranscript": .local, "com.typewhisper.local-llm-llamacpp": .local,
+            "com.typewhisper.local-llm-mlx": .local,
             "com.typewhisper.memory.file": .local, "com.typewhisper.parakeet": .local,
             "com.typewhisper.qwen3": .local, "com.typewhisper.speaker-diarization": .local,
             "com.typewhisper.speechanalyzer": .local, "com.typewhisper.tts.supertonic": .local,
@@ -90,7 +91,7 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testPluginsThatDownloadModelsRequireTheHostWithTheDownloadPolicy() throws {
         let downloaders = [
-            "CanaryPlugin", "CohereLocalPlugin", "GigaAMPlugin", "GranitePlugin", "LocalLLMPlugin", "ParakeetPlugin",
+            "CanaryPlugin", "CohereLocalPlugin", "GigaAMPlugin", "GranitePlugin", "LlamaCppPlugin", "LocalLLMPlugin", "ParakeetPlugin",
             "Qwen3Plugin", "SpeechAnalyzerPlugin", "SupertonicPlugin", "VoxtralPlugin", "WhisperKitPlugin",
         ]
         for directory in downloaders {
