@@ -71,6 +71,10 @@ final class MeetingLinkParserTests: XCTestCase {
             parser.parse(text: "https://meet.google.com/lookup/Weekly-Planning?hs=122").first,
             CalendarMeetingCanonicalLink(provider: .googleMeet, identity: "lookup/weekly-planning")
         )
+        XCTAssertEqual(
+            parser.parse(text: "https://meet.google.com/meet/FPK-vsmc-dju?ijlm=1761596000&hs=187").first,
+            CalendarMeetingCanonicalLink(provider: .googleMeet, identity: "fpk-vsmc-dju")
+        )
     }
 
     func testFaceTimeWebPayloadIsOrderIndependentAndDeepLinkNormalizesTarget() {
@@ -126,6 +130,7 @@ final class MeetingLinkParserTests: XCTestCase {
         https://zoom.us.evil.example/j/123
         https://teams.microsoft.com/
         https://meet.google.com/not-a-code
+        https://meet.google.com/meet/not-a-code
         javascript:https://meet.google.com/abc-defg-hij
         """
 

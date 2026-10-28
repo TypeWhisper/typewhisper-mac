@@ -207,7 +207,9 @@ struct MeetingLinkParser: Sendable {
             guard !slug.isEmpty else { return nil }
             return CalendarMeetingCanonicalLink(provider: .googleMeet, identity: "lookup/\(slug)")
         }
-        let code = normalizedIdentifier(parts[0])
+        // Google also serves calls at /meet/<code>; keep the bare code so it matches the event link.
+        let codePart = parts.count >= 2 && parts[0].lowercased() == "meet" ? parts[1] : parts[0]
+        let code = normalizedIdentifier(codePart)
         guard code.range(of: #"^[a-z]{3}-[a-z]{4}-[a-z]{3}$"#, options: .regularExpression) != nil else {
             return nil
         }
