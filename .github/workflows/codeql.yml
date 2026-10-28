@@ -49,14 +49,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -153,7 +153,7 @@ jobs:
           echo "identifier=$identifier" >> "$GITHUB_OUTPUT"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: swift
           build-mode: manual
@@ -171,7 +171,7 @@ jobs:
       # alerts in skipped files look fixed.
       - name: Perform CodeQL Analysis
         id: analyze
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:swift"
           upload: never
@@ -182,7 +182,7 @@ jobs:
         run: python3 scripts/codeql_swift_coverage.py "$SARIF_DIR/swift.sarif"
 
       - name: Upload CodeQL Swift results
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ steps.analyze.outputs.sarif-output }}/swift.sarif
           category: "/language:swift"
