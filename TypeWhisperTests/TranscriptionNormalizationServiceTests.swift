@@ -83,6 +83,31 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testLanguageFallbackAfterPolishAndUnsupportedLanguages() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defaults.set(0, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        defer { defaults.removePersistentDomain(forName: #function) }
+
+        for (text, candidates, expected) in [
+            // Polish has a parser, so English text still falls back to English.
+            ("Set the value to twenty three", ["pl", "en"], "Set the value to 23"),
+            // Polish shares "zero" with English but must not split an English decimal.
+            ("zero point five", ["pl", "en"], "0.5"),
+            ("zero point five and zero", ["pl", "en"], "0.5 and 0"),
+            // Without a parser for the first language, English must not take over.
+            ("ten soubor je důležitý", ["cs", "en"], "ten soubor je důležitý")
+        ] {
+            let result = TranscriptionNormalizationService.normalizeText(
+                text,
+                languages: candidates,
+                defaults: defaults
+            )
+            XCTAssertEqual(result, expected, "\(candidates): \(text)")
+        }
+    }
+
+    @MainActor
     func testNormalizeResultUsesLaterConfiguredLanguageCandidate() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
@@ -108,7 +133,7 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testUnsupportedHigherPriorityLanguageBlocksLaterCandidate() async throws {
+    func testPolishWordsStayUnchangedWhenEnglishIsLaterCandidate() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         defaults.set(0, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
@@ -135,7 +160,7 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testDetectedSupportedLanguageStillNormalizesWithUnsupportedCandidate() async throws {
+    func testDetectedEnglishNormalizesWithPolishCandidate() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         defer { defaults.removePersistentDomain(forName: #function) }
