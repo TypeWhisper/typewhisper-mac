@@ -164,6 +164,8 @@ struct LlamaCppSettingsView: View {
                     .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                 }
             }
+            // Validation saves the token it started with, so edits meanwhile would be lost.
+            .disabled(isValidatingToken)
 
             if isValidatingToken {
                 HStack(spacing: 4) {

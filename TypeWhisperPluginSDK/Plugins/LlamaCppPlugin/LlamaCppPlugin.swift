@@ -759,8 +759,8 @@ final class LlamaCppPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
         return model
     }
 
-    /// Copies a local GGUF file into the plugin's model folder. On APFS the copy is a clone
-    /// and takes no extra disk space.
+    /// Copies a local GGUF file into the plugin's model folder. On the same APFS volume the
+    /// copy is a clone and takes no extra disk space.
     @MainActor
     @discardableResult
     func importModelFile(_ url: URL) async throws -> LlamaCppModelDefinition {
@@ -792,17 +792,18 @@ final class LlamaCppPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
         let destination = weightsURL(for: model)
         isImportingModel = true
         defer { isImportingModel = false }
-        try await Task.detached(priority: .userInitiated) {
-            try FileManager.default.createDirectory(
-                at: destination.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try FileManager.default.copyItem(at: url, to: destination)
-            try LlamaCppVerificationMarker.write(for: destination, sha256: nil)
-        }.value
         do {
+            try await Task.detached(priority: .userInitiated) {
+                try FileManager.default.createDirectory(
+                    at: destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try FileManager.default.copyItem(at: url, to: destination)
+                try LlamaCppVerificationMarker.write(for: destination, sha256: nil)
+            }.value
             try saveCustomModel(model)
         } catch {
+            // A partial copy would block the next import of the same file under this ID.
             try? FileManager.default.removeItem(at: destination.deletingLastPathComponent())
             throw error
         }

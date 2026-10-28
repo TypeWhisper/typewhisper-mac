@@ -2073,6 +2073,34 @@
         }
       }
     },
+    "The reply was cut off at the output limit of %@ tokens, so the text is incomplete.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Antwort wurde am Ausgabelimit von %@ Tokens abgeschnitten und ist daher unvollständig."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La respuesta se cortó en el límite de salida de %@ tokens, así que el texto está incompleto."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "応答が出力上限の%@トークンで途切れたため、テキストが不完全です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回复在 %@ 个令牌的输出上限处被截断，因此文本不完整。"
+          }
+        }
+      }
+    },
     "The text is too long for the model's context window.": {
       "localizations": {
         "de": {

@@ -9,11 +9,11 @@
     ],
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Run GGUF models on your Mac with llama.cpp and Metal: Gemma 4, Qwen3.5, LFM2.5, any GGUF model from Hugging Face, or your own .gguf file. No API key required.",
+    "description": "Run GGUF models on your Mac with llama.cpp and Metal: Gemma 4, Qwen3.5, LFM2.5, any single-file GGUF model from Hugging Face, or your own .gguf file. No API key required.",
     "descriptions": {
-        "de": "Führt GGUF-Modelle mit llama.cpp und Metal auf dem Mac aus: Gemma 4, Qwen3.5, LFM2.5, jedes GGUF-Modell von Hugging Face oder eine eigene .gguf-Datei. Kein API-Key erforderlich.",
-        "es": "Ejecuta modelos GGUF en tu Mac con llama.cpp y Metal: Gemma 4, Qwen3.5, LFM2.5, cualquier modelo GGUF de Hugging Face o tu propio archivo .gguf. No necesita clave de API.",
-        "ja": "llama.cppとMetalでGGUFモデルをMac上で実行します。Gemma 4、Qwen3.5、LFM2.5、Hugging Faceの任意のGGUFモデル、または独自の.ggufファイルに対応。APIキーは不要です。"
+        "de": "Führt GGUF-Modelle mit llama.cpp und Metal auf dem Mac aus: Gemma 4, Qwen3.5, LFM2.5, jedes GGUF-Modell aus einer einzelnen Datei von Hugging Face oder eine eigene .gguf-Datei. Kein API-Key erforderlich.",
+        "es": "Ejecuta modelos GGUF en tu Mac con llama.cpp y Metal: Gemma 4, Qwen3.5, LFM2.5, cualquier modelo GGUF de un solo archivo de Hugging Face o tu propio archivo .gguf. No necesita clave de API.",
+        "ja": "llama.cppとMetalでGGUFモデルをMac上で実行します。Gemma 4、Qwen3.5、LFM2.5、Hugging Faceの単一ファイルのGGUFモデル、または独自の.ggufファイルに対応。APIキーは不要です。"
     },
     "category": "llm",
     "iconSystemName": "cpu.fill",

@@ -111,7 +111,12 @@ enum LlamaCppHuggingFaceLookup {
         let infoURL = host
             .appending(path: "api/models/\(repository)/revision")
             .appending(component: requestedRevision)
-        let info: ModelInfo = try await fetch(infoURL, repository: repository, token: token, dataFetcher: dataFetcher)
+        let info: ModelInfo = try await fetch(
+            infoURL,
+            repository: repository,
+            token: token,
+            dataFetcher: dataFetcher
+        ).value
         guard let sha = info.sha, sha.range(of: #"^[0-9a-f]{40}$"#, options: .regularExpression) != nil else {
             throw LlamaCppPluginError.huggingFaceRequestFailed(0)
         }
@@ -121,12 +126,21 @@ enum LlamaCppHuggingFaceLookup {
             resolvingAgainstBaseURL: false
         )!
         treeComponents.queryItems = [URLQueryItem(name: "recursive", value: "true")]
-        let entries: [TreeEntry] = try await fetch(
-            treeComponents.url!,
-            repository: repository,
-            token: token,
-            dataFetcher: dataFetcher
-        )
+        // The tree listing returns 1,000 entries per page and names the next page in `Link`.
+        var entries: [TreeEntry] = []
+        var nextPageURL = treeComponents.url
+        var pageCount = 0
+        while let pageURL = nextPageURL, pageCount < maximumTreePages {
+            let page: (value: [TreeEntry], response: URLResponse) = try await fetch(
+                pageURL,
+                repository: repository,
+                token: token,
+                dataFetcher: dataFetcher
+            )
+            entries += page.value
+            pageCount += 1
+            nextPageURL = nextPage(from: page.response, host: host)
+        }
 
         var models: [LlamaCppRemoteFile] = []
         var projectors: [LlamaCppRemoteFile] = []
@@ -208,12 +222,31 @@ enum LlamaCppHuggingFaceLookup {
         return models.count == 1 ? models[0].path : nil
     }
 
+    static let maximumTreePages = 50
+
+    /// The `rel="next"` URL of a paginated response, only on the Hugging Face host so the
+    /// token never goes elsewhere.
+    static func nextPage(from response: URLResponse, host: URL) -> URL? {
+        guard let link = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Link") else { return nil }
+        for part in link.split(separator: ",") {
+            let pieces = part.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard pieces.dropFirst().contains(where: { $0.replacingOccurrences(of: " ", with: "") == #"rel="next""# }),
+                  let target = pieces.first, target.hasPrefix("<"), target.hasSuffix(">"),
+                  let url = URL(string: String(target.dropFirst().dropLast())),
+                  url.scheme == host.scheme, url.host == host.host, url.port == host.port else {
+                continue
+            }
+            return url
+        }
+        return nil
+    }
+
     private static func fetch<Response: Decodable>(
         _ url: URL,
         repository: String,
         token: String?,
         dataFetcher: @Sendable (URLRequest) async throws -> (Data, URLResponse)
-    ) async throws -> Response {
+    ) async throws -> (value: Response, response: URLResponse) {
         var request = URLRequest(url: url)
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -225,7 +258,7 @@ enum LlamaCppHuggingFaceLookup {
         switch status {
         case 200:
             do {
-                return try JSONDecoder().decode(Response.self, from: data)
+                return (try JSONDecoder().decode(Response.self, from: data), response)
             } catch {
                 throw LlamaCppPluginError.huggingFaceRequestFailed(status)
             }

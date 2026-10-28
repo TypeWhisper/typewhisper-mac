@@ -166,8 +166,13 @@ final class LlamaCppServer: @unchecked Sendable {
         process.standardError = outputPipe
         outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            self?.captureOutput(text)
+            guard !data.isEmpty else {
+                // End of file: without removing the handler it fires again without pause.
+                handle.readabilityHandler = nil
+                return
+            }
+            // Lossy decoding keeps a chunk that splits a UTF-8 sequence.
+            self?.captureOutput(String(decoding: data, as: UTF8.self))
         }
         process.terminationHandler = { [weak self] exitedProcess in
             self?.handleTermination(of: exitedProcess)
@@ -220,12 +225,16 @@ final class LlamaCppServer: @unchecked Sendable {
         guard process.isRunning else { return }
 
         process.terminate()
+        // The supervisor stops the server within about five seconds. Wait off the
+        // caller, which is often the main actor, and only kill this process.
         let deadline = Date().addingTimeInterval(Self.shutdownTimeout)
-        while process.isRunning, Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        if process.isRunning {
-            kill(process.processIdentifier, SIGKILL)
+        DispatchQueue.global(qos: .utility).async {
+            while process.isRunning, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
         }
     }
 
@@ -365,6 +374,12 @@ enum LlamaCppChatClient {
             }
 
             let message: Message
+            let finishReason: String?
+
+            enum CodingKeys: String, CodingKey {
+                case message
+                case finishReason = "finish_reason"
+            }
         }
 
         let choices: [Choice]
@@ -423,7 +438,15 @@ enum LlamaCppChatClient {
             }
             throw LlamaCppPluginError.serverRequestFailed(statusCode, message)
         }
-        guard let content = try JSONDecoder().decode(Response.self, from: data).choices.first?.message.content else {
+        guard let choice = try JSONDecoder().decode(Response.self, from: data).choices.first else {
+            throw LlamaCppPluginError.emptyResponse
+        }
+        // A reply cut off at the token limit is not the finished text. Failing lets the
+        // host fall back to the original text instead of inserting a partial result.
+        if choice.finishReason == "length" {
+            throw LlamaCppPluginError.outputTruncated(maxOutputTokens)
+        }
+        guard let content = choice.message.content else {
             throw LlamaCppPluginError.emptyResponse
         }
         return content

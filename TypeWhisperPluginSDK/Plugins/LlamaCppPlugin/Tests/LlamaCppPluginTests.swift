@@ -136,6 +136,38 @@ final class LlamaCppHuggingFaceLookupTests: XCTestCase {
         XCTAssertTrue(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer hf_secret" })
     }
 
+    func testFollowsTreePagesOnTheHuggingFaceHostOnly() async throws {
+        let recorder = RequestRecorder()
+        let secondPage = "https://huggingface.co/api/models/owner/big/tree/\(Self.sha)?recursive=true&cursor=abc"
+        let result = try await LlamaCppHuggingFaceLookup.lookUp(
+            LlamaCppHuggingFaceReference(repositoryId: "owner/big"),
+            token: "hf_secret",
+            dataFetcher: { request in
+                recorder.record(request)
+                let url = request.url!
+                if url.path.contains("/revision/") {
+                    return (Data(#"{"sha":"\#(Self.sha)"}"#.utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+                }
+                let isSecondPage = url.query?.contains("cursor=abc") == true
+                let body = Self.tree([Self.file(isSecondPage ? "late-Q4_K_M.gguf" : "README.md", size: 7, lfs: isSecondPage)])
+                let headers = isSecondPage ? [:] : ["Link": "<\(secondPage)>; rel=\"next\""]
+                return (body, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!)
+            }
+        )
+        XCTAssertEqual(result.models.map(\.path), ["late-Q4_K_M.gguf"])
+        XCTAssertEqual(recorder.requests.count, 3)
+        XCTAssertEqual(recorder.requests.last?.url?.absoluteString, secondPage)
+
+        let host = URL(string: "https://huggingface.co")!
+        let foreign = HTTPURLResponse(
+            url: host,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Link": #"<https://example.com/steal?x=1>; rel="next""#]
+        )!
+        XCTAssertNil(LlamaCppHuggingFaceLookup.nextPage(from: foreign, host: host))
+    }
+
     func testPreselectionPrefersTheNamedFileAndExactQuantization() throws {
         let files = ["m-Q4_K_M.gguf", "m-IQ4_K_M_L.gguf", "m-Q4_K_M_L.gguf"].map {
             LlamaCppRemoteFile(repositoryId: "o/r", revision: Self.sha, path: $0, size: 1, sha256: Self.checksum)
@@ -278,6 +310,24 @@ final class LlamaCppServerTests: XCTestCase {
         ) { error in
             XCTAssertEqual(error as? LlamaCppPluginError, .emptyResponse)
         }
+    }
+
+    func testRejectsAnswersCutOffAtTheOutputLimit() {
+        XCTAssertThrowsError(
+            try LlamaCppChatClient.parse(
+                data: Data(#"{"choices":[{"finish_reason":"length","message":{"content":"Half a sen"}}]}"#.utf8),
+                statusCode: 200
+            )
+        ) { error in
+            XCTAssertEqual(error as? LlamaCppPluginError, .outputTruncated(LlamaCppChatClient.maxOutputTokens))
+        }
+        XCTAssertEqual(
+            try LlamaCppChatClient.parse(
+                data: Data(#"{"choices":[{"finish_reason":"stop","message":{"content":"Done."}}]}"#.utf8),
+                statusCode: 200
+            ),
+            "Done."
+        )
     }
 
     func testFinalOutputDropsReasoning() {

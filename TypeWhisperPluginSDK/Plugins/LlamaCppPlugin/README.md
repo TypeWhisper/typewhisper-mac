@@ -29,8 +29,9 @@ The settings recommend Gemma 4 E2B or E4B based on the Mac's memory.
   file. The plugin pins the file to the repository's current commit and checks size and SHA-256
   after the download. Projector files (`mmproj-*.gguf`) and models split into several files
   are not offered. Private and gated repositories need a saved Hugging Face token.
-- **File:** import a `.gguf` file. It is copied into the plugin's data folder; on APFS the copy
-  is a clone and takes no extra space. The original file stays where it is.
+- **File:** import a `.gguf` file. It is copied into the plugin's data folder; when the file is on
+  the same APFS volume, the copy is a clone and takes no extra space. The original file stays
+  where it is.
 
 Custom models are stored in `custom-models.json` in the plugin data directory.
 

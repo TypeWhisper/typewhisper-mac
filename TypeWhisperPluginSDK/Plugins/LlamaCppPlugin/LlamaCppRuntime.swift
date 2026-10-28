@@ -214,15 +214,23 @@ enum LlamaCppFileChecks {
     }
 
     /// Checks size and SHA-256 off the calling executor; multi-gigabyte models take seconds.
+    /// Cancelling the caller stops the hash, so a cancelled load writes no marker.
     static func verify(_ file: URL, expectedSize: Int64, expectedSHA256: String) async throws {
-        try await Task.detached(priority: .utility) {
+        let task = Task.detached(priority: .utility) {
+            try Task.checkCancellation()
             guard fileSize(of: file) == expectedSize else {
                 throw LlamaCppPluginError.verificationFailed(file.lastPathComponent)
             }
             guard try sha256(of: file) == expectedSHA256.lowercased() else {
                 throw LlamaCppPluginError.verificationFailed(file.lastPathComponent)
             }
-        }.value
+        }
+        try await withTaskCancellationHandler {
+            try await task.value
+            try Task.checkCancellation()
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     static func sha256(of file: URL) throws -> String {

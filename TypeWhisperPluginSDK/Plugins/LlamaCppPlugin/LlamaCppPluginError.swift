@@ -14,6 +14,7 @@ enum LlamaCppPluginError: LocalizedError, Equatable, Sendable {
     case serverRequestFailed(Int, String)
     case emptyResponse
     case inputTooLong
+    case outputTruncated(Int)
     case importedFileMissing(String)
     case notAGGUFFile
     case projectorIsNotAModel
@@ -57,6 +58,8 @@ enum LlamaCppPluginError: LocalizedError, Equatable, Sendable {
             return Self.localized("The model returned no text.")
         case .inputTooLong:
             return Self.localized("The text is too long for the model's context window.")
+        case .outputTruncated(let limit):
+            return Self.formatted("The reply was cut off at the output limit of %@ tokens, so the text is incomplete.", String(limit))
         case .importedFileMissing(let fileName):
             return Self.formatted("The imported model file %@ is missing. Remove the model and import it again.", fileName)
         case .notAGGUFFile:
