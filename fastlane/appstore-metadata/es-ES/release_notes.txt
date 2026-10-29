@@ -1,0 +1,18 @@
+TypeWhisper 1.8.1 elige el idioma correcto cuando hablas varios, te permite corregir tu último dictado en segundos y hace más fiables los flujos de trabajo integrados.
+
+• Language Detection: si eliges varios idiomas hablados y el motor solo acepta uno, como Parakeet, WhisperKit o Qwen3, TypeWhisper detecta cuál de ellos hablas. La detección se hace en tu Mac y el audio nunca sale de él. Añade el plugin en Integraciones (Apple silicon).
+• Corregir el último dictado: una opción de la barra de menús y un atajo opcional abren tu último dictado en un pequeño editor. Al guardar, se actualiza el historial y se copia el texto corregido.
+• Los dictados en Modo Alternar pueden terminar solos tras un silencio de la duración que elijas.
+• El indicador de dictado puede mostrar el modelo actual y cambiarlo desde un menú.
+• Los flujos de trabajo pueden usar el texto de la ventana en primer plano como referencia, por ejemplo para escribir los nombres como aparecen en pantalla. Desactivado por omisión.
+• Los flujos de trabajo integrados siguen mejor tu dictado: Texto limpio elimina muletillas, tartamudeos y repeticiones, Respuesta de correo se dirige directamente a la persona que nombras y Notas de reunión se mantienen en el idioma del dictado.
+• El editor de flujos de trabajo muestra primero Comportamiento y Activador, y puedes probar un borrador antes de guardarlo.
+• La app ya está disponible en español.
+• Recorder: elige la carpeta para las nuevas grabaciones y empieza la siguiente grabación mientras la anterior aún se transcribe. Las grabaciones eliminadas van a la Papelera.
+• La automatización de reuniones puede funcionar sin cuentas atrás, y los enlaces de Google Meet con el formato meet.google.com/meet/ vuelven a reconocerse.
+• Importa tus propios paquetes de términos desde un archivo JSON en Diccionario > Paquetes de términos.
+• Los números dictados en polaco se convierten en cifras, y el dictado en inglés entiende los términos de puntuación de EE. UU., las comillas dictadas y «hashtag».
+• Los dictados en chino y japonés se cuentan por caracteres para el límite «Omitir el posprocesamiento con IA».
+• GigaAM añade dictado local en ruso.
+• Premium: si compraste una licencia de TypeWhisper fuera del App Store, puedes conectarla en la página Premium.
+• Corrige un posible cierre inesperado con varios modelos MLX locales activados. TypeWhisper sigue en la barra de menús al cerrar su última ventana.

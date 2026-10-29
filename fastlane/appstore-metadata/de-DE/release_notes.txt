@@ -1,0 +1,18 @@
+TypeWhisper 1.8.1 erkennt die richtige Sprache, wenn du mehrere sprichst, lässt dich dein letztes Diktat in Sekunden korrigieren und macht die eingebauten Workflows zuverlässiger.
+
+• Language Detection: Wählst du mehrere gesprochene Sprachen und die Engine akzeptiert nur eine, etwa Parakeet, WhisperKit oder Qwen3, erkennt TypeWhisper, welche davon du sprichst. Das läuft auf deinem Mac, das Audio verlässt ihn nicht. Du findest das Plugin unter Integrationen (Apple silicon).
+• Letztes Diktat korrigieren: Ein Eintrag in der Menüleiste und ein optionaler Kurzbefehl öffnen dein letztes Diktat in einem kleinen Editor. Beim Sichern wird der Verlauf aktualisiert und der korrigierte Text kopiert.
+• Diktate im Umschaltmodus können nach einer gewählten Stille von selbst enden.
+• Die Diktat-Anzeige kann das aktuelle Modell zeigen und es über ein Menü wechseln.
+• Workflows können den Text des vorderen Fensters als Referenz nutzen, etwa damit Namen so geschrieben werden wie auf dem Bildschirm. Standardmäßig aus.
+• Die eingebauten Workflows folgen deinem Diktat genauer: Bereinigter Text entfernt Füllwörter, Stottern und Wiederholungen, die E-Mail-Antwort spricht die genannte Person direkt an, und Besprechungsnotizen bleiben in der Sprache des Diktats.
+• Der Workflow-Editor zeigt Verhalten und Trigger zuerst, und du kannst einen Entwurf vor dem Sichern ausprobieren.
+• Spanisch ist als App-Sprache verfügbar.
+• Recorder: Wähle den Ordner für neue Aufnahmen und starte die nächste Aufnahme, während die letzte noch transkribiert wird. Gelöschte Aufnahmen landen im Papierkorb.
+• Die Meeting-Automatik kann ohne Countdowns laufen, und Google-Meet-Links im Format meet.google.com/meet/ werden wieder erkannt.
+• Importiere eigene Begriff-Pakete aus einer JSON-Datei unter Wörterbuch > Begriff-Pakete.
+• Polnische Zahlwörter werden zu Ziffern, und englische Diktate verstehen amerikanische Satzzeichen-Begriffe, gesprochene Anführungszeichen und „hashtag“.
+• Chinesische und japanische Diktate werden für die Grenze „KI-Nachbearbeitung überspringen“ nach Zeichen gezählt.
+• GigaAM bringt lokales Diktat auf Russisch.
+• Premium: Hast du eine TypeWhisper-Lizenz außerhalb des App Store gekauft, kannst du sie auf der Premium-Seite verbinden.
+• Behebt einen möglichen Absturz, wenn mehrere lokale MLX-Modelle aktiviert sind. TypeWhisper läuft in der Menüleiste weiter, wenn du das letzte Fenster schließt.
