@@ -345,6 +345,23 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         XCTAssertEqual(launch(coordinator), .none)
     }
 
+    func testOverviewFloatsAboveSettingsOnlyWhileActiveAndEscapeAcknowledgesIt() throws {
+        let coordinator = WhatsNewCoordinator(defaults: defaults)
+        XCTAssertEqual(launch(coordinator), .whatsNew)
+        let controller = WhatsNewWindowController(coordinator: coordinator)
+        let window = try XCTUnwrap(controller.window)
+        controller.updateLevel(appIsActive: true)
+        XCTAssertGreaterThan(window.level.rawValue, NSWindow.Level.normal.rawValue)
+        controller.updateLevel(appIsActive: false)
+        XCTAssertEqual(window.level, .normal)
+        controller.showWindow(nil)
+
+        window.cancelOperation(nil)
+
+        XCTAssertFalse(window.isVisible)
+        XCTAssertFalse(coordinator.hasUnseenContent)
+    }
+
     func testOverviewIsManagedForDockVisibilityWhileOpen() throws {
         let coordinator = WhatsNewCoordinator(defaults: defaults)
         let controller = WhatsNewWindowController(coordinator: coordinator)
