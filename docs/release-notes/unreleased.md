@@ -1,3 +1,4 @@
 # Unreleased
 
 - Dictation: Dictating into the kitty terminal no longer ends with "No text field detected" when kitty shows the text a moment late. kitty passes typed text on to the shell, which echoes it back, so a field that has not changed yet does not mean the text went nowhere. TypeWhisper now counts the dictation as inserted there, as it already does for web inputs.
+- Parakeet: **Import Model…** in the plugin settings adds your own Parakeet TDT models converted to Core ML, from a folder or a Hugging Face repository, for example a fine-tune for one language. Raw `.mlpackage` conversions are compiled during the import. Fine-tunes that add tokens to the vocabulary, such as the Greek Parakeet v3 fine-tune, transcribe correctly. Imported models appear in the model list and can be deleted there.

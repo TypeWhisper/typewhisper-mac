@@ -157,6 +157,7 @@
 		C2300000000000000000000D /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000015 /* WhisperKit */; };
 		C2300000000000000000000E /* WhisperKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000154 /* WhisperKitPlugin.swift */; };
 		C23000000000000000000011 /* ParakeetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000157 /* ParakeetPlugin.swift */; };
+		PKIM00000000000000000003 /* ParakeetModelImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = PKIM00000000000000000001 /* ParakeetModelImport.swift */; };
 		C23000000000000000000012 /* TypeWhisperFluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000017 /* TypeWhisperFluidAudio */; };
 		C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */; };
 		C23000000000000000000010 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
@@ -420,6 +421,7 @@
 		AA00000000000000000163 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000014 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000164 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000015 /* WhisperKit */; };
 		AA00000000000000000165 /* ParakeetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000157 /* ParakeetPlugin.swift */; };
+		PKIM00000000000000000002 /* ParakeetModelImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = PKIM00000000000000000001 /* ParakeetModelImport.swift */; };
 		AA00000000000000000166 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000158 /* manifest.json */; };
 		AA00000000000000000167 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000016 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000168 /* TypeWhisperFluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000017 /* TypeWhisperFluidAudio */; };
@@ -1156,6 +1158,7 @@
 		BB00000000000000000155 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000156 /* ParakeetPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ParakeetPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000157 /* ParakeetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetPlugin.swift; sourceTree = "<group>"; };
+		PKIM00000000000000000001 /* ParakeetModelImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetModelImport.swift; sourceTree = "<group>"; };
 		BB00000000000000000158 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		C0E300000000000000000010 /* CohereLocalPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CohereLocalPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E300000000000000000011 /* CohereLocalPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereLocalPlugin.swift; sourceTree = "<group>"; };
@@ -2660,6 +2663,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000157 /* ParakeetPlugin.swift */,
+				PKIM00000000000000000001 /* ParakeetModelImport.swift */,
 				BB00000000000000000158 /* manifest.json */,
 				BB00000000000000000169 /* Localizable.xcstrings */,
 			);
@@ -5485,6 +5489,7 @@
 				9955C123AB7F4A40A50720CF /* CanaryPlugin.swift in Sources */,
 				C2300000000000000000000E /* WhisperKitPlugin.swift in Sources */,
 				C23000000000000000000011 /* ParakeetPlugin.swift in Sources */,
+				PKIM00000000000000000003 /* ParakeetModelImport.swift in Sources */,
 				C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */,
 				C23000000000000000000010 /* DeepgramPlugin.swift in Sources */,
 				C23000000000000000000003 /* LocalLLMPlugin.swift in Sources */,
@@ -5904,6 +5909,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000165 /* ParakeetPlugin.swift in Sources */,
+				PKIM00000000000000000002 /* ParakeetModelImport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

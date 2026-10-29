@@ -18,6 +18,8 @@ architecture before downloading weights. The current import providers are:
 | `granite_speech5_ctc` | Granite Speech (TurboCTC) |
 | `voxtral_realtime` | Voxtral |
 
+Parakeet imports Core ML models instead; see [Parakeet (Core ML)](#parakeet-core-ml).
+
 The files must be compatible with the plugin's MLX loader. The engine loads the
 model before accepting the import, so matching `model_type` alone does not
 establish compatibility. A failed import is removed and the previous model stays
@@ -29,8 +31,8 @@ Importing a model does not add support for a new architecture.
 Canary, including `KIEFERSA/Sophea-Canary-ASR-mlx`, is supported by the Canary ASR
 plugin. Select an explicit source language in Dictation settings: **Greek** for
 Greek Sophea audio and **English** for English audio. The Canary plugin does not
-automatically detect languages or expose translation. Core ML WhisperKit/Parakeet
-models cannot use this MLX import path. Longer Canary recordings use roughly
+automatically detect languages or expose translation. Core ML WhisperKit models
+cannot use this MLX import path. Longer Canary recordings use roughly
 20-second chunks, searching nearby low-energy pauses for boundaries.
 
 On success, the model is loaded and appears in the plugin's model list. Select the
@@ -53,11 +55,63 @@ files to the same repository commit. Repository scripts are neither downloaded
 nor executed. A repository root is required; links to branches, individual files
 or subfolders are not accepted.
 
+## Parakeet (Core ML)
+
+The Parakeet plugin imports Parakeet TDT models converted to Core ML, from a local
+folder or a Hugging Face repository. Its settings window has the same
+**Import Model…** button. A model needs no `config.json`; the plugin recognizes
+it by its files:
+
+| Part | Accepted names (`.mlmodelc` or `.mlpackage`) |
+| --- | --- |
+| Preprocessor | `Preprocessor`, `parakeet_preprocessor` |
+| Encoder | `Encoder`, `parakeet_encoder` |
+| Decoder | `Decoder`, `parakeet_decoder` |
+| Joint decision | `JointDecisionv3`, `JointDecision`, `parakeet_joint_decision_single_step` |
+| Vocabulary | `parakeet_vocab.json`, `parakeet_v3_vocab.json`, `vocab.json`, `vocab.txt` |
+
+This covers FluidAudio's layout (as in `FluidInference/parakeet-tdt-0.6b-v3-coreml`)
+and the raw output of FluidInference's mobius converter
+(`models/stt/parakeet-tdt-v3-0.6b/coreml/convert-parakeet.py`). Other files, such
+as mobius' `parakeet_mel_encoder` and `parakeet_joint`, are not copied.
+`.mlpackage` models are compiled during the import and stored under FluidAudio's
+names. The vocabulary may be a JSON object (`{"0": "<unk>", …}`), a JSON array or a
+NeMo/onnx-asr `vocab.txt` (`<piece> <id>` per line); a blank entry is dropped.
+
+mobius does not export a vocabulary. Without one, the plugin uses the stock v3 or
+v2 vocabulary when mobius' `metadata.json` reports 8,192 or 1,024 tokens (or when
+there is no `metadata.json`). Any other token count needs the model's own
+vocabulary in the folder; the import says so before compiling anything.
+
+Supported are 1,024 tokens (Parakeet TDT v2 decoding) and 8,192 tokens or more
+(v3 decoding). FluidAudio fixes the v3 blank token at ID 8,192 and primes the
+decoder with it. Fine-tunes that add tokens move their blank behind them, for
+example to 8,225 in `myned-ai/parakeet-tdt-0.6b-v3-greek`. For such models the
+plugin wraps the decoder and joint network in `MLModel` subclasses that translate
+token IDs between the model and FluidAudio: the model's blank becomes 8,192 and the
+added tokens follow it. Without this, the Greek model loads without error but
+drops and repeats characters.
+
+The import loads the model and transcribes a second of silence before it
+completes, so files that do not match FluidAudio's inputs and outputs fail the
+import and are removed. Imported models are listed after the built-in models and
+are deleted with the trash button in the Parakeet settings. The language hint
+works when the joint network has `top_k_ids`/`top_k_logits` outputs, as both
+FluidAudio's and mobius' joint decision models do.
+
 ## Plugin integration
 
 `PluginModelImportButton(importer:bundle:)` provides the shared dialog inside
 each plugin’s own settings view. It validates against that plugin’s supported
 architectures and uses the plugin bundle for its UI translations.
+
+Engines whose models have no `config.json` also adopt
+`PluginCustomModelImportInspecting`: the dialog then calls the plugin's
+`inspectImportSource(_:token:)` instead of reading `model_type`, and shows its
+`importFolderDescription` below the folder picker. The plugin passes the entries it
+needs to `PluginCustomModelStore.add(_:supportedTypes:entries:…)`, which copies or
+downloads exactly those files and Core ML model folders (`.mlmodelc`,
+`.mlpackage`) and leaves the content checks to the plugin's validation.
 
 `PluginCustomModelImporting` is an optional SDK protocol. Existing plugins need
 no changes unless they want to provide import support. New import-capable bundles
@@ -116,6 +170,17 @@ remaining Canary checks without initializing the MLX runtime. The dev app's
 Hugging Face import dialog was also exercised with the original Sophea URL
 (revision `1d0827f8f869dfad40f6b6980434cf34b1987963`): it completed with the
 "Imported and loaded" confirmation.
+
+The Parakeet import was checked with `myned-ai/parakeet-tdt-0.6b-v3-greek`
+converted by mobius (seven `.mlpackage` files, `metadata.json`, 8,225 tokens) and
+synthetic Greek speech: with its `vocab.txt` the model transcribed the sentence
+exactly, with and without the Greek language hint; without the ID translation it
+produced broken words. Without a vocabulary file the import stops with a message
+asking for one.
+
+```sh
+swift test --package-path TypeWhisperPluginSDK --filter ParakeetPluginTests.ParakeetModelImportTests
+```
 
 Granite and Voxtral were build-checked; their custom models were not run through
 inference in that validation.

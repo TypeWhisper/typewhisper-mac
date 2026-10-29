@@ -42,7 +42,7 @@ final class PluginManifestValidationTests: XCTestCase {
                 PluginSDKCompatibility.isCompatible(manifestVersion: manifest.sdkCompatibilityVersion, isBundled: false),
                 manifestURL.lastPathComponent
             )
-            let importPlugins = ["com.typewhisper.canary", "com.typewhisper.qwen3", "com.typewhisper.granite", "com.typewhisper.voxtral"]
+            let importPlugins = ["com.typewhisper.canary", "com.typewhisper.qwen3", "com.typewhisper.granite", "com.typewhisper.voxtral", "com.typewhisper.parakeet"]
             if importPlugins.contains(manifest.id) {
                 XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.modelImportVersion)
             }

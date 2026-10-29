@@ -7,6 +7,15 @@ public protocol PluginCustomModelImporting: TranscriptionEnginePlugin {
     @MainActor func importModel(_ candidate: PluginModelImportCandidate, token: String?) async throws -> PluginModelInfo
 }
 
+/// Optional capability for engines whose models have no Hugging Face `config.json`, such as
+/// Core ML conversions. The import sheet asks the plugin to inspect the source instead.
+public protocol PluginCustomModelImportInspecting: PluginCustomModelImporting {
+    /// Checks the source before any weights are downloaded and names the files to import.
+    func inspectImportSource(_ source: PluginModelImportSource, token: String?) async throws -> PluginModelImportCandidate
+    /// Shown below the folder picker: which files the folder must contain.
+    var importFolderDescription: String { get }
+}
+
 public enum PluginModelImportError: LocalizedError, Equatable {
     case invalidSource
     case invalidModel(String)
@@ -70,12 +79,49 @@ public struct PluginModelImportCandidate: Sendable {
     public let revision: String?
     let files: [String]
 
+    /// For inspections done by the plugin (`PluginCustomModelImportInspecting`). `files` lists the
+    /// repository paths a Hugging Face import may download; folder imports leave it empty.
+    public init(source: PluginModelImportSource, modelType: String, displayName: String, revision: String?, files: [String]) {
+        self.source = source
+        self.modelType = modelType
+        self.displayName = displayName
+        self.revision = revision
+        self.files = files
+    }
+
+    /// Repository paths of a Hugging Face candidate, including files inside model folders.
+    public var repositoryFiles: [String] { files }
+
+    /// The commit a Hugging Face repository is at and the paths of its files.
+    public static func huggingFaceRepositoryFiles(
+        _ repository: String,
+        token: String? = nil,
+        fetch: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await Self.fetchMetadata($0, session: .shared, limit: 4 * 1024 * 1024) }
+    ) async throws -> (revision: String, files: [String]) {
+        guard try PluginModelImportSource.huggingFaceInput(repository) == .huggingFace(repository) else {
+            throw PluginModelImportError.invalidSource
+        }
+        let (metadata, response) = try await fetch(request("https://huggingface.co/api/models/\(repository)", token: token))
+        try checkResponse(response)
+        struct Repository: Decodable {
+            struct File: Decodable { let rfilename: String }
+            let sha: String
+            let siblings: [File]
+        }
+        let repo = try JSONDecoder().decode(Repository.self, from: metadata)
+        guard repo.sha.range(of: #"^[0-9a-fA-F]{40}$"#, options: .regularExpression) != nil else {
+            throw PluginModelImportError.invalidModel("Invalid repository revision")
+        }
+        return (repo.sha, repo.siblings.map(\.rfilename))
+    }
+
     public var suggestedPluginName: String? {
         switch modelType {
         case "canary": "Canary ASR"
         case "qwen3_asr": "Qwen3 ASR"
         case "granite_speech": "Granite Speech"
         case "voxtral_realtime": "Voxtral"
+        case "parakeet_tdt_coreml": "Parakeet"
         default: nil
         }
     }
@@ -92,27 +138,14 @@ public struct PluginModelImportCandidate: Sendable {
             return Self(source: source, modelType: try modelType(config),
                         displayName: folder.lastPathComponent, revision: nil, files: [])
         case .huggingFace(let repository):
-            guard try PluginModelImportSource.huggingFaceInput(repository) == source else {
-                throw PluginModelImportError.invalidSource
-            }
-            let (metadata, response) = try await fetch(request("https://huggingface.co/api/models/\(repository)", token: token))
-            try checkResponse(response)
-            struct Repository: Decodable {
-                struct File: Decodable { let rfilename: String }
-                let sha: String
-                let siblings: [File]
-            }
-            let repo = try JSONDecoder().decode(Repository.self, from: metadata)
-            guard repo.sha.range(of: #"^[0-9a-fA-F]{40}$"#, options: .regularExpression) != nil else {
-                throw PluginModelImportError.invalidModel("Invalid repository revision")
-            }
+            let repo = try await huggingFaceRepositoryFiles(repository, token: token, fetch: fetch)
             let (config, configResponse) = try await fetch(request(
-                "https://huggingface.co/\(repository)/resolve/\(repo.sha)/config.json", token: token
+                "https://huggingface.co/\(repository)/resolve/\(repo.revision)/config.json", token: token
             ))
             try checkResponse(configResponse)
             return Self(source: source, modelType: try modelType(config),
                         displayName: repository.split(separator: "/").last.map(String.init) ?? repository,
-                        revision: repo.sha, files: repo.siblings.map(\.rfilename))
+                        revision: repo.revision, files: repo.files)
         }
     }
 
@@ -284,6 +317,79 @@ public struct PluginCustomModelStore: Sendable {
         },
         validation: @escaping @Sendable (Model) async throws -> Void = { _ in }
     ) async throws -> Model {
+        try await addModel(candidate, supportedTypes: supportedTypes, validation: validation, populate: { staging in
+            switch candidate.source {
+            case .folder(let source):
+                try copyModelFiles(from: source, to: staging)
+            case .huggingFace(let repo):
+                guard let revision = candidate.revision else { throw PluginModelImportError.invalidSource }
+                for file in candidate.files where Self.isImportableFile(file) {
+                    try await Self.downloadFile(file, repository: repo, revision: revision, into: staging,
+                                                token: token, download: download)
+                }
+            }
+        }, check: { staging in
+            let type = try PluginModelImportCandidate.modelType(PluginModelImportCandidate.readConfig(in: staging))
+            guard type == candidate.modelType, supportedTypes.contains(type) else {
+                throw PluginModelImportError.unsupportedArchitecture(type)
+            }
+            try validateFiles(in: staging, requirements: requirements)
+            return type
+        })
+    }
+
+    /// Model folders the store copies as a whole, for engines that load Core ML models.
+    public static let modelBundleExtensions: Set<String> = ["mlmodelc", "mlpackage"]
+
+    /// Imports exactly `entries`: names at the top of the model folder or repository, each a
+    /// data file or a Core ML model folder (`modelBundleExtensions`). Unlike the variant above,
+    /// no `config.json` is needed; the plugin identified the model while inspecting the source,
+    /// and `validation` loads it before the import completes.
+    public func add(
+        _ candidate: PluginModelImportCandidate,
+        supportedTypes: Set<String>,
+        entries: Set<String>,
+        token: String? = nil,
+        download: @escaping @Sendable (URLRequest) async throws -> (URL, URLResponse) = { request in
+            try await URLSession.shared.download(for: request)
+        },
+        validation: @escaping @Sendable (Model) async throws -> Void = { _ in }
+    ) async throws -> Model {
+        guard !entries.isEmpty, entries.allSatisfy(Self.isImportableEntry) else {
+            throw PluginModelImportError.invalidModel("Unsupported model files")
+        }
+        return try await addModel(candidate, supportedTypes: supportedTypes, validation: validation, populate: { staging in
+            switch candidate.source {
+            case .folder(let source):
+                for entry in entries.sorted() {
+                    try copyEntry(source.appendingPathComponent(entry), to: staging.appendingPathComponent(entry))
+                }
+            case .huggingFace(let repo):
+                guard let revision = candidate.revision else { throw PluginModelImportError.invalidSource }
+                for file in candidate.files where Self.isImportablePath(file, entries: entries) {
+                    try await Self.downloadFile(file, repository: repo, revision: revision, into: staging,
+                                                token: token, download: download)
+                }
+            }
+        }, check: { staging in
+            for entry in entries {
+                let url = staging.appendingPathComponent(entry)
+                let isBundle = Self.modelBundleExtensions.contains(url.pathExtension.lowercased())
+                guard isBundle ? Self.containsFiles(url) : (Self.regularFileSize(url) ?? 0) > 0 else {
+                    throw PluginModelImportError.invalidModel("Missing or empty \(entry)")
+                }
+            }
+            return candidate.modelType
+        })
+    }
+
+    private func addModel(
+        _ candidate: PluginModelImportCandidate,
+        supportedTypes: Set<String>,
+        validation: @escaping @Sendable (Model) async throws -> Void,
+        populate: (URL) async throws -> Void,
+        check: (URL) throws -> String
+    ) async throws -> Model {
         guard supportedTypes.contains(candidate.modelType) else {
             throw PluginModelImportError.unsupportedArchitecture(candidate.modelType)
         }
@@ -304,29 +410,10 @@ public struct PluginCustomModelStore: Sendable {
             throw PluginModelImportError.duplicate
         }
 
-        switch candidate.source {
-        case .folder(let source):
-            try copyModelFiles(from: source, to: staging)
-        case .huggingFace(let repo):
-            guard let revision = candidate.revision else { throw PluginModelImportError.invalidSource }
-            for file in candidate.files where Self.isImportableFile(file) {
-                try Task.checkCancellation()
-                let (temporary, response) = try await download(PluginModelImportCandidate.request(
-                    "https://huggingface.co/\(repo)/resolve/\(revision)/\(file)", token: token
-                ))
-                defer { try? FileManager.default.removeItem(at: temporary) }
-                try PluginModelImportCandidate.checkResponse(response)
-                try FileManager.default.moveItem(at: temporary, to: staging.appendingPathComponent(file))
-            }
-        }
+        try await populate(staging)
         try Task.checkCancellation()
-        let type = try PluginModelImportCandidate.modelType(PluginModelImportCandidate.readConfig(in: staging))
-        guard type == candidate.modelType, supportedTypes.contains(type) else {
-            throw PluginModelImportError.unsupportedArchitecture(type)
-        }
-        try validateFiles(in: staging, requirements: requirements)
-        let files = try FileManager.default.contentsOfDirectory(at: staging, includingPropertiesForKeys: [.fileSizeKey])
-        let bytes = try files.reduce(Int64(0)) { $0 + Int64(try $1.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) }
+        let type = try check(staging)
+        let bytes = Self.totalFileSize(in: staging)
         let model = Model(id: id, displayName: candidate.displayName, modelType: type,
                           origin: origin, revision: candidate.revision, bytes: bytes)
         try JSONEncoder().encode(model).write(to: staging.appendingPathComponent(Self.metadataName), options: .atomic)
@@ -354,6 +441,105 @@ public struct PluginCustomModelStore: Sendable {
             try? FileManager.default.removeItem(at: destination.appendingPathComponent(".lease"))
         }
         return model
+    }
+
+    private static func downloadFile(
+        _ file: String, repository: String, revision: String, into staging: URL, token: String?,
+        download: @Sendable (URLRequest) async throws -> (URL, URLResponse)
+    ) async throws {
+        try Task.checkCancellation()
+        let (temporary, response) = try await download(PluginModelImportCandidate.request(
+            "https://huggingface.co/\(repository)/resolve/\(revision)/\(file)", token: token
+        ))
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try PluginModelImportCandidate.checkResponse(response)
+        let destination = staging.appendingPathComponent(file)
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: temporary, to: destination)
+    }
+
+    /// A name at the top of the model: a data file or a Core ML model folder.
+    static func isImportableEntry(_ name: String) -> Bool {
+        isImportableFile(name)
+            || (isSafePathComponent(name) && modelBundleExtensions.contains((name as NSString).pathExtension.lowercased()))
+    }
+
+    /// A repository path inside one of `entries`. Paths inside a model folder may nest a few
+    /// levels (`Encoder.mlmodelc/weights/weight.bin`); every component must be a plain name.
+    static func isImportablePath(_ path: String, entries: Set<String>) -> Bool {
+        let components = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard let first = components.first, entries.contains(first), components.count <= 8,
+              components.allSatisfy(isSafePathComponent) else { return false }
+        if components.count == 1 { return isImportableFile(first) }
+        return modelBundleExtensions.contains((first as NSString).pathExtension.lowercased())
+    }
+
+    private static func isSafePathComponent(_ name: String) -> Bool {
+        !name.hasPrefix(".") && name != metadataName
+            && name.range(of: #"^[A-Za-z0-9_.-]+$"#, options: .regularExpression) != nil
+    }
+
+    /// Copies a data file, or a Core ML model folder with every regular file inside it.
+    /// Symlinked files (as in Hugging Face snapshots) are copied as the files they point to.
+    private func copyEntry(_ source: URL, to destination: URL) throws {
+        try Task.checkCancellation()
+        let resolved = source.resolvingSymlinksInPath()
+        let values = try resolved.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
+        guard Self.modelBundleExtensions.contains(source.pathExtension.lowercased()) else {
+            guard values.isRegularFile == true else {
+                throw PluginModelImportError.invalidModel("Missing \(source.lastPathComponent)")
+            }
+            try Self.copyFile(from: resolved, to: destination)
+            return
+        }
+        guard values.isDirectory == true else {
+            throw PluginModelImportError.invalidModel("Missing \(source.lastPathComponent)")
+        }
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: resolved, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: []
+        ) else { throw CocoaError(.fileReadUnknown) }
+        let base = resolved.standardizedFileURL.pathComponents.count
+        for case let item as URL in enumerator {
+            try Task.checkCancellation()
+            let relative = Array(item.standardizedFileURL.pathComponents.dropFirst(base))
+            guard !relative.isEmpty, relative.count < 8, relative.allSatisfy(Self.isSafePathComponent) else {
+                enumerator.skipDescendants()
+                continue
+            }
+            let target = relative.reduce(destination) { $0.appendingPathComponent($1) }
+            let itemValues = try item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            if itemValues.isDirectory == true, itemValues.isSymbolicLink != true {
+                try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+                continue
+            }
+            let file = item.resolvingSymlinksInPath()
+            guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
+            try Self.copyFile(from: file, to: target)
+        }
+    }
+
+    private static func containsFiles(_ folder: URL) -> Bool {
+        guard let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]) else {
+            return false
+        }
+        for case let item as URL in enumerator where (regularFileSize(item) ?? 0) > 0 { return true }
+        return false
+    }
+
+    private static func regularFileSize(_ url: URL) -> Int? {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true else { return nil }
+        return values.fileSize
+    }
+
+    static func totalFileSize(in folder: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]) else {
+            return 0
+        }
+        var bytes: Int64 = 0
+        for case let item as URL in enumerator { bytes += Int64(regularFileSize(item) ?? 0) }
+        return bytes
     }
 
     private static func isModelID(_ id: String) -> Bool {
