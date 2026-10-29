@@ -9723,14 +9723,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let outcome = try await earlyStopWebsiteDictation(
             workflowEngineId: "mock-live-dictation",
             transcriptionDeadline: 0.3,
-            configurePlugin: { $0.sessionCreationStall = 2.0 },
+            // Long enough that dictation finishes first even on a slow CI runner, where
+            // post-processing alone took about 1.8 s and a 2 s stall ended too early.
+            configurePlugin: { $0.sessionCreationStall = 6.0 },
             afterFinish: { plugin in
                 // Dictation finished while session creation was still stalled, so the
                 // stop path did not wait for it.
                 XCTAssertEqual(plugin.liveSessionCancelCount, 0)
                 // The stalled session opens after the deadline; it must be closed
                 // without receiving audio.
-                for _ in 0..<120 where plugin.liveSessionCancelCount == 0 {
+                let deadline = Date().addingTimeInterval(10)
+                while plugin.liveSessionCancelCount == 0, Date() < deadline {
                     try await Task.sleep(for: .milliseconds(25))
                 }
                 XCTAssertEqual(plugin.liveSessionCancelCount, 1)
