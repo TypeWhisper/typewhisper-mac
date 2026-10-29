@@ -6744,6 +6744,43 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testUnchangedInputProxyDoesNotReportMissedTextField() async throws {
+        // kitty exposes its terminal as a text area whose value can be set but that takes no
+        // text at the caret. The pasted text appears only after the shell echoes it (#1793).
+        for acceptsTextAtCaret in [false, true] {
+            let service = TextInsertionService()
+            let field = AXUIElementCreateApplication(1)
+            let window = AXUIElementCreateApplication(2)
+            let pasteboard = NSPasteboard.withUniqueName()
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.captureActiveAppOverride = { ("Editor", "com.example.editor", nil) }
+            service.focusedTextElementOverride = { field }
+            service.accessibilityRoleOverride = { $0 == field ? "AXTextArea" : "AXWindow" }
+            service.accessibilityParentOverride = { $0 == field ? window : nil }
+            service.accessibilityValueSettableOverride = { _ in true }
+            service.selectedTextSettableOverride = { _ in acceptsTextAtCaret }
+            service.focusedTextStateOverride = { _ in
+                (value: "$ ", selectedText: "", selectedRange: NSRange(location: 2, length: 0))
+            }
+            service.pasteVerificationAttempts = 1
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            service.pasteSimulatorOverride = {}
+
+            let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+            let label = acceptsTextAtCaret ? "editable field" : "input proxy"
+            XCTAssertEqual(
+                result,
+                .pasted(verification: .unverified(acceptsTextAtCaret ? .focusedTextUnchanged : .inputProxyUnchanged)),
+                label
+            )
+            XCTAssertEqual(result.missedTextField, acceptsTextAtCaret, label)
+            XCTAssertEqual(result.hasUnverifiableUnchangedField, !acceptsTextAtCaret, label)
+        }
+    }
+
+    @MainActor
     func testFocusedWebAreaDoesNotSuppressMissedPasteWarning() async throws {
         let service = TextInsertionService()
         let webArea = AXUIElementCreateApplication(1)
