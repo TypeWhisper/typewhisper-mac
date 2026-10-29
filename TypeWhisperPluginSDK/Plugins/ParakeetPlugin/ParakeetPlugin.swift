@@ -1731,13 +1731,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             let token = PluginHuggingFaceTokenHelper.normalizedToken(token) ?? _hfToken
             let snapshot = try await PluginModelImportCandidate.huggingFaceRepositoryFiles(repository, token: token)
             let layout = try ParakeetModelImport.layout(of: ParakeetModelImport.topLevelNames(snapshot.files))
-            if layout.vocabulary == nil {
-                // A model that needs its own vocabulary fails here, before its weights download.
-                let metadata = try await layout.converterMetadata.asyncMap { name in
-                    try await PluginModelImportCandidate.huggingFaceMetadataFile(
-                        name, repository: repository, revision: snapshot.revision, token: token
-                    )
-                }
+            // A model with a missing or unusable vocabulary fails here, before its weights download.
+            let metadata = try await layout.converterMetadata.asyncMap { name in
+                try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                    name, repository: repository, revision: snapshot.revision, token: token
+                )
+            }
+            if let name = layout.vocabulary {
+                let data = try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                    name, repository: repository, revision: snapshot.revision, token: token
+                )
+                try ParakeetModelImport.checkTokenCount(
+                    ParakeetModelImport.parseVocabulary(data, fileName: name).count,
+                    expectedSize: metadata.flatMap(ParakeetModelImport.converterVocabularySize)
+                )
+            } else {
                 try ParakeetModelImport.checkVocabulary(converterMetadata: metadata, layout: layout)
             }
             let files = snapshot.files.filter { path in
@@ -1762,6 +1770,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         isImportingModel = true
         defer { isImportingModel = false }
         let previousSelectedModelId = host?.userDefault(forKey: "selectedModel") as? String
+        let previousLoadedModelId = host?.userDefault(forKey: "loadedModel") as? String
         let previousVersion = selectedVersion
         let token = PluginHuggingFaceTokenHelper.normalizedToken(token) ?? _hfToken
         // Set by the validation, which runs off this function's isolation: the imported model, and
@@ -1800,8 +1809,11 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                 _selectedModelId = previousSelectedModelId
                 host?.setUserDefault(previousSelectedModelId, forKey: "selectedModel")
                 host?.setUserDefault(previousVersion.rawValue, forKey: "selectedVersion")
+                // The import's load replaced the previous model; it loads again from its files.
+                host?.setUserDefault(previousLoadedModelId, forKey: "loadedModel")
                 if case .error = modelState { modelState = isConfigured ? .ready : .notLoaded }
                 host?.notifyCapabilitiesChanged()
+                requestPassiveRestoreOfSelection()
             }
             throw error
         }
