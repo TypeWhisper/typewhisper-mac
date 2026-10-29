@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import ParakeetPlugin
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
+@_spi(Testing) import TypeWhisperPluginSDKTesting
 
 final class ParakeetModelImportTests: XCTestCase {
     func testLayoutAcceptsMobiusConverterOutput() throws {
@@ -87,5 +88,24 @@ final class ParakeetModelImportTests: XCTestCase {
         } catch let error as PluginModelImportError {
             XCTAssertTrue(error.localizedDescription.contains("vocab.txt"), error.localizedDescription)
         }
+    }
+
+    /// An import only selects and loads its model while no newer choice was made since it began.
+    func testModelChoicesSinceAnImportBeganChangeTheGeneration() throws {
+        let host = try PluginTestHostServices(defaults: [:], shouldRestoreLoadedModelsPassively: false)
+        let plugin = ParakeetPlugin()
+        plugin.restoresModelOnActivate = false
+        plugin.asrModelLoadOverrideForTests = { _ in }
+        plugin.activate(host: host)
+        addTeardownBlock { plugin.deactivate() }
+
+        var generation = plugin.modelChoiceGeneration
+        plugin.unloadModel(clearPersistence: false)
+        XCTAssertEqual(plugin.modelChoiceGeneration, generation, "Internal unloads keep the user's choice")
+        plugin.selectModel("parakeet-tdt-0.6b-v3")
+        XCTAssertGreaterThan(plugin.modelChoiceGeneration, generation)
+        generation = plugin.modelChoiceGeneration
+        plugin.unloadModel()
+        XCTAssertGreaterThan(plugin.modelChoiceGeneration, generation)
     }
 }

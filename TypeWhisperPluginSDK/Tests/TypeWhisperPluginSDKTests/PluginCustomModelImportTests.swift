@@ -478,6 +478,25 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
     }
 
 
+    func testHuggingFaceMetadataFileIsPinnedAndOnlyForPlainPaths() async throws {
+        let revision = String(repeating: "b", count: 40)
+        let data = try await PluginModelImportCandidate.huggingFaceMetadataFile(
+            "metadata.json", repository: "owner/model", revision: revision,
+            fetch: { request in
+                XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/owner/model/resolve/\(revision)/metadata.json")
+                return (Data("{}".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            })
+        XCTAssertEqual(data, Data("{}".utf8))
+        for (path, revision) in [("../metadata.json", revision), ("metadata.json", "main"), ("model.bin", revision)] {
+            do {
+                _ = try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                    path, repository: "owner/model", revision: revision,
+                    fetch: { _ in XCTFail("Fetched \(path)"); throw CancellationError() })
+                XCTFail("Accepted \(path) at \(revision)")
+            } catch PluginModelImportError.invalidSource {}
+        }
+    }
+
     func testEntryImportCopiesModelFoldersAndOnlyTheListedEntries() async throws {
         let source = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = self.store()

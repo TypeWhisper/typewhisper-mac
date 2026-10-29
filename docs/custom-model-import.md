@@ -81,7 +81,8 @@ NeMo/onnx-asr `vocab.txt` (`<piece> <id>` per line); a blank entry is dropped.
 mobius does not export a vocabulary. Without one, the plugin uses the stock v3 or
 v2 vocabulary when mobius' `metadata.json` reports 8,192 or 1,024 tokens (or when
 there is no `metadata.json`). Any other token count needs the model's own
-vocabulary in the folder; the import says so before compiling anything.
+vocabulary next to the model files; the import says so during inspection, before
+it copies or downloads the models (for Hugging Face it reads only `metadata.json`).
 
 Supported are 1,024 tokens (Parakeet TDT v2 decoding) and 8,192 tokens or more
 (v3 decoding). FluidAudio fixes the v3 blank token at ID 8,192 and primes the
@@ -93,7 +94,9 @@ added tokens follow it. Without this, the Greek model loads without error but
 drops and repeats characters.
 
 The import loads the model and transcribes a second of silence before it
-completes, so files that do not match FluidAudio's inputs and outputs fail the
+completes. If another model was chosen or the engine was unloaded while the
+files were copied, the imported model is checked in a separate instance and the
+newer choice stays. Files that do not match FluidAudio's inputs and outputs fail the
 import and are removed. Imported models are listed after the built-in models and
 are deleted with the trash button in the Parakeet settings. The language hint
 works when the joint network has `top_k_ids`/`top_k_logits` outputs, as both

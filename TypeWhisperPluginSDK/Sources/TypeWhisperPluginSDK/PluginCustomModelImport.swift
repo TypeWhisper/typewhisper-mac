@@ -115,6 +115,24 @@ public struct PluginModelImportCandidate: Sendable {
         return (repo.sha, repo.siblings.map(\.rfilename))
     }
 
+    /// A small file of a Hugging Face repository at `revision`, read with the 4 MiB metadata limit.
+    public static func huggingFaceMetadataFile(
+        _ path: String,
+        repository: String,
+        revision: String,
+        token: String? = nil,
+        fetch: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await Self.fetchMetadata($0, session: .shared, limit: 4 * 1024 * 1024) }
+    ) async throws -> Data {
+        guard try PluginModelImportSource.huggingFaceInput(repository) == .huggingFace(repository),
+              revision.range(of: #"^[0-9a-fA-F]{40}$"#, options: .regularExpression) != nil,
+              PluginCustomModelStore.isImportablePath(path, entries: [String(path.split(separator: "/").first ?? "")]) else {
+            throw PluginModelImportError.invalidSource
+        }
+        let (data, response) = try await fetch(request("https://huggingface.co/\(repository)/resolve/\(revision)/\(path)", token: token))
+        try checkResponse(response)
+        return data
+    }
+
     public var suggestedPluginName: String? {
         switch modelType {
         case "canary": "Canary ASR"

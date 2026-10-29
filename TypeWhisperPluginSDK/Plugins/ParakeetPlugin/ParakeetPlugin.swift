@@ -165,6 +165,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// ready, with the newer selection, and fail the request it waits for.
     private var latestModelRequest: (id: Int, modelId: String, isPending: Bool)?
     private var modelRequestCount = 0
+    /// Changes with every explicit model request, transient selection and explicit unload. An
+    /// import compares it to decide whether it may still select and load the imported model.
+    private(set) var modelChoiceGeneration = 0
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -206,6 +209,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     func deactivate() {
+        modelChoiceGeneration += 1
         transientSelection.end()
         versionBeforeTransientSelection = nil
         latestModelRequest = nil
@@ -322,6 +326,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     func beginTransientModelSelection(_ modelId: String) {
         guard host != nil, let version = self.version(forModelId: modelId) else { return }
+        modelChoiceGeneration += 1
         let wasTransient = transientSelection.modelId != nil
         guard transientSelection.begin(version.modelDef.id) else { return }
         if !wasTransient {
@@ -1199,6 +1204,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     private func beginModelRequest(_ modelId: String) -> Int {
+        modelChoiceGeneration += 1
         modelRequestCount += 1
         latestModelRequest = (modelRequestCount, modelId, true)
         return modelRequestCount
@@ -1582,6 +1588,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        if clearPersistence { modelChoiceGeneration += 1 }
         modelPrewarm.cancel()
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
@@ -1724,6 +1731,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             let token = PluginHuggingFaceTokenHelper.normalizedToken(token) ?? _hfToken
             let snapshot = try await PluginModelImportCandidate.huggingFaceRepositoryFiles(repository, token: token)
             let layout = try ParakeetModelImport.layout(of: ParakeetModelImport.topLevelNames(snapshot.files))
+            if layout.vocabulary == nil, let name = layout.converterMetadata {
+                // A model that needs its own vocabulary fails here, before its weights download.
+                let metadata = try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                    name, repository: repository, revision: snapshot.revision, token: token
+                )
+                try ParakeetModelImport.checkVocabulary(converterMetadata: metadata, layout: layout)
+            }
             let files = snapshot.files.filter { path in
                 path.split(separator: "/").first.map { layout.entries.contains(String($0)) } ?? false
             }
@@ -1748,8 +1762,11 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let previousSelectedModelId = host?.userDefault(forKey: "selectedModel") as? String
         let previousVersion = selectedVersion
         let token = PluginHuggingFaceTokenHelper.normalizedToken(token) ?? _hfToken
-        // Set by the validation, which runs off this function's isolation.
+        // Set by the validation, which runs off this function's isolation: the imported model, and
+        // the generation after the validation's own load, while no newer choice superseded it.
         let importedModelId = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let ownGeneration = OSAllocatedUnfairLock<Int?>(initialState: nil)
+        let generation = modelChoiceGeneration
         do {
             let imported = try await store.add(
                 candidate, supportedTypes: supportedImportModelTypes, entries: layout.entries, token: token,
@@ -1761,25 +1778,27 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                     )
                     let version = ParakeetVersion.imported(ParakeetImportedModel(model, directory: directory, settings: settings))
                     importedModelId.withLock { $0 = model.id }
-                    try await validateImportedModel(version)
+                    try await validateImportedModel(version, generation: generation, ownGeneration: ownGeneration)
                 }
             )
             host?.notifyCapabilitiesChanged()
             return PluginModelInfo(
                 id: imported.id, displayName: imported.displayName,
-                sizeDescription: imported.sizeDescription, downloaded: true, loaded: true
+                sizeDescription: imported.sizeDescription, downloaded: true, loaded: loadedModelId == imported.id
             )
         } catch {
             let importedId = importedModelId.withLock { $0 }
+            // Only an import that changed the selection, with nothing newer since, rolls it back.
+            let ownsSelection = ownGeneration.withLock { $0 } == modelChoiceGeneration
             if let importedId, loadedModelId == importedId {
                 unloadModel(clearPersistence: true)
             }
-            if importedId != nil, host != nil {
+            if ownsSelection, host != nil {
                 selectedVersion = previousVersion
                 _selectedModelId = previousSelectedModelId
                 host?.setUserDefault(previousSelectedModelId, forKey: "selectedModel")
                 host?.setUserDefault(previousVersion.rawValue, forKey: "selectedVersion")
-                if case .error = modelState { modelState = .notLoaded }
+                if case .error = modelState { modelState = isConfigured ? .ready : .notLoaded }
                 host?.notifyCapabilitiesChanged()
             }
             throw error
@@ -1787,13 +1806,26 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     /// Loads the imported model like a model chosen in the settings and transcribes a second of
-    /// silence, so files that load but do not fit FluidAudio fail the import.
+    /// silence, so files that load but do not fit FluidAudio fail the import. When another model
+    /// was chosen or the engine unloaded since the import began (`generation`), the model is only
+    /// checked on its own and the newer choice stays. `ownGeneration` records the generation after
+    /// the import's own load, so a failed import rolls back only a selection it made itself.
     @MainActor
-    private func validateImportedModel(_ version: ParakeetVersion) async throws {
+    private func validateImportedModel(
+        _ version: ParakeetVersion,
+        generation: Int,
+        ownGeneration: OSAllocatedUnfairLock<Int?>
+    ) async throws {
         try Task.checkCancellation()
+        guard let importedModel = version.importedModel else { throw PluginModelImportError.invalidSource }
+        guard modelChoiceGeneration == generation else {
+            try await validateSeparately(importedModel)
+            return
+        }
         _selectedModelId = version.modelDef.id
         selectedVersion = version
         await loadModel(version: version)
+        ownGeneration.withLock { $0 = modelChoiceGeneration }
         try Task.checkCancellation()
         guard loadedModelId == version.modelDef.id, let asrManager else {
             if case .error(let message) = modelState {
@@ -1804,6 +1836,16 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         try await transcriptionGate.withLock { [self] in
             _ = try await runInference([Float](repeating: 0, count: 16_000), manager: asrManager, language: nil)
         }
+    }
+
+    /// Loads the imported model into its own manager and transcribes a second of silence,
+    /// leaving the loaded model and the selection unchanged.
+    private func validateSeparately(_ model: ParakeetImportedModel) async throws {
+        let models = try ParakeetModelImport.loadModels(model)
+        let manager = AsrManager(config: Self.asrConfiguration)
+        try await manager.loadModels(models)
+        try Task.checkCancellation()
+        _ = try await runInference([Float](repeating: 0, count: 16_000), manager: manager, language: nil)
     }
 
     /// The stock vocabulary for models that bring none: v3's for 8,192 tokens, v2's for 1,024.

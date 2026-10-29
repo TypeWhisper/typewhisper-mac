@@ -246,15 +246,19 @@ enum ParakeetModelImport {
 
     static func missingVocabulary(tokenCount: Int) -> PluginModelImportError {
         .invalidModel(
-            "The folder has no vocabulary, and the model's \(tokenCount) tokens match no standard Parakeet vocabulary. Add the vocabulary of the original model (vocab.txt or vocab.json) to the folder and import it again."
+            "The model has no vocabulary file, and its \(tokenCount) tokens match no standard Parakeet vocabulary. Put the vocabulary of the original model (vocab.txt or vocab.json) next to the model files and import it again."
         )
     }
 
-    /// Fails a local folder that would need a vocabulary it lacks before anything is copied.
+    /// Fails a model that would need a vocabulary it lacks before anything is copied or downloaded.
     static func checkVocabulary(in folder: URL, layout: Layout) throws {
-        guard layout.vocabulary == nil, let name = layout.converterMetadata,
-              let data = try? Data(contentsOf: folder.appendingPathComponent(name)),
-              let size = converterVocabularySize(data), !stockVocabularySizes.contains(size) else { return }
+        guard let name = layout.converterMetadata else { return }
+        try checkVocabulary(converterMetadata: try? Data(contentsOf: folder.appendingPathComponent(name)), layout: layout)
+    }
+
+    static func checkVocabulary(converterMetadata: Data?, layout: Layout) throws {
+        guard layout.vocabulary == nil, let size = converterMetadata.flatMap(converterVocabularySize),
+              !stockVocabularySizes.contains(size) else { return }
         throw missingVocabulary(tokenCount: size)
     }
 
