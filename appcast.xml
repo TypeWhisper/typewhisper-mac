@@ -5,21 +5,21 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.8.2-daily.20261029</title>
+      <pubDate>Thu, 29 Oct 2026 19:20:27 +0000</pubDate>
+      <sparkle:version>1558</sparkle:version>
+      <sparkle:shortVersionString>1.8.2-daily.20261029</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.8.2-daily.20261029/TypeWhisper-v1.8.2-daily.20261029.zip" sparkle:edSignature="/qL4GumN+4WMc1mrNMx1qV6DrwIr0iUiYOSXX0Jc/vIZgN6YDRUOcdfSRdte4wWeaqM0U7G7ff7w7i/sFAR0Cg==" length="25042747" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.8.1</title>
       <pubDate>Thu, 29 Oct 2026 10:58:04 +0000</pubDate>
       <sparkle:version>1555</sparkle:version>
       <sparkle:shortVersionString>1.8.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.8.1/TypeWhisper-v1.8.1.zip" sparkle:edSignature="qyQVBsunT3vEp+bJUbcYUNA4AGQPs/xWjZSsNn+U4aGwxS8nMZKZBw7MOwYVVXd8axooFSYLZqxLMrWS/dCDDw==" length="25015383" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.8.1-daily.20261028</title>
-      <pubDate>Wed, 28 Oct 2026 10:57:05 +0000</pubDate>
-      <sparkle:version>1549</sparkle:version>
-      <sparkle:shortVersionString>1.8.1-daily.20261028</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.8.1-daily.20261028/TypeWhisper-v1.8.1-daily.20261028.zip" sparkle:edSignature="uf0fAiad/b3jWMCHALnv9c0yTy6lPmayytpqqws9CcEHqLYfV1kFp2EJikDTKqYPfraksNiI3PMF/+0zC20DDQ==" length="25004311" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.8.1-rc2</title>
