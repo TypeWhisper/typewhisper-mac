@@ -6,7 +6,7 @@ TypeWhisper 1.8.1 sceglie la lingua giusta quando ne parli più di una, ti perme
 • L’indicatore di dettatura può mostrare il modello attuale e cambiarlo da un menu.
 • I workflow possono usare come riferimento il testo della finestra in primo piano, per esempio per scrivere i nomi come appaiono sullo schermo. Disattivato per impostazione predefinita.
 • I workflow integrati seguono meglio la tua dettatura: Cleaned Text rimuove intercalari, balbettii e ripetizioni, Email Reply si rivolge direttamente alla persona nominata e Meeting Notes restano nella lingua della dettatura.
-• L’editor dei workflow mostra prima comportamento e attivazione, e puoi provare una bozza prima di salvarla.
+• L’editor dei workflow mostra prima “Behavior” e “Trigger”, e puoi provare una bozza prima di salvarla.
 • Lo spagnolo è disponibile come lingua dell’app.
 • Recorder: scegli la cartella per le nuove registrazioni e avvia la registrazione successiva mentre la precedente viene ancora trascritta. Le registrazioni eliminate finiscono nel Cestino.
 • L’automazione delle riunioni può funzionare senza conti alla rovescia, e i link di Google Meet nel formato meet.google.com/meet/ vengono di nuovo riconosciuti.
