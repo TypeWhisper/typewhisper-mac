@@ -4775,15 +4775,23 @@ final class DictationViewModel: ObservableObject {
                     && modelManager.canUseForTranscription(engine)
                     && !modelManager.lacksDownloadedModel(engine),
                 streamsLive: engine.supportsStreaming && engine.liveTranscriptionPlugin(forModelId: nil) != nil,
-                languages: Self.livePreviewLanguages(of: engine, sessionLanguage: languageSelection.requestedLanguage)
+                languages: Self.livePreviewLanguages(
+                    of: engine,
+                    sessionLanguage: modelManager.preparationLanguage(for: languageSelection, plugin: engine)
+                )
             )
         }
-        return Self.automaticPreviewEngineId(among: candidates, previewLanguage: previewLanguage)
+        // A managed policy that enforces an engine replaces any other, so a preview engine
+        // it would replace is no alternative to the cloud engine.
+        guard let engineId = Self.automaticPreviewEngineId(among: candidates, previewLanguage: previewLanguage),
+              modelManager.effectiveEngineId(engineId) == engineId else { return nil }
+        return engineId
     }
 
     /// Apple Speech lists every locale it offers but transcribes only the loaded one. It counts
     /// only when the session keeps that locale: `sessionLanguage` is the language the session
-    /// requests, nil with automatic language selection, which keeps the loaded locale. Another
+    /// prepares (`ModelManagerService.preparationLanguage`), nil with automatic language
+    /// selection, which keeps the loaded locale. Another
     /// one, such as en-GB with en-US loaded, would switch and possibly download a model.
     static func livePreviewLanguages(
         of engine: TranscriptionEnginePlugin,

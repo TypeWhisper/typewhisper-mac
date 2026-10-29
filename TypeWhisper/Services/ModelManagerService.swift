@@ -2007,6 +2007,15 @@ final class ModelManagerService: ObservableObject {
         }
     }
 
+    /// The language a session with `languageSelection` asks `plugin` to prepare, as transcription does.
+    func preparationLanguage(for languageSelection: LanguageSelection, plugin: TranscriptionEnginePlugin) -> String? {
+        preparationRequestedLanguage(
+            for: languageSelection,
+            runtimeSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
+            plugin: plugin
+        )
+    }
+
     private func preparationRequestedLanguage(
         for languageSelection: LanguageSelection,
         runtimeSelection: PluginLanguageSelection,
