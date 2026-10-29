@@ -45,8 +45,6 @@ struct WhatsNewView: View {
             Divider()
 
             HStack {
-                Button("Skip", action: onDismiss)
-                    .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Continue", action: onDismiss)
                     .buttonStyle(.borderedProminent)
@@ -83,13 +81,16 @@ struct WhatsNewView: View {
 
 /// A standalone, nonmodal window: dismissing it never advances into another
 /// startup sheet or reopens setup. It does not activate the app or steal focus.
+/// While TypeWhisper is active it floats above Settings and the other app
+/// windows; other apps can still cover it once the user switches away.
 @MainActor
 final class WhatsNewWindowController: NSWindowController, NSWindowDelegate {
     private let coordinator: WhatsNewCoordinator
+    nonisolated(unsafe) private var activationObservers: [NSObjectProtocol] = []
 
     init(coordinator: WhatsNewCoordinator) {
         self.coordinator = coordinator
-        let window = NSWindow(
+        let window = WhatsNewWindow(
             contentRect: .zero,
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
@@ -119,11 +120,38 @@ final class WhatsNewWindowController: NSWindowController, NSWindowDelegate {
         window.setFrame(NSRect(origin: .zero, size: contentView.fittingSize), display: false)
         window.center()
         coordinator.dismissPresentation = { [weak self] in self?.close() }
+
+        updateLevel(appIsActive: NSApp.isActive)
+        for (name, isActive) in [
+            (NSApplication.didBecomeActiveNotification, true),
+            (NSApplication.didResignActiveNotification, false)
+        ] {
+            activationObservers.append(NotificationCenter.default.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateLevel(appIsActive: isActive) }
+            })
+        }
+    }
+
+    deinit {
+        activationObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    func updateLevel(appIsActive: Bool) {
+        window?.level = appIsActive ? .floating : .normal
     }
 
     required init?(coder: NSCoder) { nil }
 
     func windowWillClose(_ notification: Notification) {
         coordinator.acknowledgePresentation()
+    }
+}
+
+/// Escape closes the overview like Continue; there is no separate Skip button.
+private final class WhatsNewWindow: NSWindow {
+    override func cancelOperation(_ sender: Any?) {
+        close()
     }
 }
