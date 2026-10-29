@@ -214,6 +214,7 @@ final class TextInsertionService {
     var accessibilityRoleOverride: ((AXUIElement) -> String?)?
     var accessibilityParentOverride: ((AXUIElement) -> AXUIElement?)?
     var accessibilityValueSettableOverride: ((AXUIElement) -> Bool)?
+    var selectedTextSettableOverride: ((AXUIElement) -> Bool)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
     var generatedTextRangesOverride: ((AXUIElement) -> [NSRange])?
@@ -327,6 +328,7 @@ final class TextInsertionService {
         var hasUnverifiableUnchangedField: Bool {
             self == .pasted(verification: .unverified(.webContentUnchanged))
                 || self == .pasted(verification: .unverified(.focusedTextAncestryUnavailable))
+                || self == .pasted(verification: .unverified(.inputProxyUnchanged))
         }
 
         /// The paste reached no text field: none was focused, or the focused field was readable
@@ -362,6 +364,9 @@ final class TextInsertionService {
         case focusedTextUnchanged = "focused-text-unchanged"
         /// Web editors and terminal input proxies can consume a paste without retaining it here.
         case webContentUnchanged = "web-content-unchanged"
+        /// A native field that takes a new value but no text at the caret, such as a terminal
+        /// that forwards input to a shell and shows it only once the shell echoes it.
+        case inputProxyUnchanged = "input-proxy-unchanged"
         /// Accessibility could inspect the focused app, and no text element was focused.
         case noFocusedTextElement = "no-focused-text-element"
     }
@@ -1687,7 +1692,9 @@ final class TextInsertionService {
         case .unknown:
             return .unverified(.focusedTextAncestryUnavailable)
         case .native:
-            return .unverified(.focusedTextUnchanged)
+            return isTextInputProxy(initialState.element)
+                ? .unverified(.inputProxyUnchanged)
+                : .unverified(.focusedTextUnchanged)
         }
     }
 
@@ -2636,6 +2643,28 @@ final class TextInsertionService {
         var settable = DarwinBoolean(false)
         return AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success
             && settable.boolValue
+    }
+
+    /// Whether a native field forwards input instead of editing its own text. kitty exposes its
+    /// terminal as a text area whose value can be set but that accepts no text at the caret; the
+    /// text appears there only after the shell echoes it, which can take longer than the paste
+    /// verification waits (#1793). Editable fields accept text at the caret, and read-only
+    /// fields accept neither, so they still report a missed paste.
+    private func isTextInputProxy(_ element: AXUIElement) -> Bool {
+        let valueSettable = accessibilityValueSettableOverride.map { $0(element) }
+            ?? isAttributeSettable(kAXValueAttribute as CFString, on: element)
+        let selectedTextSettable = selectedTextSettableOverride.map { $0(element) }
+            ?? isAttributeSettable(kAXSelectedTextAttribute as CFString, on: element)
+        return valueSettable == true && selectedTextSettable == false
+    }
+
+    /// Nil when accessibility cannot tell, so an unknown answer never counts as either.
+    private func isAttributeSettable(_ attribute: CFString, on element: AXUIElement) -> Bool? {
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(element, attribute, &settable) == .success else {
+            return nil
+        }
+        return settable.boolValue
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {
