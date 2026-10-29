@@ -6583,18 +6583,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
     @MainActor
     func testDetectMissedTextFieldIgnoresTerminalWithoutTextElement() async throws {
-        let service = TextInsertionService()
-        let pasteboard = NSPasteboard.withUniqueName()
-        service.accessibilityGrantedOverride = true
-        service.pasteboardProvider = { pasteboard }
-        service.captureActiveAppOverride = { ("Ghostty", "com.mitchellh.ghostty", nil) }
-        service.focusedTextElementOverride = { nil }
-        service.pasteSimulatorOverride = {}
+        let terminals = [
+            (name: "Ghostty", bundleIdentifier: "com.mitchellh.ghostty"),
+            (name: "kitty", bundleIdentifier: "net.kovidgoyal.kitty")
+        ]
+        for terminal in terminals {
+            let service = TextInsertionService()
+            let pasteboard = NSPasteboard.withUniqueName()
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.captureActiveAppOverride = { (terminal.name, terminal.bundleIdentifier, nil) }
+            service.focusedTextElementOverride = { nil }
+            service.pasteSimulatorOverride = {}
 
-        let result = try await service.insertText("Hello", detectMissedTextField: true)
+            let result = try await service.insertText("Hello", detectMissedTextField: true)
 
-        XCTAssertEqual(result, .pasted(verification: .notAwaited))
-        XCTAssertFalse(result.missedTextField)
+            XCTAssertEqual(result, .pasted(verification: .notAwaited), terminal.name)
+            XCTAssertFalse(result.missedTextField, terminal.name)
+        }
     }
 
     func testFocusedWindowDoesNotShowKeyboardTarget() {

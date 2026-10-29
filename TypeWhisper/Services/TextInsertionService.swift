@@ -182,6 +182,7 @@ final class TextInsertionService {
         "dev.warp.Warp-Preview",
         "dev.warp.WarpPreview",
         "com.mitchellh.ghostty",
+        "net.kovidgoyal.kitty",
         "com.cmuxterm.app"
     ]
     private static let geckoBundleIdentifiers =
