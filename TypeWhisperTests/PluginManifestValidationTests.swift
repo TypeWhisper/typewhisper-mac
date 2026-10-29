@@ -42,7 +42,7 @@ final class PluginManifestValidationTests: XCTestCase {
                 PluginSDKCompatibility.isCompatible(manifestVersion: manifest.sdkCompatibilityVersion, isBundled: false),
                 manifestURL.lastPathComponent
             )
-            let importPlugins = ["com.typewhisper.canary", "com.typewhisper.qwen3", "com.typewhisper.granite", "com.typewhisper.voxtral"]
+            let importPlugins = ["com.typewhisper.canary", "com.typewhisper.qwen3", "com.typewhisper.granite", "com.typewhisper.voxtral", "com.typewhisper.parakeet"]
             if importPlugins.contains(manifest.id) {
                 XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.modelImportVersion)
             }
@@ -156,7 +156,7 @@ final class PluginManifestValidationTests: XCTestCase {
     func testSourceFootageProgressPluginsDeclareCapability() throws {
         let manifestExpectations = [
             ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.8.1"),
+            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.8.2"),
             ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.8.0"),
         ]
 

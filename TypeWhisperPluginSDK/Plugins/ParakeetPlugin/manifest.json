@@ -1,9 +1,9 @@
 {
     "id": "com.typewhisper.parakeet",
     "name": "Parakeet",
-    "version": "1.6.1",
-    "minHostVersion": "1.8.1",
-    "sdkCompatibilityVersion": "v1",
+    "version": "1.7.0",
+    "minHostVersion": "1.8.2",
+    "sdkCompatibilityVersion": "v1-model-import",
     "minOSVersion": "14.0",
     "supportedArchitectures": [
         "arm64"

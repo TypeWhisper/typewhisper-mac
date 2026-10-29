@@ -3,6 +3,7 @@ import Combine
 import Foundation
 import CoreML
 import OSLog
+import os
 import SwiftUI
 import FluidAudio
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
@@ -96,7 +97,7 @@ final class ParakeetModelPrewarm: @unchecked Sendable {
 // a host reads a declared policy for a model override by selecting that model, which reloads
 // Parakeet models.
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsSettingEnabling, LiveTranscriptionCapablePlugin, LiveTranscriptionModelSupportProviding, LiveTranscriptionProgressModeProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, TransientModelSelectionProviding, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsSettingEnabling, LiveTranscriptionCapablePlugin, LiveTranscriptionModelSupportProviding, LiveTranscriptionProgressModeProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, TransientModelSelectionProviding, PluginCustomModelImportInspecting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     static let vocabularyAssetFileName = "parakeet_vocab.json"
@@ -164,6 +165,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// ready, with the newer selection, and fail the request it waits for.
     private var latestModelRequest: (id: Int, modelId: String, isPending: Bool)?
     private var modelRequestCount = 0
+    /// Changes with every explicit model request, transient selection and explicit unload. An
+    /// import compares it to decide whether it may still select and load the imported model.
+    private(set) var modelChoiceGeneration = 0
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -178,6 +182,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     func activate(host: HostServices) {
         self.host = host
+        if let store = customModelStore {
+            Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
+        }
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
         vocabularyBoostingEnabled = host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool ?? false
@@ -186,13 +193,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             selectedVersion = version
         }
         if let selectedModelId = _selectedModelId,
-           let version = ParakeetVersion.from(modelId: selectedModelId) {
+           let version = self.version(forModelId: selectedModelId) {
             selectedVersion = version
         } else if let persistedLoadedModel = host.userDefault(forKey: "loadedModel") as? String,
                   !persistedLoadedModel.isEmpty {
             _selectedModelId = persistedLoadedModel
             host.setUserDefault(persistedLoadedModel, forKey: "selectedModel")
-            if let version = ParakeetVersion.from(modelId: persistedLoadedModel) {
+            if let version = self.version(forModelId: persistedLoadedModel) {
                 selectedVersion = version
             }
         }
@@ -202,6 +209,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     func deactivate() {
+        modelChoiceGeneration += 1
         transientSelection.end()
         versionBeforeTransientSelection = nil
         latestModelRequest = nil
@@ -235,7 +243,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        ParakeetVersion.allCases.map { version in
+        availableVersions.map { version in
             let def = version.modelDef
             return PluginModelInfo(
                 id: def.id,
@@ -255,7 +263,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// previews them by transcribing the growing recording and transcribes it again at the end.
     func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
         guard let modelId else { return selectedVersion.streamsLive }
-        return ParakeetVersion.from(modelId: modelId)?.streamsLive ?? false
+        return self.version(forModelId: modelId)?.streamsLive ?? false
     }
 
     /// Nemotron reports the transcript of all audio so far, not a recent window.
@@ -283,7 +291,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     func selectModel(_ modelId: String) {
-        guard let version = ParakeetVersion.from(modelId: modelId) else { return }
+        guard let version = self.version(forModelId: modelId) else { return }
         if transientSelection.modelId != nil {
             saveUserSelection(version)
             return
@@ -317,7 +325,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     var transientModelId: String? { transientSelection.modelId }
 
     func beginTransientModelSelection(_ modelId: String) {
-        guard host != nil, let version = ParakeetVersion.from(modelId: modelId) else { return }
+        guard host != nil, let version = self.version(forModelId: modelId) else { return }
+        modelChoiceGeneration += 1
         let wasTransient = transientSelection.modelId != nil
         guard transientSelection.begin(version.modelDef.id) else { return }
         if !wasTransient {
@@ -336,7 +345,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     func endTransientModelSelection() {
         guard let host, transientSelection.end() != nil else { return }
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-        selectedVersion = _selectedModelId.flatMap(ParakeetVersion.from(modelId:))
+        selectedVersion = _selectedModelId.flatMap(self.version(forModelId:))
             ?? (host.userDefault(forKey: "selectedVersion") as? String).flatMap(ParakeetVersion.init(rawValue:))
             ?? versionBeforeTransientSelection
             ?? selectedVersion
@@ -469,7 +478,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             minimumDuration: 1.0,
             sampleRate: 16_000
         )
-        let loadedVersion = loadedModelId.flatMap(ParakeetVersion.from(modelId:)) ?? selectedVersion
+        let loadedVersion = loadedModelId.flatMap(self.version(forModelId:)) ?? selectedVersion
         let fluidLanguage = loadedVersion.acceptsLanguageHint ? Self.fluidAudioLanguage(for: language) : nil
         let progressTask: Task<Void, Never>? = if Self.shouldObserveSourceProgress(sampleCount: normalizedSamples.count) {
             Task { [asrManager, duration = audio.duration, onSourceProgress] in
@@ -1161,7 +1170,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             // Chosen in the settings while a transient model is in use: saved for later, not loaded.
             endModelRequest(request)
             saveUserSelection(version)
-            selectedVersion = ParakeetVersion.from(modelId: transientModelId) ?? selectedVersion
+            selectedVersion = self.version(forModelId: transientModelId) ?? selectedVersion
             requestPassiveRestoreOfSelection()
             return
         }
@@ -1195,6 +1204,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     private func beginModelRequest(_ modelId: String) -> Int {
+        modelChoiceGeneration += 1
         modelRequestCount += 1
         latestModelRequest = (modelRequestCount, modelId, true)
         return modelRequestCount
@@ -1238,6 +1248,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                 try await asrModelLoadOverrideForTests(version)
                 models = nil
                 nemotron = version == .nemotronStreaming ? nemotronStreamFactoryForTests : nil
+            } else if let importedModel = version.importedModel {
+                // Imported models load from their own folder and never download.
+                models = try ParakeetModelImport.loadModels(importedModel)
             } else if allowDownloads, downloadRefusal == nil {
                 let spaceReservation = isModelDownloaded(version: version)
                     ? nil
@@ -1518,7 +1531,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
         guard let modelId = modelId.map(String.init),
-              let version = ParakeetVersion.from(modelId: modelId) else {
+              let version = self.version(forModelId: modelId) else {
             return
         }
         let revision = transientSelection.revision
@@ -1575,6 +1588,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        if clearPersistence { modelChoiceGeneration += 1 }
         modelPrewarm.cancel()
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
@@ -1600,7 +1614,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         // A transient model replaces the model the user loaded last.
         guard let savedModelId = transientSelection.modelId
             ?? host?.userDefault(forKey: "loadedModel") as? String else { return }
-        let version = ParakeetVersion.from(modelId: savedModelId) ?? selectedVersion
+        let version = self.version(forModelId: savedModelId) ?? selectedVersion
         guard allowDownloads || isModelDownloaded(version: version) else { return }
         await loadModel(version: version, passively: passively, requestedAt: revision)
     }
@@ -1649,6 +1663,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         case .ultra, .v3, .v2:
             guard let asrModelVersion = version.asrModelVersion else { return false }
             return AsrModels.modelsExist(at: version.installDirectory, version: asrModelVersion)
+        case .imported(let model):
+            return ParakeetModelImport.isInstalled(at: model.directory)
         }
     }
 
@@ -1659,6 +1675,232 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let vocabularyURL = Self.vocabularyAssetDirectory(for: version)
             .appendingPathComponent(Self.vocabularyAssetFileName)
         return isModelDownloaded(version: version) && Self.vocabularyAssetExists(at: vocabularyURL)
+    }
+
+    // MARK: - Imported Models
+
+    /// Imported files are owned by this plugin, separate from FluidAudio's model cache.
+    var customModelStore: PluginCustomModelStore? {
+        host.map { PluginCustomModelStore(directory: $0.pluginDataDirectory.appendingPathComponent("custom-models")) }
+    }
+
+    var importedModels: [ParakeetImportedModel] {
+        guard let store = customModelStore else { return [] }
+        return store.models().compactMap { model in
+            guard model.modelType == ParakeetModelImport.modelType,
+                  let directory = store.modelDirectory(for: model.id),
+                  let settings = ParakeetModelImport.settings(in: directory) else { return nil }
+            return ParakeetImportedModel(model, directory: directory, settings: settings)
+        }
+    }
+
+    /// The built-in models followed by the imported ones.
+    var availableVersions: [ParakeetVersion] {
+        ParakeetVersion.allCases + importedModels.map(ParakeetVersion.imported)
+    }
+
+    func version(forModelId modelId: String) -> ParakeetVersion? {
+        if let version = ParakeetVersion.from(modelId: modelId) { return version }
+        guard modelId.hasPrefix("custom-") else { return nil }
+        return importedModels.first { $0.id == modelId }.map(ParakeetVersion.imported)
+    }
+
+    private(set) var isImportingModel = false
+
+    var supportedImportModelTypes: Set<String> { [ParakeetModelImport.modelType] }
+
+    var importFolderDescription: String {
+        String(
+            localized: "Choose a folder with a Parakeet TDT model converted to Core ML: Preprocessor, Encoder, Decoder and JointDecision as .mlmodelc or .mlpackage, plus the vocabulary (parakeet_vocab.json, vocab.json or vocab.txt). TypeWhisper keeps its own copy; your original files are not changed.",
+            bundle: Bundle(for: ParakeetPlugin.self)
+        )
+    }
+
+    func inspectImportSource(_ source: PluginModelImportSource, token: String?) async throws -> PluginModelImportCandidate {
+        switch source {
+        case .folder(let folder):
+            guard folder.isFileURL else { throw PluginModelImportError.invalidSource }
+            let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+            let layout = try ParakeetModelImport.layout(of: Set(names))
+            try ParakeetModelImport.checkVocabulary(in: folder, layout: layout)
+            return PluginModelImportCandidate(
+                source: source, modelType: ParakeetModelImport.modelType,
+                displayName: folder.lastPathComponent, revision: nil, files: []
+            )
+        case .huggingFace(let repository):
+            let token = PluginHuggingFaceTokenHelper.normalizedToken(token) ?? _hfToken
+            let snapshot = try await PluginModelImportCandidate.huggingFaceRepositoryFiles(repository, token: token)
+            let layout = try ParakeetModelImport.layout(of: ParakeetModelImport.topLevelNames(snapshot.files))
+            // A model with a missing or unusable vocabulary fails here, before its weights download.
+            let metadata = try await layout.converterMetadata.asyncMap { name in
+                try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                    name, repository: repository, revision: snapshot.revision, token: token
+                )
+            }
+            if let name = layout.vocabulary {
+                let data = try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                    name, repository: repository, revision: snapshot.revision, token: token
+                )
+                try ParakeetModelImport.checkTokenCount(
+                    ParakeetModelImport.parseVocabulary(data, fileName: name).count,
+                    expectedSize: metadata.flatMap(ParakeetModelImport.converterVocabularySize)
+                )
+            } else {
+                try ParakeetModelImport.checkVocabulary(converterMetadata: metadata, layout: layout)
+            }
+            let files = snapshot.files.filter { path in
+                path.split(separator: "/").first.map { layout.entries.contains(String($0)) } ?? false
+            }
+            return PluginModelImportCandidate(
+                source: source, modelType: ParakeetModelImport.modelType,
+                displayName: repository.split(separator: "/").last.map(String.init) ?? repository,
+                revision: snapshot.revision, files: files
+            )
+        }
+    }
+
+    /// Copies the model, compiles and checks it, then loads it as the selected model.
+    /// A model that fails to load or transcribe is removed again.
+    @MainActor
+    func importModel(_ candidate: PluginModelImportCandidate, token: String?) async throws -> PluginModelInfo {
+        guard !isImportingModel, modelState != .downloading else { throw PluginModelImportError.busy }
+        guard let store = customModelStore else { throw PluginTranscriptionError.notConfigured }
+        if case .huggingFace = candidate.source { try host?.requireModelDownloadAllowed() }
+        let layout = try ParakeetModelImport.layout(of: candidate)
+        isImportingModel = true
+        defer { isImportingModel = false }
+        let previousSelectedModelId = host?.userDefault(forKey: "selectedModel") as? String
+        let previousLoadedModelId = host?.userDefault(forKey: "loadedModel") as? String
+        let previousVersion = selectedVersion
+        let token = PluginHuggingFaceTokenHelper.normalizedToken(token) ?? _hfToken
+        // Set by the validation, which runs off this function's isolation: the imported model, and
+        // the generation after the validation's own load, while no newer choice superseded it.
+        let importedModelId = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let ownGeneration = OSAllocatedUnfairLock<Int?>(initialState: nil)
+        let generation = modelChoiceGeneration
+        do {
+            let imported = try await store.add(
+                candidate, supportedTypes: supportedImportModelTypes, entries: layout.entries, token: token,
+                validation: { [self] model in
+                    guard let directory = store.modelDirectory(for: model.id) else { throw PluginModelImportError.invalidSource }
+                    let settings = try await ParakeetModelImport.prepare(
+                        directory: directory, layout: layout,
+                        stockVocabulary: { size in try await self.stockVocabulary(tokenCount: size) }
+                    )
+                    let version = ParakeetVersion.imported(ParakeetImportedModel(model, directory: directory, settings: settings))
+                    importedModelId.withLock { $0 = model.id }
+                    try await validateImportedModel(version, generation: generation, ownGeneration: ownGeneration)
+                }
+            )
+            host?.notifyCapabilitiesChanged()
+            return PluginModelInfo(
+                id: imported.id, displayName: imported.displayName,
+                sizeDescription: imported.sizeDescription, downloaded: true, loaded: loadedModelId == imported.id
+            )
+        } catch {
+            let importedId = importedModelId.withLock { $0 }
+            // Only an import that changed the selection, with nothing newer since, rolls it back.
+            let ownsSelection = ownGeneration.withLock { $0 } == modelChoiceGeneration
+            if let importedId, loadedModelId == importedId {
+                unloadModel(clearPersistence: true)
+            }
+            if ownsSelection, host != nil {
+                selectedVersion = previousVersion
+                _selectedModelId = previousSelectedModelId
+                host?.setUserDefault(previousSelectedModelId, forKey: "selectedModel")
+                host?.setUserDefault(previousVersion.rawValue, forKey: "selectedVersion")
+                // The import's load replaced the previous model; it loads again from its files.
+                host?.setUserDefault(previousLoadedModelId, forKey: "loadedModel")
+                if case .error = modelState { modelState = isConfigured ? .ready : .notLoaded }
+                host?.notifyCapabilitiesChanged()
+                requestPassiveRestoreOfSelection()
+            }
+            throw error
+        }
+    }
+
+    /// Loads the imported model like a model chosen in the settings and transcribes a second of
+    /// silence, so files that load but do not fit FluidAudio fail the import. When another model
+    /// was chosen or the engine unloaded since the import began (`generation`), or a transient
+    /// model is in use, the model is only checked on its own and the current choice stays. `ownGeneration` records the generation after
+    /// the import's own load, so a failed import rolls back only a selection it made itself.
+    @MainActor
+    private func validateImportedModel(
+        _ version: ParakeetVersion,
+        generation: Int,
+        ownGeneration: OSAllocatedUnfairLock<Int?>
+    ) async throws {
+        try Task.checkCancellation()
+        guard let importedModel = version.importedModel else { throw PluginModelImportError.invalidSource }
+        // A transient (enforced) model stays in use; `loadModel` would only save the import for later.
+        guard modelChoiceGeneration == generation, transientSelection.modelId == nil else {
+            try await validateSeparately(importedModel)
+            return
+        }
+        _selectedModelId = version.modelDef.id
+        selectedVersion = version
+        await loadModel(version: version)
+        ownGeneration.withLock { $0 = modelChoiceGeneration }
+        try Task.checkCancellation()
+        guard loadedModelId == version.modelDef.id, let asrManager else {
+            if case .error(let message) = modelState {
+                throw PluginModelImportError.invalidModel(message)
+            }
+            throw PluginModelImportError.invalidModel("The model could not be loaded")
+        }
+        try await transcriptionGate.withLock { [self] in
+            _ = try await runInference([Float](repeating: 0, count: 16_000), manager: asrManager, language: nil)
+        }
+    }
+
+    /// Loads the imported model into its own manager and transcribes a second of silence,
+    /// leaving the loaded model and the selection unchanged.
+    private func validateSeparately(_ model: ParakeetImportedModel) async throws {
+        let models = try ParakeetModelImport.loadModels(model)
+        let manager = AsrManager(config: Self.asrConfiguration)
+        try await manager.loadModels(models)
+        try Task.checkCancellation()
+        _ = try await runInference([Float](repeating: 0, count: 16_000), manager: manager, language: nil)
+    }
+
+    /// The stock vocabulary for models that bring none: v3's for 8,192 tokens, v2's for 1,024.
+    private func stockVocabulary(tokenCount: Int) async throws -> Data? {
+        let version: ParakeetVersion
+        switch tokenCount {
+        case 8192: version = .v3
+        case 1024: version = .v2
+        default: return nil
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parakeet-vocabulary-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let installed = version.installDirectory.appendingPathComponent(Self.vocabularyAssetFileName)
+        if Self.vocabularyAssetExists(at: installed) {
+            return try Data(contentsOf: installed)
+        }
+        try host?.requireModelDownloadAllowed()
+        try await ensureVocabularyAsset(for: version, targetDirectory: directory)
+        return try Data(contentsOf: directory.appendingPathComponent(Self.vocabularyAssetFileName))
+    }
+
+    /// Removes an imported model, unloading it first; the selection falls back to the default model.
+    func deleteImportedModel(_ modelId: String) throws {
+        guard modelId.hasPrefix("custom-"), let store = customModelStore else { return }
+        guard !isImportingModel, modelState != .downloading else { throw PluginModelImportError.busy }
+        if loadedModelId == modelId {
+            unloadModel(clearPersistence: true)
+        }
+        if _selectedModelId == modelId || selectedVersion.modelDef.id == modelId {
+            _selectedModelId = nil
+            selectedVersion = .ultra
+            host?.setUserDefault(nil, forKey: "selectedModel")
+            host?.setUserDefault(ParakeetVersion.ultra.rawValue, forKey: "selectedVersion")
+        }
+        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+            host?.setUserDefault(nil, forKey: "loadedModel")
+        }
+        try store.remove(modelId)
+        host?.notifyCapabilitiesChanged()
     }
 
     // MARK: - Settings View
@@ -1724,12 +1966,40 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 /// Ordered as offered: Ultra is the default because it is more accurate than v3 and keeps
 /// transcribing the person dictating when someone else talks in the background. Nemotron
 /// comes last: it transcribes while the user speaks, but less accurately than the TDT models.
-enum ParakeetVersion: String, CaseIterable {
+enum ParakeetVersion: Hashable, CaseIterable {
     case ultra
     case v3
     case fluidSpeechMini
     case v2
     case nemotronStreaming
+    /// A model the user imported; listed after the built-in models.
+    case imported(ParakeetImportedModel)
+
+    /// The built-in models, in the order they are offered.
+    static let allCases: [ParakeetVersion] = [.ultra, .v3, .fluidSpeechMini, .v2, .nemotronStreaming]
+
+    /// Saved as the selected version; an imported model saves its model ID.
+    var rawValue: String {
+        switch self {
+        case .ultra: "ultra"
+        case .v3: "v3"
+        case .fluidSpeechMini: "fluidSpeechMini"
+        case .v2: "v2"
+        case .nemotronStreaming: "nemotronStreaming"
+        case .imported(let model): model.id
+        }
+    }
+
+    /// Built-in models only; imported ones are found through the plugin's model store.
+    init?(rawValue: String) {
+        guard let version = Self.allCases.first(where: { $0.rawValue == rawValue }) else { return nil }
+        self = version
+    }
+
+    var importedModel: ParakeetImportedModel? {
+        if case .imported(let model) = self { return model }
+        return nil
+    }
 
     /// The Parakeet TDT decode contract; nil for Nemotron, which decodes in FluidAudio streams.
     var asrModelVersion: AsrModelVersion? {
@@ -1739,6 +2009,7 @@ enum ParakeetVersion: String, CaseIterable {
         // Fluid Speech Mini keeps Ultra's decoder, joint network and decode contract.
         case .ultra, .fluidSpeechMini: return .ultra
         case .nemotronStreaming: return nil
+        case .imported(let model): return model.asrModelVersion
         }
     }
 
@@ -1767,6 +2038,8 @@ enum ParakeetVersion: String, CaseIterable {
         case .ultra: return Repo.parakeetUltra.remotePath
         case .fluidSpeechMini: return FluidSpeechMini.repository
         case .nemotronStreaming: return NemotronStreaming.repository
+        // Imported models load from their own folder and never download.
+        case .imported(let model): return model.origin
         }
     }
 
@@ -1778,6 +2051,7 @@ enum ParakeetVersion: String, CaseIterable {
         case .ultra: return AsrModels.defaultCacheDirectory(for: .ultra)
         case .fluidSpeechMini: return FluidSpeechMini.directory
         case .nemotronStreaming: return NemotronStreaming.directory
+        case .imported(let model): return model.directory
         }
     }
 
@@ -1789,6 +2063,7 @@ enum ParakeetVersion: String, CaseIterable {
         case .v3, .ultra: return ModelNames.ASR.requiredModelsV3()
         case .fluidSpeechMini: return FluidSpeechMini.modelFolders
         case .nemotronStreaming: return NemotronStreaming.modelFolders
+        case .imported: return Set(ParakeetModelImport.Role.allCases.map(\.installedName))
         }
     }
 
@@ -1798,6 +2073,7 @@ enum ParakeetVersion: String, CaseIterable {
         case .v2, .fluidSpeechMini: return ModelNames.ASR.jointFile
         case .v3, .ultra: return ModelNames.ASR.jointV3File
         case .nemotronStreaming: return ModelNames.NemotronMultilingualStreaming.jointFile
+        case .imported: return ParakeetModelImport.jointFileName
         }
     }
 
@@ -1805,7 +2081,8 @@ enum ParakeetVersion: String, CaseIterable {
     /// outputs, which Fluid Speech Mini does not have; v2 ignores the hint. Nemotron takes
     /// the language as its prompt.
     var acceptsLanguageHint: Bool {
-        self != .fluidSpeechMini
+        if case .imported(let model) = self { return model.settings.hasTopK }
+        return self != .fluidSpeechMini
     }
 
     var modelDef: ParakeetModelDef {
@@ -1845,6 +2122,13 @@ enum ParakeetVersion: String, CaseIterable {
                 sizeDescription: "~665 MB",
                 ramRequirement: "8 GB+"
             )
+        case .imported(let model):
+            return ParakeetModelDef(
+                id: model.id,
+                displayName: model.displayName,
+                sizeDescription: model.sizeDescription,
+                ramRequirement: "8 GB+"
+            )
         }
     }
 
@@ -1852,7 +2136,9 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2, .fluidSpeechMini:
             return ["en"]
-        case .v3, .ultra:
+        case .imported(let model) where model.asrModelVersion == .v2:
+            return ["en"]
+        case .v3, .ultra, .imported:
             return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
         case .nemotronStreaming:
             return NemotronStreaming.supportedLanguages
@@ -1876,9 +2162,12 @@ enum ParakeetVersion: String, CaseIterable {
             return String(localized: "Fluid Speech Mini by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Smallest download, English only, no API key required.", bundle: bundle)
         case .nemotronStreaming:
             return String(localized: "NVIDIA Nemotron 3.5 ASR Streaming - streams as you speak, so the text is ready when you stop. 28 languages, no API key required.", bundle: bundle)
+        case .imported(let model):
+            return String(localized: "Imported model from \(model.origin)", bundle: bundle)
         }
     }
 
+    /// Built-in models only; `ParakeetPlugin.version(forModelId:)` also finds imported ones.
     static func from(modelId: String) -> ParakeetVersion? {
         allCases.first { $0.modelDef.id == modelId }
     }
@@ -2535,6 +2824,9 @@ private struct ParakeetSettingsView: View {
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var downloadedVersions: Set<ParakeetVersion> = []
+    @State private var versions: [ParakeetVersion] = ParakeetVersion.allCases
+    @State private var pendingDeletion: ParakeetImportedModel?
+    @State private var deletionError: String?
     @State private var onDemandModelId: String?
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
@@ -2637,13 +2929,33 @@ private struct ParakeetSettingsView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Model Version", bundle: bundle)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                    HStack {
+                        Text("Model Version", bundle: bundle)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Spacer()
+                        PluginModelImportButton(importer: plugin, bundle: bundle)
+                    }
 
-                    ForEach(ParakeetVersion.allCases, id: \.self) { version in
+                    ForEach(versions, id: \.self) { version in
                         modelRow(for: version)
                     }
+
+                    if let deletionError {
+                        Text(deletionError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .confirmationDialog(
+                    Text("Delete \(pendingDeletion?.displayName ?? "")?", bundle: bundle),
+                    isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } })
+                ) {
+                    Button(String(localized: "Delete", bundle: bundle), role: .destructive) {
+                        if let pendingDeletion { delete(pendingDeletion) }
+                    }
+                } message: {
+                    Text("The imported model files are removed from TypeWhisper. Your original files are not changed.", bundle: bundle)
                 }
 
                 // Nemotron takes no dictionary terms, so Vocabulary Boosting does not apply.
@@ -2705,8 +3017,32 @@ private struct ParakeetSettingsView: View {
 
             Spacer()
 
-            modelAction(for: version)
+            HStack(spacing: 6) {
+                modelAction(for: version)
+                if let model = version.importedModel {
+                    Button {
+                        pendingDeletion = model
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(modelState == .downloading)
+                    .help(Text("Delete \(model.displayName)", bundle: bundle))
+                    .accessibilityLabel(Text("Delete \(model.displayName)", bundle: bundle))
+                }
+            }
         }
+    }
+
+    private func delete(_ model: ParakeetImportedModel) {
+        do {
+            try plugin.deleteImportedModel(model.id)
+            deletionError = nil
+        } catch {
+            deletionError = error.localizedDescription
+        }
+        pendingDeletion = nil
+        syncViewStateFromPlugin()
     }
 
     @ViewBuilder
@@ -2886,7 +3222,8 @@ private struct ParakeetSettingsView: View {
         selectedVersion = plugin.selectedVersion
         modelState = plugin.modelState
         downloadProgress = plugin.downloadProgress
-        downloadedVersions = Set(ParakeetVersion.allCases.filter(plugin.isModelDownloaded(version:)))
+        versions = plugin.availableVersions
+        downloadedVersions = Set(versions.filter(plugin.isModelDownloaded(version:)))
         onDemandModelId = plugin.host?.modelIdLoadedOnDemand
         boostingEnabled = plugin.vocabularyBoostingEnabled
         ctcModelState = plugin.ctcModelState
@@ -2920,5 +3257,12 @@ private struct ParakeetSettingsView: View {
         } else {
             dismiss()
         }
+    }
+}
+
+private extension Optional {
+    func asyncMap<T>(_ transform: (Wrapped) async throws -> T) async rethrows -> T? {
+        guard let self else { return nil }
+        return try await transform(self)
     }
 }

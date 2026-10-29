@@ -75,8 +75,9 @@ private struct PluginModelImportSheet: View {
                         Button(String(localized: "Choose Folder…", bundle: bundle)) { showFolderPicker = true }
                             .disabled(importTask != nil)
                     }
-                    Text(String(localized: "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed.", bundle: bundle))
+                    Text(folderDescription)
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     TextField("https://huggingface.co/owner/model", text: $repository)
                         .textFieldStyle(.roundedBorder)
@@ -128,6 +129,11 @@ private struct PluginModelImportSheet: View {
         .onDisappear { importTask?.cancel() }
     }
 
+    private var folderDescription: String {
+        (importer as? any PluginCustomModelImportInspecting)?.importFolderDescription
+            ?? String(localized: "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed.", bundle: bundle)
+    }
+
     private func startImport() {
         error = nil
         status = String(localized: "Checking model compatibility…", bundle: bundle)
@@ -145,7 +151,11 @@ private struct PluginModelImportSheet: View {
                 importTask = nil
             }
             do {
-                let candidate = try await PluginModelImportCandidate.inspect(source, token: importToken)
+                let candidate = if let inspector = importer as? any PluginCustomModelImportInspecting {
+                    try await inspector.inspectImportSource(source, token: importToken)
+                } else {
+                    try await PluginModelImportCandidate.inspect(source, token: importToken)
+                }
                 try Task.checkCancellation()
                 guard importer.supportedImportModelTypes.contains(candidate.modelType) else {
                     self.error = String(localized: "This model architecture is not supported by this plugin. Open the settings of a compatible plugin to import it.", bundle: bundle)

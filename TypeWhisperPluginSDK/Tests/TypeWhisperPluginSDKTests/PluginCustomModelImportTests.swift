@@ -477,6 +477,79 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [".staging.lock"])
     }
 
+
+    func testHuggingFaceMetadataFileIsPinnedAndOnlyForPlainPaths() async throws {
+        let revision = String(repeating: "b", count: 40)
+        let data = try await PluginModelImportCandidate.huggingFaceMetadataFile(
+            "metadata.json", repository: "owner/model", revision: revision,
+            fetch: { request in
+                XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/owner/model/resolve/\(revision)/metadata.json")
+                return (Data("{}".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            })
+        XCTAssertEqual(data, Data("{}".utf8))
+        for (path, revision) in [("../metadata.json", revision), ("metadata.json", "main"), ("model.bin", revision)] {
+            do {
+                _ = try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                    path, repository: "owner/model", revision: revision,
+                    fetch: { _ in XCTFail("Fetched \(path)"); throw CancellationError() })
+                XCTFail("Accepted \(path) at \(revision)")
+            } catch PluginModelImportError.invalidSource {}
+        }
+    }
+
+    func testEntryImportCopiesModelFoldersAndOnlyTheListedEntries() async throws {
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let store = self.store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let weights = source.appendingPathComponent("Encoder.mlpackage/Data/com.apple.CoreML/weights")
+        try FileManager.default.createDirectory(at: weights, withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: weights.appendingPathComponent("weight.bin"))
+        try Data("{}".utf8).write(to: source.appendingPathComponent("Encoder.mlpackage/Manifest.json"))
+        try Data("a 0".utf8).write(to: source.appendingPathComponent("vocab.txt"))
+        try Data([9]).write(to: source.appendingPathComponent("unused.json"))
+        let candidate = PluginModelImportCandidate(source: .folder(source), modelType: "coreml_test",
+                                                   displayName: "Test", revision: nil, files: [])
+
+        let model = try await store.add(candidate, supportedTypes: ["coreml_test"],
+                                        entries: ["Encoder.mlpackage", "vocab.txt"])
+
+        let folder = try XCTUnwrap(store.modelDirectory(for: model.id))
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("Encoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin")), Data([1, 2, 3]))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("Encoder.mlpackage/Manifest.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("vocab.txt").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent("unused.json").path))
+        XCTAssertEqual(model.bytes, 3 + 2 + 3)
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["coreml_test"], entries: ["../Encoder.mlpackage"])
+            XCTFail("Accepted an entry outside the model folder")
+        } catch PluginModelImportError.invalidModel {}
+    }
+
+    func testEntryImportDownloadsOnlySafePathsInsideListedEntries() async throws {
+        let store = self.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let revision = String(repeating: "a", count: 40)
+        let files = ["Decoder.mlmodelc/weights/weight.bin", "Decoder.mlmodelc/model.mil", "parakeet_vocab.json",
+                     "Decoder.mlmodelc/../../escape.bin", "Other.mlmodelc/model.mil", "README.md"]
+        let candidate = PluginModelImportCandidate(source: .huggingFace("owner/model"), modelType: "coreml_test",
+                                                   displayName: "model", revision: revision, files: files)
+        let requested = LockedPaths()
+        let model = try await store.add(candidate, supportedTypes: ["coreml_test"],
+                                        entries: ["Decoder.mlmodelc", "parakeet_vocab.json"],
+                                        download: { request in
+            requested.append(request.url!.path)
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try Data([1]).write(to: file)
+            return (file, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        XCTAssertEqual(requested.paths.sorted(), [
+            "/owner/model/resolve/\(revision)/Decoder.mlmodelc/model.mil",
+            "/owner/model/resolve/\(revision)/Decoder.mlmodelc/weights/weight.bin",
+            "/owner/model/resolve/\(revision)/parakeet_vocab.json",
+        ])
+        let folder = try XCTUnwrap(store.modelDirectory(for: model.id))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("Decoder.mlmodelc/weights/weight.bin").path))
+    }
 }
 
 private final class ImportMetadataURLProtocol: URLProtocol, @unchecked Sendable {
@@ -505,4 +578,11 @@ private actor ImportDownloadBarrier {
             await withCheckedContinuation { waiting = $0 }
         }
     }
+}
+
+private final class LockedPaths: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String] = []
+    var paths: [String] { lock.withLock { stored } }
+    func append(_ path: String) { lock.withLock { stored.append(path) } }
 }
