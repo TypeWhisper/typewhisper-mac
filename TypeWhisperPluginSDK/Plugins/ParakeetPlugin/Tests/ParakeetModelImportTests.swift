@@ -68,6 +68,16 @@ final class ParakeetModelImportTests: XCTestCase {
         ])
 
         XCTAssertThrowsError(try ParakeetModelImport.checkVocabulary(in: folder, layout: layout))
+        XCTAssertThrowsError(
+            try ParakeetModelImport.checkVocabulary(converterMetadata: nil, layout: layout),
+            "Without metadata the stock vocabulary size is unknown"
+        )
+        try Data("a 0\nb 1\n".utf8).write(to: folder.appendingPathComponent("vocab.txt"))
+        let withVocabulary = try ParakeetModelImport.layout(of: layout.entries.union(["vocab.txt"]))
+        XCTAssertThrowsError(try ParakeetModelImport.checkVocabulary(in: folder, layout: withVocabulary)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("8225"), error.localizedDescription)
+        }
+        try FileManager.default.removeItem(at: folder.appendingPathComponent("vocab.txt"))
         try Data(#"{"vocab_size": 8192}"#.utf8).write(to: folder.appendingPathComponent("metadata.json"))
         XCTAssertNoThrow(try ParakeetModelImport.checkVocabulary(in: folder, layout: layout))
         try Data(#"{"vocab_size": 8225}"#.utf8).write(to: folder.appendingPathComponent("metadata.json"))

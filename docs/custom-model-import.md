@@ -79,8 +79,8 @@ names. The vocabulary may be a JSON object (`{"0": "<unk>", …}`), a JSON array
 NeMo/onnx-asr `vocab.txt` (`<piece> <id>` per line); a blank entry is dropped.
 
 mobius does not export a vocabulary. Without one, the plugin uses the stock v3 or
-v2 vocabulary when mobius' `metadata.json` reports 8,192 or 1,024 tokens (or when
-there is no `metadata.json`). Any other token count needs the model's own
+v2 vocabulary when mobius' `metadata.json` reports 8,192 or 1,024 tokens. Without
+`metadata.json`, or with any other token count, the model needs its own
 vocabulary next to the model files; the import says so during inspection, before
 it copies or downloads the models (for Hugging Face it reads only `metadata.json`).
 

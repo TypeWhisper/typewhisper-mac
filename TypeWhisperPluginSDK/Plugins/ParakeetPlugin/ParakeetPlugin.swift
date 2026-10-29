@@ -1731,11 +1731,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             let token = PluginHuggingFaceTokenHelper.normalizedToken(token) ?? _hfToken
             let snapshot = try await PluginModelImportCandidate.huggingFaceRepositoryFiles(repository, token: token)
             let layout = try ParakeetModelImport.layout(of: ParakeetModelImport.topLevelNames(snapshot.files))
-            if layout.vocabulary == nil, let name = layout.converterMetadata {
+            if layout.vocabulary == nil {
                 // A model that needs its own vocabulary fails here, before its weights download.
-                let metadata = try await PluginModelImportCandidate.huggingFaceMetadataFile(
-                    name, repository: repository, revision: snapshot.revision, token: token
-                )
+                let metadata = try await layout.converterMetadata.asyncMap { name in
+                    try await PluginModelImportCandidate.huggingFaceMetadataFile(
+                        name, repository: repository, revision: snapshot.revision, token: token
+                    )
+                }
                 try ParakeetModelImport.checkVocabulary(converterMetadata: metadata, layout: layout)
             }
             let files = snapshot.files.filter { path in
@@ -3242,5 +3244,12 @@ private struct ParakeetSettingsView: View {
         } else {
             dismiss()
         }
+    }
+}
+
+private extension Optional {
+    func asyncMap<T>(_ transform: (Wrapped) async throws -> T) async rethrows -> T? {
+        guard let self else { return nil }
+        return try await transform(self)
     }
 }

@@ -192,21 +192,12 @@ enum ParakeetModelImport {
         let tokens: [Int: String]
         if let name = layout.vocabulary {
             tokens = try parseVocabulary(Data(contentsOf: directory.appendingPathComponent(name)), fileName: name)
-        } else if let data = try await stockVocabulary(expectedSize ?? 8192) {
+        } else if let expectedSize, let data = try await stockVocabulary(expectedSize) {
             tokens = try parseVocabulary(data, fileName: ModelNames.ASR.vocabularyFile)
         } else {
-            throw missingVocabulary(tokenCount: expectedSize ?? 0)
+            throw missingVocabulary(tokenCount: expectedSize)
         }
-        if let expectedSize, expectedSize != tokens.count {
-            throw PluginModelImportError.invalidModel(
-                "The vocabulary has \(tokens.count) tokens, but the model was converted with \(expectedSize)."
-            )
-        }
-        guard tokens.count == 1024 || tokens.count >= 8192 else {
-            throw PluginModelImportError.invalidModel(
-                "Parakeet models with \(tokens.count) tokens are not supported. Supported are the vocabularies of Parakeet TDT v2 (1,024 tokens) and v3 (8,192 tokens or more)."
-            )
-        }
+        try checkTokenCount(tokens.count, expectedSize: expectedSize)
 
         let fileManager = FileManager.default
         for role in Role.allCases {
@@ -244,22 +235,48 @@ enum ParakeetModelImport {
     /// Token counts whose stock vocabulary the plugin supplies when a model brings none.
     static let stockVocabularySizes: Set<Int> = [8192, 1024]
 
-    static func missingVocabulary(tokenCount: Int) -> PluginModelImportError {
-        .invalidModel(
+    /// Without a vocabulary, only mobius' `metadata.json` tells which stock vocabulary fits.
+    static func missingVocabulary(tokenCount: Int?) -> PluginModelImportError {
+        guard let tokenCount else {
+            return .invalidModel(
+                "The model has no vocabulary file. Put its vocabulary (parakeet_vocab.json, vocab.json or vocab.txt) next to the model files and import it again."
+            )
+        }
+        return .invalidModel(
             "The model has no vocabulary file, and its \(tokenCount) tokens match no standard Parakeet vocabulary. Put the vocabulary of the original model (vocab.txt or vocab.json) next to the model files and import it again."
         )
     }
 
-    /// Fails a model that would need a vocabulary it lacks before anything is copied or downloaded.
-    static func checkVocabulary(in folder: URL, layout: Layout) throws {
-        guard let name = layout.converterMetadata else { return }
-        try checkVocabulary(converterMetadata: try? Data(contentsOf: folder.appendingPathComponent(name)), layout: layout)
+    /// The token-count rules the inspection and `prepare` share.
+    static func checkTokenCount(_ count: Int, expectedSize: Int?) throws {
+        if let expectedSize, expectedSize != count {
+            throw PluginModelImportError.invalidModel(
+                "The vocabulary has \(count) tokens, but the model was converted with \(expectedSize)."
+            )
+        }
+        guard count == 1024 || count >= 8192 else {
+            throw PluginModelImportError.invalidModel(
+                "Parakeet models with \(count) tokens are not supported. Supported are the vocabularies of Parakeet TDT v2 (1,024 tokens) and v3 (8,192 tokens or more)."
+            )
+        }
     }
 
+    /// Fails a local folder with a missing or unusable vocabulary before anything is copied.
+    static func checkVocabulary(in folder: URL, layout: Layout) throws {
+        let metadata = layout.converterMetadata.flatMap { try? Data(contentsOf: folder.appendingPathComponent($0)) }
+        if let name = layout.vocabulary {
+            let tokens = try parseVocabulary(Data(contentsOf: folder.appendingPathComponent(name)), fileName: name)
+            try checkTokenCount(tokens.count, expectedSize: metadata.flatMap(converterVocabularySize))
+        } else {
+            try checkVocabulary(converterMetadata: metadata, layout: layout)
+        }
+    }
+
+    /// Fails a model without a vocabulary unless `metadata.json` names a stock vocabulary size.
     static func checkVocabulary(converterMetadata: Data?, layout: Layout) throws {
-        guard layout.vocabulary == nil, let size = converterMetadata.flatMap(converterVocabularySize),
-              !stockVocabularySizes.contains(size) else { return }
-        throw missingVocabulary(tokenCount: size)
+        guard layout.vocabulary == nil else { return }
+        let size = converterMetadata.flatMap(converterVocabularySize)
+        guard let size, stockVocabularySizes.contains(size) else { throw missingVocabulary(tokenCount: size) }
     }
 
     static func settings(in directory: URL) -> Settings? {
