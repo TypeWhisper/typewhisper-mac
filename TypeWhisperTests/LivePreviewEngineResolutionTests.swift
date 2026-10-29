@@ -176,11 +176,12 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: "en"), ["en_US"])
-        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: "en-US"), ["en_US"])
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: "en"), ["en_US"])
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: "en-US"), ["en_US"])
         // en-GB would switch the loaded model and might download one.
-        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: "en-GB"), [])
-        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, previewLanguage: nil), [])
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: "en-GB"), [])
+        // Automatic language selection requests no language, so the loaded locale stays.
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: nil), ["en_US"])
     }
 
     func testAutomaticPreviewEngineIsLoadedLocalStreamingEngineForPreviewLanguage() {

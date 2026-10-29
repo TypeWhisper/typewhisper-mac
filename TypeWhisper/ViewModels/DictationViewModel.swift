@@ -4775,36 +4775,40 @@ final class DictationViewModel: ObservableObject {
                     && modelManager.canUseForTranscription(engine)
                     && !modelManager.lacksDownloadedModel(engine),
                 streamsLive: engine.supportsStreaming && engine.liveTranscriptionPlugin(forModelId: nil) != nil,
-                languages: Self.livePreviewLanguages(of: engine, previewLanguage: previewLanguage)
+                languages: Self.livePreviewLanguages(of: engine, sessionLanguage: languageSelection.requestedLanguage)
             )
         }
         return Self.automaticPreviewEngineId(among: candidates, previewLanguage: previewLanguage)
     }
 
     /// Apple Speech lists every locale it offers but transcribes only the loaded one. It counts
-    /// only when the preview language keeps that locale, since another one, such as en-GB with
-    /// en-US loaded, would switch and possibly download a model.
+    /// only when the session keeps that locale: `sessionLanguage` is the language the session
+    /// requests, nil with automatic language selection, which keeps the loaded locale. Another
+    /// one, such as en-GB with en-US loaded, would switch and possibly download a model.
     static func livePreviewLanguages(
         of engine: TranscriptionEnginePlugin,
-        previewLanguage: String?
+        sessionLanguage: String?
     ) -> [String] {
         guard engine.providerId == AppleSpeechModelSelection.providerId else {
             return engine.supportedLanguages
         }
         guard let modelId = engine.selectedModelId,
-              modelId.hasPrefix(AppleSpeechModelSelection.modelIdPrefix),
-              let previewLanguage,
-              AppleSpeechModelSelection.preferredModelId(
+              modelId.hasPrefix(AppleSpeechModelSelection.modelIdPrefix) else {
+            return []
+        }
+        let loadedLocale = String(modelId.dropFirst(AppleSpeechModelSelection.modelIdPrefix.count))
+        guard let sessionLanguage else { return [loadedLocale] }
+        guard AppleSpeechModelSelection.preferredModelId(
                   from: engine.modelCatalog,
-                  localeIdentifier: previewLanguage,
-                  languageCode: previewLanguage,
+                  localeIdentifier: sessionLanguage,
+                  languageCode: sessionLanguage,
                   preferredModelId: modelId,
                   fallbackLocaleIdentifier: Locale.current.identifier,
                   fallbackToFirst: false
               ) == modelId else {
             return []
         }
-        return [String(modelId.dropFirst(AppleSpeechModelSelection.modelIdPrefix.count))]
+        return [loadedLocale]
     }
 
     enum PreviewEngineResolution: Equatable {
@@ -5709,6 +5713,12 @@ final class DictationViewModel: ObservableObject {
 
     func updateExternalStreamingDisplay(active: Bool) {
         externalStreamingDisplayCount += active ? 1 : -1
+        // A Live Transcript window opened during the recording asks for the preview that was
+        // skipped to avoid re-uploading audio to the cloud engine (#1771); start it now.
+        if active, state == .recording, lastStreamingParams == nil, skippedCloudPreviewParams != nil {
+            logger.info("A live transcript display opened, starting the skipped live preview")
+            startLiveStreaming(allowLiveTranscription: true)
+        }
     }
 
     private func showRecoveryAwareFeedback(
