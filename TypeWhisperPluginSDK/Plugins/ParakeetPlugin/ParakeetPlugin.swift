@@ -1821,8 +1821,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     /// Loads the imported model like a model chosen in the settings and transcribes a second of
     /// silence, so files that load but do not fit FluidAudio fail the import. When another model
-    /// was chosen or the engine unloaded since the import began (`generation`), the model is only
-    /// checked on its own and the newer choice stays. `ownGeneration` records the generation after
+    /// was chosen or the engine unloaded since the import began (`generation`), or a transient
+    /// model is in use, the model is only checked on its own and the current choice stays. `ownGeneration` records the generation after
     /// the import's own load, so a failed import rolls back only a selection it made itself.
     @MainActor
     private func validateImportedModel(
@@ -1832,7 +1832,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     ) async throws {
         try Task.checkCancellation()
         guard let importedModel = version.importedModel else { throw PluginModelImportError.invalidSource }
-        guard modelChoiceGeneration == generation else {
+        // A transient (enforced) model stays in use; `loadModel` would only save the import for later.
+        guard modelChoiceGeneration == generation, transientSelection.modelId == nil else {
             try await validateSeparately(importedModel)
             return
         }
