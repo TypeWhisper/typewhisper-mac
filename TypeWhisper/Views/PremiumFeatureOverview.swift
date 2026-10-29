@@ -20,6 +20,12 @@ enum PremiumCorrectionExamples {
                 ("すいません", "すみません"),
             ]
         }
+        if isTraditionalChineseLanguageCode(language) {
+            return [
+                ("因該", "應該"),
+                ("在次", "再次"),
+            ]
+        }
         if language.hasPrefix("zh") {
             return [
                 ("因该", "应该"),
@@ -363,7 +369,7 @@ struct PremiumLockedFeatureOverview: View {
 /// rest of its settings.
 enum PairedDevicesPremiumCopy {
     static var title: String {
-        localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad")
+        localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad", zhHant: "iPhone 和 iPad")
     }
 
     static var description: String {
@@ -371,7 +377,8 @@ enum PairedDevicesPremiumCopy {
             "Transcribe and write on your iPhone or iPad with this Mac's models and workflows.",
             de: "Transkribiere und schreibe auf deinem iPhone oder iPad mit den Modellen und Workflows dieses Macs.",
             ja: "この Mac のモデルとワークフローを使って、iPhone や iPad で文字起こしや文章作成ができます。",
-            zh: "在 iPhone 或 iPad 上使用这台 Mac 的模型和工作流进行转写和写作。"
+            zh: "在 iPhone 或 iPad 上使用这台 Mac 的模型和工作流进行转写和写作。",
+            zhHant: "在 iPhone 或 iPad 上使用這台 Mac 的模型和工作流程進行轉錄和寫作。"
         )
     }
 
@@ -380,7 +387,8 @@ enum PairedDevicesPremiumCopy {
             "Pair once, then dictate on the go",
             de: "Einmal koppeln, dann unterwegs diktieren",
             ja: "一度ペアリングすれば、外出先でも音声入力",
-            zh: "配对一次，随时随地听写"
+            zh: "配对一次，随时随地听写",
+            zhHant: "配對一次，隨時隨地聽寫"
         )
     }
 
@@ -392,6 +400,7 @@ enum PairedDevicesPremiumCopy {
                 de: "1 gekoppelt",
                 ja: "1 台ペアリング済み",
                 zh: "已配对 1 台",
+                zhHant: "已配對 1 台",
                 es: "1 vinculado"
             )
         }
@@ -400,6 +409,7 @@ enum PairedDevicesPremiumCopy {
             de: "\(count) gekoppelt",
             ja: "\(count) 台ペアリング済み",
             zh: "已配对 \(count) 台",
+            zhHant: "已配對 \(count) 台",
             es: "\(count) vinculados"
         )
     }
@@ -1242,6 +1252,7 @@ struct PremiumCorrectionExampleRow: View {
             de: "\(before), korrigiert zu \(after)",
             ja: "\(before) を \(after) に修正",
             zh: "\(before) 更正为 \(after)",
+            zhHant: "\(before) 更正為 \(after)",
             es: "\(before), corregido a \(after)"
         ))
     }

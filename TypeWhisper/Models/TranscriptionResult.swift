@@ -94,6 +94,7 @@ enum TranscriptionTask: String, CaseIterable, Identifiable {
             de: "Übersetzen nach \(language)",
             ja: "\(language)に翻訳",
             zh: "翻译为\(language)",
+            zhHant: "翻譯為\(language)",
             es: "Traducir al \(language)"
         )
     }

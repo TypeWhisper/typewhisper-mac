@@ -19,6 +19,9 @@ struct GeneralSettingsView: View {
         if preferredLanguage?.hasPrefix("ja") == true {
             return "ja"
         }
+        if let preferredLanguage, isTraditionalChineseLanguageCode(preferredLanguage) {
+            return "zh-Hant"
+        }
         if preferredLanguage?.hasPrefix("zh") == true {
             return "zh-Hans"
         }
@@ -64,6 +67,7 @@ struct GeneralSettingsView: View {
                     Text(String(localized: "Deutsch")).tag("de")
                     Text(String(localized: "日本語")).tag("ja")
                     Text(String(localized: "简体中文")).tag("zh-Hans")
+                    Text(String(localized: "繁體中文")).tag("zh-Hant")
                     Text(String(localized: "Español")).tag("es")
                 }
                 .onChange(of: appLanguage) {

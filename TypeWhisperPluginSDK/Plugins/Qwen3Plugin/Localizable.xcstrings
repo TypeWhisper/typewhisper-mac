@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "下载并加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入 %@"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "错误"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "隐藏 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入 %@"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已載入"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "正在加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入 %@"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 Hugging Face 權杖"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "保存 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 Hugging Face 權杖"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "卸载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載 %@"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "32 GB 品质"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "32 GB 品質"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "8 GB 选择"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 GB 選擇"
+          }
         }
       }
     },
@@ -389,6 +467,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅私有或受限模型需要令牌。令牌仅用于此次导入，不会保存。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅私有或受限模型需要權杖。權杖僅用於此次匯入，不會儲存。"
           }
         }
       }
@@ -419,6 +503,12 @@
             "state": "translated",
             "value": "添加与此插件兼容的语音识别模型。导入完成前会检查并加载模型。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增與此外掛相容的語音辨識模型。匯入完成前會檢查並載入模型。"
+          }
         }
       }
     },
@@ -446,6 +536,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "“自动卸载模型”已设为“立即”。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動卸載模型」已設為「立即」。"
           }
         }
       }
@@ -475,6 +571,12 @@
             "state": "translated",
             "value": "最佳默认"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最佳預設"
+          }
         }
       }
     },
@@ -502,6 +604,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "大多数 16 GB 以上 Mac 的最佳默认选择。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大多數 16 GB 以上 Mac 的最佳預設選擇。"
           }
         }
       }
@@ -531,6 +639,12 @@
             "state": "translated",
             "value": "Canary 需要明确指定源语言。使用 Sophea 时，请在听写设置中选择希腊语或英语。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canary 需要明確指定來源語言。使用 Sophea 時，請在聽寫設定中選擇希臘語或英語。"
+          }
         }
       }
     },
@@ -555,6 +669,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "取消"
@@ -587,6 +707,12 @@
             "state": "translated",
             "value": "正在取消…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在取消…"
+          }
         }
       }
     },
@@ -614,6 +740,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在检查模型兼容性…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在檢查模型相容性…"
           }
         }
       }
@@ -643,6 +775,12 @@
             "state": "translated",
             "value": "选择文件夹…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇資料夾…"
+          }
         }
       }
     },
@@ -671,6 +809,12 @@
             "state": "translated",
             "value": "选择包含 config.json、分词器文件和权重的文件夹。TypeWhisper 会保存副本，不会修改原始文件。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇包含 config.json、分詞器檔案和權重的資料夾。TypeWhisper 會儲存副本，不會修改原始檔案。"
+          }
         }
       }
     },
@@ -695,6 +839,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "完成"
@@ -727,6 +877,12 @@
             "state": "translated",
             "value": "下载并加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入"
+          }
         }
       }
     },
@@ -751,6 +907,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速 / 8 GB"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "快速 / 8 GB"
@@ -783,6 +945,12 @@
             "state": "translated",
             "value": "8 GB Mac 和日常听写的快速选择。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 GB Mac 和日常聽寫的快速選擇。"
+          }
         }
       }
     },
@@ -810,6 +978,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "当 0.6B 质量重要时的高精度小模型。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當 0.6B 品質重要時的高精度小模型。"
           }
         }
       }
@@ -839,6 +1013,12 @@
             "state": "translated",
             "value": "32 GB 以上 Mac 的高品质选择。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "32 GB 以上 Mac 的高品質選擇。"
+          }
         }
       }
     },
@@ -866,6 +1046,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 模型网址"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 模型網址"
           }
         }
       }
@@ -895,6 +1081,12 @@
             "state": "translated",
             "value": "Hugging Face 令牌（可选）"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖（可選）"
+          }
         }
       }
     },
@@ -922,6 +1114,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HuggingFace 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFace 權杖"
           }
         }
       }
@@ -951,6 +1149,12 @@
             "state": "translated",
             "value": "导入"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入"
+          }
         }
       }
     },
@@ -978,6 +1182,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "导入模型…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入模型…"
           }
         }
       }
@@ -1007,6 +1217,12 @@
             "state": "translated",
             "value": "导入语音识别模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入語音辨識模型"
+          }
         }
       }
     },
@@ -1034,6 +1250,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已导入并加载：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已匯入並載入：%@"
           }
         }
       }
@@ -1063,6 +1285,12 @@
             "state": "translated",
             "value": "已导入的模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已匯入的模型"
+          }
         }
       }
     },
@@ -1090,6 +1318,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在使用 %@ 导入并加载…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用 %@ 匯入並載入…"
           }
         }
       }
@@ -1119,6 +1353,12 @@
             "state": "translated",
             "value": "无效的 HuggingFace 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 HuggingFace 權杖"
+          }
         }
       }
     },
@@ -1146,6 +1386,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "最大的未量化模型；用于最高保真度验证。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大的未量化模型；用於最高保真度驗證。"
           }
         }
       }
@@ -1175,6 +1421,12 @@
             "state": "translated",
             "value": "加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入"
+          }
         }
       }
     },
@@ -1202,6 +1454,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "按需加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需載入"
           }
         }
       }
@@ -1231,6 +1489,12 @@
             "state": "translated",
             "value": "本地文件夹"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本機資料夾"
+          }
         }
       }
     },
@@ -1258,6 +1522,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "基于 Apple Silicon 上 MLX 的本地 Qwen3-ASR 语音转文字。支持 30 种语言及中文方言，无需 API 密钥。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基於 Apple Silicon 上 MLX 的本機 Qwen3-ASR 語音轉文字。支援 30 種語言及中文方言，無需 API 金鑰。"
           }
         }
       }
@@ -1287,6 +1557,12 @@
             "state": "translated",
             "value": "默认 6 位模型内存紧张时的折中选择。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預設 6 位模型記憶體緊張時的折中選擇。"
+          }
         }
       }
     },
@@ -1311,6 +1587,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -1343,6 +1625,12 @@
             "state": "translated",
             "value": "未选择文件夹"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未選擇資料夾"
+          }
         }
       }
     },
@@ -1370,6 +1658,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選。提高下載速率限制。在 huggingface.co/settings/tokens 免費取得。"
           }
         }
       }
@@ -1399,6 +1693,12 @@
             "state": "translated",
             "value": "品质 / 32 GB"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "品質 / 32 GB"
+          }
         }
       }
     },
@@ -1426,6 +1726,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "快速选择"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速選擇"
           }
         }
       }
@@ -1455,6 +1761,12 @@
             "state": "translated",
             "value": "推荐"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建議"
+          }
         }
       }
     },
@@ -1479,6 +1791,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -1511,6 +1829,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -1538,6 +1862,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "比 4 位略高精度，占用空间相似。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "比 4 位略高精度，佔用空間相似。"
           }
         }
       }
@@ -1567,6 +1897,12 @@
             "state": "translated",
             "value": "最小的 1.7B 选项；当 6 位过重时使用。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小的 1.7B 選項；當 6 位過重時使用。"
+          }
         }
       }
     },
@@ -1594,6 +1930,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "最小下载量；当内存比质量更重要时使用。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小下載量；當記憶體比品質更重要時使用。"
           }
         }
       }
@@ -1624,6 +1966,12 @@
             "state": "translated",
             "value": "来源"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "來源"
+          }
         }
       }
     },
@@ -1653,6 +2001,12 @@
             "state": "translated",
             "value": "此插件不支持该模型架构。请打开兼容插件的设置进行导入。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此外掛不支援該模型架構。請開啟相容外掛的設定進行匯入。"
+          }
         }
       }
     },
@@ -1680,6 +2034,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "卸载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載"
           }
         }
       }
@@ -1709,6 +2069,12 @@
             "state": "translated",
             "value": "未量化的小模型；用于比较或验证。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未量化的小模型；用於比較或驗證。"
+          }
         }
       }
     },
@@ -1736,6 +2102,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "有效的 HuggingFace 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 HuggingFace 權杖"
           }
         }
       }
@@ -1765,6 +2137,12 @@
             "state": "translated",
             "value": "正在验证令牌..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在驗證權杖..."
+          }
         }
       }
     },
@@ -1792,6 +2170,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "你可以在听写设置中选择引擎，在集成中管理模型。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你可以在聽寫設定中選擇引擎，在整合中管理模型。"
           }
         }
       }

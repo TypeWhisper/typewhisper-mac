@@ -66,6 +66,7 @@ struct AppStorePermissionRow: View {
             localizedAppText(
                 "\(AppStoreInputAccess.postEventSettingsName) needed to paste automatically",
                 de: "\(AppStoreInputAccess.postEventSettingsName) zum automatischen Einfügen nötig",
+                zhHant: "自動貼上需要「\(AppStoreInputAccess.postEventSettingsName)」",
                 es: "Se necesita \(AppStoreInputAccess.postEventSettingsName) para pegar automáticamente"
             )
         case (.inputMonitoring, .short):

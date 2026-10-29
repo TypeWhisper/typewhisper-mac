@@ -290,7 +290,8 @@ struct HomeSettingsView: View {
                                 "Opens this transcription in History.",
                                 de: "Öffnet diese Transkription im Verlauf.",
                                 ja: "この文字起こしを履歴で開きます。",
-                                zh: "在历史记录中打开此转录。"
+                                zh: "在历史记录中打开此转录。",
+                                zhHant: "在歷史記錄中開啟此轉錄。"
                             ))
                             // The context menu is hard to reach with VoiceOver;
                             // offer its copy command as an action as well.
@@ -406,6 +407,7 @@ struct HomeSettingsView: View {
                     de: "Drücke \(primaryHotkeyLabel) in einer beliebigen App, um zu beginnen.",
                     ja: "任意のアプリで\(primaryHotkeyLabel)を押して開始します。",
                     zh: "在任意应用中按 \(primaryHotkeyLabel) 开始。",
+                    zhHant: "在任意應用中按 \(primaryHotkeyLabel) 開始。",
                     es: "Presiona \(primaryHotkeyLabel) en cualquier app para empezar."
                 ))
                 .accessibilityAddTraits(.isStaticText)

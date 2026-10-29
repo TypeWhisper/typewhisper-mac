@@ -191,6 +191,7 @@ private struct VoiceProfileRow: View {
                             de: "\(profile.name) umbenennen",
                             ja: "\(profile.name)の名前を変更",
                             zh: "重命名\(profile.name)",
+                            zhHant: "重新命名\(profile.name)",
                             es: "Renombrar \(profile.name)"
                         ))
                     Text(String.localizedStringWithFormat(
@@ -212,8 +213,8 @@ private struct VoiceProfileRow: View {
                     .help(String(localized: "speakers.page.profile.recordings"))
                     .accessibilityLabel(String(localized: "speakers.page.profile.recordings"))
                     .accessibilityValue(showsRecordings
-                        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
-                        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠"))
+                        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开", zhHant: "已展開")
+                        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠", zhHant: "已摺疊"))
                 }
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
@@ -225,6 +226,7 @@ private struct VoiceProfileRow: View {
                     de: "Sprecherprofil von \(profile.name) löschen",
                     ja: "\(profile.name)の声のプロフィールを削除",
                     zh: "删除\(profile.name)的声音档案",
+                    zhHant: "刪除\(profile.name)的聲音檔案",
                     es: "Eliminar el perfil de voz de \(profile.name)"
                 ))
             }
@@ -238,7 +240,7 @@ private struct VoiceProfileRow: View {
                         // The magnifier badge marks a suggested, unconfirmed match.
                         Image(systemName: appearance.isSuggestion ? "waveform.badge.magnifyingglass" : "waveform")
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel(localizedAppText("Suggested", de: "Vorgeschlagen", ja: "提案", zh: "建议"))
+                            .accessibilityLabel(localizedAppText("Suggested", de: "Vorgeschlagen", ja: "提案", zh: "建议", zhHant: "建議"))
                             .accessibilityHidden(!appearance.isSuggestion)
                         Text(appearance.title)
                             .lineLimit(1)
@@ -258,6 +260,7 @@ private struct VoiceProfileRow: View {
                             de: "\(appearance.title) öffnen",
                             ja: "\(appearance.title)を開く",
                             zh: "打开\(appearance.title)",
+                            zhHant: "開啟\(appearance.title)",
                             es: "Abrir \(appearance.title)"
                         ))
                     }

@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "“自动卸载模型”已设为“立即”。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動卸載模型」已設為「立即」。"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "下载并加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "下载并加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入 %@"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "错误"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "GigaAM（俄语）"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GigaAM（俄語）"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "隐藏 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 Hugging Face 權杖"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HuggingFace 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFace 權杖"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "无效的 HuggingFace 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 HuggingFace 權杖"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已載入"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "正在加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入 %@"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "按需加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需載入"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "使用 Sber 的 GigaAM v3 进行本地俄语语音识别。会添加标点和大小写，并在 CPU 上运行。仅识别俄语，因此其他语言的录音也会按俄语转写。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Sber 的 GigaAM v3 進行本機俄語語音辨識。會新增標點和大小寫，並在 CPU 上執行。僅辨識俄語，因此其他語言的錄音也會按俄語轉錄。"
+          }
         }
       }
     },
@@ -386,6 +464,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -418,6 +502,12 @@
             "state": "translated",
             "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選。提高下載速率限制。在 huggingface.co/settings/tokens 免費取得。"
+          }
         }
       }
     },
@@ -442,6 +532,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "移除 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -501,6 +603,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
           }
         }
       }
@@ -530,6 +638,12 @@
             "state": "translated",
             "value": "保存 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -557,6 +671,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 Hugging Face 權杖"
           }
         }
       }
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "卸载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載"
+          }
         }
       }
     },
@@ -613,6 +739,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "卸载 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載 %@"
           }
         }
       }
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "有效的 HuggingFace 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 HuggingFace 權杖"
+          }
         }
       }
     },
@@ -669,6 +807,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在验证令牌..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在驗證權杖..."
           }
         }
       }

@@ -142,7 +142,8 @@ struct HistoryRetranscriptionView: View {
                 "New result ready to compare",
                 de: "Neues Ergebnis zum Vergleichen bereit",
                 ja: "比較できる新しい結果があります",
-                zh: "新结果已可供比较"
+                zh: "新结果已可供比较",
+                zhHant: "新結果已可供比較"
             ))
         }
     }
@@ -155,7 +156,8 @@ struct HistoryRetranscriptionView: View {
             "This result is now the text of the entry",
             de: "Dieses Ergebnis ist jetzt der Text des Eintrags",
             ja: "この結果がエントリのテキストになりました",
-            zh: "此结果现已成为该条目的文本"
+            zh: "此结果现已成为该条目的文本",
+            zhHant: "此結果現已成為該條目的文字"
         ))
     }
 
@@ -163,7 +165,7 @@ struct HistoryRetranscriptionView: View {
         if let selectedVersionID {
             service.discard(selectedVersionID, in: record)
             if service.errorMessage == nil {
-                announce(localizedAppText("Version deleted", de: "Version gelöscht", ja: "バージョンを削除しました", zh: "版本已删除"))
+                announce(localizedAppText("Version deleted", de: "Version gelöscht", ja: "バージョンを削除しました", zh: "版本已删除", zhHant: "版本已刪除"))
             }
         }
         selectedVersionID = candidates.last?.id

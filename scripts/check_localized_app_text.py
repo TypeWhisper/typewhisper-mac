@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Verify that every text passed to localizedAppText(_:de:ja:zh:es:) has Spanish.
+"""Verify that every text passed to localizedAppText(_:de:ja:zh:zhHant:es:) has Spanish
+and Traditional Chinese.
 
 localizedAppText returns the German argument directly and looks up Japanese, Chinese
 and Spanish in the app's string catalog by the English text. That lookup only works for
 plain English literals: a literal with interpolated values, like "More Models (\\(count))",
-is looked up after interpolation and never matches. So:
+is looked up after interpolation and never matches. So, for Spanish (`es:`, catalog "es")
+and Traditional Chinese (`zhHant:`, catalog "zh-Hant"):
 
-- a plain English literal needs an "es" value in TypeWhisper/Resources/Localizable.xcstrings
-  under the English text, or an inline `es:` argument;
-- an interpolated English literal needs an inline `es:` literal that interpolates the same
+- a plain English literal needs a value in TypeWhisper/Resources/Localizable.xcstrings
+  under the English text, or an inline argument;
+- an interpolated English literal needs an inline literal that interpolates the same
   expressions.
 """
 
@@ -26,6 +28,8 @@ SOURCE_DIRECTORIES = ("TypeWhisper", "AppStore/Sources")
 APP_CATALOG = "TypeWhisper/Resources/Localizable.xcstrings"
 FUNCTION_NAME = "localizedAppText"
 LANGUAGE = "es"
+# Argument label of localizedAppText -> locale in the string catalog.
+LANGUAGES = {"es": "es", "zhHant": "zh-Hant"}
 
 
 class SwiftParseError(ValueError):
@@ -324,10 +328,10 @@ def find_calls(path: Path, source: str | None = None) -> list[Call]:
     return calls
 
 
-def catalog_spanish_keys(catalog: dict) -> set[str]:
+def catalog_keys(catalog: dict, locale: str) -> set[str]:
     keys = set()
     for key, entry in catalog.get("strings", {}).items():
-        node = entry.get("localizations", {}).get(LANGUAGE, {})
+        node = entry.get("localizations", {}).get(locale, {})
         unit = node.get("stringUnit", {}) if isinstance(node, dict) else {}
         if isinstance(unit.get("value"), str) and unit["value"]:
             keys.add(key)
@@ -336,35 +340,41 @@ def catalog_spanish_keys(catalog: dict) -> set[str]:
     return keys
 
 
-def check_calls(calls: list[Call], spanish_keys: set[str]) -> list[str]:
+def catalog_spanish_keys(catalog: dict) -> set[str]:
+    return catalog_keys(catalog, LANGUAGE)
+
+
+def check_calls(
+    calls: list[Call], translated_keys: set[str], label: str = LANGUAGE, locale: str = LANGUAGE
+) -> list[str]:
     problems = []
     for call in calls:
         location = f"{call.path}:{call.line}"
         english = call.english
-        inline = call.arguments.get(LANGUAGE)
-        has_inline = LANGUAGE in call.arguments
+        inline = call.arguments.get(label)
+        has_inline = label in call.arguments
         if english is None:
             problems.append(f"{location}: the English text must be a string literal")
             continue
         if has_inline:
             if inline is None:
-                problems.append(f"{location}: `{LANGUAGE}:` must be a string literal")
+                problems.append(f"{location}: `{label}:` must be a string literal")
             elif inline.interpolations != english.interpolations:
                 problems.append(
-                    f"{location}: `{LANGUAGE}:` interpolates {inline.interpolations}, "
+                    f"{location}: `{label}:` interpolates {inline.interpolations}, "
                     f"English interpolates {english.interpolations}"
                 )
             elif not inline.text.strip() and english.text.strip():
-                problems.append(f"{location}: `{LANGUAGE}:` is empty")
+                problems.append(f"{location}: `{label}:` is empty")
             continue
         if english.is_interpolated:
             problems.append(
-                f"{location}: English text with interpolation needs an inline `{LANGUAGE}:` translation: "
+                f"{location}: English text with interpolation needs an inline `{label}:` translation: "
                 f"{english.text!r}"
             )
-        elif english.text not in spanish_keys:
+        elif english.text not in translated_keys:
             problems.append(
-                f"{location}: no {LANGUAGE} value in {APP_CATALOG} for {english.text!r}"
+                f"{location}: no {locale} value in {APP_CATALOG} for {english.text!r}"
             )
     return problems
 
@@ -378,7 +388,6 @@ def swift_files(repo_root: Path = REPO_ROOT) -> list[Path]:
 
 def main() -> int:
     catalog = json.loads((REPO_ROOT / APP_CATALOG).read_text(encoding="utf-8"))
-    spanish_keys = catalog_spanish_keys(catalog)
     calls: list[Call] = []
     for path in swift_files():
         try:
@@ -389,15 +398,17 @@ def main() -> int:
     for call in calls:
         call.path = call.path.relative_to(REPO_ROOT)
 
-    problems = check_calls(calls, spanish_keys)
-    if problems:
-        print(f"error: {len(problems)} {FUNCTION_NAME} calls have no {LANGUAGE} translation")
-        for problem in problems:
-            print(f"  {problem}")
-        return 1
-
-    print(f"verified {LANGUAGE} translations for {len(calls)} {FUNCTION_NAME} calls")
-    return 0
+    failed = False
+    for label, locale in LANGUAGES.items():
+        problems = check_calls(calls, catalog_keys(catalog, locale), label, locale)
+        if problems:
+            print(f"error: {len(problems)} {FUNCTION_NAME} calls have no {locale} translation")
+            for problem in problems:
+                print(f"  {problem}")
+            failed = True
+        else:
+            print(f"verified {locale} translations for {len(calls)} {FUNCTION_NAME} calls")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

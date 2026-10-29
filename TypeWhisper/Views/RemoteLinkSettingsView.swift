@@ -10,12 +10,13 @@ struct RemoteLinkSettingsView: View {
             PremiumSettingsDetailHeader(
                 icon: "iphone.radiowaves.left.and.right",
                 accent: .indigo,
-                title: localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad"),
+                title: localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad", zhHant: "iPhone 和 iPad"),
                 description: localizedAppText(
                     "Paired iPhones and iPads transcribe and write with this Mac's models and workflows over the local network.",
                     de: "Gekoppelte iPhones und iPads transkribieren und schreiben über das lokale Netzwerk mit den Modellen und Workflows dieses Macs.",
                     ja: "ペアリング済みの iPhone と iPad は、ローカルネットワーク経由でこの Mac のモデルとワークフローを使って文字起こしや文章作成を行えます。",
-                    zh: "已配对的 iPhone 和 iPad 可以通过本地网络使用这台 Mac 的模型和工作流进行转写和写作。"
+                    zh: "已配对的 iPhone 和 iPad 可以通过本地网络使用这台 Mac 的模型和工作流进行转写和写作。",
+                    zhHant: "已配對的 iPhone 和 iPad 可以透過本機網路使用這台 Mac 的模型和工作流程進行轉錄和寫作。"
                 ),
                 status: viewModel.isEnabled ? statusText : String(localized: "premium.hub.status.off"),
                 statusColor: viewModel.isEnabled && viewModel.isAdvertised ? .green : .secondary
@@ -29,13 +30,15 @@ struct RemoteLinkSettingsView: View {
                                 "Allow Paired Devices on the Local Network",
                                 de: "Gekoppelte Geräte im lokalen Netzwerk erlauben",
                                 ja: "ローカルネットワーク上のペアリング済みデバイスを許可",
-                                zh: "允许本地网络上的已配对设备"
+                                zh: "允许本地网络上的已配对设备",
+                                zhHant: "允許本機網路上的已配對裝置"
                             ),
                             info: localizedAppText(
                                 "Paired iPhones and iPads on the same network can send recordings to this Mac and transcribe them with its models. Only paired devices are accepted, and every connection is encrypted. The local API and its token are not exposed.",
                                 de: "Gekoppelte iPhones und iPads im selben Netzwerk können Aufnahmen an diesen Mac senden und mit seinen Modellen transkribieren lassen. Nur gekoppelte Geräte werden angenommen, und jede Verbindung ist verschlüsselt. Die lokale API und ihr Token bleiben davon unberührt.",
                                 ja: "同じネットワーク上のペアリング済み iPhone と iPad は、録音をこの Mac に送信し、この Mac のモデルで文字起こしできます。ペアリング済みのデバイスのみが受け入れられ、すべての接続は暗号化されます。ローカル API とそのトークンは公開されません。",
-                                zh: "同一网络上的已配对 iPhone 和 iPad 可以将录音发送到这台 Mac，并使用它的模型进行转写。只接受已配对的设备，所有连接均经过加密。本地 API 及其令牌不会被公开。"
+                                zh: "同一网络上的已配对 iPhone 和 iPad 可以将录音发送到这台 Mac，并使用它的模型进行转写。只接受已配对的设备，所有连接均经过加密。本地 API 及其令牌不会被公开。",
+                                zhHant: "同一網路上的已配對 iPhone 和 iPad 可以將錄音傳送到這台 Mac，並使用它的模型進行轉錄。只接受已配對的裝置，所有連線均經過加密。本機 API 及其權杖不會被公開。"
                             )
                         )
                     }
@@ -58,14 +61,15 @@ struct RemoteLinkSettingsView: View {
                                         "If this Mac stays invisible, allow TypeWhisper under Local Network in Privacy & Security.",
                                         de: "Bleibt dieser Mac unsichtbar, erlaube TypeWhisper unter „Lokales Netzwerk“ in „Datenschutz & Sicherheit“.",
                                         ja: "この Mac が表示されないままの場合は、「プライバシーとセキュリティ」の「ローカルネットワーク」で TypeWhisper を許可してください。",
-                                        zh: "如果这台 Mac 一直不可见，请在“隐私与安全性”的“本地网络”中允许 TypeWhisper。"
+                                        zh: "如果这台 Mac 一直不可见，请在“隐私与安全性”的“本地网络”中允许 TypeWhisper。",
+                                        zhHant: "如果這台 Mac 一直不可見，請在「隱私權與安全性」的「本機網路」中允許 TypeWhisper。"
                                     ),
                                     systemImage: "network.badge.shield.half.filled"
                                 )
                                 .font(.callout)
                                 .foregroundStyle(.orange)
                                 Spacer()
-                                Button(localizedAppText("Open Settings", de: "Einstellungen öffnen", ja: "設定を開く", zh: "打开设置")) {
+                                Button(localizedAppText("Open Settings", de: "Einstellungen öffnen", ja: "設定を開く", zh: "打开设置", zhHant: "開啟設定")) {
                                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
                                         NSWorkspace.shared.open(url)
                                     }
@@ -86,18 +90,20 @@ struct RemoteLinkSettingsView: View {
                                     "Allow Writing with This Mac",
                                     de: "Schreiben mit diesem Mac erlauben",
                                     ja: "この Mac での文章作成を許可",
-                                    zh: "允许使用这台 Mac 写作"
+                                    zh: "允许使用这台 Mac 写作",
+                                    zhHant: "允許使用這台 Mac 寫作"
                                 ),
                                 info: localizedAppText(
                                     "Paired devices can run text through this Mac's language models and workflows. Requests may use cloud providers from your language model list, including their API costs.",
                                     de: "Gekoppelte Geräte können Text mit den Sprachmodellen und Workflows dieses Macs verarbeiten. Dabei können Cloud-Anbieter aus deiner Sprachmodell-Liste samt ihrer API-Kosten genutzt werden.",
                                     ja: "ペアリング済みのデバイスは、この Mac の言語モデルとワークフローでテキストを処理できます。言語モデルの一覧にあるクラウドプロバイダが使われ、その API 料金が発生する場合があります。",
-                                    zh: "已配对的设备可以使用这台 Mac 的语言模型和工作流处理文本。请求可能会使用你语言模型列表中的云服务提供商，并产生相应的 API 费用。"
+                                    zh: "已配对的设备可以使用这台 Mac 的语言模型和工作流处理文本。请求可能会使用你语言模型列表中的云服务提供商，并产生相应的 API 费用。",
+                                    zhHant: "已配對的裝置可以使用這台 Mac 的語言模型和工作流程處理文字。請求可能會使用你語言模型清單中的雲端服務供應商，並產生相應的 API 費用。"
                                 )
                             )
                         }
 
-                        Button(localizedAppText("Pair Device…", de: "Gerät koppeln …", ja: "デバイスをペアリング…", zh: "配对设备…")) {
+                        Button(localizedAppText("Pair Device…", de: "Gerät koppeln …", ja: "デバイスをペアリング…", zh: "配对设备…", zhHant: "配對裝置…")) {
                             viewModel.beginPairing()
                         }
                         .disabled(!viewModel.isRunning)
@@ -107,11 +113,11 @@ struct RemoteLinkSettingsView: View {
 
             SettingsCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(localizedAppText("Paired Devices", de: "Gekoppelte Geräte", ja: "ペアリング済みのデバイス", zh: "已配对的设备"))
+                    Text(localizedAppText("Paired Devices", de: "Gekoppelte Geräte", ja: "ペアリング済みのデバイス", zh: "已配对的设备", zhHant: "已配對的裝置"))
                         .font(.headline)
                         .accessibilityAddTraits(.isHeader)
                     if viewModel.devices.isEmpty {
-                        Text(localizedAppText("No paired devices", de: "Keine gekoppelten Geräte", ja: "ペアリング済みのデバイスはありません", zh: "没有已配对的设备"))
+                        Text(localizedAppText("No paired devices", de: "Keine gekoppelten Geräte", ja: "ペアリング済みのデバイスはありません", zh: "没有已配对的设备", zhHant: "沒有已配對的裝置"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     } else {
@@ -145,6 +151,7 @@ private extension RemoteLinkSettingsView {
                 de: "Sichtbar als „\(viewModel.computerName)“",
                 ja: "「\(viewModel.computerName)」として表示中",
                 zh: "显示为“\(viewModel.computerName)”",
+                zhHant: "顯示為「\(viewModel.computerName)」",
                 es: "Visible como “\(viewModel.computerName)”"
             )
         }
@@ -153,7 +160,8 @@ private extension RemoteLinkSettingsView {
                 "Waiting for local network access",
                 de: "Warte auf Zugriff auf das lokale Netzwerk",
                 ja: "ローカルネットワークへのアクセスを待っています",
-                zh: "正在等待本地网络访问权限"
+                zh: "正在等待本地网络访问权限",
+                zhHant: "正在等待本機網路存取權限"
             )
         }
         return String(localized: "Not running")
@@ -177,13 +185,14 @@ private struct RemoteLinkDeviceRow: View {
             }
             .accessibilityElement(children: .combine)
             Spacer()
-            Button(localizedAppText("Remove", de: "Entfernen", ja: "削除", zh: "移除"), role: .destructive, action: onRemove)
+            Button(localizedAppText("Remove", de: "Entfernen", ja: "削除", zh: "移除", zhHant: "移除"), role: .destructive, action: onRemove)
                 .buttonStyle(.borderless)
                 .accessibilityLabel(localizedAppText(
                     "Remove \(device.name)",
                     de: "\(device.name) entfernen",
                     ja: "\(device.name) を削除",
                     zh: "移除 \(device.name)",
+                    zhHant: "移除 \(device.name)",
                     es: "Quitar \(device.name)"
                 ))
         }
@@ -192,10 +201,10 @@ private struct RemoteLinkDeviceRow: View {
     private var lastUsedText: String {
         guard let lastSeenAt = device.lastSeenAt else {
             let paired = device.pairedAt.formatted(date: .abbreviated, time: .omitted)
-            return localizedAppText("Paired \(paired)", de: "Gekoppelt am \(paired)", ja: "\(paired) にペアリング", zh: "配对于 \(paired)", es: "Vinculado: \(paired)")
+            return localizedAppText("Paired \(paired)", de: "Gekoppelt am \(paired)", ja: "\(paired) にペアリング", zh: "配对于 \(paired)", zhHant: "配對於 \(paired)", es: "Vinculado: \(paired)")
         }
         let used = lastSeenAt.formatted(.relative(presentation: .named))
-        return localizedAppText("Last used \(used)", de: "Zuletzt verwendet \(used)", ja: "最終使用: \(used)", zh: "上次使用：\(used)", es: "Último uso: \(used)")
+        return localizedAppText("Last used \(used)", de: "Zuletzt verwendet \(used)", ja: "最終使用: \(used)", zh: "上次使用：\(used)", zhHant: "上次使用：\(used)", es: "Último uso: \(used)")
     }
 }
 
@@ -204,7 +213,7 @@ private struct RemoteLinkPairingSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(localizedAppText("Pair iPhone or iPad", de: "iPhone oder iPad koppeln", ja: "iPhone または iPad をペアリング", zh: "配对 iPhone 或 iPad"))
+            Text(localizedAppText("Pair iPhone or iPad", de: "iPhone oder iPad koppeln", ja: "iPhone または iPad をペアリング", zh: "配对 iPhone 或 iPad", zhHant: "配對 iPhone 或 iPad"))
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
 
@@ -245,17 +254,18 @@ private struct RemoteLinkPairingSheet: View {
             de: "„\(request.deviceName)“ möchte sich mit diesem Mac koppeln.",
             ja: "「\(request.deviceName)」がこの Mac とのペアリングを求めています。",
             zh: "“\(request.deviceName)”想要与这台 Mac 配对。",
+            zhHant: "「\(request.deviceName)」想要與這台 Mac 配對。",
             es: "“\(request.deviceName)” quiere vincularse con este Mac."
         )
     }
 
     static func spokenCode(_ code: String) -> String {
         let digits = code.map(String.init).joined(separator: " ")
-        return localizedAppText("Code \(digits)", de: "Code \(digits)", ja: "コード \(digits)", zh: "代码 \(digits)", es: "Código \(digits)")
+        return localizedAppText("Code \(digits)", de: "Code \(digits)", ja: "コード \(digits)", zh: "代码 \(digits)", zhHant: "程式碼 \(digits)", es: "Código \(digits)")
     }
 
     static func pairedText(_ name: String) -> String {
-        localizedAppText("Paired with “\(name)”.", de: "Mit „\(name)“ gekoppelt.", ja: "「\(name)」とペアリングしました。", zh: "已与“\(name)”配对。", es: "Vinculado con “\(name)”.")
+        localizedAppText("Paired with “\(name)”.", de: "Mit „\(name)“ gekoppelt.", ja: "「\(name)」とペアリングしました。", zh: "已与“\(name)”配对。", zhHant: "已與「\(name)」配對。", es: "Vinculado con “\(name)”.")
     }
 
     static var failedText: String {
@@ -263,7 +273,8 @@ private struct RemoteLinkPairingSheet: View {
             "Pairing was not completed.",
             de: "Die Kopplung wurde nicht abgeschlossen.",
             ja: "ペアリングは完了しませんでした。",
-            zh: "配对未完成。"
+            zh: "配对未完成。",
+            zhHant: "配對未完成。"
         )
     }
 
@@ -277,13 +288,15 @@ private struct RemoteLinkPairingSheet: View {
                         "Waiting for a device",
                         de: "Warte auf ein Gerät",
                         ja: "デバイスを待っています",
-                        zh: "正在等待设备"
+                        zh: "正在等待设备",
+                        zhHant: "正在等待裝置"
                     ))
                 Text(localizedAppText(
                     "On your iPhone or iPad, open TypeWhisper, go to Settings → Mac and choose “\(viewModel.computerName)”.",
                     de: "Öffne TypeWhisper auf deinem iPhone oder iPad, gehe zu Einstellungen → Mac und wähle „\(viewModel.computerName)“.",
                     ja: "iPhone または iPad で TypeWhisper を開き、設定 → Mac で「\(viewModel.computerName)」を選択してください。",
                     zh: "在 iPhone 或 iPad 上打开 TypeWhisper，前往“设置”→“Mac”，然后选择“\(viewModel.computerName)”。",
+                    zhHant: "在 iPhone 或 iPad 上開啟 TypeWhisper，前往「設定」→「Mac」，然後選擇「\(viewModel.computerName)」。",
                     es: "En tu iPhone o iPad, abre TypeWhisper, ve a Ajustes → Mac y elige “\(viewModel.computerName)”."
                 ))
                 .multilineTextAlignment(.center)
@@ -301,7 +314,8 @@ private struct RemoteLinkPairingSheet: View {
                     "Approve only if the device shows the same code.",
                     de: "Bestätige nur, wenn das Gerät denselben Code anzeigt.",
                     ja: "デバイスに同じコードが表示されている場合のみ承認してください。",
-                    zh: "仅当设备显示相同的代码时才批准。"
+                    zh: "仅当设备显示相同的代码时才批准。",
+                    zhHant: "僅當裝置顯示相同的程式碼時才批准。"
                 ))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -315,7 +329,8 @@ private struct RemoteLinkPairingSheet: View {
                     "Waiting for confirmation on the device…",
                     de: "Warte auf die Bestätigung auf dem Gerät …",
                     ja: "デバイスでの確認を待っています…",
-                    zh: "正在等待设备上的确认…"
+                    zh: "正在等待设备上的确认…",
+                    zhHant: "正在等待裝置上的確認…"
                 ))
             }
         case .paired(let name):
@@ -341,10 +356,10 @@ private struct RemoteLinkPairingSheet: View {
     private var buttons: some View {
         switch viewModel.pairingState {
         case .confirming:
-            Button(localizedAppText("Deny", de: "Ablehnen", ja: "拒否", zh: "拒绝")) {
+            Button(localizedAppText("Deny", de: "Ablehnen", ja: "拒否", zh: "拒绝", zhHant: "拒絕")) {
                 viewModel.denyPairing()
             }
-            Button(localizedAppText("Approve", de: "Bestätigen", ja: "承認", zh: "批准")) {
+            Button(localizedAppText("Approve", de: "Bestätigen", ja: "承認", zh: "批准", zhHant: "批准")) {
                 viewModel.approvePairing()
             }
             .keyboardShortcut(.defaultAction)
@@ -357,7 +372,7 @@ private struct RemoteLinkPairingSheet: View {
             Button(String(localized: "Cancel")) {
                 viewModel.endPairing()
             }
-            Button(localizedAppText("Try Again", de: "Erneut versuchen", ja: "再試行", zh: "重试")) {
+            Button(localizedAppText("Try Again", de: "Erneut versuchen", ja: "再試行", zh: "重试", zhHant: "重試")) {
                 viewModel.beginPairing()
             }
             .keyboardShortcut(.defaultAction)

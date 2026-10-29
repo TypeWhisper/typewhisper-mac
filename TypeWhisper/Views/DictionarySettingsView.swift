@@ -7,7 +7,7 @@ private func dictionaryReplacementDisplayText(_ replacement: String) -> String {
 
 /// Spoken stand-in for the arrow between wrong and correct text.
 private var dictionaryReplacedWithText: String {
-    localizedAppText("replaced with", de: "ersetzt durch", ja: "置き換え先", zh: "替换为")
+    localizedAppText("replaced with", de: "ersetzt durch", ja: "置き換え先", zh: "替换为", zhHant: "替換為")
 }
 
 /// Spoken form of a correction ("teh, replaced with the"); the strikethrough and arrow are visual only.
@@ -18,6 +18,7 @@ private func dictionaryCorrectionAccessibilityText(original: String, replacement
             de: "\(original), wird entfernt",
             ja: "\(original)、削除",
             zh: "\(original)，删除",
+            zhHant: "\(original)，刪除",
             es: "\(original), se elimina"
         )
     }
@@ -26,6 +27,7 @@ private func dictionaryCorrectionAccessibilityText(original: String, replacement
         de: "\(original), ersetzt durch \(replacement)",
         ja: "\(original)を\(replacement)に置き換え",
         zh: "\(original)，替换为\(replacement)",
+        zhHant: "\(original)，替換為\(replacement)",
         es: "\(original), reemplazado por \(replacement)"
     )
 }
@@ -37,6 +39,7 @@ private func dictionaryBoostingAccessibilityText(label: String, value: String) -
         de: "Boosting: \(setting)",
         ja: "認識の優先度調整: \(setting)",
         zh: "增强：\(setting)",
+        zhHant: "增強：\(setting)",
         es: "Refuerzo: \(setting)"
     )
 }
@@ -349,7 +352,8 @@ struct DictionarySettingsView: View {
             "More Dictionary Actions",
             de: "Weitere Wörterbuch-Aktionen",
             ja: "辞書のその他の操作",
-            zh: "更多词典操作"
+            zh: "更多词典操作",
+            zhHant: "更多詞典操作"
         ))
     }
 
@@ -433,18 +437,21 @@ struct DictionarySettingsView: View {
             return localizedAppText(
                 "This deletes \(request.autoLearnedCorrectionCount) auto-learned corrections. Manual entries and term packs remain unchanged. This cannot be undone.",
                 de: "Dadurch werden \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. Manuelle Einträge und Begriff-Pakete bleiben unverändert. Dies kann nicht rückgängig gemacht werden.",
+                zhHant: "這將刪除 \(request.autoLearnedCorrectionCount) 條自動學習的修正。手動條目和術語包保持不變。此操作無法復原。",
                 es: "Esto elimina \(request.autoLearnedCorrectionCount) correcciones aprendidas automáticamente. Las entradas manuales y los paquetes de términos no cambian. Esta acción no se puede deshacer."
             )
         case .resetCustomDictionary:
             return localizedAppText(
                 "This deletes \(request.termCount) custom terms, \(request.manualCorrectionCount) manual corrections, and \(request.autoLearnedCorrectionCount) auto-learned corrections. \(request.activePackCount) active term packs and their entries remain unchanged. This cannot be undone.",
                 de: "Dadurch werden \(request.termCount) eigene Begriffe, \(request.manualCorrectionCount) manuelle Korrekturen und \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. \(request.activePackCount) aktive Begriff-Pakete und deren Einträge bleiben unverändert. Dies kann nicht rückgängig gemacht werden.",
+                zhHant: "這將刪除 \(request.termCount) 個自訂術語、\(request.manualCorrectionCount) 條手動修正和 \(request.autoLearnedCorrectionCount) 條自動學習的修正。\(request.activePackCount) 個已啟用的術語包及其條目保持不變。此操作無法復原。",
                 es: "Esto elimina \(request.termCount) términos personalizados, \(request.manualCorrectionCount) correcciones manuales y \(request.autoLearnedCorrectionCount) correcciones aprendidas automáticamente. Los \(request.activePackCount) paquetes de términos activos y sus entradas no cambian. Esta acción no se puede deshacer."
             )
         case .deactivateAllTermPacks:
             return localizedAppText(
                 "This deactivates \(request.activePackCount) term packs and removes \(request.termCount) pack terms and \(request.correctionCount) pack corrections. Custom and auto-learned entries remain unchanged.",
                 de: "Dadurch werden \(request.activePackCount) Begriff-Pakete deaktiviert sowie \(request.termCount) Paket-Begriffe und \(request.correctionCount) Paket-Korrekturen entfernt. Eigene und automatisch gelernte Einträge bleiben unverändert.",
+                zhHant: "這將停用 \(request.activePackCount) 個術語包，並移除 \(request.termCount) 個術語包詞條和 \(request.correctionCount) 條術語包修正。自訂和自動學習的條目保持不變。",
                 es: "Esto desactiva \(request.activePackCount) paquetes de términos y quita \(request.termCount) términos y \(request.correctionCount) correcciones de los paquetes. Las entradas personalizadas y las aprendidas automáticamente no cambian."
             )
         }
@@ -812,6 +819,7 @@ private struct DictionaryTrainingSheet: View {
                             de: "Engine: \(snapshot.engineName)",
                             ja: "エンジン: \(snapshot.engineName)",
                             zh: "引擎：\(snapshot.engineName)",
+                            zhHant: "引擎：\(snapshot.engineName)",
                             es: "Motor: \(snapshot.engineName)"
                         ))
                     Label(snapshot.modelName, systemImage: "shippingbox")
@@ -820,6 +828,7 @@ private struct DictionaryTrainingSheet: View {
                             de: "Modell: \(snapshot.modelName)",
                             ja: "モデル: \(snapshot.modelName)",
                             zh: "模型：\(snapshot.modelName)",
+                            zhHant: "模型：\(snapshot.modelName)",
                             es: "Modelo: \(snapshot.modelName)"
                         ))
                     Label(languageName, systemImage: "globe")
@@ -828,6 +837,7 @@ private struct DictionaryTrainingSheet: View {
                             de: "Sprache: \(languageName)",
                             ja: "言語: \(languageName)",
                             zh: "语言：\(languageName)",
+                            zhHant: "語言：\(languageName)",
                             es: "Idioma: \(languageName)"
                         ))
                 }
@@ -1016,6 +1026,7 @@ private struct DictionaryTrainingSheet: View {
             .accessibilityLabel(localizedAppText(
                 "Include \(candidate.original) as a correction",
                 de: "\(candidate.original) als Korrektur einschließen",
+                zhHant: "將 \(candidate.original) 加入為修正",
                 es: "Incluir \(candidate.original) como corrección"
             ))
             .disabled(candidate.disposition != .available)
@@ -1053,6 +1064,7 @@ private struct DictionaryTrainingSheet: View {
                 Text(localizedAppText(
                     "Candidates were produced by \(snapshot.engineName) / \(snapshot.modelName). Corrections remain global.",
                     de: "Die Kandidaten wurden von \(snapshot.engineName) / \(snapshot.modelName) erzeugt. Korrekturen bleiben global.",
+                    zhHant: "候選項由 \(snapshot.engineName) / \(snapshot.modelName) 產生。修正仍全域適用。",
                     es: "Los candidatos los generó \(snapshot.engineName) / \(snapshot.modelName). Las correcciones siguen siendo globales."
                 ))
                 .font(.caption)
@@ -1124,6 +1136,7 @@ private struct DictionaryTrainingSheet: View {
         return termText + " " + localizedAppText(
             "Added \(summary.addedCorrections.count) corrections, skipped \(summary.duplicateCorrections.count) duplicates and \(summary.conflictingCorrections.count) conflicts.",
             de: "\(summary.addedCorrections.count) Korrekturen hinzugefügt, \(summary.duplicateCorrections.count) Duplikate und \(summary.conflictingCorrections.count) Konflikte übersprungen.",
+            zhHant: "已新增 \(summary.addedCorrections.count) 條修正，略過 \(summary.duplicateCorrections.count) 條重複項和 \(summary.conflictingCorrections.count) 條衝突項。",
             es: "Se agregaron \(summary.addedCorrections.count) correcciones; se omitieron \(summary.duplicateCorrections.count) duplicados y \(summary.conflictingCorrections.count) conflictos."
         )
     }
@@ -1186,7 +1199,7 @@ private struct DictionaryTrainingSheet: View {
                 .foregroundStyle(.secondary)
         case .conflict(let replacement):
             Label(
-                localizedAppText("Conflict: \(replacement)", de: "Konflikt: \(replacement)", es: "Conflicto: \(replacement)"),
+                localizedAppText("Conflict: \(replacement)", de: "Konflikt: \(replacement)", zhHant: "衝突：\(replacement)", es: "Conflicto: \(replacement)"),
                 systemImage: "exclamationmark.triangle"
             )
             .foregroundStyle(.orange)
@@ -1799,6 +1812,7 @@ private struct DictionaryCorrectionGroupCardView: View {
                     Text(localizedAppText(
                         "\(group.aliases.count) variants",
                         de: "\(group.aliases.count) Varianten",
+                        zhHant: "\(group.aliases.count) 個變體",
                         es: "\(group.aliases.count) variantes"
                     ))
                     .font(.caption2)
@@ -1822,6 +1836,7 @@ private struct DictionaryCorrectionGroupCardView: View {
                 de: "Variante für \(group.replacementDisplayText) hinzufügen",
                 ja: "\(group.replacementDisplayText)の別表記を追加",
                 zh: "为\(group.replacementDisplayText)添加变体",
+                zhHant: "為\(group.replacementDisplayText)新增變體",
                 es: "Agregar variante para \(group.replacementDisplayText)"
             ))
         }
@@ -2123,7 +2138,8 @@ private struct DictionaryEditorSheet: View {
                                         "Threshold",
                                         de: "Schwellenwert",
                                         ja: "しきい値",
-                                        zh: "阈值"
+                                        zh: "阈值",
+                                        zhHant: "閾值"
                                     ))
                                     .accessibilityValue(String(format: "%.2f", viewModel.editAdvancedCtcMinSimilarity))
 

@@ -63,7 +63,8 @@ class AccessibilityAnnouncementService {
             "Recording stopped, transcribing",
             de: "Aufnahme beendet, wird transkribiert",
             ja: "録音を停止しました。文字起こし中",
-            zh: "录音已停止，正在转录"
+            zh: "录音已停止，正在转录",
+            zhHant: "錄音已停止，正在轉錄"
         ))
     }
 

@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "隐藏 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 API 金鑰"
+          }
         }
       }
     },
@@ -50,6 +56,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "移除 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 API 金鑰"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 API 金鑰"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "显示 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 API 金鑰"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "温度模式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度模式"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "自定义"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "提供商默认"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "供應商預設"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "温度"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "API 密钥安全存储在钥匙串中"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰安全儲存在鑰匙圈中"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无效的 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 API 金鑰"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "最后更新：%@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最後更新：%@"
+          }
         }
       }
     },
@@ -386,6 +464,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "LLM 模型"
@@ -418,6 +502,12 @@
             "state": "translated",
             "value": "刷新模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理模型"
+          }
         }
       }
     },
@@ -442,6 +532,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -501,6 +603,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无法刷新模型。请检查连接后重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法重新整理模型。請檢查連線後重試。"
           }
         }
       }
@@ -530,6 +638,12 @@
             "state": "translated",
             "value": "有效的 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 金鑰"
+          }
         }
       }
     },
@@ -557,6 +671,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在使用默认模型。刷新以获取完整列表。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用預設模型。重新整理以取得完整清單。"
           }
         }
       }
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "验证中..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證中..."
+          }
         }
       }
     },
@@ -613,6 +739,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无法验证 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法驗證 API 金鑰"
           }
         }
       }
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "高级"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "進階"
+          }
         }
       }
     },
@@ -666,6 +804,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推理力度"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "推理力度"
@@ -698,6 +842,12 @@
             "state": "translated",
             "value": "低"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
+          }
         }
       }
     },
@@ -722,6 +872,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "中"
@@ -754,6 +910,12 @@
             "state": "translated",
             "value": "高"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
         }
       }
     },
@@ -778,6 +940,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "最高"
@@ -810,6 +978,12 @@
             "state": "translated",
             "value": "最大"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大"
+          }
         }
       }
     },
@@ -837,6 +1011,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "控制模型在回答前花费多少思考时间。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "控制模型在回答前花費多少思考時間。"
           }
         }
       }
@@ -866,6 +1046,12 @@
             "state": "translated",
             "value": "当工作流的推理力度保持为“提供商默认”时生效。级别越高，速度越慢，消耗的输出 token 也越多。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當工作流程的推理力度保持為「供應商預設」時生效。級別越高，速度越慢，消耗的輸出 token 也越多。"
+          }
         }
       }
     },
@@ -893,6 +1079,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "所选模型不支持设置推理力度。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所選模型不支援設定推理力度。"
           }
         }
       }
@@ -922,6 +1114,12 @@
             "state": "translated",
             "value": "模型默认"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型預設"
+          }
         }
       }
     },
@@ -949,6 +1147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "模型默认（%@）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型預設（%@）"
           }
         }
       }
@@ -978,6 +1182,12 @@
             "state": "translated",
             "value": "此模型不支持“%@”，因此请求将使用模型默认值。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此模型不支援「%@」，因此請求將使用模型預設值。"
+          }
         }
       }
     },
@@ -1005,6 +1215,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "对于此模型或已设置推理力度时，自定义温度将被忽略。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對於此模型或已設定推理力度時，自訂溫度將被忽略。"
           }
         }
       }
@@ -1034,6 +1250,12 @@
             "state": "translated",
             "value": "提示缓存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提示快取"
+          }
         }
       }
     },
@@ -1061,6 +1283,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "关闭"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉"
           }
         }
       }
@@ -1090,6 +1318,12 @@
             "state": "translated",
             "value": "5 分钟"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 分鐘"
+          }
         }
       }
     },
@@ -1117,6 +1351,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 小时"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 小時"
           }
         }
       }
@@ -1146,6 +1386,12 @@
             "state": "translated",
             "value": "在此时间内的多次请求之间复用系统提示，降低重复请求的费用。只有至少 512 到 4,096 个 token（取决于模型）的提示才会被缓存。写入缓存的费用为 1.25 倍（5 分钟）或 2 倍（1 小时），读取缓存的费用为十分之一或更低。更换模型或推理力度会开始新的缓存。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此時間內的多次請求之間複用系統提示，降低重複請求的費用。只有至少 512 到 4,096 個 token（取決於模型）的提示才會被快取。寫入快取的費用為 1.25 倍（5 分鐘）或 2 倍（1 小時），讀取快取的費用為十分之一或更低。更換模型或推理力度會開始新的快取。"
+          }
         }
       }
     },
@@ -1173,6 +1419,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "上次请求"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次請求"
           }
         }
       }
@@ -1202,6 +1454,12 @@
             "state": "translated",
             "value": "缓存：读取 %lld，写入 %lld · 输入：%lld · 输出：%lld 个 token"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快取：讀取 %lld，寫入 %lld · 輸入：%lld · 輸出：%lld 個 token"
+          }
         }
       }
     },
@@ -1229,6 +1487,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用备用模型重试被拒绝的请求"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用備用模型重試被拒絕的請求"
           }
         }
       }
@@ -1258,6 +1522,12 @@
             "state": "translated",
             "value": "适用于 Claude Opus 5.5、Opus 5、Sonnet 5.5 和 Fable 5.1。如果 Anthropic 的安全检查拒绝了请求，将在同一次调用中由备用模型回答，并按该模型的价格计费。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "適用於 Claude Opus 5.5、Opus 5、Sonnet 5.5 和 Fable 5.1。如果 Anthropic 的安全檢查拒絕了請求，將在同一次呼叫中由備用模型回答，並按該模型的價格計費。"
+          }
         }
       }
     },
@@ -1285,6 +1555,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@（%2$@ 拒绝后的备用模型）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@（%2$@ 拒絕後的備用模型）"
           }
         }
       }

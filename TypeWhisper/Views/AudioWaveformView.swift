@@ -62,7 +62,7 @@ struct AudioWaveformBarModel {
 /// `levelAccessibilityValue(_:)` on its container instead.
 struct AudioWaveformView: View {
     static var levelAccessibilityLabel: String {
-        localizedAppText("Microphone level", de: "Mikrofonpegel", ja: "マイクレベル", zh: "麦克风电平")
+        localizedAppText("Microphone level", de: "Mikrofonpegel", ja: "マイクレベル", zh: "麦克风电平", zhHant: "麥克風電平")
     }
 
     static func levelAccessibilityValue(_ level: Float) -> String {

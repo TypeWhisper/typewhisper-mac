@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "下载并加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入 %@"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在下载 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載 %@"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "隐藏 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入 %@"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已載入"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "正在加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入 %@"
+          }
         }
       }
     },
@@ -218,6 +260,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 %@"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除 %@"
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "移除 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 Hugging Face 權杖"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "显示 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "卸载 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載 %@"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "14 种语言需明确选择：英语、法语、德语、西班牙语、意大利语、葡萄牙语、荷兰语、波兰语、希腊语、阿拉伯语、日语、中文、越南语和韩语。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14 種語言需明確選擇：英語、法語、德語、西班牙語、義大利語、葡萄牙語、荷蘭語、波蘭語、希臘語、阿拉伯語、日語、中文、越南語和韓語。"
+          }
         }
       }
     },
@@ -390,6 +468,12 @@
             "state": "translated",
             "value": "Cohere Transcribe 03-2026 的本地 GGUF 和 Metal 私有提供程序。音频数据保留在此 Mac 上。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 03-2026 的本機 GGUF 和 Metal 私有提供程式。音訊資料保留在此 Mac 上。"
+          }
         }
       }
     },
@@ -414,6 +498,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "取消"
@@ -446,6 +536,12 @@
             "state": "translated",
             "value": "功能与限制"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "功能與限制"
+          }
         }
       }
     },
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "Cohere 模型许可"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere 模型許可"
+          }
         }
       }
     },
@@ -495,6 +597,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cohere Transcribe（本地）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe（本機）"
           }
         }
       }
@@ -524,6 +632,12 @@
             "state": "translated",
             "value": "CrispASR 许可与声明"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 許可與宣告"
+          }
         }
       }
     },
@@ -548,6 +662,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "完成"
@@ -580,6 +700,12 @@
             "state": "translated",
             "value": "下载并加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入"
+          }
         }
       }
     },
@@ -607,6 +733,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "已下载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已下載"
           }
         }
       }
@@ -636,6 +768,12 @@
             "state": "translated",
             "value": "正在下载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載"
+          }
         }
       }
     },
@@ -663,6 +801,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在下载 Cohere 模型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載 Cohere 模型"
           }
         }
       }
@@ -692,6 +836,12 @@
             "state": "translated",
             "value": "错误"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
+          }
         }
       }
     },
@@ -719,6 +869,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -748,6 +904,12 @@
             "state": "translated",
             "value": "无效的 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -775,6 +937,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入"
           }
         }
       }
@@ -804,6 +972,12 @@
             "state": "translated",
             "value": "本地 · 批量"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本機 · 批次"
+          }
         }
       }
     },
@@ -831,6 +1005,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "不支持自动语言检测、流式传输、时间戳、说话人分离、翻译或词典增强。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不支援自動語言偵測、流式傳輸、時間戳記、說話者分離、翻譯或詞典增強。"
           }
         }
       }
@@ -860,6 +1040,12 @@
             "state": "translated",
             "value": "模型权重从固定的 Apache-2.0 GGUF 版本下载。CrispASR 和 VAD 模型采用 MIT 许可。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型權重從固定的 Apache-2.0 GGUF 版本下載。CrispASR 和 VAD 模型採用 MIT 許可。"
+          }
         }
       }
     },
@@ -887,6 +1073,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "未下载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未下載"
           }
         }
       }
@@ -916,6 +1108,12 @@
             "state": "translated",
             "value": "可选。提高下载速率限制并可能加速模型下载。令牌安全存储在钥匙串中。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選。提高下載速率限制並可能加速模型下載。權杖安全儲存在鑰匙圈中。"
+          }
         }
       }
     },
@@ -943,6 +1141,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "准备中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備中"
           }
         }
       }
@@ -972,6 +1176,12 @@
             "state": "translated",
             "value": "正在使用 Metal 启动 CrispASR 并预热模型。完成后即可开始听写。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用 Metal 啟動 CrispASR 並預熱模型。完成後即可開始聽寫。"
+          }
         }
       }
     },
@@ -999,6 +1209,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "就绪"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就緒"
           }
         }
       }
@@ -1028,6 +1244,12 @@
             "state": "translated",
             "value": "正在本地使用 Metal 运行 Cohere..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在本機使用 Metal 執行 Cohere..."
+          }
         }
       }
     },
@@ -1052,6 +1274,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -1084,6 +1312,12 @@
             "state": "translated",
             "value": "移除已下载的模型？"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除已下載的模型？"
+          }
         }
       }
     },
@@ -1108,6 +1342,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除模型"
@@ -1140,6 +1380,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -1167,6 +1413,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "模型加载后将常驻内存。Metal 在提供程序就绪前完成预热，确保首次转录响应迅速。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型載入後將常駐記憶體。Metal 在提供程式就緒前完成預熱，確保首次轉錄回應迅速。"
           }
         }
       }
@@ -1196,6 +1448,12 @@
             "state": "translated",
             "value": "卸载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載"
+          }
         }
       }
     },
@@ -1223,6 +1481,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "有效的 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 Hugging Face 權杖"
           }
         }
       }
@@ -1252,6 +1516,12 @@
             "state": "translated",
             "value": "正在验证令牌..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在驗證權杖..."
+          }
         }
       }
     },
@@ -1279,6 +1549,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "VAD 模型许可"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VAD 模型許可"
           }
         }
       }
@@ -1308,6 +1584,12 @@
             "state": "translated",
             "value": "每次转录前运行语音活动检测，以抑制静音和低噪声幻听。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次轉錄前執行語音活動偵測，以抑制靜音和低噪聲幻聽。"
+          }
         }
       }
     },
@@ -1326,6 +1608,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.51 GB"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "1.51 GB"
@@ -1352,6 +1640,12 @@
             "state": "translated",
             "value": "1.74 GB"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.74 GB"
+          }
         }
       }
     },
@@ -1374,6 +1668,12 @@
             "state": "translated",
             "value": "1.98 GB"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.98 GB"
+          }
         }
       }
     },
@@ -1392,6 +1692,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2.42 GB"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "2.42 GB"
@@ -1424,6 +1730,12 @@
             "state": "translated",
             "value": "8 GB 以上 Mac"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 GB 以上 Mac"
+          }
         }
       }
     },
@@ -1451,6 +1763,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "建议 16 GB 以上"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建議 16 GB 以上"
           }
         }
       }
@@ -1480,6 +1798,12 @@
             "state": "translated",
             "value": "经过测试的大小、速度和准确度的最佳平衡"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "經過測試的大小、速度和準確度的最佳平衡"
+          }
         }
       }
     },
@@ -1507,6 +1831,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "选择 Compact Q4_K 获得最小下载量，Fast Q5_0 作为推荐默认选项，Q6_K 获得更高数值精度，或实验性 Q8_0 获得最高数值精度。仅加载选定的模型。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇 Compact Q4_K 獲得最小下載量，Fast Q5_0 作為建議預設選項，Q6_K 獲得更高數值精度，或實驗性 Q8_0 獲得最高數值精度。僅載入選定的模型。"
           }
         }
       }
@@ -1536,6 +1866,12 @@
             "state": "translated",
             "value": "Cohere 资源验证失败："
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere 資源驗證失敗："
+          }
         }
       }
     },
@@ -1563,6 +1899,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cohere Transcribe 不支持翻译。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 不支援翻譯。"
           }
         }
       }
@@ -1592,6 +1934,12 @@
             "state": "translated",
             "value": "Cohere Transcribe 需要明确选择支持的语言。不支持自动语言检测。支持的语言："
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 需要明確選擇支援的語言。不支援自動語言偵測。支援的語言："
+          }
         }
       }
     },
@@ -1613,6 +1961,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "紧凑型（Q4_K · Metal）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "緊湊型（Q4_K · Metal）"
           }
         }
       }
@@ -1642,6 +1996,12 @@
             "state": "translated",
             "value": "CrispASR 未能在五分钟内就绪。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 未能在五分鐘內就緒。"
+          }
         }
       }
     },
@@ -1669,6 +2029,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "CrispASR 在启动时退出。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 在啟動時退出。"
           }
         }
       }
@@ -1698,6 +2064,12 @@
             "state": "translated",
             "value": "快速型（Q5_0 · 推荐）"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速型（Q5_0 · 建議）"
+          }
         }
       }
     },
@@ -1722,6 +2094,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更高精度（Q6_K · Metal）"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "更高精度（Q6_K · Metal）"
@@ -1754,6 +2132,12 @@
             "state": "translated",
             "value": "推荐 Q5_0 与 Q8_0 之间的中间量化级别"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建議 Q5_0 與 Q8_0 之間的中間量化級別"
+          }
         }
       }
     },
@@ -1781,6 +2165,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "最大量化；尚未测得整体准确度提升"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大量化；尚未測得整體準確度提升"
           }
         }
       }
@@ -1810,6 +2200,12 @@
             "state": "translated",
             "value": "最高精度（Q8_0 · 实验性）"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高精度（Q8_0 · 實驗性）"
+          }
         }
       }
     },
@@ -1834,6 +2230,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -1866,6 +2268,12 @@
             "state": "translated",
             "value": "最小下载量和内存占用"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小下載量和記憶體佔用"
+          }
         }
       }
     },
@@ -1893,6 +2301,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cohere 模型下载已完成，但缺少部分必需的模型文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere 模型下載已完成，但缺少部分必需的模型檔案。"
           }
         }
       }
@@ -1922,6 +2336,12 @@
             "state": "translated",
             "value": "Cohere Transcribe 模型尚未下载。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 模型尚未下載。"
+          }
         }
       }
     },
@@ -1949,6 +2369,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cohere Transcribe 模型尚未加载。请打开插件设置并先加载模型。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 模型尚未載入。請開啟外掛設定並先載入模型。"
           }
         }
       }
@@ -1978,6 +2404,12 @@
             "state": "translated",
             "value": "无法解压 CrispASR 运行时。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法解壓 CrispASR 執行時。"
+          }
         }
       }
     },
@@ -2005,6 +2437,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "CrispASR 运行时下载失败。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 執行時下載失敗。"
           }
         }
       }
@@ -2034,6 +2472,12 @@
             "state": "translated",
             "value": "本地 CrispASR 服务器 URL 无效。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本機 CrispASR 伺服器 URL 無效。"
+          }
         }
       }
     },
@@ -2061,6 +2505,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "固定的 Cohere 模型仓库标识符无效。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "固定的 Cohere 模型倉庫辨識符號無效。"
           }
         }
       }
@@ -2090,6 +2540,12 @@
             "state": "translated",
             "value": "已验证的 CrispASR 运行时归档不完整。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已驗證的 CrispASR 執行時壓縮檔不完整。"
+          }
         }
       }
     },
@@ -2117,6 +2573,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "这将移除 %@。如果安装了其他变体，共享运行时文件将保留。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這將移除 %@。如果安裝了其他變體，共享執行時檔案將保留。"
           }
         }
       }
@@ -2146,6 +2608,12 @@
             "state": "translated",
             "value": "TypeWhisper 无法为 Cohere Transcribe 预留本地端口。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper 無法為 Cohere Transcribe 預留本機埠。"
+          }
         }
       }
     },
@@ -2173,6 +2641,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在使用 Metal 启动并预热 Cohere"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用 Metal 啟動並預熱 Cohere"
           }
         }
       }
@@ -2202,6 +2676,12 @@
             "state": "translated",
             "value": "正在运行..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在執行..."
+          }
         }
       }
     },
@@ -2230,6 +2710,12 @@
             "state": "translated",
             "value": "按需加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需載入"
+          }
         }
       }
     },
@@ -2257,6 +2743,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "“自动卸载模型”已设为“立即”。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動卸載模型」已設為「立即」。"
           }
         }
       }

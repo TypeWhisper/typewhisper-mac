@@ -59,7 +59,8 @@ struct FileTranscriptionView: View {
                             "Select Watch Folder…",
                             de: "Überwachten Ordner auswählen …",
                             ja: "ウォッチフォルダを選択…",
-                            zh: "选择监控文件夹…"
+                            zh: "选择监控文件夹…",
+                            zhHant: "選擇監控資料夾…"
                         ))
                     }
 
@@ -98,7 +99,8 @@ struct FileTranscriptionView: View {
                             "Select Output Folder…",
                             de: "Ausgabeordner auswählen …",
                             ja: "出力フォルダを選択…",
-                            zh: "选择输出文件夹…"
+                            zh: "选择输出文件夹…",
+                            zhHant: "選擇輸出資料夾…"
                         ))
                     }
                 }
@@ -187,6 +189,7 @@ struct FileTranscriptionView: View {
                                     de: "\(processing) wird verarbeitet",
                                     ja: "\(processing)を処理中",
                                     zh: "正在处理\(processing)",
+                                    zhHant: "正在處理\(processing)",
                                     es: "Procesando \(processing)"
                                 ))
                         }
@@ -448,7 +451,8 @@ struct FileTranscriptionView: View {
                         "Transcription progress",
                         de: "Transkriptionsfortschritt",
                         ja: "文字起こしの進行状況",
-                        zh: "转录进度"
+                        zh: "转录进度",
+                        zhHant: "轉錄進度"
                     ))
             }
 
@@ -479,6 +483,7 @@ struct FileTranscriptionView: View {
                 de: "Transkript von \(item.fileName) kopieren",
                 ja: "\(item.fileName)の文字起こしをコピー",
                 zh: "复制\(item.fileName)的转录",
+                zhHant: "複製\(item.fileName)的轉錄",
                 es: "Copiar la transcripción de \(item.fileName)"
             ))
 
@@ -499,6 +504,7 @@ struct FileTranscriptionView: View {
                     de: "Untertitel für \(item.fileName) exportieren",
                     ja: "\(item.fileName)の字幕を書き出し",
                     zh: "导出\(item.fileName)的字幕",
+                    zhHant: "匯出\(item.fileName)的字幕",
                     es: "Exportar subtítulos de \(item.fileName)"
                 ))
             }
@@ -639,6 +645,7 @@ struct FileTranscriptionView: View {
             de: "\(processed) von \(total) Dateien verarbeitet",
             ja: "\(total)件中\(processed)件のファイルを処理済み",
             zh: "已处理 \(processed)/\(total) 个文件",
+            zhHant: "已處理 \(processed)/\(total) 個檔案",
             es: "\(processed) de \(total) archivos procesados"
         )
     }
@@ -648,7 +655,8 @@ struct FileTranscriptionView: View {
             "Clear Output Folder",
             de: "Ausgabeordner zurücksetzen",
             ja: "出力フォルダをクリア",
-            zh: "清除输出文件夹"
+            zh: "清除输出文件夹",
+            zhHant: "清除輸出資料夾"
         )
     }
 
@@ -796,7 +804,7 @@ private struct FileRowExpandAction: ViewModifier {
         content.accessibilityActions {
             if isAvailable {
                 Button(isExpanded
-                    ? localizedAppText("Hide Transcript", de: "Transkript ausblenden", ja: "文字起こしを非表示", zh: "隐藏转录")
+                    ? localizedAppText("Hide Transcript", de: "Transkript ausblenden", ja: "文字起こしを非表示", zh: "隐藏转录", zhHant: "隱藏轉錄")
                     : String(localized: "recorder.showTranscript")
                 ) {
                     toggle()

@@ -188,6 +188,7 @@ struct HotkeyRecorderView: View {
                 de: "Tastenkürzel für „\(title)“ entfernen",
                 ja: "「\(title)」のショートカットキーを削除",
                 zh: "清除“\(title)”的快捷键",
+                zhHant: "清除「\(title)」的快速鍵",
                 es: "Borrar el atajo de \(title)"
             ))
         }
@@ -212,6 +213,7 @@ struct HotkeyRecorderView: View {
             de: "Tastenkürzel für „\(title)“ mit visueller Tastatur bearbeiten",
             ja: "「\(title)」のショートカットキーをビジュアルキーボードで編集",
             zh: "使用可视化键盘编辑“\(title)”的快捷键",
+            zhHant: "使用視覺化鍵盤編輯「\(title)」的快速鍵",
             es: "Editar el atajo de \(title) con el teclado visual"
         ))
     }

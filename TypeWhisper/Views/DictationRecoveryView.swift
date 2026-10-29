@@ -28,7 +28,8 @@ struct DictationRecoveryView: View {
                 "Saved to History",
                 de: "Im Verlauf gespeichert",
                 ja: "履歴に保存しました",
-                zh: "已保存到历史记录"
+                zh: "已保存到历史记录",
+                zhHant: "已儲存到歷史記錄"
             ))
         }
         .onChange(of: recoveryErrors) { previous, current in
@@ -66,6 +67,7 @@ struct DictationRecoveryView: View {
                 de: "\(message) (\(count) Aufnahmen)",
                 ja: "\(message)（\(count)件の録音）",
                 zh: "\(message)（\(count) 个录音）",
+                zhHant: "\(message)（\(count) 個錄音）",
                 es: "\(message) (\(count) grabaciones)"
             )
         }
@@ -152,6 +154,7 @@ struct DictationRecoveryView: View {
                                 Text(localizedAppText(
                                     "This will permanently delete all \(viewModel.recoveries.count) recovery recordings.",
                                     de: "Dadurch werden alle \(viewModel.recoveries.count) Wiederherstellungsaufnahmen dauerhaft gelöscht.",
+                                    zhHant: "這將永久刪除全部 \(viewModel.recoveries.count) 個恢復錄音。",
                                     es: "Esto eliminará de forma permanente las \(viewModel.recoveries.count) grabaciones de recuperación."
                                 ))
                             }
@@ -257,6 +260,7 @@ struct DictationRecoveryView: View {
                             Text(localizedAppText(
                                 "\(hedgeThresholdLabelValue) seconds",
                                 de: "\(hedgeThresholdLabelValue) Sekunden",
+                                zhHant: "\(hedgeThresholdLabelValue) 秒",
                                 es: "\(hedgeThresholdLabelValue) segundos"
                             ))
                         }
@@ -265,13 +269,15 @@ struct DictationRecoveryView: View {
                             "Start racing after",
                             de: "Rennen starten nach",
                             ja: "並行実行を開始するまでの時間",
-                            zh: "开始并行处理前的等待时间"
+                            zh: "开始并行处理前的等待时间",
+                            zhHant: "開始並行處理前的等待時間"
                         ))
                         .accessibilityValue(localizedAppText(
                             "\(hedgeThresholdLabelValue) seconds",
                             de: "\(hedgeThresholdLabelValue) Sekunden",
                             ja: "\(hedgeThresholdLabelValue) 秒",
                             zh: "\(hedgeThresholdLabelValue) 秒",
+                            zhHant: "\(hedgeThresholdLabelValue) 秒",
                             es: "\(hedgeThresholdLabelValue) segundos"
                         ))
                     }
@@ -370,7 +376,8 @@ struct DictationRecoveryView: View {
                     "Selects this recording for Transcribe.",
                     de: "Wählt diese Aufnahme für „Transkribieren“ aus.",
                     ja: "この録音を「音声認識」の対象に選択します。",
-                    zh: "选择此录音进行转录。"
+                    zh: "选择此录音进行转录。",
+                    zhHant: "選擇此錄音進行轉錄。"
                 )
                 : "")
 
@@ -383,6 +390,7 @@ struct DictationRecoveryView: View {
             .accessibilityLabel(localizedAppText(
                 "Discard \(recovery.fileName)",
                 de: "\(recovery.fileName) verwerfen",
+                zhHant: "捨棄 \(recovery.fileName)",
                 es: "Descartar \(recovery.fileName)"
             ))
         }

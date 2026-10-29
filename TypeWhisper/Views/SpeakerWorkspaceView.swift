@@ -146,8 +146,8 @@ struct SpeakerWorkspaceView: View {
                 }
             }
             Button(isSelected
-                ? localizedAppText("Deselect Turn", de: "Wortmeldung abwählen", ja: "発言の選択を解除", zh: "取消选择发言")
-                : localizedAppText("Select Turn", de: "Wortmeldung auswählen", ja: "発言を選択", zh: "选择发言")
+                ? localizedAppText("Deselect Turn", de: "Wortmeldung abwählen", ja: "発言の選択を解除", zh: "取消选择发言", zhHant: "取消選擇發言")
+                : localizedAppText("Select Turn", de: "Wortmeldung auswählen", ja: "発言を選択", zh: "选择发言", zhHant: "選擇發言")
             ) {
                 model.select(turn: paragraph.turnIndex, extending: false, toggling: true)
             }
@@ -592,7 +592,8 @@ private struct SpeakerChip: View {
                 "Only this speaker plays",
                 de: "Nur dieser Sprecher wird abgespielt",
                 ja: "この話者のみ再生",
-                zh: "仅播放此说话人"
+                zh: "仅播放此说话人",
+                zhHant: "僅播放此說話者"
             ))
         }
         if model.mutedSpeakers.contains(speakerID) {
@@ -600,7 +601,8 @@ private struct SpeakerChip: View {
                 "Skipped in playback",
                 de: "Wird bei der Wiedergabe übersprungen",
                 ja: "再生時にスキップ",
-                zh: "播放时跳过"
+                zh: "播放时跳过",
+                zhHant: "播放時跳過"
             ))
         }
         if model.voiceState(of: speakerID) == .suggestion {
@@ -611,7 +613,8 @@ private struct SpeakerChip: View {
                 "Only this speaker is shown",
                 de: "Nur dieser Sprecher wird angezeigt",
                 ja: "この話者のみ表示中",
-                zh: "仅显示此说话人"
+                zh: "仅显示此说话人",
+                zhHant: "僅顯示此說話者"
             ))
         }
         return parts.joined(separator: ", ")
@@ -735,6 +738,7 @@ private struct SpeakerInspectorRow: View {
                     de: "Weitere Aktionen für \(model.name(of: speakerID))",
                     ja: "\(model.name(of: speakerID))のその他の操作",
                     zh: "\(model.name(of: speakerID))的更多操作",
+                    zhHant: "\(model.name(of: speakerID))的更多操作",
                     es: "Más acciones para \(model.name(of: speakerID))"
                 ))
             }
@@ -1265,6 +1269,7 @@ private struct SpeakerTimeline: View {
                     de: "\(elapsed) abgespielt",
                     ja: "経過 \(elapsed)",
                     zh: "已播放 \(elapsed)",
+                    zhHant: "已播放 \(elapsed)",
                     es: "\(elapsed) transcurrido"
                 ))
             SpeakerScrubber(model: model, playback: playback, time: clock.time)
@@ -1275,6 +1280,7 @@ private struct SpeakerTimeline: View {
                     de: "Noch \(remaining)",
                     ja: "残り \(remaining)",
                     zh: "剩余 \(remaining)",
+                    zhHant: "剩餘 \(remaining)",
                     es: "\(remaining) restante"
                 ))
         }
@@ -1390,6 +1396,7 @@ private struct SpeakerScrubber: View {
             de: "\(stamp) von \(total)",
             ja: "\(total)中 \(stamp)",
             zh: "\(stamp)/\(total)",
+            zhHant: "\(stamp)/\(total)",
             es: "\(stamp) de \(total)"
         )
         guard let turn = SpeakerTranscriptPresentation.spokenTurn(in: model.turns, at: time) else { return position }

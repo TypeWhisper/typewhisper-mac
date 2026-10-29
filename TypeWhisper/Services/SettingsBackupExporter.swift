@@ -390,7 +390,8 @@ enum SettingsBackupExporter {
                     "Global keyboard shortcuts. Only fills empty slots on import unless Replace existing items is on.",
                     de: "Globale Tastenkombinationen. Beim Import werden nur leere Plätze befüllt, außer „Vorhandene Einträge ersetzen“ ist eingeschaltet.",
                     ja: "アプリ共通のキーボードショートカット。「既存の項目を置き換える」がオフの場合、取込み時は未設定の項目にのみ適用します。",
-                    zh: "全局键盘快捷键。除非开启“替换现有项目”，导入时仅填充空白位置。"
+                    zh: "全局键盘快捷键。除非开启“替换现有项目”，导入时仅填充空白位置。",
+                    zhHant: "全域鍵盤快速鍵。除非開啟「替換現有項目」，匯入時僅填入空白位置。"
                 )
             case .plugins: return localizedAppText(
                     "Installed community plugins. Reinstalling requires network access and fetches the latest marketplace version.",

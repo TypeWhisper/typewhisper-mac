@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "运行 confucius4_r2t2 模型（流式模式）的 audiocpp_server。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "執行 confucius4_r2t2 模型（流式模式）的 audiocpp_server。"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "音频以 16 kHz PCM 流式传输，仅发送到此处配置的 audio.cpp 服务器。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音訊以 16 kHz PCM 流式傳輸，僅傳送到此處設定的 audio.cpp 伺服器。"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "已连接"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連線"
+          }
         }
       }
     },
@@ -106,6 +124,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型 ID"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型 ID"
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务器 URL"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器 URL"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "测试连接"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試連線"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务器配置中模型条目的 \"id\"。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器設定中模型條目的 \"id\"。"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "%@（推荐）"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（建議）"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "audiocpp_server %@ 正在 127.0.0.1:%@ 上运行。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ 正在 127.0.0.1:%@ 上執行。"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "audiocpp_server %@ 会在第一次听写时启动，停止后会自动重启。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ 會在第一次聽寫時啟動，停止後會自動重新啟動。"
+          }
         }
       }
     },
@@ -334,6 +400,12 @@
             "state": "translated",
             "value": "内置"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內建"
+          }
         }
       }
     },
@@ -358,6 +430,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "取消"
@@ -390,6 +468,12 @@
             "state": "translated",
             "value": "删除"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除"
+          }
         }
       }
     },
@@ -417,6 +501,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除已下载的模型？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除已下載的模型？"
           }
         }
       }
@@ -446,6 +536,12 @@
             "state": "translated",
             "value": "下载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載"
+          }
         }
       }
     },
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "全精度，体积最大"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全精度，體積最大"
+          }
         }
       }
     },
@@ -498,6 +600,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -530,6 +638,12 @@
             "state": "translated",
             "value": "模型许可证"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型授權"
+          }
         }
       }
     },
@@ -557,6 +671,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "接近全精度质量，由 davidxifeng 提供"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接近全精度品質，由 davidxifeng 提供"
           }
         }
       }
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "自有服务器"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自有伺服器"
+          }
         }
       }
     },
@@ -613,6 +739,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器"
           }
         }
       }
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "在访达中显示"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在訪達中顯示"
+          }
         }
       }
     },
@@ -669,6 +807,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "体积最小、速度最快，由 Nairod785 提供的社区量化版本"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "體積最小、速度最快，由 Nairod785 提供的社群量化版本"
           }
         }
       }
@@ -698,6 +842,12 @@
             "state": "translated",
             "value": "模型权重由网易有道依据 Confucius4-R2T2 模型使用许可证授权，该许可证会随每个模型一起下载（LICENSE、LICENSE_zh、NOTICE）。下载即表示你接受该许可证。服务器为 audio.cpp，采用 Apache-2.0 许可证。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型權重由網易有道依據 Confucius4-R2T2 模型使用授權授權，該授權會隨每個模型一起下載（LICENSE、LICENSE_zh、NOTICE）。下載即表示你接受該授權。伺服器為 audio.cpp，採用 Apache-2.0 授權。"
+          }
         }
       }
     },
@@ -726,6 +876,12 @@
             "state": "translated",
             "value": "audiocpp_server %@ 尚未安装。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ 尚未安裝。"
+          }
         }
       }
     },
@@ -753,6 +909,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "内置服务器需要配备 Apple 芯片的 Mac。在这台 Mac 上，请连接你自己运行的 audio.cpp 服务器。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內建伺服器需要配備 Apple 晶片的 Mac。在這台 Mac 上，請連線你自己執行的 audio.cpp 伺服器。"
           }
         }
       }

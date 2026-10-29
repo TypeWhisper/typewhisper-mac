@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "隐藏 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 API 金鑰"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "刷新 LLM 模型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理 LLM 模型"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "刷新转录模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理轉錄模型"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 API 金鑰"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "保存 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 API 金鑰"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "搜索 LLM 模型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋 LLM 模型"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "搜索转录模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋轉錄模型"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 API 金鑰"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API 密钥安全存储在钥匙串中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰安全儲存在鑰匙圈中"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "余额：$%@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "餘額：$%@"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "自定义"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "免费"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "免費"
+          }
         }
       }
     },
@@ -389,6 +467,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "获取 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得 API 金鑰"
           }
         }
       }
@@ -418,6 +502,12 @@
             "state": "translated",
             "value": "API 密钥无效"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰無效"
+          }
         }
       }
     },
@@ -442,6 +532,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "LLM 模型"
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "价格不可用"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "價格不可用"
+          }
         }
       }
     },
@@ -501,6 +603,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "提供商默认"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "供應商預設"
           }
         }
       }
@@ -530,6 +638,12 @@
             "state": "translated",
             "value": "刷新"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理"
+          }
         }
       }
     },
@@ -554,6 +668,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -613,6 +739,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "搜索模型..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋模型..."
           }
         }
       }
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "Vercel AI Gateway 的语音转文字功能处于测试阶段。您的团队可能尚未启用转录模型。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vercel AI Gateway 的語音轉文字功能處於測試階段。您的團隊可能尚未啟用轉錄模型。"
+          }
         }
       }
     },
@@ -669,6 +807,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "温度"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度"
           }
         }
       }
@@ -698,6 +842,12 @@
             "state": "translated",
             "value": "温度模式"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度模式"
+          }
         }
       }
     },
@@ -725,6 +875,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "转录模型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轉錄模型"
           }
         }
       }
@@ -754,6 +910,12 @@
             "state": "translated",
             "value": "正在使用默认模型。点击刷新以获取所有可用模型。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用預設模型。點選重新整理以取得所有可用模型。"
+          }
         }
       }
     },
@@ -782,6 +944,12 @@
             "state": "translated",
             "value": "API 密钥有效"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰有效"
+          }
         }
       }
     },
@@ -809,6 +977,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在验证..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在驗證..."
           }
         }
       }

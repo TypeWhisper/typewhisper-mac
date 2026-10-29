@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "自定义追加格式"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂追加格式"
+          }
         }
       }
     },
@@ -54,6 +60,12 @@
             "state": "translated",
             "value": "每日笔记文件名"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日筆記檔名"
+          }
         }
       }
     },
@@ -75,6 +87,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "你是一名助手，负责将口述内容整理成结构清晰、兼容 Obsidian 的 Markdown 笔记。请使用合适的标题、项目符号和段落组织文本。在保留原意的同时，修正语法并删除填充词。仅输出格式化后的 Markdown，不要附加解释。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你是一名助手，負責將口述內容整理成結構清晰、相容 Obsidian 的 Markdown 筆記。請使用合適的標題、項目符號和段落組織文字。在保留原意的同時，修正語法並刪除填入詞。僅輸出格式化後的 Markdown，不要附加解釋。"
           }
         }
       }
@@ -104,6 +122,12 @@
             "state": "translated",
             "value": "向每条笔记添加元数据（日期、应用、语言、标签）。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向每條筆記新增後設資料（日期、應用、語言、標籤）。"
+          }
         }
       }
     },
@@ -132,6 +156,12 @@
             "state": "translated",
             "value": "将所有转录内容追加到单个每日文件中，而不是创建单独的笔记。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將所有轉錄內容追加到單個每日檔案中，而不是建立單獨的筆記。"
+          }
         }
       }
     },
@@ -156,6 +186,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "追加格式："
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "追加格式："
@@ -188,6 +224,12 @@
             "state": "translated",
             "value": "自动导出"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動匯出"
+          }
         }
       }
     },
@@ -215,6 +257,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "浏览..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "瀏覽..."
           }
         }
       }
@@ -244,6 +292,12 @@
             "state": "translated",
             "value": "复制指令"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製指令"
+          }
         }
       }
     },
@@ -271,6 +325,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "创建自定义工作流，将其粘贴到指令中，并将操作目标设置为「保存到 Obsidian」。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建立自訂工作流程，將其貼上到指令中，並將操作目標設定為「儲存到 Obsidian」。"
           }
         }
       }
@@ -300,6 +360,12 @@
             "state": "translated",
             "value": "项目符号列表"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "項目符號清單"
+          }
         }
       }
     },
@@ -327,6 +393,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "自定义"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂"
           }
         }
       }
@@ -356,6 +428,12 @@
             "state": "translated",
             "value": "每日笔记模式"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日筆記模式"
+          }
         }
       }
     },
@@ -383,6 +461,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "检测到的 Vault"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "偵測到的 Vault"
           }
         }
       }
@@ -412,6 +496,12 @@
             "state": "translated",
             "value": "文件组织"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案組織"
+          }
         }
       }
     },
@@ -439,6 +529,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "文件名："
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔名："
           }
         }
       }
@@ -468,6 +564,12 @@
             "state": "translated",
             "value": "纯文本追加"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "純文字追加"
+          }
         }
       }
     },
@@ -495,6 +597,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "在 TypeWhisper 中编辑转录时，保持已导出的单独笔记为最新状态。Obsidian 中的外部编辑可能会被覆盖。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 TypeWhisper 中編輯轉錄時，保持已匯出的單獨筆記為最新狀態。Obsidian 中的外部編輯可能會被覆蓋。"
           }
         }
       }
@@ -524,6 +632,12 @@
             "state": "translated",
             "value": "实时同步历史编辑"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即時同步歷史編輯"
+          }
         }
       }
     },
@@ -551,6 +665,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "实时同步仅适用于单独笔记。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即時同步僅適用於單獨筆記。"
           }
         }
       }
@@ -580,6 +700,12 @@
             "state": "translated",
             "value": "笔记模板"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "筆記模板"
+          }
         }
       }
     },
@@ -607,6 +733,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "未选择 Vault"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未選擇 Vault"
           }
         }
       }
@@ -636,6 +768,12 @@
             "state": "translated",
             "value": "占位符：{{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "佔位符：{{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
+          }
         }
       }
     },
@@ -663,6 +801,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "占位符：{{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "佔位符：{{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}"
           }
         }
       }
@@ -692,6 +836,12 @@
             "state": "translated",
             "value": "占位符：{{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "佔位符：{{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
+          }
         }
       }
     },
@@ -719,6 +869,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "预览：%@.md"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預覽：%@.md"
           }
         }
       }
@@ -748,6 +904,12 @@
             "state": "translated",
             "value": "工作流指令"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流程指令"
+          }
         }
       }
     },
@@ -775,6 +937,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "选择 Vault..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇 Vault..."
           }
         }
       }
@@ -804,6 +972,12 @@
             "state": "translated",
             "value": "选择您的 Obsidian Vault 文件夹"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇您的 Obsidian Vault 資料夾"
+          }
         }
       }
     },
@@ -831,6 +1005,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "子文件夹："
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "子資料夾："
           }
         }
       }
@@ -860,6 +1040,12 @@
             "state": "translated",
             "value": "标签："
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標籤："
+          }
         }
       }
     },
@@ -888,6 +1074,12 @@
             "state": "translated",
             "value": "时间戳分段"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時間戳記分段"
+          }
         }
       }
     },
@@ -912,6 +1104,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "Vault"
@@ -944,6 +1142,12 @@
             "state": "translated",
             "value": "YAML 前置元数据"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YAML 前置後設資料"
+          }
         }
       }
     },
@@ -971,6 +1175,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "TypeWhisper 无法再访问此 Vault。请通过“浏览...”重新选择。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper 無法再存取此 Vault。請透過「瀏覽...」重新選擇。"
           }
         }
       }
@@ -1000,6 +1210,12 @@
             "state": "translated",
             "value": "听写"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聽寫"
+          }
         }
       }
     },
@@ -1027,6 +1243,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "录音器转录"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音器轉錄"
           }
         }
       }
@@ -1056,6 +1278,12 @@
             "state": "translated",
             "value": "将每个完成的录音保存为单独的笔记，在每日笔记模式下也是如此。日历录音会在 frontmatter 中保留标题和参会者。开启实时同步后，重新转录录音会更新其笔记。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將每個完成的錄音儲存為單獨的筆記，在每日筆記模式下也是如此。行事曆錄音會在 frontmatter 中保留標題和參會者。開啟即時同步後，重新轉錄錄音會更新其筆記。"
+          }
         }
       }
     },
@@ -1084,6 +1312,12 @@
             "state": "translated",
             "value": "自动将下方选择的转录保存到 Obsidian。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動將下方選擇的轉錄儲存到 Obsidian。"
+          }
         }
       }
     },
@@ -1111,6 +1345,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "在每日笔记模式下，实时同步只会更新录音器转录的笔记。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在每日筆記模式下，即時同步只會更新錄音器轉錄的筆記。"
           }
         }
       }

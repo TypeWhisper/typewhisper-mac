@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "删除 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除 %@"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "编辑 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯 %@"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "启用 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用 %@"
+          }
         }
       }
     },
@@ -110,6 +128,12 @@
             "state": "translated",
             "value": "失败"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "失敗"
+          }
         }
       }
     },
@@ -134,6 +158,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成功"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "成功"
@@ -166,6 +196,12 @@
             "state": "translated",
             "value": "添加 Webhook 以将转录数据发送到外部服务。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增 Webhook 以將轉錄資料傳送到外部服務。"
+          }
         }
       }
     },
@@ -193,6 +229,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "添加 Webhook"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增 Webhook"
           }
         }
       }
@@ -222,6 +264,12 @@
             "state": "translated",
             "value": "所有转录"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有轉錄"
+          }
         }
       }
     },
@@ -246,6 +294,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "取消"
@@ -278,6 +332,12 @@
             "state": "translated",
             "value": "投递日志"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "投遞日誌"
+          }
         }
       }
     },
@@ -302,6 +362,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "完成"
@@ -334,6 +400,12 @@
             "state": "translated",
             "value": "编辑 Webhook"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯 Webhook"
+          }
         }
       }
     },
@@ -358,6 +430,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通用"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "通用"
@@ -390,6 +468,12 @@
             "state": "translated",
             "value": "方法"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方法"
+          }
         }
       }
     },
@@ -417,6 +501,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "名称"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名稱"
           }
         }
       }
@@ -446,6 +536,12 @@
             "state": "translated",
             "value": "无 Webhook"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無 Webhook"
+          }
         }
       }
     },
@@ -474,6 +570,12 @@
             "state": "translated",
             "value": "未配置工作流。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未設定工作流程。"
+          }
         }
       }
     },
@@ -498,6 +600,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不再可用"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "不再可用"
@@ -530,6 +638,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -557,6 +671,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "请至少选择一个工作流。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請至少選擇一個工作流程。"
           }
         }
       }
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "选定的工作流"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選定的工作流程"
+          }
         }
       }
     },
@@ -613,6 +739,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "发送 Webhook 至"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "傳送 Webhook 至"
           }
         }
       }
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "每次转录后都会发送 Webhook，包括没有工作流的转录。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次轉錄後都會傳送 Webhook，包括沒有工作流程的轉錄。"
+          }
         }
       }
     },
@@ -670,6 +808,12 @@
             "state": "translated",
             "value": "仅对选定的工作流发送 Webhook。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅對選定的工作流程傳送 Webhook。"
+          }
         }
       }
     },
@@ -694,6 +838,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "URL"
@@ -726,6 +876,12 @@
             "state": "translated",
             "value": "Webhook 通知"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhook 通知"
+          }
         }
       }
     },
@@ -754,6 +910,12 @@
             "state": "translated",
             "value": "工作流"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流程"
+          }
         }
       }
     },
@@ -781,6 +943,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "工作流：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流程：%@"
           }
         }
       }
@@ -811,6 +979,12 @@
             "state": "translated",
             "value": "同时发送录音器已完成的转录结果"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同時傳送錄音器已完成的轉錄結果"
+          }
         }
       }
     },
@@ -840,6 +1014,12 @@
             "state": "translated",
             "value": "录音"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錄音"
+          }
         }
       }
     },
@@ -868,6 +1048,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "发送手动、日历和 API 录音的已保存转录，包括重新转录的结果。不受工作流筛选条件影响。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "傳送手動、行事曆和 API 錄音的已儲存轉錄，包括重新轉錄的結果。不受工作流程篩選條件影響。"
           }
         }
       }

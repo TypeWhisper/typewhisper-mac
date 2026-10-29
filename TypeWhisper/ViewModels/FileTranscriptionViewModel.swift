@@ -468,6 +468,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             de: "Transkription abgeschlossen: \(done) von \(total) Dateien",
             ja: "文字起こし完了: \(total)件中\(done)件のファイル",
             zh: "转录完成：\(total) 个文件中的 \(done) 个",
+            zhHant: "轉錄完成：\(total) 個檔案中的 \(done) 個",
             es: "Transcripción completada: \(done) de \(total) archivos"
         )
         if failed > 0 {
@@ -476,6 +477,7 @@ final class FileTranscriptionViewModel: ObservableObject {
                 de: "\(failed) fehlgeschlagen",
                 ja: "\(failed)件失敗",
                 zh: "\(failed) 个失败",
+                zhHant: "\(failed) 個失敗",
                 es: "\(failed) con errores"
             )
         }

@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "下载并加载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入 %@"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在下载 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載 %@"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "错误"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "隐藏 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 Hugging Face 權杖"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "加载 %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入 %@"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "已加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已載入"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 Hugging Face 權杖"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "重试 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重試 %@"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "重试下载 CTC 模型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重試下載 CTC 模型"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "保存 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 Hugging Face 權杖"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "卸载 %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載 %@"
+          }
         }
       }
     },
@@ -375,7 +453,8 @@
           }
         },
         "ja": { "stringUnit": { "state": "translated", "value": "モデルを準備中" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在准备模型" } }
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在准备模型" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "正在準備模型" } }
       }
     },
     "Load": {
@@ -402,6 +481,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入"
           }
         }
       }
@@ -431,6 +516,12 @@
             "state": "translated",
             "value": "CTC 模型（约 100 MB）- 首次使用时自动下载，或："
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CTC 模型（約 100 MB）- 首次使用時自動下載，或："
+          }
         }
       }
     },
@@ -458,6 +549,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "下载并加载"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並載入"
           }
         }
       }
@@ -487,6 +584,12 @@
             "state": "translated",
             "value": "立即下载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即下載"
+          }
         }
       }
     },
@@ -511,6 +614,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "完成"
@@ -543,6 +652,12 @@
             "state": "translated",
             "value": "正在下载 CTC 模型..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載 CTC 模型..."
+          }
         }
       }
     },
@@ -570,6 +685,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "启用词汇增强"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用詞彙增強"
           }
         }
       }
@@ -599,6 +720,12 @@
             "state": "translated",
             "value": "使用辅助 CTC 模型提高词典中自定义术语的识别率。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用輔助 CTC 模型提高詞典中自訂術語的辨識率。"
+          }
         }
       }
     },
@@ -626,6 +753,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 權杖"
           }
         }
       }
@@ -655,6 +788,12 @@
             "state": "translated",
             "value": "无效的 Hugging Face 令牌"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 Hugging Face 權杖"
+          }
         }
       }
     },
@@ -679,6 +818,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型版本"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型版本"
@@ -711,6 +856,12 @@
             "state": "translated",
             "value": "NVIDIA Parakeet TDT V2 - 在 Apple Silicon 上极快。仅限英语，最高召回率。无需 API 密钥。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT V2 - 在 Apple Silicon 上極快。僅限英語，最高召回率。無需 API 金鑰。"
+          }
         }
       }
     },
@@ -738,6 +889,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "NVIDIA Parakeet TDT - 在 Apple Silicon 上极快。支持 25 种欧洲语言，无需 API 密钥。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT - 在 Apple Silicon 上極快。支援 25 種歐洲語言，無需 API 金鑰。"
           }
         }
       }
@@ -767,6 +924,12 @@
             "state" : "translated",
             "value" : "NVIDIA Nemotron 3.5 ASR Streaming - 边说边转写，停止时文字即已就绪。支持 28 种语言，无需 API 密钥。"
           }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NVIDIA Nemotron 3.5 ASR Streaming - 邊說邊轉錄，停止時文字即已就緒。支援 28 種語言，無需 API 金鑰。"
+          }
         }
       }
     },
@@ -794,6 +957,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可選。提高下載速率限制。在 huggingface.co/settings/tokens 免費取得。"
           }
         }
       }
@@ -823,6 +992,12 @@
             "state": "translated",
             "value": "就绪 - 已加载 %lld 个术语"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就緒 - 已載入 %lld 個術語"
+          }
         }
       }
     },
@@ -851,6 +1026,12 @@
             "state": "translated",
             "value": "就绪 - 在词典设置中添加术语"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就緒 - 在詞典設定中新增術語"
+          }
         }
       }
     },
@@ -875,6 +1056,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -907,6 +1094,12 @@
             "state": "translated",
             "value": "重试"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重試"
+          }
         }
       }
     },
@@ -934,6 +1127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
           }
         }
       }
@@ -963,6 +1162,12 @@
             "state": "translated",
             "value": "卸载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸載"
+          }
         }
       }
     },
@@ -990,6 +1195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "有效的 Hugging Face 令牌"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 Hugging Face 權杖"
           }
         }
       }
@@ -1019,6 +1230,12 @@
             "state": "translated",
             "value": "正在验证令牌..."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在驗證權杖..."
+          }
         }
       }
     },
@@ -1046,6 +1263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "词汇增强"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "詞彙增強"
           }
         }
       }
@@ -1075,6 +1298,12 @@
             "state": "translated",
             "value": "FluidVoice 的 Fluid Speech Mini，基于 NVIDIA Parakeet TDT 0.6B v3 和 Moondream Parakeet Ultra。下载体积最小，仅支持英语，无需 API 密钥。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FluidVoice 的 Fluid Speech Mini，基於 NVIDIA Parakeet TDT 0.6B v3 和 Moondream Parakeet Ultra。下載體積最小，僅支援英語，無需 API 金鑰。"
+          }
         }
       }
     },
@@ -1102,6 +1331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moondream Parakeet Ultra - 在 Parakeet TDT v3 基础上继续训练，准确率更高。支持 25 种欧洲语言，无需 API 密钥。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moondream Parakeet Ultra - 在 Parakeet TDT v3 基礎上繼續訓練，準確率更高。支援 25 種歐洲語言，無需 API 金鑰。"
           }
         }
       }
@@ -1131,6 +1366,12 @@
             "state": "translated",
             "value": "按需加载"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需載入"
+          }
         }
       }
     },
@@ -1159,6 +1400,12 @@
             "state": "translated",
             "value": "“自动卸载模型”已设为“立即”。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「自動卸載模型」已設為「立即」。"
+          }
         }
       }
     },
@@ -1186,6 +1433,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "启用词汇增强后，Parakeet 能更准确地识别你的词条（需下载约 100 MB）。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用詞彙增強後，Parakeet 能更準確地辨識你的詞條（需下載約 100 MB）。"
           }
         }
       }

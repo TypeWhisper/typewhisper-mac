@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "错误"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "隐藏 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 API 金鑰"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "刷新声音"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理聲音"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 API 金鑰"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "保存 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 API 金鑰"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 API 金鑰"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "使用自定义声音 ID"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用自訂聲音 ID"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "API 密钥安全存储在钥匙串中"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰安全儲存在鑰匙圈中"
+          }
         }
       }
     },
@@ -277,6 +331,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无法验证 API 密钥。请检查连接后重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法驗證 API 金鑰。請檢查連線後重試。"
           }
         }
       }
@@ -306,6 +366,12 @@
             "state": "translated",
             "value": "自定义声音 ID"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂聲音 ID"
+          }
         }
       }
     },
@@ -333,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "默认声音"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預設聲音"
           }
         }
       }
@@ -362,6 +434,12 @@
             "state": "translated",
             "value": "无效的 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 API 金鑰"
+          }
         }
       }
     },
@@ -390,6 +468,12 @@
             "state": "translated",
             "value": "刷新"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理"
+          }
         }
       }
     },
@@ -414,6 +498,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "移除"
@@ -446,6 +536,12 @@
             "state": "translated",
             "value": "保存"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
+          }
         }
       }
     },
@@ -473,6 +569,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "语音识别"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語音辨識"
           }
         }
       }
@@ -502,6 +604,12 @@
             "state": "translated",
             "value": "语音：%@；声音：%@；Cartesia"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語音：%@；聲音：%@；Cartesia"
+          }
         }
       }
     },
@@ -529,6 +637,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "口语语言"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "口語語言"
           }
         }
       }
@@ -558,6 +672,12 @@
             "state": "translated",
             "value": "口语语言是源音频的语言。仅当音频本身为英语时才选择英语。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "口語語言是來源音訊的語言。僅當音訊本身為英語時才選擇英語。"
+          }
         }
       }
     },
@@ -586,6 +706,12 @@
             "state": "translated",
             "value": "语音合成声音"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語音合成聲音"
+          }
         }
       }
     },
@@ -610,6 +736,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "使用"
@@ -642,6 +774,12 @@
             "state": "translated",
             "value": "有效的 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 金鑰"
+          }
         }
       }
     },
@@ -669,6 +807,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "验证中..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證中..."
           }
         }
       }

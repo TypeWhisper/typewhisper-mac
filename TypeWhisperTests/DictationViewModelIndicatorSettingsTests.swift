@@ -2527,6 +2527,49 @@ final class LanguageLocalizationTests: XCTestCase {
         )
     }
 
+    func testLocalizedAppTextFindsTraditionalChineseInTheCatalogOrInline() throws {
+        UserDefaults.standard.set("zh-Hant", forKey: UserDefaultsKeys.preferredAppLanguage)
+
+        // Plain English text is looked up in the zh-Hant catalog, not the Simplified one.
+        let catalogTraditional = try TestSupport.localizedCatalogValue(for: "Multilingual", language: "zh-Hant")
+        let catalogSimplified = try TestSupport.localizedCatalogValue(for: "Multilingual", language: "zh-Hans")
+        XCTAssertNotEqual(catalogTraditional, "Multilingual")
+        XCTAssertNotEqual(catalogTraditional, catalogSimplified)
+        XCTAssertEqual(localizedAppLanguageName(for: "multi"), catalogTraditional)
+
+        // Inline Traditional Chinese wins over inline Simplified Chinese.
+        let count = 3
+        XCTAssertEqual(
+            localizedAppText(
+                "More Models (\(count))",
+                de: "Weitere Modelle (\(count))",
+                zh: "更多模型（\(count)）",
+                zhHant: "更多模型（共 \(count) 個）"
+            ),
+            "更多模型（共 3 個）"
+        )
+
+        UserDefaults.standard.set("zh-Hans", forKey: UserDefaultsKeys.preferredAppLanguage)
+        XCTAssertEqual(
+            localizedAppText(
+                "More Models (\(count))",
+                de: "Weitere Modelle (\(count))",
+                zh: "更多模型（\(count)）",
+                zhHant: "更多模型（共 \(count) 個）"
+            ),
+            "更多模型（3）"
+        )
+    }
+
+    func testTraditionalChineseLanguageCodes() {
+        for code in ["zh-Hant", "zh-Hant-TW", "zh-Hant-HK", "zh-TW", "zh_HK", "zh-MO"] {
+            XCTAssertTrue(isTraditionalChineseLanguageCode(code), code)
+        }
+        for code in ["zh", "zh-Hans", "zh-Hans-HK", "zh-CN", "zh-SG", "ja", "en"] {
+            XCTAssertFalse(isTraditionalChineseLanguageCode(code), code)
+        }
+    }
+
     func testLanguageSearchTermsIncludeDeepgramMultilingualAliases() {
         UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
 

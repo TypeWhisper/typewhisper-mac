@@ -12,15 +12,27 @@ func preferredAppLanguageCode() -> String {
     return Locale.current.language.languageCode?.identifier ?? "en"
 }
 
+/// Whether a language code asks for Traditional Chinese: `zh-Hant` with or without a
+/// region, and the Traditional Chinese regions Taiwan, Hong Kong and Macau without a script.
+func isTraditionalChineseLanguageCode(_ code: String) -> Bool {
+    let lowercased = code.lowercased().replacingOccurrences(of: "_", with: "-")
+    guard lowercased.hasPrefix("zh") else { return false }
+    if lowercased.hasPrefix("zh-hant") { return true }
+    if lowercased.hasPrefix("zh-hans") { return false }
+    return ["zh-tw", "zh-hk", "zh-mo"].contains { lowercased.hasPrefix($0) }
+}
+
 /// Returns the text for the app language. German comes from the call site; Japanese,
 /// Chinese and Spanish come from the call site when given, otherwise from the string
 /// catalog entry whose key is the English text. Text with interpolated values can't be
 /// found in the catalog that way, so those call sites pass their translations inline.
+/// `zh` is Simplified Chinese and `zhHant` Traditional Chinese.
 func localizedAppText(
     _ english: String,
     de german: String,
     ja japanese: String? = nil,
     zh chinese: String? = nil,
+    zhHant traditionalChinese: String? = nil,
     es spanish: String? = nil
 ) -> String {
     let language = preferredAppLanguageCode()
@@ -39,7 +51,16 @@ func localizedAppText(
         }
     }
 
-    if language.hasPrefix("zh") {
+    if isTraditionalChineseLanguageCode(language) {
+        if let traditionalChinese {
+            return traditionalChinese
+        }
+
+        let localized = Bundle.main.localizedString(forKey: english, value: nil, table: nil)
+        if localized != english {
+            return localized
+        }
+    } else if language.hasPrefix("zh") {
         if let chinese {
             return chinese
         }

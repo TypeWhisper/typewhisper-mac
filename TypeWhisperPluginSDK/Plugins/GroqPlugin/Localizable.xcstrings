@@ -26,6 +26,12 @@
             "state": "translated",
             "value": "隐藏 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏 API 金鑰"
+          }
         }
       }
     },
@@ -53,6 +59,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "刷新 LLM 模型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理 LLM 模型"
           }
         }
       }
@@ -82,6 +94,12 @@
             "state": "translated",
             "value": "移除 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除 API 金鑰"
+          }
         }
       }
     },
@@ -109,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存 API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 API 金鑰"
           }
         }
       }
@@ -138,6 +162,12 @@
             "state": "translated",
             "value": "显示 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示 API 金鑰"
+          }
         }
       }
     },
@@ -165,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "发送词典术语"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "傳送詞典術語"
           }
         }
       }
@@ -194,6 +230,12 @@
             "state": "translated",
             "value": "默认关闭，因为发送词典术语可能导致 Groq 漏掉部分听写内容。转写后的词典纠正始终生效。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預設關閉，因為傳送詞典術語可能導致 Groq 漏掉部分聽寫內容。轉錄後的詞典糾正始終生效。"
+          }
         }
       }
     },
@@ -221,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API 密钥"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰"
           }
         }
       }
@@ -250,6 +298,12 @@
             "state": "translated",
             "value": "API 密钥安全存储在钥匙串中"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 金鑰安全儲存在鑰匙圈中"
+          }
         }
       }
     },
@@ -278,6 +332,12 @@
             "state": "translated",
             "value": "无效的 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 API 金鑰"
+          }
         }
       }
     },
@@ -302,6 +362,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "模型"
@@ -334,6 +400,12 @@
             "state": "translated",
             "value": "移除"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -361,6 +433,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
           }
         }
       }
@@ -390,6 +468,12 @@
             "state": "translated",
             "value": "有效的 API 密钥"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 金鑰"
+          }
         }
       }
     },
@@ -417,6 +501,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "验证中..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "驗證中..."
           }
         }
       }
@@ -446,6 +536,12 @@
             "state": "translated",
             "value": "自定义"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂"
+          }
         }
       }
     },
@@ -470,6 +566,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "LLM 模型"
@@ -502,6 +604,12 @@
             "state": "translated",
             "value": "提供商默认"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "供應商預設"
+          }
         }
       }
     },
@@ -529,6 +637,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "刷新"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理"
           }
         }
       }
@@ -558,6 +672,12 @@
             "state": "translated",
             "value": "温度"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度"
+          }
         }
       }
     },
@@ -585,6 +705,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "温度模式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "溫度模式"
           }
         }
       }
@@ -614,6 +740,12 @@
             "state": "translated",
             "value": "转录模型"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轉錄模型"
+          }
         }
       }
     },
@@ -641,6 +773,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在使用默认模型。点击刷新以获取所有可用模型。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用預設模型。點選重新整理以取得所有可用模型。"
           }
         }
       }

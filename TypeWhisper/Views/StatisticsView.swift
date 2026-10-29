@@ -429,6 +429,7 @@ struct StatisticsView: View {
                 de: "\(dayName): keine Diktate",
                 ja: "\(dayName): 文字起こしなし",
                 zh: "\(dayName)：无听写",
+                zhHant: "\(dayName)：無聽寫",
                 es: "\(dayName): sin dictados"
             )
         }
@@ -549,7 +550,7 @@ private struct StatisticsStatCard: View {
 
 /// The cards show "—" while there is no data; VoiceOver would read it as "em dash".
 func statisticsSpokenValue(_ value: String) -> String {
-    value == "—" ? localizedAppText("No data", de: "Keine Daten", ja: "データなし", zh: "无数据") : value
+    value == "—" ? localizedAppText("No data", de: "Keine Daten", ja: "データなし", zh: "无数据", zhHant: "無資料") : value
 }
 
 struct StatisticsMetricCard: View {

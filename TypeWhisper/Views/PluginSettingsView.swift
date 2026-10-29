@@ -663,6 +663,7 @@ struct PluginSettingsView: View {
                 "\(installed) installed · \(updates) updates · \(available) available",
                 de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar",
                 ja: "\(installed)件インストール済み · \(updates)件の更新 · \(available)件利用可能",
+                zhHant: "已安裝 \(installed) 個 · \(updates) 個更新 · \(available) 個可用",
                 es: "\(installed) instalados · \(updates) actualizaciones · \(available) disponibles"
             )
         }
@@ -670,6 +671,7 @@ struct PluginSettingsView: View {
             "\(installed) installed · \(available) available",
             de: "\(installed) installiert · \(available) verfügbar",
             ja: "\(installed)件インストール済み · \(available)件利用可能",
+            zhHant: "已安裝 \(installed) 個 · \(available) 個可用",
             es: "\(installed) instalados · \(available) disponibles"
         )
     }
@@ -1166,7 +1168,8 @@ struct PluginSettingsView: View {
                         "Loading plugins",
                         de: "Plugins werden geladen",
                         ja: "プラグインを読み込み中",
-                        zh: "正在加载插件"
+                        zh: "正在加载插件",
+                        zhHant: "正在載入外掛"
                     ))
             case .error(let message):
                 VStack(spacing: 8) {
@@ -1182,7 +1185,8 @@ struct PluginSettingsView: View {
                         "Retry loading plugins",
                         de: "Laden der Plugins erneut versuchen",
                         ja: "プラグインの読み込みを再試行",
-                        zh: "重试加载插件"
+                        zh: "重试加载插件",
+                        zhHant: "重試載入外掛"
                     ))
                 }
                 .frame(maxWidth: .infinity, minHeight: 160)
@@ -1397,7 +1401,7 @@ struct PluginSettingsView: View {
     }
 
     private static var capabilityFilterAccessibilityLabel: String {
-        localizedAppText("Filter by function", de: "Nach Funktion filtern", ja: "機能で絞り込む", zh: "按功能筛选")
+        localizedAppText("Filter by function", de: "Nach Funktion filtern", ja: "機能で絞り込む", zh: "按功能筛选", zhHant: "按功能篩選")
     }
 
     private static var hostingFilterAccessibilityLabel: String {
@@ -1405,12 +1409,13 @@ struct PluginSettingsView: View {
             "Filter by local or cloud",
             de: "Nach lokal oder Cloud filtern",
             ja: "ローカルまたはクラウドで絞り込む",
-            zh: "按本地或云端筛选"
+            zh: "按本地或云端筛选",
+            zhHant: "按本機或雲端篩選"
         )
     }
 
     private static var sortAccessibilityLabel: String {
-        localizedAppText("Sort by", de: "Sortieren nach", ja: "並べ替え", zh: "排序方式")
+        localizedAppText("Sort by", de: "Sortieren nach", ja: "並べ替え", zh: "排序方式", zhHant: "排序方式")
     }
 
     private static var communityToggleAccessibilityLabel: String {
@@ -1418,7 +1423,8 @@ struct PluginSettingsView: View {
             "Show community plugins",
             de: "Community-Plugins anzeigen",
             ja: "コミュニティプラグインを表示",
-            zh: "显示社区插件"
+            zh: "显示社区插件",
+            zhHant: "顯示社群外掛"
         )
     }
 
@@ -1491,7 +1497,7 @@ struct PluginSettingsView: View {
             return category.badgeTitle
         }
 
-        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen", ja: "\(selected.count)件の機能", es: "\(selected.count) funciones")
+        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen", ja: "\(selected.count)件の機能", zhHant: "\(selected.count) 個功能", es: "\(selected.count) funciones")
     }
 
     /// Checked while no function is selected. Choosing it clears the selection;
@@ -1542,7 +1548,8 @@ struct PluginSettingsView: View {
                     "Search plugins",
                     de: "Plugins durchsuchen",
                     ja: "プラグインを検索",
-                    zh: "搜索插件"
+                    zh: "搜索插件",
+                    zhHant: "搜尋外掛"
                 ))
             if !searchText.isEmpty {
                 Button {
@@ -1667,6 +1674,7 @@ struct PluginSettingsView: View {
             de: "\(name) installiert",
             ja: "\(name)をインストールしました",
             zh: "已安装\(name)",
+            zhHant: "已安裝\(name)",
             es: "\(name) instalado"
         ))
         SettingsNavigationCoordinator.shared.navigate(to: .installedPlugin(pluginId: pluginId))
@@ -1858,11 +1866,11 @@ private extension Array where Element: Hashable {
 
 /// "Version 1.2.0" instead of "v1.2.0", which VoiceOver reads letter by letter.
 private func pluginVersionAccessibilityLabel(_ version: String) -> String {
-    localizedAppText("Version \(version)", de: "Version \(version)", ja: "バージョン \(version)", zh: "版本 \(version)", es: "Versión \(version)")
+    localizedAppText("Version \(version)", de: "Version \(version)", ja: "バージョン \(version)", zh: "版本 \(version)", zhHant: "版本 \(version)", es: "Versión \(version)")
 }
 
 private func pluginAuthorAccessibilityLabel(_ author: String) -> String {
-    localizedAppText("by \(author)", de: "von \(author)", ja: "作成者: \(author)", zh: "作者：\(author)", es: "de \(author)")
+    localizedAppText("by \(author)", de: "von \(author)", ja: "作成者: \(author)", zh: "作者：\(author)", zhHant: "作者：\(author)", es: "de \(author)")
 }
 
 private struct IntegrationEmptyState: View {
@@ -1888,17 +1896,18 @@ private extension IntegrationPluginSource {
     var accessibilityTitle: String {
         switch self {
         case .builtIn:
-            return localizedAppText("Built-in plugin", de: "Integriertes Plugin", ja: "内蔵プラグイン", zh: "内置插件")
+            return localizedAppText("Built-in plugin", de: "Integriertes Plugin", ja: "内蔵プラグイン", zh: "内置插件", zhHant: "內建外掛")
         case .official:
-            return localizedAppText("Marketplace plugin", de: "Marketplace-Plugin", ja: "マーケットプレイスのプラグイン", zh: "市场插件")
+            return localizedAppText("Marketplace plugin", de: "Marketplace-Plugin", ja: "マーケットプレイスのプラグイン", zh: "市场插件", zhHant: "市場外掛")
         case .community:
-            return localizedAppText("Community plugin", de: "Community-Plugin", ja: "コミュニティプラグイン", zh: "社区插件")
+            return localizedAppText("Community plugin", de: "Community-Plugin", ja: "コミュニティプラグイン", zh: "社区插件", zhHant: "社群外掛")
         case .manual:
             return localizedAppText(
                 "Manually installed plugin",
                 de: "Manuell installiertes Plugin",
                 ja: "手動でインストールしたプラグイン",
-                zh: "手动安装的插件"
+                zh: "手动安装的插件",
+                zhHant: "手動安裝的外掛"
             )
         }
     }
@@ -1907,9 +1916,9 @@ private extension IntegrationPluginSource {
 private extension PluginHosting {
     var accessibilityTitle: String {
         if self == .cloud {
-            return localizedAppText("Uses a cloud service", de: "Nutzt einen Cloud-Dienst", ja: "クラウドサービスを使用", zh: "使用云服务")
+            return localizedAppText("Uses a cloud service", de: "Nutzt einen Cloud-Dienst", ja: "クラウドサービスを使用", zh: "使用云服务", zhHant: "使用雲端服務")
         }
-        return localizedAppText("Runs locally", de: "Läuft lokal", ja: "ローカルで動作", zh: "在本地运行")
+        return localizedAppText("Runs locally", de: "Läuft lokal", ja: "ローカルで動作", zh: "在本地运行", zhHant: "在本機執行")
     }
 }
 
@@ -2135,8 +2144,8 @@ private struct InstalledPluginRow: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(downloadedModelCountTitle(models.count))
                         .accessibilityValue(modelsExpanded
-                            ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
-                            : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠"))
+                            ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开", zhHant: "已展開")
+                            : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠", zhHant: "已摺疊"))
                     }
 
                     if let externalNotice {
@@ -2345,6 +2354,7 @@ private struct DownloadedPluginModelRow: View {
                         de: "\(model.displayName) wird entfernt",
                         ja: "\(model.displayName)を削除中",
                         zh: "正在移除\(model.displayName)",
+                        zhHant: "正在移除\(model.displayName)",
                         es: "Quitando \(model.displayName)"
                     ))
             } else {
@@ -2474,6 +2484,7 @@ private struct AvailablePluginRow: View {
                         de: "Details für \(plugin.name) öffnen",
                         ja: "\(plugin.name)の詳細を開く",
                         zh: "打开“\(plugin.name)”的详细信息",
+                        zhHant: "開啟「\(plugin.name)」的詳細資訊",
                         es: "Abrir los detalles de \(plugin.name)"
                     ))
                 }
@@ -2504,6 +2515,7 @@ private struct AvailablePluginRow: View {
             de: "Installation von \(plugin.name) erneut versuchen",
             ja: "\(plugin.name)のインストールを再試行",
             zh: "重试安装\(plugin.name)",
+            zhHant: "重試安裝\(plugin.name)",
             es: "Reintentar la instalación de \(plugin.name)"
         )
     }
@@ -2623,6 +2635,7 @@ private struct PluginInstallStateView: View {
                 de: "\(name) wird installiert",
                 ja: "\(name)をインストール中",
                 zh: "正在安装\(name)",
+                zhHant: "正在安裝\(name)",
                 es: "Instalando \(name)"
             ))
         case .restartRequired:

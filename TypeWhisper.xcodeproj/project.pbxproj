@@ -4731,6 +4731,7 @@
 				de,
 				ja,
 				"zh-Hans",
+				"zh-Hant",
 				es,
 				Base,
 			);

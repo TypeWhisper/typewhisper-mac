@@ -622,7 +622,8 @@ struct LicenseSettingsView: View {
                     "License key",
                     de: "Lizenzschlüssel",
                     ja: "ライセンスキー",
-                    zh: "许可证密钥"
+                    zh: "许可证密钥",
+                    zhHant: "授權金鑰"
                 ))
 
             Button(localizedAppText("Activate", de: "Aktivieren")) {
@@ -646,7 +647,7 @@ struct LicenseSettingsView: View {
     }
 
     private var activatingAccessibilityLabel: String {
-        localizedAppText("Activating license", de: "Lizenz wird aktiviert", ja: "ライセンスを有効化中", zh: "正在激活许可证")
+        localizedAppText("Activating license", de: "Lizenz wird aktiviert", ja: "ライセンスを有効化中", zh: "正在激活许可证", zhHant: "正在啟用授權")
     }
 
     /// The result of an activation appears below the field, where VoiceOver focus usually is not.
@@ -675,6 +676,7 @@ struct LicenseSettingsView: View {
                     "Connect Discord to claim your \(supporterTierDisplayName(tier)) supporter status in the community server.",
                     de: "Verbinde Discord, um deinen \(supporterTierDisplayName(tier))-Supporter-Status im Community-Server zu bestätigen.",
                     ja: "Discordを連携して、コミュニティサーバーで\(supporterTierDisplayName(tier))サポーターステータスを受け取ります。",
+                    zhHant: "連結 Discord，即可在社群伺服器中領取你的 \(supporterTierDisplayName(tier)) 支援者身份。",
                     es: "Conecta Discord para reclamar tu estado de Supporter \(supporterTierDisplayName(tier)) en el servidor de la comunidad."
                 ))
                     .font(.caption)
@@ -706,7 +708,7 @@ struct LicenseSettingsView: View {
                     .foregroundStyle(.green)
 
                 if let username = supporterDiscord.claimStatus.discordUsername {
-                    Text(localizedAppText("Linked account: \(username)", de: "Verknüpftes Konto: \(username)", ja: "連携済みアカウント: \(username)", es: "Cuenta vinculada: \(username)"))
+                    Text(localizedAppText("Linked account: \(username)", de: "Verknüpftes Konto: \(username)", ja: "連携済みアカウント: \(username)", zhHant: "已連結帳號：\(username)", es: "Cuenta vinculada: \(username)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -716,6 +718,7 @@ struct LicenseSettingsView: View {
                         "Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
                         de: "Aktive Rollen: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
                         ja: "有効なロール: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
+                        zhHant: "已啟用的身份組：\(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
                         es: "Roles activos: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"
                     ))
                         .font(.caption)
@@ -756,7 +759,8 @@ struct LicenseSettingsView: View {
                         "Checking Discord status",
                         de: "Discord-Status wird geprüft",
                         ja: "Discordのステータスを確認中",
-                        zh: "正在检查 Discord 状态"
+                        zh: "正在检查 Discord 状态",
+                        zhHant: "正在檢查 Discord 狀態"
                     ))
             }
 
@@ -940,6 +944,7 @@ struct LicenseSettingsView: View {
                 "Detected commercial key: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
                 de: "Kommerzieller Schlüssel erkannt: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
                 ja: "商用キーを検出しました: \(businessTierDisplayName(tier))\(lifetimeSuffix)。",
+                zhHant: "偵測到商業金鑰：\(businessTierDisplayName(tier))\(lifetimeSuffix)。",
                 es: "Clave comercial detectada: \(businessTierDisplayName(tier))\(lifetimeSuffix)."
             )
         case .supporter(let tier):
@@ -947,6 +952,7 @@ struct LicenseSettingsView: View {
                 "Detected supporter key: \(supporterTierDisplayName(tier)).",
                 de: "Supporter-Schlüssel erkannt: \(supporterTierDisplayName(tier)).",
                 ja: "サポーターキーを検出しました: \(supporterTierDisplayName(tier))。",
+                zhHant: "偵測到支援者金鑰：\(supporterTierDisplayName(tier))。",
                 es: "Clave de Supporter detectada: \(supporterTierDisplayName(tier))."
             )
         }
@@ -1050,7 +1056,7 @@ struct LicenseSettingsView: View {
         }
         // Only the prominent button style marks the tier you already support with.
         .accessibilityValue(isCurrentTier
-            ? localizedAppText("Your current tier", de: "Deine aktuelle Stufe", ja: "現在のランク", zh: "你当前的等级")
+            ? localizedAppText("Your current tier", de: "Deine aktuelle Stufe", ja: "現在のランク", zh: "你当前的等级", zhHant: "你目前的等級")
             : "")
 
         if isCurrentTier {

@@ -684,6 +684,7 @@ struct MenuBarView: View {
                 localizedAppText(
                     "Microphone: \(snapshot.microphoneSummary)",
                     de: "Mikrofon: \(snapshot.microphoneSummary)",
+                    zhHant: "麥克風：\(snapshot.microphoneSummary)",
                     es: "Micrófono: \(snapshot.microphoneSummary)"
                 ),
                 systemImage: "mic"
@@ -716,6 +717,7 @@ struct MenuBarView: View {
                 localizedAppText(
                     "Language: \(snapshot.languageSummary)",
                     de: "Sprache: \(snapshot.languageSummary)",
+                    zhHant: "語言：\(snapshot.languageSummary)",
                     es: "Idioma: \(snapshot.languageSummary)"
                 ),
                 systemImage: "globe"
@@ -741,7 +743,7 @@ struct MenuBarView: View {
                         }
                         if !group.setupRequiredOptions.isEmpty {
                             let count = group.setupRequiredOptions.count
-                            Menu(localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", es: "Más modelos (\(count))")) {
+                            Menu(localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", zhHant: "更多模型（\(count)）", es: "Más modelos (\(count))")) {
                                 ForEach(group.setupRequiredOptions) { option in
                                     quickSelectionItem(option, select: quickSelection.selectModel)
                                 }
@@ -757,6 +759,7 @@ struct MenuBarView: View {
                 localizedAppText(
                     "Model: \(snapshot.modelSummary)",
                     de: "Modell: \(snapshot.modelSummary)",
+                    zhHant: "模型：\(snapshot.modelSummary)",
                     es: "Modelo: \(snapshot.modelSummary)"
                 ),
                 systemImage: "waveform"

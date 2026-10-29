@@ -234,7 +234,8 @@ struct PremiumAccessSettingsView: View {
                                 "Please wait",
                                 de: "Bitte warten",
                                 ja: "お待ちください",
-                                zh: "请稍候"
+                                zh: "请稍候",
+                                zhHant: "請稍候"
                             ))
                     }
 
