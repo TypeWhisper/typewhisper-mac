@@ -638,6 +638,9 @@ final class DictationViewModel: ObservableObject {
         let normalizeNumbers: Bool?
     }
     private var lastStreamingParams: StreamingParamsSnapshot?
+    /// Params of a recording whose preview was skipped so that a cloud engine would not get
+    /// the audio again (#1771). A website workflow that changes them gets another chance.
+    private var skippedCloudPreviewParams: StreamingParamsSnapshot?
     /// Whether the most recent `streamingHandler.start(...)` ran the preview on the
     /// dictation engine. When false (a distinct preview engine), the live session's
     /// text is display-only and must never be promoted to the final transcription.
@@ -1699,6 +1702,7 @@ final class DictationViewModel: ObservableObject {
         urlResolutionTask = nil
         cancelIncrementalWorkflowPostProcessing()
         lastStreamingParams = nil
+        skippedCloudPreviewParams = nil
         pendingLiveFieldCapture = nil
         pinnedInsertionTarget = nil
     }
@@ -2081,6 +2085,7 @@ final class DictationViewModel: ObservableObject {
             stopFinalizationTask = nil
             streamingHandler.stop()
             lastStreamingParams = nil
+            skippedCloudPreviewParams = nil
             cancelIncrementalWorkflowPostProcessing()
             transcriptionTask?.cancel()
             transcriptionTask = nil
@@ -2985,6 +2990,7 @@ final class DictationViewModel: ObservableObject {
             cancelLiveFieldTranscriptSession()
             streamingHandler.stop()
             lastStreamingParams = nil
+            skippedCloudPreviewParams = nil
             stopRecordingTimer()
             let discardedSamples = await audioRecordingService.stopRecording(
                 policy: .immediate,
@@ -3011,6 +3017,7 @@ final class DictationViewModel: ObservableObject {
 
         let streamingParams = lastStreamingParams
         lastStreamingParams = nil
+        skippedCloudPreviewParams = nil
         let previewFollowedDictationEngine = lastPreviewFollowsDictationEngine
         lastPreviewFollowsDictationEngine = true
         let streamingPreviewWasHidden = lastStreamingPreviewHidden || hiddenLiveSessionWasDeferred
@@ -4297,6 +4304,7 @@ final class DictationViewModel: ObservableObject {
         metadataCaptureTask = nil
         cancelIncrementalWorkflowPostProcessing()
         lastStreamingParams = nil
+        skippedCloudPreviewParams = nil
         liveFieldTranscriptSession = nil
         pendingLiveFieldCapture = nil
         pinnedInsertionTarget = nil
@@ -4395,7 +4403,7 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: effectiveCloudModelOverride,
             normalizeNumbers: effectiveNumberNormalizationOverride
         )
-        let resolution = Self.resolvePreviewEngine(
+        var resolution = Self.resolvePreviewEngine(
             preferredPreviewEngineId: livePreviewEngineId,
             dictationEngineOverrideId: params.engineOverrideId,
             selectedProviderId: params.providerId,
@@ -4406,6 +4414,27 @@ final class DictationViewModel: ObservableObject {
                 return self.canUseEngineForPreview(engine)
             }
         )
+        var previewResolvedAutomatically = false
+        if allowLiveTranscription,
+           resolution == .followsDictationEngine,
+           livePreviewEngineId?.isEmpty ?? true,
+           modelManager.livePreviewReuploadsCloudAudio(
+               engineOverrideId: params.engineOverrideId,
+               cloudModelOverride: params.cloudModelOverride
+           ) {
+            // Following this engine would upload the last 10 s of audio every 3 s (#1771).
+            if let engineId = automaticLocalPreviewEngineId(languageSelection: params.languageSelection) {
+                resolution = .overrideEngine(engineId)
+                previewResolvedAutomatically = true
+                logger.info("Live preview runs on local engine \(engineId, privacy: .public) instead of re-uploading audio to the cloud dictation engine")
+            } else if !liveFieldTranscriptEnabled, externalStreamingDisplayCount == 0 {
+                // Live text in the field and live transcript windows are turned on by
+                // choice, so they keep the cloud preview. The indicator preview does not.
+                resolution = .previewUnavailable
+                previewResolvedAutomatically = true
+                logger.info("No ready local engine for the live preview; preview skipped instead of re-uploading audio to the cloud dictation engine")
+            }
+        }
         var previewEngineOverrideId: String?
         let previewUsable: Bool
         switch resolution {
@@ -4421,7 +4450,9 @@ final class DictationViewModel: ObservableObject {
             // traffic on the (possibly metered cloud) dictation engine.
             previewEngineOverrideId = params.engineOverrideId
             previewUsable = false
-            logger.warning("Selected live preview engine is unavailable; preview disabled for this recording instead of falling back to the dictation engine")
+            if !previewResolvedAutomatically {
+                logger.warning("Selected live preview engine is unavailable; preview disabled for this recording instead of falling back to the dictation engine")
+            }
         }
         var effectiveAllowLiveTranscription = allowLiveTranscription && previewUsable
         // Engines whose live session is the dictation path (e.g. Soniox realtime) keep
@@ -4439,6 +4470,7 @@ final class DictationViewModel: ObservableObject {
             effectiveAllowLiveTranscription = true
         }
         lastStreamingParams = effectiveAllowLiveTranscription ? params : nil
+        skippedCloudPreviewParams = previewResolvedAutomatically && !effectiveAllowLiveTranscription ? params : nil
         let previewFollowsDictationEngine =
             (previewEngineOverrideId ?? params.providerId) == (params.engineOverrideId ?? params.providerId)
         lastPreviewFollowsDictationEngine = previewFollowsDictationEngine
@@ -4692,6 +4724,101 @@ final class DictationViewModel: ObservableObject {
         return allowsFallback
     }
 
+    /// Whether a live preview that follows the dictation engine runs on a local engine instead,
+    /// because the dictation engine would upload the last seconds of audio again and again.
+    var livePreviewUsesLocalEngineInsteadOfDictationEngine: Bool {
+        guard modelManager.livePreviewReuploadsCloudAudio() else { return false }
+        // Live text in the field keeps the cloud preview when no local engine can take over.
+        return (!liveFieldTranscriptEnabled && externalStreamingDisplayCount == 0)
+            || automaticLocalPreviewEngineId(languageSelection: settingsViewModel.languageSelection) != nil
+    }
+
+    struct AutomaticPreviewEngineCandidate: Equatable {
+        var providerId: String
+        var isLocal: Bool
+        /// The model is loaded, so the preview neither loads nor downloads one.
+        var isLoaded: Bool
+        var streamsLive: Bool
+        var languages: [String]
+    }
+
+    /// The local engine that shows the live preview in place of a cloud dictation engine without
+    /// a live session: loaded, streaming natively and transcribing the preview language.
+    nonisolated static func automaticPreviewEngineId(
+        among candidates: [AutomaticPreviewEngineCandidate],
+        previewLanguage: String?
+    ) -> String? {
+        guard let language = previewLanguage.flatMap(baseLanguageCode) else { return nil }
+        return candidates.first { candidate in
+            candidate.isLocal
+                && candidate.isLoaded
+                && candidate.streamsLive
+                && candidate.languages.contains { baseLanguageCode($0) == language }
+        }?.providerId
+    }
+
+    private nonisolated static func baseLanguageCode(_ code: String) -> String? {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return Locale(identifier: trimmed).language.languageCode?.identifier.lowercased()
+    }
+
+    private func automaticLocalPreviewEngineId(languageSelection: LanguageSelection) -> String? {
+        // Live previews use the first selected language; without one, the first preferred
+        // macOS language is the best guess.
+        let previewLanguage = languageSelection.selectedCodes.first ?? modelManager.preferredLanguages().first
+        let candidates = (PluginManager.shared?.transcriptionEngines ?? []).map { engine in
+            AutomaticPreviewEngineCandidate(
+                providerId: engine.providerId,
+                isLocal: modelManager.isLocalTranscriptionEngine(engine.providerId),
+                isLoaded: engine.isConfigured
+                    && modelManager.canUseForTranscription(engine)
+                    && !modelManager.lacksDownloadedModel(engine),
+                streamsLive: engine.supportsStreaming && engine.liveTranscriptionPlugin(forModelId: nil) != nil,
+                languages: Self.livePreviewLanguages(
+                    of: engine,
+                    sessionLanguage: modelManager.preparationLanguage(for: languageSelection, plugin: engine)
+                )
+            )
+        }
+        // A managed policy that enforces an engine replaces any other, so a preview engine
+        // it would replace is no alternative to the cloud engine.
+        guard let engineId = Self.automaticPreviewEngineId(among: candidates, previewLanguage: previewLanguage),
+              modelManager.effectiveEngineId(engineId) == engineId else { return nil }
+        return engineId
+    }
+
+    /// Apple Speech lists every locale it offers but transcribes only the loaded one. It counts
+    /// only when the session keeps that locale: `sessionLanguage` is the language the session
+    /// prepares (`ModelManagerService.preparationLanguage`), nil with automatic language
+    /// selection, which keeps the loaded locale. Another
+    /// one, such as en-GB with en-US loaded, would switch and possibly download a model.
+    static func livePreviewLanguages(
+        of engine: TranscriptionEnginePlugin,
+        sessionLanguage: String?
+    ) -> [String] {
+        guard engine.providerId == AppleSpeechModelSelection.providerId else {
+            return engine.supportedLanguages
+        }
+        guard let modelId = engine.selectedModelId,
+              modelId.hasPrefix(AppleSpeechModelSelection.modelIdPrefix) else {
+            return []
+        }
+        let loadedLocale = String(modelId.dropFirst(AppleSpeechModelSelection.modelIdPrefix.count))
+        guard let sessionLanguage else { return [loadedLocale] }
+        guard AppleSpeechModelSelection.preferredModelId(
+                  from: engine.modelCatalog,
+                  localeIdentifier: sessionLanguage,
+                  languageCode: sessionLanguage,
+                  preferredModelId: modelId,
+                  fallbackLocaleIdentifier: Locale.current.identifier,
+                  fallbackToFirst: false
+              ) == modelId else {
+            return []
+        }
+        return [loadedLocale]
+    }
+
     enum PreviewEngineResolution: Equatable {
         /// No usable distinct preference — the preview follows the dictation
         /// engine (prior behavior), keeping any cloud model override intact.
@@ -4746,6 +4873,12 @@ final class DictationViewModel: ObservableObject {
             || liveFieldTranscriptEnabled
             || externalStreamingDisplayCount > 0
         guard let previous = lastStreamingParams else {
+            // The preview was skipped for the cloud engine; the workflow's engine may show it.
+            if let skipped = skippedCloudPreviewParams, newParams != skipped {
+                logger.info("Streaming params changed after URL resolution, resolving the skipped live preview again")
+                startLiveStreaming(allowLiveTranscription: allowLive)
+                return lastStreamingParams != nil
+            }
             // Nothing streams yet, but a workflow may have switched to an engine that
             // streams dictation even with the preview hidden.
             guard modelManager.prefersLiveSessionForDictation(
@@ -5588,6 +5721,12 @@ final class DictationViewModel: ObservableObject {
 
     func updateExternalStreamingDisplay(active: Bool) {
         externalStreamingDisplayCount += active ? 1 : -1
+        // A Live Transcript window opened during the recording asks for the preview that was
+        // skipped to avoid re-uploading audio to the cloud engine (#1771); start it now.
+        if active, state == .recording, lastStreamingParams == nil, skippedCloudPreviewParams != nil {
+            logger.info("A live transcript display opened, starting the skipped live preview")
+            startLiveStreaming(allowLiveTranscription: true)
+        }
     }
 
     private func showRecoveryAwareFeedback(

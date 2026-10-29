@@ -150,6 +150,62 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
         XCTAssertTrue(DictationViewModel.engineSupportsPreview(LivePreviewReadinessPlugin(isConfigured: true)))
     }
 
+    // MARK: - Local preview in place of a cloud engine without a live session (#1771)
+
+    func testCloudEngineWithoutLiveSessionWouldReuploadPreviewAudio() throws {
+        let plugin = LivePreviewReadinessPlugin(isConfigured: true)
+
+        for (locality, reuploads) in [("cloud", true), ("configurable", false), ("local", false)] {
+            let modelManager = try installReadinessPlugin(plugin, locality: locality)
+            XCTAssertEqual(
+                modelManager.livePreviewReuploadsCloudAudio(engineOverrideId: plugin.providerId),
+                reuploads,
+                locality
+            )
+        }
+    }
+
+    func testAutomaticAppleSpeechPreviewKeepsTheLoadedLocale() {
+        let plugin = LivePreviewReadinessPlugin(
+            providerId: AppleSpeechModelSelection.providerId,
+            isConfigured: true,
+            selectedModelId: "speechanalyzer-en_US",
+            availableModels: [
+                PluginModelInfo(id: "speechanalyzer-en_US", displayName: "English (US)"),
+                PluginModelInfo(id: "speechanalyzer-en_GB", displayName: "English (UK)"),
+            ]
+        )
+
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: "en"), ["en_US"])
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: "en-US"), ["en_US"])
+        // en-GB would switch the loaded model and might download one.
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: "en-GB"), [])
+        // Automatic language selection requests no language, so the loaded locale stays.
+        XCTAssertEqual(DictationViewModel.livePreviewLanguages(of: plugin, sessionLanguage: nil), ["en_US"])
+    }
+
+    func testAutomaticPreviewEngineIsLoadedLocalStreamingEngineForPreviewLanguage() {
+        typealias Candidate = DictationViewModel.AutomaticPreviewEngineCandidate
+        let candidates = [
+            Candidate(providerId: "cloud", isLocal: false, isLoaded: true, streamsLive: true, languages: ["de"]),
+            Candidate(providerId: "unloaded", isLocal: true, isLoaded: false, streamsLive: true, languages: ["de"]),
+            Candidate(providerId: "batch", isLocal: true, isLoaded: true, streamsLive: false, languages: ["de"]),
+            Candidate(providerId: "english", isLocal: true, isLoaded: true, streamsLive: true, languages: ["en"]),
+            Candidate(providerId: "speechAnalyzer", isLocal: true, isLoaded: true, streamsLive: true, languages: ["de_DE"]),
+        ]
+
+        XCTAssertEqual(
+            DictationViewModel.automaticPreviewEngineId(among: candidates, previewLanguage: "de-AT"),
+            "speechAnalyzer"
+        )
+        XCTAssertEqual(
+            DictationViewModel.automaticPreviewEngineId(among: candidates, previewLanguage: "en"),
+            "english"
+        )
+        XCTAssertNil(DictationViewModel.automaticPreviewEngineId(among: candidates, previewLanguage: "ru"))
+        XCTAssertNil(DictationViewModel.automaticPreviewEngineId(among: candidates, previewLanguage: nil))
+    }
+
     // MARK: - Ready-or-restorable predicate
 
     func testAutoUnloadedLocalEngineWithPersistedLoadedModelIsRestorable() throws {
@@ -369,7 +425,8 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
     }
 
     private func installReadinessPlugin(
-        _ plugin: LivePreviewReadinessPlugin
+        _ plugin: LivePreviewReadinessPlugin,
+        locality: String? = nil
     ) throws -> ModelManagerService {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -385,7 +442,8 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
                     id: LivePreviewReadinessPlugin.pluginId,
                     name: LivePreviewReadinessPlugin.pluginName,
                     version: "1.0.0",
-                    principalClass: "LivePreviewReadinessPlugin"
+                    principalClass: "LivePreviewReadinessPlugin",
+                    locality: locality
                 ),
                 instance: plugin,
                 bundle: Bundle.main,
