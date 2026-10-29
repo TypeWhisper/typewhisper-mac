@@ -1,11 +1,11 @@
 # TypeWhisper 1.x Release Readiness
 
 This document defines the release and maintenance gates for the current `1.x`
-product path, with stable `1.8.0` as its published baseline.
+product path, with stable `1.8.1` as its published baseline.
 
 TypeWhisper `1.x` is a stable release line for macOS, distributed as a direct
 download and, from `1.8.0`, through the Mac App Store. Both editions ship the
-same version from the same commit. The `main` branch is the current `1.8.1`
+same version from the same commit. The `main` branch is the current `1.8.2`
 development line. The `release/1.7` branch starts at the published `v1.7.0` tag
 and is reserved for explicitly approved `1.7.x` hotfixes. The `release/1.6`
 branch remains for `1.6.x` hotfixes that are still needed.
@@ -38,11 +38,11 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Widgets
 - Watch Folder
 
-## `1.8.1` Development and `1.7` Compatibility
+## `1.8.2` Development and `1.7` Compatibility
 
-- Keep `main` on the current `1.8.1` version line; daily builds publish
-  as `v1.8.1-daily.*`.
-- Treat stable `1.8.0` as the release baseline. Use `release/1.7` only for
+- Keep `main` on the current `1.8.2` version line; daily builds publish
+  as `v1.8.2-daily.*`.
+- Treat stable `1.8.1` as the release baseline. Use `release/1.7` only for
   narrowly scoped `1.7.x` hotfixes.
 - Validate hotfix pull requests against `release/1.7`, tag the resulting
   `v1.7.x` release from that branch, and forward-port each fix to `main`.
