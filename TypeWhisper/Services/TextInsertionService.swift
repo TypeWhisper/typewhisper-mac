@@ -233,6 +233,7 @@ final class TextInsertionService {
     var setSelectedRangeOverride: ((AXUIElement, NSRange) -> Bool)?
     var textSelectionOverride: (() -> TextSelection?)?
     var insertTextAtOverride: ((AXUIElement, String) -> Bool)?
+    var hiddenTextInputProxyOverride: ((AXUIElement) -> Bool)?
     var pasteSimulatorOverride: (() -> Void)?
     var copySimulatorOverride: (() -> Void)?
     var returnSimulatorOverride: (() -> Void)?
@@ -718,6 +719,7 @@ final class TextInsertionService {
         if let insertTextAtOverride {
             return insertTextAtOverride(element, text)
         }
+        guard !isHiddenTextInputProxy(element) else { return false }
 
         let result = AXUIElementSetAttributeValue(
             element,
@@ -1513,7 +1515,8 @@ final class TextInsertionService {
             if holdsAccessibilityVerification { isVerifyingAccessibilityInsertion = false }
         }
         if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
-           let focusedElement = getFocusedTextElement() {
+           let focusedElement = getFocusedTextElement(),
+           !isHiddenTextInputProxy(focusedElement) {
             isVerifyingAccessibilityInsertion = true
             holdsAccessibilityVerification = true
             if let accessibilityInsertionTiming = await insertTextAtAndVerifyChange(
@@ -1792,6 +1795,12 @@ final class TextInsertionService {
         keyUp?.post(tap: tapLocation)
     }
 
+    /// Command as a real left Command key reports it: the device-independent flag plus the
+    /// left-Command device bit (`NX_DEVICELCMDKEYMASK`). Flutter tracks modifiers by the device
+    /// bits. Without it, Flutter sees a plain V, and the Edit menu pastes into its hidden input
+    /// view instead of the visible field (#1809).
+    nonisolated static let clipboardShortcutFlags = CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x8)
+
     private func simulatePaste() {
         if let pasteSimulatorOverride {
             pasteSimulatorOverride()
@@ -1804,12 +1813,12 @@ final class TextInsertionService {
         // Use nil source + .cgSessionEventTap for App Sandbox compatibility
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
-        keyDown?.flags = .maskCommand
+        keyDown?.flags = Self.clipboardShortcutFlags
         keyDown?.post(tap: .cgSessionEventTap)
 
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: false)
         keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
-        keyUp?.flags = .maskCommand
+        keyUp?.flags = Self.clipboardShortcutFlags
         keyUp?.post(tap: .cgSessionEventTap)
     }
 
@@ -1824,12 +1833,12 @@ final class TextInsertionService {
         let cKeyCode = virtualKeyCode(for: "c") ?? 0x08 // Fallback to QWERTY
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
-        keyDown?.flags = .maskCommand
+        keyDown?.flags = Self.clipboardShortcutFlags
         keyDown?.post(tap: .cgSessionEventTap)
 
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: false)
         keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
-        keyUp?.flags = .maskCommand
+        keyUp?.flags = Self.clipboardShortcutFlags
         keyUp?.post(tap: .cgSessionEventTap)
     }
 
@@ -2567,7 +2576,7 @@ final class TextInsertionService {
             return liveFieldTargetEligibilityOverride(element)
         }
 
-        guard isLiveFieldTextRole(element) else { return false }
+        guard isLiveFieldTextRole(element), !isHiddenTextInputProxy(element) else { return false }
 
         var selectedTextSettable = DarwinBoolean(false)
         var selectedRangeSettable = DarwinBoolean(false)
@@ -2665,6 +2674,35 @@ final class TextInsertionService {
             return nil
         }
         return settable.boolValue
+    }
+
+    /// A focused text element without any area is an input proxy, not the field the user sees.
+    /// Flutter routes typing through a zero-width `NSTextView` that mirrors its text model.
+    /// Accessibility writes change only that view, yet its `AXValue` then reads the new text, so
+    /// the insertion looks verified while the visible field stays empty (#1809). Only typed keys,
+    /// and so a paste, reach the app's own text model.
+    func isHiddenTextInputProxy(_ element: AXUIElement) -> Bool {
+        if let hiddenTextInputProxyOverride {
+            return hiddenTextInputProxyOverride(element)
+        }
+
+        var sizeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXSizeAttribute as CFString,
+            &sizeValue
+        ) == .success,
+        let sizeValue,
+        CFGetTypeID(sizeValue) == AXValueGetTypeID() else {
+            return false
+        }
+        var size = CGSize.zero
+        guard AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else { return false }
+        let isProxy = size.width <= 0 || size.height <= 0
+        if isProxy {
+            logger.info("Focused text element has no area; skipping AX insertion for a paste")
+        }
+        return isProxy
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {
