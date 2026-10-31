@@ -73,7 +73,18 @@ func localizedAppLanguageName(for code: String) -> String {
     }
 
     let locale = Locale(identifier: preferredAppLanguageCode())
-    return locale.localizedString(forIdentifier: code) ?? code
+    return locale.localizedString(forIdentifier: spokenLanguageIdentifier(for: code)) ?? code
+}
+
+/// Speech engines such as Apple Speech and Deepgram use zh-HK for Hong Kong Cantonese, which
+/// Locale names "Chinese (Hong Kong)". Naming it after the spoken language sets it apart from
+/// Chinese (Taiwan), which is Mandarin.
+private func spokenLanguageIdentifier(for code: String) -> String {
+    let language = Locale.Language(identifier: code)
+    guard language.languageCode == .chinese, language.region == .hongKong else {
+        return code
+    }
+    return "yue-HK"
 }
 
 struct LocalizedAppLanguageOption: Equatable {

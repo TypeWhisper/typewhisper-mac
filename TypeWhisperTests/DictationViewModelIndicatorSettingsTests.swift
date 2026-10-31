@@ -2501,6 +2501,12 @@ final class LanguageLocalizationTests: XCTestCase {
         XCTAssertEqual(localizedAppLanguageName(for: "multi"), "Mehrsprachig")
     }
 
+    func testLocalizedAppLanguageNameNamesHongKongChineseAsCantonese() {
+        UserDefaults.standard.set("en", forKey: UserDefaultsKeys.preferredAppLanguage)
+        XCTAssertEqual(localizedAppLanguageName(for: "zh-HK"), "Cantonese (Hong Kong)")
+        XCTAssertEqual(localizedAppLanguageName(for: "zh-TW"), "Chinese (Taiwan)")
+    }
+
     func testLocalizedAppTextFindsSpanishInTheCatalogOrInline() throws {
         UserDefaults.standard.set("es", forKey: UserDefaultsKeys.preferredAppLanguage)
 

@@ -125,11 +125,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
     var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxContextualTerms) }
 
     var supportedLanguages: [String] {
-        let codes = Set(cachedModels.compactMap { model -> String? in
-            let localeId = String(model.id.dropFirst("speechanalyzer-".count))
-            return Locale(identifier: localeId).language.languageCode?.identifier
-        })
-        return Array(codes)
+        AppleSpeechModelSelection.supportedLanguages(fromModelIds: cachedModels.map(\.id))
     }
 
     func transcribe(
