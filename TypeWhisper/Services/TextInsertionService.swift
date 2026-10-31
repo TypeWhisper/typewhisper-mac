@@ -2741,6 +2741,8 @@ final class TextInsertionService {
         expectedState: FocusedTextObservation
     ) -> RangeReplacementResult {
         let element = expectedState.element
+        // Reject before moving the selection: the write below would be refused anyway.
+        guard !isHiddenTextInputProxy(element) else { return .notApplied }
         let beforeNSString = expectedState.value as NSString
         guard let expectedSelection = expectedState.selectedRange,
               let current = captureFocusedTextState(for: element),
