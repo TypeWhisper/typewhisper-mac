@@ -65,9 +65,12 @@ enum ShellCompletions {
         _typewhisper_files() {
             # Bash 3.2 has no compopt; an empty reply falls back to readline's file completion there.
             type compopt >/dev/null 2>&1 || return 0
-            local IFS=$'\n'
+            local file
             compopt -o filenames
-            COMPREPLY=($(compgen -f -- "$cur"))
+            COMPREPLY=()
+            while IFS= read -r file; do
+                COMPREPLY+=("$file")
+            done < <(compgen -f -- "$cur")
         }
 
         _typewhisper() {
