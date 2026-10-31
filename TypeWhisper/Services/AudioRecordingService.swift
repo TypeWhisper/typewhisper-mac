@@ -3155,6 +3155,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        // The stopped engine is retained for a while, and with voice processing still enabled
+        // it keeps ducking other apps and holds the input in its voice-processing format, so the
+        // next idle preparation would misread it. Release voice processing right away.
+        if engine.inputNode.isVoiceProcessingEnabled {
+            do {
+                try engine.inputNode.setVoiceProcessingEnabled(false)
+            } catch {
+                logger.warning("Could not disable voice processing on a stopped engine: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     private func teardownPreparedEngine(_ engine: AVAudioEngine) {
