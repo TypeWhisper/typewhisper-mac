@@ -27,6 +27,24 @@ enum BuiltInRecordingInputPreparationPolicy {
     }
 }
 
+/// While a call app such as FaceTime or Google Meet uses the built-in MacBook microphone, its
+/// default route reports 3 channels and only captures cleanly with voice processing (#755).
+/// macOS ducks every other app's audio, including the call, while a voice-processing input
+/// exists, so such an input is only set up for an actual recording and never kept prepared.
+enum BuiltInVoiceProcessingPolicy {
+    static func isRequired(
+        selectedDeviceID: AudioDeviceID?,
+        engineDeviceID: AudioDeviceID?,
+        inputChannelCount: AVAudioChannelCount,
+        defaultInputUsesBuiltInTransport: Bool
+    ) -> Bool {
+        selectedDeviceID == nil
+            && engineDeviceID == nil
+            && inputChannelCount == 3
+            && defaultInputUsesBuiltInTransport
+    }
+}
+
 enum USBRecordingInputPreparationPolicy {
     static func isEligible(
         hasMicrophonePermission: Bool,
@@ -504,6 +522,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let tapFormat: AVAudioFormat
         let bluetoothInputGeneration: UInt64?
     }
+
+    /// Thrown by an idle input preparation when the input would need voice processing.
+    private struct VoiceProcessingNotAllowedError: Error {}
 
     /// What a Bluetooth start does with a steady stream of digital silence. A muted headset
     /// sends exact zeros, but so does a route that came up dead, and a fresh engine fixes that
@@ -1026,20 +1047,17 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let preparationStart = CFAbsoluteTimeGetCurrent()
         var isStreaming = false
         do {
+            // A voice-processing input ducks other apps' audio (for example a call) for as long
+            // as it exists, even when it is only prepared, so it is set up at recording start.
             let configuredCapture = try configureEngineCapture(
                 engine,
                 label: wantsStreaming ? "built-in-preroll" : "built-in-prewarm",
                 readinessDeadline: nil,
+                allowsVoiceProcessing: false,
                 shouldCancel: { false }
             )
 
-            if wantsStreaming, configuredCapture.inputNode.isVoiceProcessingEnabled {
-                // A voice-processing engine ducks other apps' audio for as long as it runs,
-                // which is not acceptable while idle. Keep the normal prewarm for this input.
-                prerollLifecycle.withLock { $0.unsupportedBuiltInDeviceID = defaultInputDeviceID }
-                logger.info("Mic pre-roll unavailable for this built-in input: voice processing is required")
-                engine.prepare()
-            } else if wantsStreaming {
+            if wantsStreaming {
                 // The tap is installed, so samples must already be routed to the ring when the
                 // engine starts.
                 setPrerollCaptureArmed(true)
@@ -1094,6 +1112,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     "Prepared built-in recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
                 )
             }
+        } catch is VoiceProcessingNotAllowedError {
+            teardownPreparedEngine(engine)
+            if wantsStreaming {
+                prerollLifecycle.withLock { $0.unsupportedBuiltInDeviceID = defaultInputDeviceID }
+            }
+            logger.info("Not preparing the built-in input while idle: it needs voice processing")
         } catch {
             teardownPreparedEngine(engine)
             if isStreaming { setPrerollCaptureArmed(false) }
@@ -2817,6 +2841,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _ engine: AVAudioEngine,
         label: String,
         readinessDeadline: TimeInterval?,
+        allowsVoiceProcessing: Bool = true,
         shouldCancel: @escaping () -> Bool
     ) throws -> ConfiguredEngineCapture {
         try throwIfRecordingStartCancelled(shouldCancel)
@@ -2837,6 +2862,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             label: label,
             shouldCancel: shouldCancel
         )
+        if !allowsVoiceProcessing,
+           requiresVoiceProcessing(inputRoute: inputRoute, currentFormat: inputFormat) {
+            throw VoiceProcessingNotAllowedError()
+        }
         if try enableVoiceProcessingIfNeeded(
             on: inputNode,
             inputRoute: inputRoute,
@@ -3126,6 +3155,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        // The stopped engine is retained for a while, and with voice processing still enabled
+        // it keeps ducking other apps and holds the input in its voice-processing format, so the
+        // next idle preparation would misread it. Release voice processing right away.
+        if engine.inputNode.isVoiceProcessingEnabled {
+            do {
+                try engine.inputNode.setVoiceProcessingEnabled(false)
+            } catch {
+                logger.warning("Could not disable voice processing on a stopped engine: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     private func teardownPreparedEngine(_ engine: AVAudioEngine) {
@@ -3220,10 +3259,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         currentFormat: AVAudioFormat,
         label: String
     ) throws -> Bool {
-        guard inputRoute.selectedDeviceID == nil,
-              inputRoute.engineDeviceID == nil,
-              currentFormat.channelCount == 3,
-              defaultInputUsesBuiltInTransport() else {
+        guard requiresVoiceProcessing(inputRoute: inputRoute, currentFormat: currentFormat) else {
             return false
         }
 
@@ -3238,6 +3274,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             logger.warning("\(label, privacy: .public) could not enable voice processing for 3-channel built-in default input: \(error.localizedDescription, privacy: .public)")
             return false
         }
+    }
+
+    private func requiresVoiceProcessing(
+        inputRoute: (selectedDeviceID: AudioDeviceID?, engineDeviceID: AudioDeviceID?),
+        currentFormat: AVAudioFormat
+    ) -> Bool {
+        BuiltInVoiceProcessingPolicy.isRequired(
+            selectedDeviceID: inputRoute.selectedDeviceID,
+            engineDeviceID: inputRoute.engineDeviceID,
+            inputChannelCount: currentFormat.channelCount,
+            defaultInputUsesBuiltInTransport: defaultInputUsesBuiltInTransport()
+        )
     }
 
     private func defaultInputUsesBuiltInTransport() -> Bool {
