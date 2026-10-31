@@ -234,6 +234,33 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         ))
     }
 
+    func testVoiceProcessingIsRequiredOnlyForAutomaticThreeChannelBuiltInInput() {
+        XCTAssertTrue(BuiltInVoiceProcessingPolicy.isRequired(
+            selectedDeviceID: nil,
+            engineDeviceID: nil,
+            inputChannelCount: 3,
+            defaultInputUsesBuiltInTransport: true
+        ))
+        XCTAssertFalse(BuiltInVoiceProcessingPolicy.isRequired(
+            selectedDeviceID: nil,
+            engineDeviceID: nil,
+            inputChannelCount: 1,
+            defaultInputUsesBuiltInTransport: true
+        ))
+        XCTAssertFalse(BuiltInVoiceProcessingPolicy.isRequired(
+            selectedDeviceID: AudioDeviceID(1),
+            engineDeviceID: AudioDeviceID(1),
+            inputChannelCount: 3,
+            defaultInputUsesBuiltInTransport: true
+        ))
+        XCTAssertFalse(BuiltInVoiceProcessingPolicy.isRequired(
+            selectedDeviceID: nil,
+            engineDeviceID: nil,
+            inputChannelCount: 3,
+            defaultInputUsesBuiltInTransport: false
+        ))
+    }
+
     func testUSBInputPreparationAllowsOnlyExplicitSelectedUSBRoute() {
         XCTAssertTrue(USBRecordingInputPreparationPolicy.isEligible(
             hasMicrophonePermission: true,
