@@ -860,7 +860,28 @@ typewhisper export settings.json # Export all supported settings
 typewhisper import settings.json # Import all categories in a backup
 typewhisper audio               # Show microphone priority, ducking and sound settings
 typewhisper audio set changes.json # Change audio settings (see Audio Settings above)
+typewhisper completions zsh     # Print a shell completion script (bash, zsh, fish)
 ```
+
+### Shell Completion
+
+`typewhisper completions <shell>` prints a completion script for bash, zsh, or fish. It completes commands, subcommands, the options that apply to each command, and file paths. While TypeWhisper is running with the API server enabled, `--engine` and `--model` also suggest the installed engine and model IDs; `--model` only lists models of the engine given with `--engine`. Without a running app, commands and options still complete.
+
+```bash
+# zsh: add to ~/.zshrc after compinit
+eval "$(typewhisper completions zsh)"
+
+# bash: add to ~/.bashrc
+eval "$(typewhisper completions bash)"
+```
+
+```fish
+# fish
+mkdir -p ~/.config/fish/completions
+typewhisper completions fish > ~/.config/fish/completions/typewhisper.fish
+```
+
+If you save the script to a file, as in the fish example, generate it again after updating TypeWhisper so new commands and options are included.
 
 ### Options
 

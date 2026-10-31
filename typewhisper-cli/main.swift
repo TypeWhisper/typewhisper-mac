@@ -115,6 +115,16 @@ guard let command else {
     exit(1)
 }
 
+// Completion scripts are static, so they work without a running app.
+if command == "completions" {
+    guard positionalArgs.count == 1, let shell = CompletionShell(rawValue: positionalArgs[0]) else {
+        printError("Error: Use 'completions bash', 'completions zsh' or 'completions fish'.")
+        exit(1)
+    }
+    print(ShellCompletions.script(for: shell), terminator: "")
+    exit(0)
+}
+
 let discovery = PortDiscovery.discover(dev: devMode)
 let port = portOverride ?? discovery.port
 let apiToken = apiTokenOverride?.isEmpty == false ? apiTokenOverride : discovery.token
@@ -207,6 +217,19 @@ do {
         }
         print(OutputFormatter.formatAudioSettings(data, json: jsonOutput))
 
+    case "__complete":
+        // Called by the completion scripts. Stays silent when the app is not reachable.
+        guard positionalArgs.count == 1, let data = try? await client.models(timeout: 2) else { exit(0) }
+        let ids: [String]
+        switch positionalArgs[0] {
+        case "engines": ids = ShellCompletions.engineIDs(fromModelsJSON: data)
+        case "models": ids = ShellCompletions.modelIDs(fromModelsJSON: data, engine: engineOverride)
+        default: ids = []
+        }
+        if !ids.isEmpty {
+            print(ids.joined(separator: "\n"))
+        }
+
     case "transcribe":
         let fileURL: URL?
         if let path = positionalArgs.first, path != "-" {
@@ -268,6 +291,7 @@ func printUsage() {
           import <file>        Import all settings from a JSON backup
           audio                Show microphone priority, ducking and sound settings
           audio set <file>     Change audio settings from a JSON file (or - for stdin)
+          completions <shell>  Print a completion script for bash, zsh or fish
 
         Global options:
           --port <N>           Server port (default: auto-detect)
@@ -308,6 +332,7 @@ func printUsage() {
           typewhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
           typewhisper transcribe - < audio.wav
           cat audio.wav | typewhisper transcribe -
+          typewhisper completions fish > ~/.config/fish/completions/typewhisper.fish
         """
     print(usage)
 }
