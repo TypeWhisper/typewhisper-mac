@@ -27,9 +27,10 @@ enum BuiltInRecordingInputPreparationPolicy {
     }
 }
 
-/// The 3-channel built-in microphone array of a MacBook only captures cleanly during calls with
-/// voice processing. macOS ducks every other app's audio while a voice-processing input exists,
-/// so such an input is only set up for an actual recording and never kept prepared while idle.
+/// While a call app such as FaceTime or Google Meet uses the built-in MacBook microphone, its
+/// default route reports 3 channels and only captures cleanly with voice processing (#755).
+/// macOS ducks every other app's audio, including the call, while a voice-processing input
+/// exists, so such an input is only set up for an actual recording and never kept prepared.
 enum BuiltInVoiceProcessingPolicy {
     static func isRequired(
         selectedDeviceID: AudioDeviceID?,
