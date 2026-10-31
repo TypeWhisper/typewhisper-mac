@@ -30,6 +30,24 @@ final class LanguageDetectionPluginTests: XCTestCase {
         XCTAssertEqual(germanOrZulu.language, "de", "Whisper knows no Zulu, so only the own guess counts")
     }
 
+    func testHongKongChineseIsCantoneseWithWhispersChineseScore() {
+        let labels = EarLabels(languages: ["en", "yue", "zh"], whisperLanguages: ["en", "zh"], whisperWeight: 1)
+        let columns = EarScoring.columns(for: ["zh-TW", "zh-HK", "en"], labels: labels.languages)
+        XCTAssertEqual(columns.map(\.code), ["zh-TW", "zh-HK", "en"])
+        XCTAssertEqual(columns.map(\.index), [2, 1, 0])
+
+        // Whisper hears Cantonese as Chinese: its Chinese score lifts both Chinese candidates
+        // over English, and the own guess picks Cantonese.
+        let own: [Float] = [log(0.4), log(0.35), log(0.25)]
+        let whisper: [Float] = [log(0.1), 0, log(0.9)]
+        XCTAssertEqual(EarScoring.pick(columns: columns, own: own, whisper: whisper, labels: labels).language, "zh-HK")
+        XCTAssertEqual(
+            EarScoring.pick(columns: [("zh-HK", 1), ("en", 0)], own: own, whisper: whisper, labels: labels).language,
+            "zh-HK",
+            "Without the stand-in Whisper would drop out and English would win"
+        )
+    }
+
     func testCandidatesMapToModelLanguages() {
         let columns = EarScoring.columns(for: ["de-AT", "de", "nb", "pt_BR", "xx"], labels: ["de", "no", "pt"])
         XCTAssertEqual(columns.map(\.code), ["de-AT", "nb", "pt_BR"])

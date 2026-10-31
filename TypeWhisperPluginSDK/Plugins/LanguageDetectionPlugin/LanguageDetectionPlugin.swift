@@ -151,9 +151,19 @@ enum EarScoring {
         "nb": "no", "nn": "no", "iw": "he", "tl": "fil", "jw": "jv", "in": "id",
     ]
 
+    /// Whisper has no Cantonese and hears it as Chinese, so its Chinese score stands in. Whisper
+    /// then stays in the mix for a Cantonese candidate, and the model's own guess alone separates
+    /// Cantonese from Mandarin.
+    private static let whisperStandIns: [String: String] = ["yue": "zh"]
+
     static func canonicalCode(_ code: String) -> String {
         let lowered = code.lowercased()
-        let base = lowered.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? lowered
+        let parts = lowered.split(whereSeparator: { $0 == "-" || $0 == "_" }).map(String.init)
+        let base = parts.first ?? lowered
+        // Speech engines such as Apple Speech and Deepgram use zh-HK for Hong Kong Cantonese.
+        if base == "zh", parts.dropFirst().contains("hk") {
+            return "yue"
+        }
         return aliases[base] ?? base
     }
 
@@ -202,17 +212,33 @@ enum EarScoring {
         return min(max(frames, 1), encoderFrames)
     }
 
+    /// The column of Whisper's guess for a label: its own, a stand-in's, or nil when Whisper
+    /// knows neither.
+    static func whisperIndex(for index: Int, labels: EarLabels) -> Int? {
+        let language = labels.languages[index]
+        if labels.whisperLanguages.contains(language) {
+            return index
+        }
+        guard let standIn = whisperStandIns[language], labels.whisperLanguages.contains(standIn) else {
+            return nil
+        }
+        return labels.languages.firstIndex(of: standIn)
+    }
+
     /// Softmax over the candidates. Whisper's guess helps with accents and noisy audio, but it
     /// knows nothing about some languages; mixing it in then would push those candidates out,
-    /// so it only joins when it covers every candidate.
+    /// so it only joins when it covers every candidate, itself or through a stand-in.
     static func pick(
         columns: [(code: String, index: Int)],
         own: [Float],
         whisper: [Float],
         labels: EarLabels
     ) -> PluginSpokenLanguageIdentification {
-        let mixWhisper = columns.allSatisfy { labels.whisperLanguages.contains(labels.languages[$0.index]) }
-        let scores = columns.map { own[$0.index] + (mixWhisper ? labels.whisperWeight * whisper[$0.index] : 0) }
+        let whisperColumns = columns.map { whisperIndex(for: $0.index, labels: labels) }
+        let mixWhisper = whisperColumns.allSatisfy { $0 != nil }
+        let scores = zip(columns, whisperColumns).map { column, whisperColumn in
+            own[column.index] + (mixWhisper ? whisperColumn.map { labels.whisperWeight * whisper[$0] } ?? 0 : 0)
+        }
         let peak = scores.max() ?? 0
         let exps = scores.map { Foundation.exp($0 - peak) }
         let sum = exps.reduce(0, +)
