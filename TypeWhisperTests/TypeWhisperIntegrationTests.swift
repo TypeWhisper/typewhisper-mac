@@ -15532,6 +15532,15 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    func testLanguageSelectionFallsBackFromRegionalCodeToSpokenLanguage() {
+        XCTAssertEqual(LanguageSelection.exact("zh-TW").normalizedForSupportedLanguages(["en", "zh"]), .exact("zh"))
+        XCTAssertEqual(LanguageSelection.exact("zh-HK").normalizedForSupportedLanguages(["en", "zh"]), .auto)
+        XCTAssertEqual(
+            LanguageSelection.hints(["zh-HK", "zh-TW", "en"]).normalizedForSupportedLanguages(["en", "yue", "zh"]),
+            .hints(["yue", "zh", "en"])
+        )
+    }
+
     @MainActor
     func testSettingsViewModelAvailableLanguagesKeepsRegionalAndScriptVariantsDistinct() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

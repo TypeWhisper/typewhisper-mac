@@ -2505,6 +2505,9 @@ final class LanguageLocalizationTests: XCTestCase {
         UserDefaults.standard.set("en", forKey: UserDefaultsKeys.preferredAppLanguage)
         XCTAssertEqual(localizedAppLanguageName(for: "zh-HK"), "Cantonese (Hong Kong)")
         XCTAssertEqual(localizedAppLanguageName(for: "zh-TW"), "Chinese (Taiwan)")
+
+        UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
+        XCTAssertTrue(localizedAppLanguageSearchTerms(for: "zh-HK").contains("Cantonese (Hong Kong)"))
     }
 
     func testLocalizedAppTextFindsSpanishInTheCatalogOrInline() throws {
