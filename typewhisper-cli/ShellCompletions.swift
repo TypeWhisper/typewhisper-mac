@@ -63,8 +63,10 @@ enum ShellCompletions {
         }
 
         _typewhisper_files() {
+            # Bash 3.2 has no compopt; an empty reply falls back to readline's file completion there.
+            type compopt >/dev/null 2>&1 || return 0
             local IFS=$'\n'
-            type compopt >/dev/null 2>&1 && compopt -o filenames
+            compopt -o filenames
             COMPREPLY=($(compgen -f -- "$cur"))
         }
 
@@ -134,7 +136,12 @@ enum ShellCompletions {
             fi
         }
 
-        complete -F _typewhisper typewhisper
+        # Bash 3.2 (the macOS default) has no compopt, so file arguments use -o default there.
+        if type compopt >/dev/null 2>&1; then
+            complete -F _typewhisper typewhisper
+        else
+            complete -o default -F _typewhisper typewhisper
+        fi
 
         """#
 
