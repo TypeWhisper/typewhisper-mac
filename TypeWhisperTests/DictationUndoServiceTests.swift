@@ -486,6 +486,18 @@ final class DictationUndoServiceTests: XCTestCase {
         }
     }
 
+    func testActualRangeWriterRejectsHiddenTextInputProxyBeforeSelecting() {
+        // Flutter's zero-width input view refuses AX writes (#1809).
+        let harness = AXReplacementHarness()
+        harness.insertion.hiddenTextInputProxyOverride = { _ in true }
+        let service = harness.makeService()
+
+        XCTAssertEqual(service.perform(.undo), .failed(.mutationFailed))
+        XCTAssertEqual(harness.selectionCount, 0)
+        XCTAssertEqual(harness.writeCount, 0)
+        XCTAssertEqual(harness.value, "Processed.")
+    }
+
     func testActualRangeWriterRejectsCaretMovedAfterSnapshotValidation() {
         for kind in [DictationUndoService.Kind.undo, .restore] {
             let harness = AXReplacementHarness()

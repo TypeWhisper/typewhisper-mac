@@ -7428,6 +7428,53 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testHiddenTextInputProxyGetsPasteInsteadOfAccessibilityInsertion() async throws {
+        // Flutter's zero-width input view takes the AX write and reads it back, but the visible
+        // field never gets it (#1809).
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Flutter App", "com.example.flutter", nil) }
+        service.hiddenTextInputProxyOverride = { _ in true }
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+        var didAttemptDirectAXInsertion = false
+        service.insertTextAtOverride = { _, _ in
+            didAttemptDirectAXInsertion = true
+            return true
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let result = try await service.insertText("Hello", preserveClipboard: true)
+        let restoreVerification = await service.waitForPendingClipboardRestore()
+
+        XCTAssertFalse(didAttemptDirectAXInsertion)
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(restoreVerification, .verified)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    func testClipboardShortcutsReportTheLeftCommandKey() {
+        // Flutter ignores Command without the left-Command device bit (#1809).
+        XCTAssertTrue(TextInsertionService.clipboardShortcutFlags.contains(.maskCommand))
+        XCTAssertEqual(TextInsertionService.clipboardShortcutFlags.rawValue & 0x8, 0x8)
+    }
+
+    @MainActor
     func testMozillaFamilyRejectsLiveFieldAccessibilityInsertion() {
         let bundleIdentifiers = [
             "org.mozilla.firefox",

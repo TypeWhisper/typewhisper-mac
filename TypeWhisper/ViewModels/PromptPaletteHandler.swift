@@ -413,6 +413,17 @@ final class PromptPaletteHandler {
                         outputFormat: resolvedOutputFormat,
                         deferredClipboardRestore: ctx.deferredClipboardRestore
                     )
+                } else if let element = ctx.focusedElement,
+                          textInsertionService.isHiddenTextInputProxy(element) {
+                    // Flutter's hidden input view refuses AX writes; only a paste reaches the field.
+                    insertionOutcome = try await activateAndInsertText(
+                        result,
+                        bundleId: ctx.activeApp.bundleId,
+                        preserveClipboard: preserveClipboard,
+                        autoEnter: workflow.output.autoEnter,
+                        outputFormat: resolvedOutputFormat,
+                        deferredClipboardRestore: ctx.deferredClipboardRestore
+                    )
                 } else if let element = ctx.focusedElement {
                     insertionOutcome = textInsertionService.insertTextAt(element: element, text: result)
                         ? .insertedViaAccessibility
