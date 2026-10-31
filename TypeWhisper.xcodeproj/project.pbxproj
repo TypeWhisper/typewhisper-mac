@@ -366,6 +366,8 @@
 		AA00000000000000000104 /* CLIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000104 /* CLIClient.swift */; };
 		AA00000000000000000105 /* PortDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000105 /* PortDiscovery.swift */; };
 		AA00000000000000000106 /* OutputFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000106 /* OutputFormatter.swift */; };
+		AA000000000000000001A0 /* ShellCompletions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000A199 /* ShellCompletions.swift */; };
+		C1E5C0A1F00D0000000000A1 /* ShellCompletions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000A199 /* ShellCompletions.swift */; };
 		AA00000000000000000107 /* typewhisper-cli in CopyFiles */ = {isa = PBXBuildFile; fileRef = DD00000000000000000098 /* typewhisper-cli */; };
 		AA00000000000000000108 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000109 /* PrivacyInfo.xcprivacy */; };
 		AA00000000000000000110 /* PromptAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000110 /* PromptAction.swift */; };
@@ -1104,6 +1106,7 @@
 		BB00000000000000000104 /* CLIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIClient.swift; sourceTree = "<group>"; };
 		BB00000000000000000105 /* PortDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortDiscovery.swift; sourceTree = "<group>"; };
 		BB00000000000000000106 /* OutputFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputFormatter.swift; sourceTree = "<group>"; };
+		BB0000000000000000A199 /* ShellCompletions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCompletions.swift; sourceTree = "<group>"; };
 		BB00000000000000000109 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BB00000000000000000110 /* PromptAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptAction.swift; sourceTree = "<group>"; };
 		BB00000000000000000111 /* PromptActionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptActionService.swift; sourceTree = "<group>"; };
@@ -2533,6 +2536,7 @@
 				BB00000000000000000104 /* CLIClient.swift */,
 				BB00000000000000000105 /* PortDiscovery.swift */,
 				BB00000000000000000106 /* OutputFormatter.swift */,
+				BB0000000000000000A199 /* ShellCompletions.swift */,
 			);
 			path = "typewhisper-cli";
 			sourceTree = "<group>";
@@ -5525,6 +5529,7 @@
 				0B58B3B8ACBA76118C3B54C2 /* ModelManagerRestoreAfterAutoUnloadTests.swift in Sources */,
 				E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */,
 				BA68B1E282D5D714132FEA24 /* PortDiscovery.swift in Sources */,
+				C1E5C0A1F00D0000000000A1 /* ShellCompletions.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5825,6 +5830,7 @@
 				AA00000000000000000104 /* CLIClient.swift in Sources */,
 				AA00000000000000000105 /* PortDiscovery.swift in Sources */,
 				AA00000000000000000106 /* OutputFormatter.swift in Sources */,
+				AA000000000000000001A0 /* ShellCompletions.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -19,6 +19,29 @@ final class CLISupportTests: XCTestCase {
         }
     }
 
+    func testShellCompletionsCoverCommandsAndOptionsForEveryShell() {
+        let words = [
+            "transcribe", "status", "models", "list", "load", "unload", "delete", "export", "import", "audio", "set", "completions",
+            "port", "api-token", "dev", "json", "help", "version", "language", "language-hint", "task", "translate-to",
+            "engine", "model", "await-download", "no-corrections", "replace", "__complete", "engines",
+        ]
+        for shell in CompletionShell.allCases {
+            let script = ShellCompletions.script(for: shell)
+            for word in words {
+                XCTAssertTrue(script.contains(word), "\(shell.rawValue) completion is missing \(word)")
+            }
+        }
+    }
+
+    func testShellCompletionIDsComeFromModelsResponse() {
+        let modelsJSON = Data(#"{"models":[{"id":"v3","engine":"parakeet"},{"id":"v2","engine":"parakeet"},{"id":"turbo","engine":"groq"},{"id":"v3","engine":"parakeet"}]}"#.utf8)
+
+        XCTAssertEqual(ShellCompletions.engineIDs(fromModelsJSON: modelsJSON), ["parakeet", "groq"])
+        XCTAssertEqual(ShellCompletions.modelIDs(fromModelsJSON: modelsJSON, engine: "parakeet"), ["v3", "v2"])
+        XCTAssertEqual(ShellCompletions.modelIDs(fromModelsJSON: modelsJSON, engine: nil), ["v3", "v2", "turbo"])
+        XCTAssertEqual(ShellCompletions.engineIDs(fromModelsJSON: Data("not json".utf8)), [])
+    }
+
     func testOutputFormatterRendersHumanReadableStatusAndModels() {
         let statusJSON = Data(#"{"status":"ready","engine":"parakeet","model":"tiny"}"#.utf8)
         let modelsJSON = Data(#"{"models":[{"id":"tiny","engine":"parakeet","name":"Tiny","status":"ready","selected":true}]}"#.utf8)

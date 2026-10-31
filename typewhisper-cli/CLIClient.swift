@@ -81,8 +81,8 @@ struct CLIClient {
         try await get("/v1/status")
     }
 
-    func models() async throws -> Data {
-        try await get("/v1/models")
+    func models(timeout: TimeInterval = 10) async throws -> Data {
+        try await get("/v1/models", timeout: timeout)
     }
 
     /// The server waits up to about ten minutes for a download or restore to finish.
