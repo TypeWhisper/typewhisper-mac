@@ -182,13 +182,29 @@ enum LanguageSelection: Hashable, Sendable {
 
         switch self {
         case .exact(let code):
-            return supportedSet.contains(code) ? .exact(code) : .auto
+            return Self.supportedCode(for: code, in: supportedSet).map { .exact($0) } ?? .auto
         case .hints(let codes):
-            let filtered = codes.filter { supportedSet.contains($0) }
+            let filtered = codes.compactMap { Self.supportedCode(for: $0, in: supportedSet) }
             return withSelectedCodes(filtered, nilBehavior: .auto)
         case .inheritGlobal, .auto:
             return self
         }
+    }
+
+    /// The code itself when the engine lists it, otherwise the engine's code for the same spoken
+    /// language: a regional pick such as zh-TW from another engine becomes zh. zh-HK is
+    /// Cantonese and becomes yue, never Mandarin.
+    private static func supportedCode(for code: String, in supportedSet: Set<String>) -> String? {
+        if supportedSet.contains(code) {
+            return code
+        }
+        guard let languageCode = Locale.Language(identifier: spokenLanguageIdentifier(for: code))
+                .languageCode?.identifier,
+              languageCode != code,
+              supportedSet.contains(languageCode) else {
+            return nil
+        }
+        return languageCode
     }
 
     private static func normalizedCodes(_ codes: [String]) -> [String] {

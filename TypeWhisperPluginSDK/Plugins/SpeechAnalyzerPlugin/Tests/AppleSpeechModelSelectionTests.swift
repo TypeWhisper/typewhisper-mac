@@ -2,6 +2,31 @@ import XCTest
 @testable import TypeWhisperPluginSDK
 
 final class AppleSpeechModelSelectionTests: XCTestCase {
+    func testListsRegionalChineseModelsWhoseScriptsDiffer() {
+        let modelIds = [
+            "speechanalyzer-en_GB",
+            "speechanalyzer-en_US",
+            "speechanalyzer-yue_CN",
+            "speechanalyzer-zh_CN",
+            "speechanalyzer-zh_HK",
+            "speechanalyzer-zh_TW"
+        ]
+
+        XCTAssertEqual(
+            AppleSpeechModelSelection.supportedLanguages(fromModelIds: modelIds),
+            ["en", "yue", "zh", "zh-CN", "zh-HK", "zh-TW"]
+        )
+        XCTAssertEqual(
+            AppleSpeechModelSelection.preferredModelId(
+                fromModelIds: modelIds,
+                localeIdentifier: "zh-HK",
+                languageCode: "zh-HK",
+                fallbackToFirst: false
+            ),
+            "speechanalyzer-zh_HK"
+        )
+    }
+
     func testPrefersExactLocaleModel() {
         let modelId = AppleSpeechModelSelection.preferredModelId(
             fromModelIds: [
