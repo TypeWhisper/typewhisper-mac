@@ -45,6 +45,19 @@ final class AppFormatterServiceTests: XCTestCase {
         XCTAssertEqual(channel, .releaseCandidate)
     }
 
+    func testAboutPanelVersionNamesTheChannelOfPreviewBuilds() {
+        func version(_ channel: AppConstants.ReleaseChannel) -> String {
+            AppConstants.aboutPanelApplicationVersion(infoDictionary: [
+                "CFBundleShortVersionString": "1.8.2",
+                "TypeWhisperReleaseChannel": channel.rawValue,
+            ])
+        }
+
+        XCTAssertEqual(version(.stable), "1.8.2")
+        XCTAssertEqual(version(.daily), "1.8.2 Daily")
+        XCTAssertEqual(version(.releaseCandidate), "1.8.2 Release Candidate")
+    }
+
     func testBundledPreviewReleaseUsesDailyTagAndURL() throws {
         let release = try XCTUnwrap(AppConstants.bundledPreviewRelease(
             infoDictionary: [
