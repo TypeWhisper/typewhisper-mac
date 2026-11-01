@@ -769,16 +769,20 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
             }
             group.addTask {
                 try await Task.sleep(for: timeout)
-                // `receive()` ignores task cancellation, and the group waits
-                // for it, so only closing the socket ends the wait. Before,
-                // every realtime transcription waited until ElevenLabs closed
-                // the idle session, about 15 seconds.
-                task.cancel(with: .normalClosure, reason: nil)
                 return .timedOut
             }
 
             let result = try await group.next() ?? .timedOut
             group.cancelAll()
+            if case .timedOut = result {
+                // `receive()` ignores task cancellation, and the group waits
+                // for it, so only closing the socket ends the wait. Before,
+                // every realtime transcription waited until ElevenLabs closed
+                // the idle session, about 15 seconds. Close only after the
+                // timeout was selected: closing earlier can fail the pending
+                // `receive()` first, and `next()` would then throw instead.
+                task.cancel(with: .normalClosure, reason: nil)
+            }
             return result
         }
     }
