@@ -895,6 +895,17 @@ final class ElevenLabsPluginTests: XCTestCase {
         )!
     }
 
+    func testRealtimeCommitsInJapaneseJoinWithoutASpace() {
+        let entries = ElevenLabsTimedTranscriptParser.appending(
+            ElevenLabsTimedTranscriptParser.entries(from: [["text": "です", "type": "word", "start": 0.6, "end": 0.9]]),
+            to: ElevenLabsTimedTranscriptParser.entries(from: [["text": "学校", "type": "word", "start": 0.0, "end": 0.5]])
+        )
+
+        let transcript = ElevenLabsTimedTranscriptParser.transcript(text: "学校です", detectedLanguage: "ja", entries: entries)
+
+        XCTAssertEqual(transcript.result.segments.map(\.text), ["学校です"])
+    }
+
     func testRealtimeCommitsKeepASpaceBetweenTheirWords() {
         let first = ElevenLabsTimedTranscriptParser.entries(from: [
             ["text": "the", "type": "word", "start": 0.0, "end": 0.3],

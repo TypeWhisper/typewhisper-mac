@@ -1824,13 +1824,38 @@ enum ElevenLabsTimedTranscriptParser {
     /// Joins the entries of a new realtime commit to the earlier ones. A commit ends with a
     /// word, so without a space its first word would run into the last word of the commit
     /// before, and segments and subtitles would read "thecat" instead of "the cat".
+    /// Scripts that do not separate words with spaces, such as Chinese and Japanese, join
+    /// without one ("学校" + "です" stays "学校です").
     static func appending(_ newEntries: [Entry], to entries: [Entry]) -> [Entry] {
         guard let last = entries.last, last.kind != .spacing,
-              let first = newEntries.first, first.kind != .spacing else {
+              let first = newEntries.first, first.kind != .spacing,
+              let lastCharacter = last.text.unicodeScalars.last,
+              let firstCharacter = first.text.unicodeScalars.first,
+              !lastCharacter.properties.isWhitespace, !firstCharacter.properties.isWhitespace,
+              !writesWithoutSpaces(lastCharacter), !writesWithoutSpaces(firstCharacter) else {
             return entries + newEntries
         }
         let spacing = Entry(kind: .spacing, text: " ", start: last.end, end: first.start)
         return entries + [spacing] + newEntries
+    }
+
+    /// Han, kana and the Southeast Asian scripts that write words without spaces between them.
+    private static func writesWithoutSpaces(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0E00...0x0EFF, // Thai, Lao
+             0x1000...0x109F, // Myanmar
+             0x1780...0x17FF, // Khmer
+             0x3000...0x30FF, // CJK punctuation, Hiragana, Katakana
+             0x31F0...0x31FF, // Katakana extensions
+             0x3400...0x4DBF, // CJK Extension A
+             0x4E00...0x9FFF, // CJK Unified Ideographs
+             0xF900...0xFAFF, // CJK Compatibility Ideographs
+             0xFF61...0xFF9F, // Halfwidth punctuation and Katakana
+             0x20000...0x3FFFF: // CJK Extensions B and later
+            return true
+        default:
+            return false
+        }
     }
 
     /// The transcript of a realtime session from the text and word entries of its commits.
