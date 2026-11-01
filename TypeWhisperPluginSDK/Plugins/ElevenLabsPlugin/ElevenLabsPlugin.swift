@@ -529,6 +529,12 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                     guard let text = String(data: data, encoding: .utf8) else { continue }
                     rawText = text
                 case .timedOut:
+                    // Without a committed transcript the partial text may miss
+                    // the end of the speech; fail so the REST fallback
+                    // transcribes the whole recording.
+                    guard receivedCommittedTranscript else {
+                        throw PluginTranscriptionError.apiError("Realtime API sent no committed transcript")
+                    }
                     return
                 }
 
