@@ -12,24 +12,36 @@ enum ElevenLabsAutomaticValidationPolicy {
     }
 }
 
+/// Scribe's documented languages and the further codes its API accepts. It
+/// rejects "jw", "haw" and "vo"; Javanese is "jv".
 private let elevenLabsSupportedLanguages = [
-    "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo",
-    "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es",
-    "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu", "ha", "haw",
-    "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja",
-    "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo",
-    "lt", "lv", "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt",
-    "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt",
+    "af", "am", "ar", "as", "ast", "az", "ba", "be", "bg", "bn",
+    "bo", "br", "bs", "ca", "ceb", "cs", "cy", "da", "de", "el",
+    "en", "es", "et", "eu", "fa", "fi", "fo", "fr", "ga", "gl",
+    "gu", "ha", "he", "hi", "hr", "ht", "hu", "hy", "id", "ig",
+    "is", "it", "ja", "jv", "ka", "kea", "kk", "km", "kn", "ko",
+    "ku", "ky", "la", "lb", "lg", "ln", "lo", "lt", "luo", "lv",
+    "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my", "ne",
+    "nl", "nn", "no", "nso", "oc", "or", "pa", "pl", "ps", "pt",
     "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq",
     "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl",
-    "tr", "tt", "uk", "ur", "uz", "vi", "vo", "yi", "yo", "yue",
-    "zh",
+    "tr", "tt", "uk", "umb", "ur", "uz", "vi", "wo", "xh", "yi",
+    "yo", "yue", "zh", "zu",
 ]
 
 private actor ElevenLabsTranscriptCollector {
     private var finals: [String] = []
     private var interim = ""
     private var detectedLanguage: String?
+    private var timedWords: [PluginWordTiming] = []
+
+    func addWords(_ words: [PluginWordTiming]) {
+        timedWords += words
+    }
+
+    func words() -> [PluginWordTiming] {
+        timedWords
+    }
 
     func addFinal(_ text: String, language: String? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -135,6 +147,8 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
     static let maximumKeytermCount = 1_000
     static let maximumKeytermCharacterCount = 49
     static let maximumKeytermWordCount = 5
+    static let defaultModelId = "scribe_v2"
+    static let medicalModelId = "scribe_v2_medical"
     /// The realtime API commits on its own after about 36 seconds of audio,
     /// and no message marks the transcript of the final commit. A recording
     /// sent as one stream ends one second after the first committed
@@ -161,8 +175,10 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
     func activate(host: HostServices) {
         self.host = host
         _apiKey = host.loadSecret(key: "api-key")
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-            ?? transcriptionModels.first?.id
+        // Selections of retired models, such as the deprecated Scribe v1, move to Scribe v2.
+        _selectedModelId = (host.userDefault(forKey: "selectedModel") as? String)
+            .flatMap { id in transcriptionModels.contains { $0.id == id } ? id : nil }
+            ?? Self.defaultModelId
         _transcriptionMode = (host.userDefault(forKey: Self.transcriptionModeKey) as? String)
             .flatMap(ElevenLabsTranscriptionMode.init(rawValue:))
             ?? .automatic
@@ -188,15 +204,25 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
 
     var transcriptionModels: [PluginModelInfo] {
         [
-            PluginModelInfo(id: "scribe_v2", displayName: "Scribe v2"),
+            PluginModelInfo(id: Self.defaultModelId, displayName: "Scribe v2"),
+            PluginModelInfo(id: Self.medicalModelId, displayName: "Scribe v2 Medical"),
         ]
     }
 
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
+        let streamedBefore = supportsStreaming
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
+        if supportsStreaming != streamedBefore {
+            host?.notifyCapabilitiesChanged()
+        }
+    }
+
+    /// Scribe v2 Medical is a batch model; only Scribe v2 has a realtime variant.
+    static func modelStreams(_ modelId: String?) -> Bool {
+        modelId != medicalModelId
     }
 
     var transcriptionMode: ElevenLabsTranscriptionMode { _transcriptionMode }
@@ -239,7 +265,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
     }
 
     var supportsTranslation: Bool { false }
-    var supportsStreaming: Bool { _transcriptionMode == .automatic }
+    var supportsStreaming: Bool { _transcriptionMode == .automatic && Self.modelStreams(_selectedModelId) }
     var dictionaryTermsSupport: DictionaryTermsSupport {
         _useDictionaryTerms ? .supported : .requiresPluginSetting
     }
@@ -325,7 +351,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         }
 
         let keyterms = activeKeyterms(prompt: prompt, dictionaryTermHints: dictionaryTermHints)
-        if transcriptionTransport(keyterms: keyterms, audioDuration: audio.duration) == .rest {
+        if transcriptionTransport(modelId: modelId, keyterms: keyterms, audioDuration: audio.duration) == .rest {
             let result = try await transcribeREST(
                 audio: audio,
                 language: language,
@@ -342,7 +368,6 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                 try await self.transcribeWebSocket(
                     audio: audio,
                     language: language,
-                    modelId: modelId,
                     apiKey: apiKey,
                     noVerbatim: self._noVerbatim,
                     onProgress: onProgress
@@ -426,10 +451,9 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                     value: String(_speakerCount)
                 )
             }
-            if modelId == "scribe_v2" {
-                for term in keyterms {
-                    body.appendMultipartField(boundary: boundary, name: "keyterms", value: term)
-                }
+            // Scribe v2 and Scribe v2 Medical both take keyterms.
+            for term in keyterms {
+                body.appendMultipartField(boundary: boundary, name: "keyterms", value: term)
             }
             body.append("--\(boundary)--\r\n".data(using: .utf8)!)
             request.httpBody = body
@@ -452,7 +476,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                 }
                 return try ElevenLabsTimedTranscriptParser.parse(data, fallbackLanguage: language)
             case 401:
-                throw PluginTranscriptionError.invalidApiKey
+                throw Self.unauthorizedError(from: data)
             case 413:
                 throw PluginTranscriptionError.fileTooLarge
             case 429:
@@ -475,13 +499,12 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
     private func transcribeWebSocket(
         audio: AudioData,
         language: String?,
-        modelId: String,
         apiKey: String,
         noVerbatim: Bool,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
-        let url = try Self.realtimeURL(language: language, modelId: modelId, noVerbatim: noVerbatim)
+        let url = try Self.realtimeURL(language: language, noVerbatim: noVerbatim)
 
         var request = URLRequest(url: url)
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
@@ -506,6 +529,12 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                     guard let text = String(data: data, encoding: .utf8) else { continue }
                     rawText = text
                 case .timedOut:
+                    // Without a committed transcript the partial text may miss
+                    // the end of the speech; fail so the REST fallback
+                    // transcribes the whole recording.
+                    guard receivedCommittedTranscript else {
+                        throw PluginTranscriptionError.apiError("Realtime API sent no committed transcript")
+                    }
                     return
                 }
 
@@ -526,16 +555,26 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                         _ = onProgress(currentText)
                     }
                 case "committed_transcript", "committed_transcript_with_timestamps":
+                    // With `include_timestamps`, the one manual commit arrives
+                    // as both messages with the same text, in either order; the
+                    // collector keeps the text once. The one with timestamps
+                    // also has the words and language, so the session ends there.
                     receivedCommittedTranscript = true
                     let text = json["text"] as? String ?? ""
-                    let detectedLanguage = json["language_code"] as? String
+                    let detectedLanguage = ElevenLabsLanguageCode.appCode(json["language_code"] as? String)
                     await collector.addFinal(text, language: detectedLanguage)
+                    if let words = json["words"] as? [[String: Any]] {
+                        await collector.addWords(ElevenLabsTimedTranscriptParser.wordTimings(from: words))
+                    }
                     let currentText = await collector.currentText()
                     if !currentText.isEmpty {
                         _ = onProgress(currentText)
                     }
+                    if messageType == "committed_transcript_with_timestamps" {
+                        return
+                    }
                 default:
-                    if messageType.localizedCaseInsensitiveContains("error") {
+                    if Self.isRealtimeError(messageType) {
                         throw PluginTranscriptionError.apiError(Self.errorMessage(from: json) ?? rawText)
                     }
                 }
@@ -589,15 +628,25 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         }
 
         let detectedLanguage = await collector.finalLanguage(fallback: language)
+        let words = await collector.words()
+        if !words.isEmpty {
+            PluginWordTimings.report(words)
+        }
         return PluginTranscriptionResult(text: finalText, detectedLanguage: detectedLanguage)
     }
 
     static func transcriptionTransport(
         mode: ElevenLabsTranscriptionMode,
+        modelId: String? = nil,
         keyterms: [String],
         audioDuration: TimeInterval
     ) -> ElevenLabsTranscriptionTransport {
-        mode == .restOnly || !keyterms.isEmpty || audioDuration > maximumRealtimeAudioDuration
+        // The realtime API takes keyterms too, but with them it often wraps
+        // the whole transcript in quotation marks; the batch API does not.
+        mode == .restOnly
+            || !modelStreams(modelId)
+            || !keyterms.isEmpty
+            || audioDuration > maximumRealtimeAudioDuration
             ? .rest
             : .realtime
     }
@@ -608,6 +657,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         audioDuration: TimeInterval = 0
     ) -> ElevenLabsTranscriptionTransport {
         transcriptionTransport(
+            modelId: _selectedModelId,
             keyterms: activeKeyterms(prompt: prompt, dictionaryTermHints: dictionaryTermHints),
             audioDuration: audioDuration
         )
@@ -656,26 +706,36 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
     }
 
     private func transcriptionTransport(
+        modelId: String?,
         keyterms: [String],
         audioDuration: TimeInterval
     ) -> ElevenLabsTranscriptionTransport {
-        Self.transcriptionTransport(mode: _transcriptionMode, keyterms: keyterms, audioDuration: audioDuration)
+        Self.transcriptionTransport(
+            mode: _transcriptionMode,
+            modelId: modelId,
+            keyterms: keyterms,
+            audioDuration: audioDuration
+        )
     }
 
-    static func realtimeURL(language: String?, modelId: String, noVerbatim: Bool) throws -> URL {
+    static func realtimeURL(language: String?, noVerbatim: Bool) throws -> URL {
         guard var components = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime") else {
             throw PluginTranscriptionError.apiError("Invalid realtime URL")
         }
 
         var queryItems = [
-            URLQueryItem(name: "model_id", value: realtimeModelId(for: modelId)),
+            URLQueryItem(name: "model_id", value: "scribe_v2_realtime"),
             URLQueryItem(name: "audio_format", value: "pcm_16000"),
             URLQueryItem(name: "commit_strategy", value: "manual"),
             URLQueryItem(name: "no_verbatim", value: formattedBoolean(noVerbatim)),
+            URLQueryItem(name: "include_timestamps", value: "true"),
         ]
 
         if let language, !language.isEmpty {
             queryItems.append(URLQueryItem(name: "language_code", value: language))
+        } else {
+            // Without it, committed transcripts carry no language code.
+            queryItems.append(URLQueryItem(name: "include_language_detection", value: "true"))
         }
 
         components.queryItems = queryItems
@@ -695,15 +755,6 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
 
     private static func formattedBoolean(_ value: Bool) -> String {
         value ? "true" : "false"
-    }
-
-    private static func realtimeModelId(for modelId: String) -> String {
-        switch modelId {
-        case "scribe_v1":
-            return "scribe_v2_realtime"
-        default:
-            return "scribe_v2_realtime"
-        }
     }
 
     private static func receivePayload(
@@ -729,8 +780,30 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
 
             let result = try await group.next() ?? .timedOut
             group.cancelAll()
+            if case .timedOut = result {
+                // `receive()` ignores task cancellation, and the group waits
+                // for it, so only closing the socket ends the wait. Before,
+                // every realtime transcription waited until ElevenLabs closed
+                // the idle session, about 15 seconds. Close only after the
+                // timeout was selected: closing earlier can fail the pending
+                // `receive()` first, and `next()` would then throw instead.
+                task.cancel(with: .normalClosure, reason: nil)
+            }
             return result
         }
+    }
+
+    /// Realtime errors that end the session. Not all of them say "error",
+    /// such as `invalid_request` for an unknown language code, so without this
+    /// list the REST fallback would only start after the receive timeout.
+    private static let realtimeErrorMessageTypes: Set<String> = [
+        "auth_error", "quota_exceeded", "commit_throttled", "unaccepted_terms", "rate_limited",
+        "queue_overflow", "resource_exhausted", "session_time_limit_exceeded", "input_error",
+        "invalid_request", "chunk_size_exceeded", "insufficient_audio_activity", "transcriber_error",
+    ]
+
+    static func isRealtimeError(_ messageType: String) -> Bool {
+        realtimeErrorMessageTypes.contains(messageType) || messageType.localizedCaseInsensitiveContains("error")
     }
 
     private static func errorMessage(from json: [String: Any]) -> String? {
@@ -774,6 +847,19 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         } catch {
             return .invalid(message: error.localizedDescription)
         }
+    }
+
+    /// ElevenLabs answers HTTP 401 not only for a wrong key but also when a
+    /// key's own credit quota is used up or it lacks a permission; those keep
+    /// the provider's message instead of "Invalid API key".
+    static func unauthorizedError(from data: Data) -> PluginTranscriptionError {
+        let detail = try? JSONDecoder().decode(ElevenLabsAPIErrorResponse.self, from: data).detail
+        guard let status = detail?.status, status != "invalid_api_key",
+              let message = detail?.message?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !message.isEmpty else {
+            return .invalidApiKey
+        }
+        return .apiError(message)
     }
 
     static func apiKeyValidationResult(statusCode: Int, data: Data) -> ElevenLabsAPIKeyValidationResult {
@@ -933,6 +1019,13 @@ private struct ElevenLabsSettingsView: View {
                     .labelsHidden()
                     .onChange(of: selectedModel) {
                         plugin.selectModel(selectedModel)
+                    }
+
+                    if selectedModel == ElevenLabsPlugin.medicalModelId {
+                        Text("Tuned for clinical audio, at the Scribe v2 price. Batch only, without realtime streaming.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -1110,6 +1203,22 @@ private extension Data {
     }
 }
 
+// MARK: - Language Codes
+
+/// Scribe's batch endpoint names the detected language in ISO 639-3 ("deu"),
+/// the realtime endpoint in ISO 639-1 ("de"). TypeWhisper uses the two-letter
+/// code where one exists, so language-specific text formatting applies.
+enum ElevenLabsLanguageCode {
+    static func appCode(_ code: String?) -> String? {
+        guard let code = code?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !code.isEmpty else { return nil }
+        guard code.count == 3 else { return code }
+        // Mandarin appears as "cmn", which has no two-letter code of its own.
+        if code == "cmn" { return "zh" }
+        return Locale.LanguageCode(code).identifier(.alpha2) ?? code
+    }
+}
+
 // MARK: - Timed Transcript
 
 /// The text, word times and segments of one Scribe batch response.
@@ -1156,15 +1265,8 @@ enum ElevenLabsTimedTranscriptParser {
         }
 
         let text = (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let detectedLanguage = json["language_code"] as? String ?? fallbackLanguage
+        let detectedLanguage = ElevenLabsLanguageCode.appCode(json["language_code"] as? String) ?? fallbackLanguage
         let entries = (json["words"] as? [[String: Any]] ?? []).compactMap(entry(from:))
-
-        let words = entries.compactMap { entry -> PluginWordTiming? in
-            guard entry.kind == .word, let start = entry.start, let end = entry.end else { return nil }
-            let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return nil }
-            return PluginWordTiming(text: text, start: start, end: max(start, end))
-        }
 
         return ElevenLabsTimedTranscript(
             result: PluginTranscriptionResult(
@@ -1172,8 +1274,22 @@ enum ElevenLabsTimedTranscriptParser {
                 detectedLanguage: detectedLanguage,
                 segments: segments(from: entries)
             ),
-            words: words
+            words: wordTimings(from: entries)
         )
+    }
+
+    /// The word entries of a batch response or realtime commit, without spacing and audio events.
+    static func wordTimings(from json: [[String: Any]]) -> [PluginWordTiming] {
+        wordTimings(from: json.compactMap(entry(from:)))
+    }
+
+    private static func wordTimings(from entries: [Entry]) -> [PluginWordTiming] {
+        entries.compactMap { entry -> PluginWordTiming? in
+            guard entry.kind == .word, let start = entry.start, let end = entry.end else { return nil }
+            let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return PluginWordTiming(text: text, start: start, end: max(start, end))
+        }
     }
 
     private static func entry(from json: [String: Any]) -> Entry? {

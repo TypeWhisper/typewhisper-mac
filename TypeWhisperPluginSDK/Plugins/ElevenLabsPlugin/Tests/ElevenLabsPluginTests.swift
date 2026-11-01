@@ -65,6 +65,23 @@ final class ElevenLabsPluginTests: XCTestCase {
         )
     }
 
+    func testTranscriptionUnauthorizedKeepsQuotaMessageAndReportsWrongKeys() {
+        // ElevenLabs answers a used-up per-key credit quota with HTTP 401 too.
+        let quota = Data(#"{"detail":{"type":"invalid_request","code":"quota_exceeded","message":"This request exceeds your API key (win-prod) quota of 1000.","status":"quota_exceeded"}}"#.utf8)
+        let wrongKey = Data(#"{"detail":{"message":"Invalid API key","status":"invalid_api_key"}}"#.utf8)
+
+        guard case .apiError(let message) = ElevenLabsPlugin.unauthorizedError(from: quota) else {
+            return XCTFail("A used-up key quota is not a wrong key")
+        }
+        XCTAssertEqual(message, "This request exceeds your API key (win-prod) quota of 1000.")
+        guard case .invalidApiKey = ElevenLabsPlugin.unauthorizedError(from: wrongKey) else {
+            return XCTFail("Expected invalidApiKey for a wrong key")
+        }
+        guard case .invalidApiKey = ElevenLabsPlugin.unauthorizedError(from: Data()) else {
+            return XCTFail("Expected invalidApiKey without a body")
+        }
+    }
+
     func testAPIKeyValidationRejectsUnrelatedMissingPermission() {
         let data = Data(#"""
         {
@@ -271,6 +288,24 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(try Self.multipartValues(named: "num_speakers", in: request), ["12"])
     }
 
+    func testMedicalModelTranscribesInBatchWithKeytermsAndRetiredModelsMoveToScribeV2() async throws {
+        let legacyHost = try PluginTestHostServices(defaults: ["selectedModel": "scribe_v1"])
+        let legacyPlugin = ElevenLabsPlugin()
+        legacyPlugin.activate(host: legacyHost)
+        XCTAssertEqual(legacyPlugin.selectedModelId, "scribe_v2")
+
+        let request = try await captureRESTRequest(
+            dictionaryTermHints: [PluginDictionaryTermHint(text: "Metoprolol")]
+        ) { plugin in
+            plugin.selectModel(ElevenLabsPlugin.medicalModelId)
+            XCTAssertFalse(plugin.supportsStreaming)
+            XCTAssertEqual(plugin.transcriptionTransport(prompt: nil, dictionaryTermHints: []), .rest)
+        }
+
+        XCTAssertEqual(try Self.multipartValues(named: "model_id", in: request), ["scribe_v2_medical"])
+        XCTAssertEqual(try Self.multipartValues(named: "keyterms", in: request), ["Metoprolol"])
+    }
+
     func testRESTRequestOmitsAutomaticSpeakerCount() async throws {
         let request = try await captureRESTRequest { plugin in
             plugin.setSpeakerCount(ElevenLabsPlugin.automaticSpeakerCount)
@@ -336,6 +371,7 @@ final class ElevenLabsPluginTests: XCTestCase {
             PluginWordTiming(text: "Danke", start: 4.0, end: 4.4),
         ])
         XCTAssertEqual(result.text, "Ja. Das stimmt. Wir (lacht) gehen jetzt Danke")
+        XCTAssertEqual(result.detectedLanguage, "de")
         XCTAssertEqual(result.segments.map(\.text), ["Ja. Das stimmt.", "Wir (lacht) gehen jetzt", "Danke"])
         XCTAssertEqual(result.segments.map(\.start), [0.0, 1.1, 4.0])
         XCTAssertEqual(result.segments.map(\.end), [1.0, 2.5, 4.4])
@@ -386,12 +422,10 @@ final class ElevenLabsPluginTests: XCTestCase {
     func testRealtimeURLAppliesNoVerbatimWithoutRESTOnlyOptions() throws {
         let cleanURL = try ElevenLabsPlugin.realtimeURL(
             language: "zh",
-            modelId: "scribe_v2",
             noVerbatim: true
         )
         let verbatimURL = try ElevenLabsPlugin.realtimeURL(
             language: nil,
-            modelId: "scribe_v2",
             noVerbatim: false
         )
 
@@ -403,6 +437,8 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(cleanItems["commit_strategy"], "manual")
         XCTAssertEqual(cleanItems["language_code"], "zh")
         XCTAssertEqual(cleanItems["no_verbatim"], "true")
+        XCTAssertEqual(cleanItems["include_timestamps"], "true")
+        XCTAssertNil(cleanItems["include_language_detection"])
         XCTAssertNil(cleanItems["tag_audio_events"])
         XCTAssertNil(cleanItems["num_speakers"])
         XCTAssertNil(cleanItems["keyterms"])
@@ -410,6 +446,23 @@ final class ElevenLabsPluginTests: XCTestCase {
         let verbatimItems = Self.queryItems(in: verbatimURL)
         XCTAssertEqual(verbatimItems["no_verbatim"], "false")
         XCTAssertNil(verbatimItems["language_code"])
+        XCTAssertEqual(verbatimItems["include_language_detection"], "true")
+    }
+
+    func testRealtimeSessionErrorsAndScribeLanguageCodesMapToTypeWhisper() {
+        // Scribe ends a realtime session for an unknown language with `invalid_request`.
+        XCTAssertTrue(ElevenLabsPlugin.isRealtimeError("invalid_request"))
+        XCTAssertTrue(ElevenLabsPlugin.isRealtimeError("quota_exceeded"))
+        XCTAssertTrue(ElevenLabsPlugin.isRealtimeError("auth_error"))
+        XCTAssertFalse(ElevenLabsPlugin.isRealtimeError("warning"))
+        XCTAssertFalse(ElevenLabsPlugin.isRealtimeError("partial_transcript"))
+
+        XCTAssertEqual(ElevenLabsLanguageCode.appCode("deu"), "de")
+        XCTAssertEqual(ElevenLabsLanguageCode.appCode("nor"), "no")
+        XCTAssertEqual(ElevenLabsLanguageCode.appCode("cmn"), "zh")
+        XCTAssertEqual(ElevenLabsLanguageCode.appCode("yue"), "yue")
+        XCTAssertEqual(ElevenLabsLanguageCode.appCode("en"), "en")
+        XCTAssertNil(ElevenLabsLanguageCode.appCode(""))
     }
 
     func testRoutingPreservesModesAndUsesOnlyEnabledValidDictionaryKeyterms() throws {
@@ -574,6 +627,7 @@ final class ElevenLabsPluginTests: XCTestCase {
             "Choose Automatic or the maximum number of speakers (1–32). Applies to REST transcription only.",
             "Use TypeWhisper dictionary terms",
             "Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.",
+            "Tuned for clinical audio, at the Scribe v2 price. Batch only, without realtime streaming.",
         ]
 
         for key in requiredKeys {
