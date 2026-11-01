@@ -2449,17 +2449,24 @@ final class AudioRecorderViewModel: ObservableObject {
         request: FinalTranscriptionRequest,
         result: TranscriptionResult? = nil
     ) -> (FinalTranscriptionOutcome, RecorderTranscriptReadyPayload?) {
-        do {
-            let timestamps = try result.flatMap {
-                try TranscriptTimestampsFile.data(
+        // The word timestamps are extra: the transcript is saved without them when
+        // they cannot be written.
+        var timestamps: Data?
+        if let result {
+            do {
+                timestamps = try TranscriptTimestampsFile.data(
                     text: text,
-                    result: $0,
+                    result: result,
                     model: modelManager.resolvedModelId(
                         engineOverrideId: request.providerId,
                         cloudModelOverride: request.modelOverrideId
                     )
                 )
+            } catch {
+                logger.error("Failed to encode word timestamps: \(error.localizedDescription, privacy: .public)")
             }
+        }
+        do {
             let payload = try saveTranscript(
                 text,
                 for: audioURL,

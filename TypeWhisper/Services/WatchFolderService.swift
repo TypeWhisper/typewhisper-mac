@@ -229,8 +229,9 @@ enum TranscriptMarkdown {
     /// The transcript's own text, split into paragraphs about a minute apart. The text
     /// is kept as it is: corrections and number formatting treat it as a whole, so it
     /// can differ from its segments ("23" against "20 three" from one segment per word).
-    /// A paragraph starts where the text of a segment is found; a segment the text does
-    /// not contain is passed over for the next one.
+    /// The segments are found in the text one after the other, close to where the one
+    /// before ended; a segment the text does not contain there is passed over. A
+    /// paragraph starts at a segment that was found.
     private static func timedParagraphs(of text: String, segments: [TranscriptionSegment]) -> String {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = segments.first, !text.isEmpty else { return text }
@@ -242,20 +243,28 @@ enum TranscriptMarkdown {
             compact.append(text[index])
             positions.append(index)
         }
+
         var starts: [(time: TimeInterval, offset: Int)] = [(first.start, 0)]
-        for index in segments.indices.dropFirst()
-        where segments[index].start - starts[starts.count - 1].time >= paragraphSeconds {
-            // At least a dozen characters, so a short common word is not found too early.
-            var needle: [Character] = []
-            var next = index
-            while next < segments.count, needle.count < 12 {
-                needle += segments[next].text.filter { !$0.isWhitespace }
-                next += 1
+        var cursor = 0
+        // Characters of the segments passed over since the last one found: the text
+        // moved on by about as much.
+        var passedOver = 0
+        for segment in segments {
+            let needle = Array(segment.text.filter { !$0.isWhitespace })
+            guard !needle.isEmpty else { continue }
+            let window = 40 + 2 * passedOver
+            guard let offset = firstOffset(of: needle, in: compact, from: cursor, within: window) else {
+                passedOver += needle.count
+                continue
             }
-            if let offset = firstOffset(of: needle, in: compact, after: starts[starts.count - 1].offset) {
-                starts.append((segments[index].start, offset))
+            cursor = offset + needle.count
+            passedOver = 0
+            if segment.start - starts[starts.count - 1].time >= paragraphSeconds,
+               offset > starts[starts.count - 1].offset {
+                starts.append((segment.start, offset))
             }
         }
+
         var paragraphs: [String] = []
         for (number, start) in starts.enumerated() {
             let from = positions[start.offset]
@@ -266,14 +275,13 @@ enum TranscriptMarkdown {
         return paragraphs.joined(separator: "\n\n")
     }
 
-    private static func firstOffset(of needle: [Character], in haystack: [Character], after start: Int) -> Int? {
-        guard !needle.isEmpty, needle.count <= haystack.count else { return nil }
-        var offset = start + 1
-        while offset + needle.count <= haystack.count {
-            if haystack[offset] == needle[0], haystack[offset..<(offset + needle.count)].elementsEqual(needle) {
-                return offset
-            }
-            offset += 1
+    /// Where `needle` starts in `haystack`, at most `window` characters after `start`.
+    private static func firstOffset(of needle: [Character], in haystack: [Character], from start: Int, within window: Int) -> Int? {
+        let last = min(start + window, haystack.count - needle.count)
+        guard start <= last else { return nil }
+        for offset in start...last
+        where haystack[offset] == needle[0] && haystack[offset..<(offset + needle.count)].elementsEqual(needle) {
+            return offset
         }
         return nil
     }

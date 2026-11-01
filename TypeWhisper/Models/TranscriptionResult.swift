@@ -167,16 +167,26 @@ enum TranscriptTimestampsFile {
     }
 
     /// The file's content, or `nil` when the engine reported no word timestamps.
+    /// Words and segments without valid times are left out, as JSON cannot hold them.
     static func data(text: String, result: TranscriptionResult, model: String?) throws -> Data? {
-        guard !result.words.isEmpty else { return nil }
+        let timed = TranscriptionResult(
+            text: result.text,
+            detectedLanguage: result.detectedLanguage,
+            duration: result.duration.isFinite ? result.duration : 0,
+            processingTime: result.processingTime.isFinite ? result.processingTime : 0,
+            engineUsed: result.engineUsed,
+            segments: result.segments.filter { $0.start.isFinite && $0.end.isFinite },
+            words: result.words.filter { $0.start.isFinite && $0.end.isFinite }
+        )
+        guard !timed.words.isEmpty else { return nil }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.withoutEscapingSlashes]
         return try encoder.encode(VerboseTranscript(
             text: text,
-            language: result.detectedLanguage,
-            result: result,
+            language: timed.detectedLanguage,
+            result: timed,
             model: model,
-            segments: result.segments,
+            segments: timed.segments,
             includesWords: true
         ))
     }

@@ -2876,6 +2876,29 @@ final class WatchFolderExportTests: XCTestCase {
         )
     }
 
+    /// A phrase said twice keeps its later time on its later occurrence.
+    func testWatchFolderMarkdownFindsRepeatedPhrasesInOrder() {
+        let result = TranscriptionResult(
+            text: "Opening. Thank you for joining us. Other discussion. Thank you for joining us.",
+            detectedLanguage: "en",
+            duration: 75,
+            processingTime: 1,
+            engineUsed: "parakeet",
+            segments: [
+                TranscriptionSegment(text: "Opening.", start: 0, end: 1),
+                TranscriptionSegment(text: "Thank you for joining us.", start: 10, end: 12),
+                TranscriptionSegment(text: "Other discussion.", start: 20, end: 22),
+                TranscriptionSegment(text: "Thank you for joining us.", start: 70, end: 72),
+            ]
+        )
+
+        XCTAssertEqual(
+            TranscriptMarkdown.body(result),
+            "**[00:00:00]** Opening. Thank you for joining us. Other discussion.\n\n"
+                + "**[00:01:10]** Thank you for joining us."
+        )
+    }
+
     func testTimestampsFileHasTheAPIFormatAndNeedsWords() throws {
         let words = [TranscriptionWord(text: "Hello", start: 0.5, end: 0.9)]
         let result = TranscriptionResult(
@@ -2903,6 +2926,11 @@ final class WatchFolderExportTests: XCTestCase {
         var withoutWords = result
         withoutWords.words = []
         XCTAssertNil(try TranscriptTimestampsFile.data(text: "Hello", result: withoutWords, model: nil))
+
+        // JSON has no NaN: such words are left out instead of failing the file.
+        var untimed = result
+        untimed.words = [TranscriptionWord(text: "Hello", start: .nan, end: 0.9)]
+        XCTAssertNil(try TranscriptTimestampsFile.data(text: "Hello", result: untimed, model: nil))
     }
 
     func testWatchFolderExportBuilderProducesSubtitleFormats() throws {
