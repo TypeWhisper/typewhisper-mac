@@ -169,30 +169,30 @@
         }
       }
     },
-    "Auto streams partial results and falls back to batch REST. REST only avoids realtime concurrency limits and uses consistent batch transcription.": {
+    "Auto streams while you dictate, so the live preview and the final text come from one realtime session, and falls back to batch REST. With active dictionary terms, the final text comes from batch REST, so dictations with a live preview are billed for both. REST only avoids realtime concurrency limits and bills the batch rate.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatisch streamt Teilergebnisse und wechselt bei Fehlern zu Batch-REST. Nur REST vermeidet Echtzeit-Parallelitätslimits und verwendet eine konsistente Batch-Transkription."
+            "value": "Automatisch streamt bereits während des Diktats, sodass Live-Vorschau und Endtext aus einer Echtzeit-Sitzung stammen, und wechselt bei Fehlern zu Batch-REST. Mit aktiven Wörterbuchbegriffen kommt der Endtext von Batch-REST, sodass Diktate mit Live-Vorschau doppelt abgerechnet werden. Nur REST vermeidet Echtzeit-Parallelitätslimits und wird zum Batch-Tarif abgerechnet."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Auto transmite resultados parciales y recurre a REST por lotes como respaldo. Solo REST evita los límites de simultaneidad en tiempo real y usa una transcripción por lotes coherente."
+            "value": "Auto transmite mientras dictas, de modo que la vista previa en vivo y el texto final salen de una sola sesión en tiempo real, y recurre a REST por lotes si falla. Con términos del diccionario activos, el texto final viene de REST por lotes, por lo que los dictados con vista previa en vivo se facturan dos veces. Solo REST evita los límites de simultaneidad en tiempo real y se factura con la tarifa por lotes."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "自動モードでは部分結果をストリーミングし、失敗時はバッチRESTに切り替えます。RESTのみではリアルタイムの同時実行制限を回避し、一貫したバッチ文字起こしを使用します。"
+            "value": "自動モードでは音声入力中にストリーミングするため、ライブプレビューと最終テキストが同じリアルタイムセッションから得られます。失敗時はバッチRESTに切り替えます。辞書の用語が有効な場合、最終テキストはバッチRESTで作成されるため、ライブプレビュー付きの音声入力は二重に課金されます。RESTのみではリアルタイムの同時実行制限を回避し、バッチ料金で課金されます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自动模式流式传输部分结果，并在失败时回退到批量 REST。仅 REST 模式可避免实时并发限制，使用一致的批量转录。"
+            "value": "自动模式在听写时即进行流式传输，因此实时预览和最终文本来自同一个实时会话，失败时回退到批量 REST。启用词典术语时，最终文本由批量 REST 生成，因此带实时预览的听写会被计费两次。仅 REST 模式可避免实时并发限制，并按批量费率计费。"
           }
         }
       }
