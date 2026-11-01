@@ -756,6 +756,34 @@
           }
         }
       }
+    },
+    "Tuned for clinical audio, at the Scribe v2 price. Batch only, without realtime streaming.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf klinische Aufnahmen abgestimmt, zum Preis von Scribe v2. Nur Batch, ohne Echtzeit-Streaming."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optimizado para audio clínico, al precio de Scribe v2. Solo por lotes, sin streaming en tiempo real."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "臨床音声向けに調整されたモデルで、料金はScribe v2と同じです。バッチのみで、リアルタイムストリーミングには対応しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "针对临床音频优化，价格与 Scribe v2 相同。仅支持批处理，不支持实时流式转写。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
