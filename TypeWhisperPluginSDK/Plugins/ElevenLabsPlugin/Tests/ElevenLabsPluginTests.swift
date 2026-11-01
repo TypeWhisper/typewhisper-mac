@@ -279,6 +279,68 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertTrue(try Self.multipartValues(named: "num_speakers", in: request).isEmpty)
     }
 
+    func testRESTTranscriptionReportsWordTimingsAndBuildsSegmentsFromScribeWords() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "scribe_v2"],
+            secrets: ["api-key": "elevenlabs-key"]
+        )
+        let plugin = ElevenLabsPlugin()
+        plugin.activate(host: host)
+
+        // "Ja." is too short for a segment of its own; the 1.5 s silence
+        // before "Danke" starts one; spacing and audio events stay in the text.
+        let words: [(String, String, Double, Double)] = [
+            ("word", "Ja.", 0.0, 0.3), ("spacing", " ", 0.3, 0.4),
+            ("word", "Das", 0.4, 0.6), ("spacing", " ", 0.6, 0.6),
+            ("word", "stimmt.", 0.6, 1.0), ("spacing", " ", 1.0, 1.1),
+            ("word", "Wir", 1.1, 1.3), ("spacing", " ", 1.3, 1.3),
+            ("audio_event", "(lacht)", 1.3, 1.8), ("spacing", " ", 1.8, 1.9),
+            ("word", "gehen", 1.9, 2.2), ("spacing", " ", 2.2, 2.2),
+            ("word", "jetzt", 2.2, 2.5), ("spacing", " ", 2.5, 4.0),
+            ("word", "Danke", 4.0, 4.4),
+        ]
+        let entries = words.map { #"{"type":"\#($0.0)","text":"\#($0.1)","start":\#($0.2),"end":\#($0.3),"speaker_id":"speaker_0","logprob":0}"# }
+        let response = #"{"text":"Ja. Das stimmt. Wir (lacht) gehen jetzt Danke","language_code":"deu","words":[\#(entries.joined(separator: ","))]}"#
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(response.utf8),
+                    Self.httpResponse(url: "https://api.elevenlabs.io/v1/speech-to-text", statusCode: 200)
+                )
+            ])
+        }
+
+        let collector = PluginWordTimingCollector()
+        let samples = [Float](repeating: 0.1, count: 16_000 * 5)
+        let result = try await PluginWordTimings.$collector.withValue(collector) {
+            try await plugin.transcribe(
+                audio: AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 5),
+                language: "de",
+                translate: false,
+                prompt: nil,
+                dictionaryTermHints: []
+            )
+        }
+
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(try Self.multipartValues(named: "timestamps_granularity", in: request), ["word"])
+        XCTAssertEqual(collector.words, [
+            PluginWordTiming(text: "Ja.", start: 0.0, end: 0.3),
+            PluginWordTiming(text: "Das", start: 0.4, end: 0.6),
+            PluginWordTiming(text: "stimmt.", start: 0.6, end: 1.0),
+            PluginWordTiming(text: "Wir", start: 1.1, end: 1.3),
+            PluginWordTiming(text: "gehen", start: 1.9, end: 2.2),
+            PluginWordTiming(text: "jetzt", start: 2.2, end: 2.5),
+            PluginWordTiming(text: "Danke", start: 4.0, end: 4.4),
+        ])
+        XCTAssertEqual(result.text, "Ja. Das stimmt. Wir (lacht) gehen jetzt Danke")
+        XCTAssertEqual(result.segments.map(\.text), ["Ja. Das stimmt.", "Wir (lacht) gehen jetzt", "Danke"])
+        XCTAssertEqual(result.segments.map(\.start), [0.0, 1.1, 4.0])
+        XCTAssertEqual(result.segments.map(\.end), [1.0, 2.5, 4.4])
+    }
+
     func testRESTRequestFiltersAndNormalizesDictionaryKeyterms() async throws {
         let validFortyNineCharacterTerm = String(repeating: "a", count: 49)
         let invalidFiftyCharacterTerm = String(repeating: "b", count: 50)

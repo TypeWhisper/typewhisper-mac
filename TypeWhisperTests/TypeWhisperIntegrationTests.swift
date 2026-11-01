@@ -1187,6 +1187,37 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterWordTimingTranscriptionPlugin)
+    private final class WordTimingTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.word-timing-transcription" }
+        static var pluginName: String { "Word Timing Mock Transcription" }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "word-timing-mock" }
+        var providerDisplayName: String { "Word Timing Mock" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "words", displayName: "Words")] }
+        var selectedModelId: String? { "words" }
+        func selectModel(_ modelId: String) {}
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginWordTimings.report([
+                PluginWordTiming(text: "teh", start: 0.0, end: 0.4),
+                PluginWordTiming(text: "quote", start: 0.5, end: 1.0),
+            ])
+            return PluginTranscriptionResult(
+                text: "teh quote",
+                detectedLanguage: language,
+                segments: [PluginTranscriptionSegment(text: "teh quote", start: 0.0, end: 1.0)]
+            )
+        }
+    }
+
     @objc(APIRouterLegacySegmentTranscriptionPlugin)
     private final class LegacySegmentTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.legacy-segment-transcription" }
@@ -3933,6 +3964,94 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(segments[0]["text"] as? String, "Hello")
         XCTAssertEqual(segments[0]["speaker"] as? String, "Speaker A")
         XCTAssertEqual(segments[1]["speaker"] as? String, "Speaker B")
+    }
+
+    @MainActor
+    func testTranscribeEndpointsReturnWordTimestampsOnlyWhenRequested() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
+        let apiContext = try XCTUnwrap(context)
+        let plugin = WordTimingTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.word-timing-transcription",
+                    name: "Word Timing Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterWordTimingTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+        apiContext.modelManager.selectProvider(plugin.providerId)
+        try apiContext.dictionaryService.upsertAPICorrection(original: "teh", replacement: "the", caseSensitive: false)
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        for (name, value) in [("response_format", "verbose_json"), ("timestamp_granularities[]", "word")] {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".data(using: .utf8)!)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let upload = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        ))
+
+        // Corrections change the text and segments; the words stay the engine's.
+        XCTAssertEqual(upload["text"] as? String, "the quote")
+        let words = try XCTUnwrap(upload["words"] as? [[String: Any]])
+        XCTAssertEqual(words.map { $0["word"] as? String }, ["teh", "quote"])
+        XCTAssertEqual(words.map { $0["start"] as? Double }, [0.0, 0.5])
+        XCTAssertEqual(words.map { $0["end"] as? Double }, [0.4, 1.0])
+
+        let fileURL = audioDirectory.appendingPathComponent("words.wav")
+        try wavData.write(to: fileURL)
+        func localFile(_ payload: [String: Any]) async throws -> [String: Any] {
+            try Self.jsonObject(await apiContext.router.route(
+                HTTPRequest(
+                    method: "POST",
+                    path: "/v1/transcribe/local-file",
+                    queryParams: [:],
+                    headers: ["content-type": "application/json"],
+                    body: try JSONSerialization.data(withJSONObject: payload.merging(["path": fileURL.path]) { $1 })
+                )
+            ))
+        }
+
+        let requested = try await localFile(["response_format": "verbose_json", "timestamp_granularities": ["word", "segment"]])
+        XCTAssertEqual((requested["words"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual((requested["segments"] as? [[String: Any]])?.count, 1)
+
+        let unrequested = try await localFile(["response_format": "verbose_json"])
+        XCTAssertNil(unrequested["words"])
+        XCTAssertEqual((unrequested["segments"] as? [[String: Any]])?.count, 1)
+
+        let invalid = try await localFile(["response_format": "verbose_json", "timestamp_granularities": ["letter"]])
+        XCTAssertEqual((invalid["error"] as? [String: Any])?["message"] as? String, "Invalid 'timestamp_granularities' value")
     }
 
     func testTranscribeLocalFileEndpointTranscribesTemporaryWavFile() async throws {
