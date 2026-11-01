@@ -1471,7 +1471,7 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
     }
 
     var currentText: String {
-        (committedTexts + [partialText]).filter { !$0.isEmpty }.joined(separator: " ")
+        ElevenLabsTimedTranscriptParser.joinedText(committedTexts + [partialText])
     }
 
     func appendAudio(samples: [Float]) async throws {
@@ -1545,7 +1545,7 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
             throw failure ?? PluginTranscriptionError.apiError("Realtime API did not answer the last commit")
         }
 
-        let text = committedTexts.joined(separator: " ")
+        let text = ElevenLabsTimedTranscriptParser.joinedText(committedTexts)
         guard !text.isEmpty else {
             throw PluginTranscriptionError.apiError("Realtime API returned no transcript")
         }
@@ -1837,6 +1837,21 @@ enum ElevenLabsTimedTranscriptParser {
         }
         let spacing = Entry(kind: .spacing, text: " ", start: last.end, end: first.start)
         return entries + [spacing] + newEntries
+    }
+
+    /// Joins the texts of realtime commits (and the current partial text) with a space,
+    /// except where one side is in a script that writes words without spaces.
+    static func joinedText(_ parts: [String]) -> String {
+        var result = ""
+        for part in parts where !part.isEmpty {
+            if let last = result.unicodeScalars.last, let first = part.unicodeScalars.first,
+               !last.properties.isWhitespace, !first.properties.isWhitespace,
+               !writesWithoutSpaces(last), !writesWithoutSpaces(first) {
+                result += " "
+            }
+            result += part
+        }
+        return result
     }
 
     /// Han, kana and the Southeast Asian scripts that write words without spaces between them.
