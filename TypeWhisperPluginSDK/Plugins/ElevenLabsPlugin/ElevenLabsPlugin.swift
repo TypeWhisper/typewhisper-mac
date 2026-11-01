@@ -1127,8 +1127,8 @@ struct ElevenLabsTimedTranscript: Sendable {
 enum ElevenLabsTimedTranscriptParser {
     /// A silence longer than this starts a new segment.
     static let pauseThreshold: TimeInterval = 1.0
-    /// A sentence end splits only after this many words, so abbreviations
-    /// and one-word answers do not become segments of their own.
+    /// A sentence end splits only after this many words, so short answers
+    /// such as "Yes." join the next sentence instead of standing alone.
     static let minimumSentenceWordCount = 3
     /// A segment without sentence end or pause is split at the next word
     /// after this length, like the 30-second windows of Whisper.
