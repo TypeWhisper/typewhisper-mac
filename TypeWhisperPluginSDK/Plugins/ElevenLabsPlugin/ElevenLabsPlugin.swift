@@ -476,7 +476,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                 }
                 return try ElevenLabsTimedTranscriptParser.parse(data, fallbackLanguage: language)
             case 401:
-                throw PluginTranscriptionError.invalidApiKey
+                throw Self.unauthorizedError(from: data)
             case 413:
                 throw PluginTranscriptionError.fileTooLarge
             case 429:
@@ -837,6 +837,19 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         } catch {
             return .invalid(message: error.localizedDescription)
         }
+    }
+
+    /// ElevenLabs answers HTTP 401 not only for a wrong key but also when a
+    /// key's own credit quota is used up or it lacks a permission; those keep
+    /// the provider's message instead of "Invalid API key".
+    static func unauthorizedError(from data: Data) -> PluginTranscriptionError {
+        let detail = try? JSONDecoder().decode(ElevenLabsAPIErrorResponse.self, from: data).detail
+        guard let status = detail?.status, status != "invalid_api_key",
+              let message = detail?.message?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !message.isEmpty else {
+            return .invalidApiKey
+        }
+        return .apiError(message)
     }
 
     static func apiKeyValidationResult(statusCode: Int, data: Data) -> ElevenLabsAPIKeyValidationResult {

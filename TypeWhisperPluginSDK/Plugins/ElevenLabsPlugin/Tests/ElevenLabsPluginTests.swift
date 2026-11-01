@@ -65,6 +65,23 @@ final class ElevenLabsPluginTests: XCTestCase {
         )
     }
 
+    func testTranscriptionUnauthorizedKeepsQuotaMessageAndReportsWrongKeys() {
+        // ElevenLabs answers a used-up per-key credit quota with HTTP 401 too.
+        let quota = Data(#"{"detail":{"type":"invalid_request","code":"quota_exceeded","message":"This request exceeds your API key (win-prod) quota of 1000.","status":"quota_exceeded"}}"#.utf8)
+        let wrongKey = Data(#"{"detail":{"message":"Invalid API key","status":"invalid_api_key"}}"#.utf8)
+
+        guard case .apiError(let message) = ElevenLabsPlugin.unauthorizedError(from: quota) else {
+            return XCTFail("A used-up key quota is not a wrong key")
+        }
+        XCTAssertEqual(message, "This request exceeds your API key (win-prod) quota of 1000.")
+        guard case .invalidApiKey = ElevenLabsPlugin.unauthorizedError(from: wrongKey) else {
+            return XCTFail("Expected invalidApiKey for a wrong key")
+        }
+        guard case .invalidApiKey = ElevenLabsPlugin.unauthorizedError(from: Data()) else {
+            return XCTFail("Expected invalidApiKey without a body")
+        }
+    }
+
     func testAPIKeyValidationRejectsUnrelatedMissingPermission() {
         let data = Data(#"""
         {
