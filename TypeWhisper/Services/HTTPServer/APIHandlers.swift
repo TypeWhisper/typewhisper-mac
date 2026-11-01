@@ -187,6 +187,26 @@ final class APIHandlers: @unchecked Sendable {
         var applyCorrections = true
         var detectSpeakers = false
         var speakerCount: Int? = nil
+        /// `verbose_json` adds `words` when this contains `word`.
+        var timestampGranularities: Set<TimestampGranularity> = []
+    }
+
+    /// OpenAI's `timestamp_granularities[]`: `segment` is always returned,
+    /// `word` adds per-word timestamps.
+    enum TimestampGranularity: String {
+        case word
+        case segment
+
+        static func parse(_ values: [String]) -> Set<TimestampGranularity>? {
+            var granularities: Set<TimestampGranularity> = []
+            for value in values.flatMap({ $0.split(separator: ",") }) {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !trimmed.isEmpty else { continue }
+                guard let granularity = TimestampGranularity(rawValue: trimmed) else { return nil }
+                granularities.insert(granularity)
+            }
+            return granularities
+        }
     }
 
     private struct LocalFileTranscribeRequest: Decodable {
@@ -203,6 +223,7 @@ final class APIHandlers: @unchecked Sendable {
         let applyCorrections: Bool?
         let detectSpeakers: Bool?
         let speakerCount: Int?
+        let timestampGranularities: [String]?
 
         enum CodingKeys: String, CodingKey {
             case path
@@ -218,6 +239,7 @@ final class APIHandlers: @unchecked Sendable {
             case applyCorrections = "apply_corrections"
             case detectSpeakers = "detect_speakers"
             case speakerCount = "speaker_count"
+            case timestampGranularities = "timestamp_granularities"
         }
     }
 
@@ -326,6 +348,14 @@ final class APIHandlers: @unchecked Sendable {
                 }
                 options.speakerCount = parsed
             }
+
+            let granularityValues = parts
+                .filter { $0.name == "timestamp_granularities[]" || $0.name == "timestamp_granularities" }
+                .compactMap { String(data: $0.data, encoding: .utf8) }
+            guard let granularities = TimestampGranularity.parse(granularityValues) else {
+                return .error(status: 400, message: "Invalid 'timestamp_granularities' value")
+            }
+            options.timestampGranularities = granularities
         } else if !request.body.isEmpty {
             audioData = request.body
             fileExtension = extensionFromMIME(contentType)
@@ -380,6 +410,12 @@ final class APIHandlers: @unchecked Sendable {
                     return .error(status: 400, message: "Invalid 'x-speaker-count' value")
                 }
                 options.speakerCount = parsed
+            }
+            if let value = request.headers["x-timestamp-granularities"] {
+                guard let granularities = TimestampGranularity.parse([value]) else {
+                    return .error(status: 400, message: "Invalid 'x-timestamp-granularities' value")
+                }
+                options.timestampGranularities = granularities
             }
         } else {
             return .error(status: 400, message: "No audio data provided")
@@ -442,6 +478,10 @@ final class APIHandlers: @unchecked Sendable {
         options.applyCorrections = payload.applyCorrections ?? true
         options.detectSpeakers = payload.detectSpeakers ?? false
         options.speakerCount = payload.speakerCount
+        guard let granularities = TimestampGranularity.parse(payload.timestampGranularities ?? []) else {
+            return .error(status: 400, message: "Invalid 'timestamp_granularities' value")
+        }
+        options.timestampGranularities = granularities
 
         do {
             let samples = try await audioFileService.loadAudioSamples(from: fileURL)
@@ -639,6 +679,12 @@ final class APIHandlers: @unchecked Sendable {
                     }
                 }
 
+                struct WordEntry: Encodable {
+                    let word: String
+                    let start: Double
+                    let end: Double
+                }
+
                 struct VerboseResponse: Encodable {
                     let text: String
                     let language: String?
@@ -647,6 +693,8 @@ final class APIHandlers: @unchecked Sendable {
                     let engine: String
                     let model: String?
                     let segments: [SegmentEntry]
+                    /// Only when word timestamps were requested; empty when the engine has none.
+                    let words: [WordEntry]?
                 }
 
                 let segments = responseSegments.map {
@@ -666,7 +714,12 @@ final class APIHandlers: @unchecked Sendable {
                     processing_time: result.processingTime,
                     engine: result.engineUsed,
                     model: modelId,
-                    segments: segments
+                    segments: segments,
+                    // The engine's own words: dictionary corrections, number
+                    // formatting and translation change only `text` and `segments`.
+                    words: options.timestampGranularities.contains(.word)
+                        ? result.words.map { WordEntry(word: $0.text, start: $0.start, end: $0.end) }
+                        : nil
                 ))
             } else {
                 struct TranscribeResponse: Encodable {

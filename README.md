@@ -387,6 +387,45 @@ Optional parameters:
 - `apply_corrections` - Boolean, default `true`. Set to `false` to return raw transcription text without Dictionary Corrections. For raw body uploads, send `x-apply-corrections: false`.
 - `detect_speakers` - Boolean, default `false`. Adds a `speaker` (`Speaker 1`, `Speaker 2`, …) to each segment of a `verbose_json` response. Needs Premium. For raw body uploads, send `x-detect-speakers: true`.
 - `speaker_count` - Number of speakers, when known. Omit it to detect the number. For raw body uploads, send `x-speaker-count`.
+- `response_format` - `json` (default) or `verbose_json`, which adds `segments` with `start`, `end` and `text` in seconds. For raw body uploads, send `x-response-format`.
+- `timestamp_granularities[]` - Repeatable, `segment` or `word`. With `word`, a `verbose_json` response also contains `words` with the time of each word. Engines without word timing return an empty `words` array; ElevenLabs Scribe and Parakeet provide them. For raw body uploads, send `x-timestamp-granularities: word`; `/v1/transcribe/local-file` takes a JSON array, `"timestamp_granularities": ["word"]`.
+
+Word timestamps:
+
+```bash
+curl -X POST http://localhost:8978/v1/transcribe \
+  -F "file=@interview.wav" \
+  -F "response_format=verbose_json" \
+  -F "timestamp_granularities[]=word"
+```
+
+```json
+{
+  "text": "Thank you for coming. We start the interview now.",
+  "language": "en",
+  "duration": 2.9,
+  "processing_time": 0.6,
+  "engine": "elevenlabs",
+  "model": "scribe_v2",
+  "segments": [
+    { "start": 0.08, "end": 1.0, "text": "Thank you for coming." },
+    { "start": 1.32, "end": 2.68, "text": "We start the interview now." }
+  ],
+  "words": [
+    { "word": "Thank", "start": 0.08, "end": 0.3 },
+    { "word": "you", "start": 0.34, "end": 0.46 },
+    { "word": "for", "start": 0.5, "end": 0.58 },
+    { "word": "coming.", "start": 0.68, "end": 1.0 },
+    { "word": "We", "start": 1.32, "end": 1.42 },
+    { "word": "start", "start": 1.5, "end": 1.74 },
+    { "word": "the", "start": 1.78, "end": 1.88 },
+    { "word": "interview", "start": 1.92, "end": 2.32 },
+    { "word": "now.", "start": 2.4, "end": 2.68 }
+  ]
+}
+```
+
+`words` are the engine's own words: Dictionary Corrections, number formatting and translation change `text` and `segments`, not `words`.
 
 Uploads to `/v1/transcribe` are limited to 256 MiB, including stdin uploads from the CLI. Requests above that size return `413 Payload Too Large`. Local CLI file paths use a direct handoff to the running TypeWhisper app instead of uploading the file bytes.
 

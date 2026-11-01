@@ -388,7 +388,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         }
         let timeouts = Self.restTimeouts(forAudioDuration: audio.duration)
 
-        return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+        let transcript = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
             let boundary = UUID().uuidString
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -408,6 +408,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
             if let language, !language.isEmpty {
                 body.appendMultipartField(boundary: boundary, name: "language_code", value: language)
             }
+            body.appendMultipartField(boundary: boundary, name: "timestamps_granularity", value: "word")
             body.appendMultipartField(
                 boundary: boundary,
                 name: "tag_audio_events",
@@ -449,7 +450,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                         "Invalid ElevenLabs response: \(htmlPageSummary)"
                     )
                 }
-                return try Self.parseRESTResponse(data, fallbackLanguage: language)
+                return try ElevenLabsTimedTranscriptParser.parse(data, fallbackLanguage: language)
             case 401:
                 throw PluginTranscriptionError.invalidApiKey
             case 413:
@@ -467,6 +468,8 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                 )
             }
         }
+        PluginWordTimings.report(transcript.words)
+        return transcript.result
     }
 
     private func transcribeWebSocket(
@@ -701,16 +704,6 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         default:
             return "scribe_v2_realtime"
         }
-    }
-
-    private static func parseRESTResponse(_ data: Data, fallbackLanguage: String?) throws -> PluginTranscriptionResult {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw PluginTranscriptionError.apiError("Invalid ElevenLabs response")
-        }
-
-        let text = (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let detectedLanguage = json["language_code"] as? String ?? fallbackLanguage
-        return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage)
     }
 
     private static func receivePayload(
@@ -1114,5 +1107,139 @@ private extension Data {
         append("Content-Type: \(contentType)\r\n\r\n".data(using: .utf8)!)
         append(data)
         append("\r\n".data(using: .utf8)!)
+    }
+}
+
+// MARK: - Timed Transcript
+
+/// The text, word times and segments of one Scribe batch response.
+struct ElevenLabsTimedTranscript: Sendable {
+    let result: PluginTranscriptionResult
+    let words: [PluginWordTiming]
+}
+
+/// Reads the `words` array of a Scribe batch response.
+///
+/// Scribe returns one entry per word, per space between words and per tagged
+/// audio event, each with `start` and `end` in seconds. Words become word
+/// timings; all entries together become segments, so the segment texts join
+/// to the transcript text.
+enum ElevenLabsTimedTranscriptParser {
+    /// A silence longer than this starts a new segment.
+    static let pauseThreshold: TimeInterval = 1.0
+    /// A sentence end splits only after this many words, so short answers
+    /// such as "Yes." join the next sentence instead of standing alone.
+    static let minimumSentenceWordCount = 3
+    /// A segment without sentence end or pause is split at the next word
+    /// after this length, like the 30-second windows of Whisper.
+    static let maximumSegmentDuration: TimeInterval = 30
+
+    private static let sentenceEndCharacters: Set<Character> = [".", "!", "?", "…", "。", "！", "？", "؟", "।"]
+    private static let trailingClosers: Set<Character> = ["\"", "'", "”", "’", "»", "«", ")", "]", "」", "』"]
+
+    private struct Entry {
+        enum Kind: String {
+            case word
+            case spacing
+            case audioEvent = "audio_event"
+        }
+
+        let kind: Kind
+        let text: String
+        let start: Double?
+        let end: Double?
+    }
+
+    static func parse(_ data: Data, fallbackLanguage: String?) throws -> ElevenLabsTimedTranscript {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw PluginTranscriptionError.apiError("Invalid ElevenLabs response")
+        }
+
+        let text = (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let detectedLanguage = json["language_code"] as? String ?? fallbackLanguage
+        let entries = (json["words"] as? [[String: Any]] ?? []).compactMap(entry(from:))
+
+        let words = entries.compactMap { entry -> PluginWordTiming? in
+            guard entry.kind == .word, let start = entry.start, let end = entry.end else { return nil }
+            let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            return PluginWordTiming(text: text, start: start, end: max(start, end))
+        }
+
+        return ElevenLabsTimedTranscript(
+            result: PluginTranscriptionResult(
+                text: text,
+                detectedLanguage: detectedLanguage,
+                segments: segments(from: entries)
+            ),
+            words: words
+        )
+    }
+
+    private static func entry(from json: [String: Any]) -> Entry? {
+        guard let text = json["text"] as? String else { return nil }
+        let kind = (json["type"] as? String).flatMap(Entry.Kind.init(rawValue:)) ?? .word
+        return Entry(
+            kind: kind,
+            text: text,
+            start: (json["start"] as? NSNumber)?.doubleValue,
+            end: (json["end"] as? NSNumber)?.doubleValue
+        )
+    }
+
+    private static func segments(from entries: [Entry]) -> [PluginTranscriptionSegment] {
+        var segments: [PluginTranscriptionSegment] = []
+        var text = ""
+        var start: Double?
+        var end: Double?
+        var wordCount = 0
+        var lastWordEndsSentence = false
+
+        func close() {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, let start, let end {
+                segments.append(PluginTranscriptionSegment(text: trimmed, start: start, end: max(start, end)))
+            }
+            text = ""
+            start = nil
+            end = nil
+            wordCount = 0
+            lastWordEndsSentence = false
+        }
+
+        for entry in entries {
+            guard entry.kind != .spacing else {
+                text += entry.text
+                continue
+            }
+
+            if let entryStart = entry.start, let segmentStart = start, let segmentEnd = end {
+                let pause = entryStart - segmentEnd
+                let isLong = entryStart - segmentStart >= maximumSegmentDuration
+                let isSentenceDone = lastWordEndsSentence && wordCount >= minimumSentenceWordCount
+                if pause > pauseThreshold || isSentenceDone || isLong {
+                    close()
+                }
+            }
+
+            text += entry.text
+            if start == nil { start = entry.start ?? end }
+            if let entryEnd = entry.end ?? entry.start { end = max(end ?? entryEnd, entryEnd) }
+            if entry.kind == .word {
+                wordCount += 1
+                lastWordEndsSentence = endsSentence(entry.text)
+            }
+        }
+        close()
+        return segments
+    }
+
+    private static func endsSentence(_ word: String) -> Bool {
+        var characters = word.trimmingCharacters(in: .whitespacesAndNewlines)[...]
+        while let last = characters.last, trailingClosers.contains(last) {
+            characters = characters.dropLast()
+        }
+        guard let last = characters.last else { return false }
+        return sentenceEndCharacters.contains(last)
     }
 }
