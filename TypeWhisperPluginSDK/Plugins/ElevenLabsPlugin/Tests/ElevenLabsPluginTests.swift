@@ -519,6 +519,160 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(calls.values, ["realtime", "failure", "rest"])
     }
 
+    func testLiveSessionsStreamScribeV2InAutoModeOnlyAndNeverFallBackToBatchPreviews() throws {
+        let host = try PluginTestHostServices(defaults: ["selectedModel": "scribe_v2"])
+        let plugin = ElevenLabsPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertNotNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: ElevenLabsPlugin.medicalModelId))
+        XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
+        XCTAssertEqual(plugin.liveTranscriptionProgressMode, .completeSnapshot)
+
+        plugin.selectModel(ElevenLabsPlugin.medicalModelId)
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+
+        plugin.selectModel(ElevenLabsPlugin.defaultModelId)
+        plugin.setTranscriptionMode(.restOnly)
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+    }
+
+    func testLiveSessionStreamsWhileRecordingAndFinishesWithTheAnswerToTheLastCommit() async throws {
+        let socket = FakeRealtimeSocket(commitAnswers: [
+            (#"{"message_type":"committed_transcript","text":"Hello there."}"#, Self.committedWithTimestamps(
+                "Hello there.", language: "de", words: [("Hello", 0.1, 0.4), ("there.", 0.5, 0.9)]
+            )),
+        ])
+        let progress = StringRecorder()
+        let session = try await ElevenLabsLiveTranscriptionSession.connect(
+            socket: socket,
+            language: nil,
+            finalTranscriber: nil,
+            onProgress: { progress.append($0); return true }
+        )
+
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 12_000))
+        XCTAssertEqual(socket.audioChunks.map(\.sampleCount), [8_000, 4_000])
+        XCTAssertEqual(socket.audioChunks.filter(\.commit).count, 0)
+
+        await session.handle(#"{"message_type":"partial_transcript","text":"Hello"}"#)
+        let result = try await session.finish()
+
+        XCTAssertEqual(result.text, "Hello there.")
+        XCTAssertEqual(result.detectedLanguage, "de")
+        XCTAssertEqual(result.segments.map(\.text), ["Hello there."])
+        XCTAssertEqual(progress.values, ["Hello", "Hello there."])
+        let chunks = socket.audioChunks
+        XCTAssertEqual(chunks.filter(\.commit).count, 1)
+        XCTAssertEqual(chunks.map(\.sampleCount), [8_000, 4_000, 0])
+        XCTAssertTrue(socket.isClosed)
+    }
+
+    func testLongLiveSessionCommitsInPausesAndBeforeElevenLabsWouldCommitOnItsOwn() async throws {
+        let socket = FakeRealtimeSocket(commitAnswers: [
+            (nil, Self.committedWithTimestamps("First part.", words: [("First", 0.5, 1), ("part.", 1, 1.5)])),
+            (nil, Self.committedWithTimestamps("Second part.", words: [("Second", 21, 22), ("part.", 22, 23)])),
+            (nil, Self.committedWithTimestamps("", words: [])),
+        ])
+        let session = try await ElevenLabsLiveTranscriptionSession.connect(
+            socket: socket,
+            language: "en",
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+
+        // 20.5 s of speech, then a pause: the session commits in the pause.
+        for _ in 0..<41 {
+            try await session.appendAudio(samples: [Float](repeating: 0.2, count: 8_000))
+        }
+        XCTAssertEqual(socket.audioChunks.filter(\.commit).count, 0)
+        try await session.appendAudio(samples: [Float](repeating: 0, count: 8_000))
+        XCTAssertEqual(socket.audioChunks.filter(\.commit).count, 1)
+
+        // 30 s of speech without a pause: the session commits before ElevenLabs would.
+        for _ in 0..<60 {
+            try await session.appendAudio(samples: [Float](repeating: 0.2, count: 8_000))
+        }
+        XCTAssertEqual(socket.audioChunks.filter(\.commit).count, 2)
+
+        // A tail shorter than ElevenLabs' minimum is padded with silence before the last commit.
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 1_600))
+        let result = try await session.finish()
+        XCTAssertEqual(socket.audioChunks.suffix(3).map(\.sampleCount), [1_600, 4_800, 0])
+        XCTAssertEqual(socket.audioChunks.filter(\.commit).count, 3)
+        XCTAssertEqual(result.text, "First part. Second part.")
+        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.segments.map(\.text), ["First part.", "Second part."])
+    }
+
+    func testLiveSessionWithDictionaryTermsTakesTheFinalTextFromTheBatchAPI() async throws {
+        let socket = FakeRealtimeSocket(commitAnswers: [
+            (nil, Self.committedWithTimestamps("type whisper", words: [])),
+        ])
+        let batchCalls = TimeoutRecorder()
+        let batchFails = OSAllocatedUnfairLock(initialState: false)
+        let connect = {
+            try await ElevenLabsLiveTranscriptionSession.connect(
+                socket: socket,
+                language: "en",
+                finalTranscriber: { audio in
+                    batchCalls.append(audio.duration)
+                    if batchFails.withLock({ $0 }) { throw URLError(.timedOut) }
+                    return PluginTranscriptionResult(text: "TypeWhisper", detectedLanguage: "en")
+                },
+                onProgress: { _ in true }
+            )
+        }
+
+        let session = try await connect()
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 16_000))
+        let result = try await session.finish()
+        XCTAssertEqual(result.text, "TypeWhisper")
+        XCTAssertEqual(batchCalls.values, [1])
+
+        // Without the batch result, the realtime transcript is the final text.
+        batchFails.withLock { $0 = true }
+        socket.reset(commitAnswers: [(nil, Self.committedWithTimestamps("type whisper", words: []))])
+        let fallbackSession = try await connect()
+        try await fallbackSession.appendAudio(samples: [Float](repeating: 0.2, count: 16_000))
+        let fallback = try await fallbackSession.finish()
+        XCTAssertEqual(fallback.text, "type whisper")
+    }
+
+    func testLiveSessionFailsWhenElevenLabsEndsItOrLeavesTheLastCommitUnanswered() async throws {
+        let failingSocket = FakeRealtimeSocket(commitAnswers: [])
+        let failingSession = try await ElevenLabsLiveTranscriptionSession.connect(
+            socket: failingSocket,
+            language: nil,
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+        await failingSession.handle(#"{"message_type":"session_time_limit_exceeded","error":"Maximum session time reached"}"#)
+        do {
+            try await failingSession.appendAudio(samples: [Float](repeating: 0.2, count: 1_600))
+            XCTFail("Appending after a session error should fail")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, PluginTranscriptionError.apiError("Maximum session time reached").localizedDescription)
+        }
+        XCTAssertTrue(failingSocket.isClosed)
+
+        // The socket closes without answering the final commit.
+        let silentSocket = FakeRealtimeSocket(commitAnswers: [], closesOnCommit: true)
+        let silentSession = try await ElevenLabsLiveTranscriptionSession.connect(
+            socket: silentSocket,
+            language: nil,
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+        try await silentSession.appendAudio(samples: [Float](repeating: 0.2, count: 16_000))
+        do {
+            _ = try await silentSession.finish()
+            XCTFail("A session without the answer to its last commit should fail")
+        } catch {}
+    }
+
     func testAutomaticModeStreamsOnlyRecordingsThatFitIntoOneCommit() {
         // The realtime API commits on its own after about 36 seconds.
         XCTAssertEqual(
@@ -628,6 +782,7 @@ final class ElevenLabsPluginTests: XCTestCase {
             "Use TypeWhisper dictionary terms",
             "Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.",
             "Tuned for clinical audio, at the Scribe v2 price. Batch only, without realtime streaming.",
+            "Auto streams while you dictate, so the live preview and the final text come from one realtime session, and falls back to batch REST. With active dictionary terms, the final text comes from batch REST, so dictations with a live preview are billed for both. REST only avoids realtime concurrency limits and bills the batch rate.",
         ]
 
         for key in requiredKeys {
@@ -709,6 +864,28 @@ final class ElevenLabsPluginTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
+    private static func committedWithTimestamps(
+        _ text: String,
+        language: String? = nil,
+        words: [(String, Double, Double)]
+    ) -> String {
+        var entries: [[String: Any]] = []
+        for (index, word) in words.enumerated() {
+            if index > 0 {
+                entries.append(["text": " ", "type": "spacing", "start": word.1, "end": word.1])
+            }
+            entries.append(["text": word.0, "type": "word", "start": word.1, "end": word.2])
+        }
+        var json: [String: Any] = [
+            "message_type": "committed_transcript_with_timestamps",
+            "text": text,
+            "words": entries,
+        ]
+        json["language_code"] = language
+        let data = try! JSONSerialization.data(withJSONObject: json)
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,
@@ -716,6 +893,41 @@ final class ElevenLabsPluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+
+    func testRealtimeCommitsInJapaneseJoinWithoutASpace() {
+        let entries = ElevenLabsTimedTranscriptParser.appending(
+            ElevenLabsTimedTranscriptParser.entries(from: [["text": "です", "type": "word", "start": 0.6, "end": 0.9]]),
+            to: ElevenLabsTimedTranscriptParser.entries(from: [["text": "学校", "type": "word", "start": 0.0, "end": 0.5]])
+        )
+
+        let transcript = ElevenLabsTimedTranscriptParser.transcript(text: "学校です", detectedLanguage: "ja", entries: entries)
+
+        XCTAssertEqual(transcript.result.segments.map(\.text), ["学校です"])
+    }
+
+    func testRealtimeCommitTextsJoinWithASpaceOnlyBetweenSpacedScripts() {
+        XCTAssertEqual(ElevenLabsTimedTranscriptParser.joinedText(["Hello there.", "How are you?"]), "Hello there. How are you?")
+        XCTAssertEqual(ElevenLabsTimedTranscriptParser.joinedText(["学校", "です", ""]), "学校です")
+        XCTAssertEqual(ElevenLabsTimedTranscriptParser.joinedText(["ใช้", "ChatGPT"]), "ใช้ ChatGPT")
+    }
+
+    func testRealtimeCommitsKeepASpaceBetweenTheirWords() {
+        let first = ElevenLabsTimedTranscriptParser.entries(from: [
+            ["text": "the", "type": "word", "start": 0.0, "end": 0.3],
+        ])
+        let second = ElevenLabsTimedTranscriptParser.entries(from: [
+            ["text": "cat", "type": "word", "start": 0.8, "end": 1.1],
+        ])
+        let entries = ElevenLabsTimedTranscriptParser.appending(
+            second,
+            to: ElevenLabsTimedTranscriptParser.appending(first, to: [])
+        )
+
+        let transcript = ElevenLabsTimedTranscriptParser.transcript(text: "the cat", detectedLanguage: "en", entries: entries)
+
+        XCTAssertEqual(transcript.result.segments.map(\.text), ["the cat"])
+        XCTAssertEqual(transcript.words.map(\.text), ["the", "cat"])
     }
 }
 
@@ -741,4 +953,73 @@ private final class TimeoutRecorder: @unchecked Sendable {
     func append(_ value: TimeInterval) {
         valuesLock.withLock { $0.append(value) }
     }
+}
+
+/// Plays the realtime API: starts the session, records the audio chunks and answers
+/// each commit with the next scripted messages.
+private final class FakeRealtimeSocket: ElevenLabsRealtimeSocket, @unchecked Sendable {
+    struct AudioChunk {
+        let sampleCount: Int
+        let commit: Bool
+    }
+
+    private struct State {
+        var chunks: [AudioChunk] = []
+        var commitAnswers: [(String?, String)] = []
+        var closesOnCommit = false
+        var isClosed = false
+        var stream: AsyncThrowingStream<String, Error>?
+        var continuation: AsyncThrowingStream<String, Error>.Continuation?
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    init(commitAnswers: [(String?, String)], closesOnCommit: Bool = false) {
+        reset(commitAnswers: commitAnswers, closesOnCommit: closesOnCommit)
+    }
+
+    func reset(commitAnswers: [(String?, String)], closesOnCommit: Bool = false) {
+        let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+        continuation.yield(#"{"message_type":"session_started","session_id":"test","config":{}}"#)
+        state.withLock {
+            $0 = State(commitAnswers: commitAnswers, closesOnCommit: closesOnCommit, stream: stream, continuation: continuation)
+        }
+    }
+
+    var audioChunks: [AudioChunk] { state.withLock { $0.chunks } }
+    var isClosed: Bool { state.withLock { $0.isClosed } }
+
+    func send(_ text: String) async throws {
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        let audio = try XCTUnwrap(Data(base64Encoded: json["audio_base_64"] as? String ?? ""))
+        let commit = json["commit"] as? Bool ?? false
+        let (answers, continuation, closes) = state.withLock { state -> ([String], AsyncThrowingStream<String, Error>.Continuation?, Bool) in
+            state.chunks.append(AudioChunk(sampleCount: audio.count / 2, commit: commit))
+            guard commit else { return ([], nil, false) }
+            if state.closesOnCommit { return ([], state.continuation, true) }
+            guard !state.commitAnswers.isEmpty else { return ([], nil, false) }
+            let answer = state.commitAnswers.removeFirst()
+            return ([answer.0, answer.1].compactMap { $0 }, state.continuation, false)
+        }
+        if closes {
+            continuation?.finish(throwing: URLError(.networkConnectionLost))
+        }
+        answers.forEach { continuation?.yield($0) }
+    }
+
+    func receive() async throws -> String {
+        let stream = state.withLock { $0.stream }
+        guard var iterator = stream?.makeAsyncIterator() else { throw URLError(.cancelled) }
+        guard let message = try await iterator.next() else { throw URLError(.cancelled) }
+        return message
+    }
+
+    func close() {
+        let continuation = state.withLock { state -> AsyncThrowingStream<String, Error>.Continuation? in
+            state.isClosed = true
+            return state.continuation
+        }
+        continuation?.finish()
+    }
+
 }

@@ -130,7 +130,15 @@ private struct ElevenLabsAPIErrorResponse: Decodable {
 }
 
 @objc(ElevenLabsPlugin)
-final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
+final class ElevenLabsPlugin: NSObject,
+    DictionaryTermHintTranscriptionEnginePlugin,
+    LiveDictionaryTermHintTranscriptionCapablePlugin,
+    LiveTranscriptionModelSupportProviding,
+    LiveTranscriptionProgressModeProviding,
+    TranscriptPreviewFallbackPolicyProviding,
+    DictionaryTermsCapabilityProviding,
+    DictionaryTermsBudgetProviding,
+    @unchecked Sendable {
     static let pluginId = "com.typewhisper.elevenlabs"
     private static let missingUserReadPermissionMessage =
         "The API key you used is missing the permission user_read to execute this operation."
@@ -388,6 +396,84 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         )
     }
 
+    // MARK: Live Sessions
+
+    /// Scribe v2 streams in Auto mode; Scribe v2 Medical and REST only transcribe after
+    /// the recording, so TypeWhisper previews those on a local engine instead.
+    func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
+        _transcriptionMode == .automatic && Self.modelStreams(modelId ?? _selectedModelId)
+    }
+
+    /// Committed segments plus the current partial transcript cover the whole recording.
+    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
+
+    /// A live session that cannot start, for example at the concurrency limit, leaves the
+    /// recording without preview instead of sending the last seconds again every few seconds.
+    var allowsTranscriptPreviewFallback: Bool {
+        !supportsLiveTranscriptionSession(forModelId: nil)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard let modelId = _selectedModelId else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+        guard supportsLiveTranscriptionSession(forModelId: modelId) else {
+            throw PluginTranscriptionError.apiError("\(modelId) does not stream in this transcription mode")
+        }
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+
+        var request = URLRequest(url: try Self.realtimeURL(language: language, noVerbatim: _noVerbatim))
+        request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+
+        // The realtime API wraps transcripts in quotation marks with keyterms, so the
+        // session streams without them for the preview, and the batch API transcribes
+        // the recording with them for the final text.
+        let keyterms = activeKeyterms(prompt: prompt, dictionaryTermHints: dictionaryTermHints)
+        var finalTranscriber: ElevenLabsLiveTranscriptionSession.FinalTranscriber?
+        if !keyterms.isEmpty {
+            finalTranscriber = { @Sendable [self] audio in
+                try await self.transcribeREST(
+                    audio: audio,
+                    language: language,
+                    modelId: modelId,
+                    apiKey: apiKey,
+                    keyterms: keyterms
+                )
+            }
+        }
+
+        return try await ElevenLabsLiveTranscriptionSession.connect(
+            socket: URLSessionElevenLabsRealtimeSocket(request: request),
+            language: language,
+            finalTranscriber: finalTranscriber,
+            onProgress: onProgress
+        )
+    }
+
     static func transcribeWithRESTFallback(
         realtime: () async throws -> PluginTranscriptionResult,
         rest: () async throws -> PluginTranscriptionResult,
@@ -575,7 +661,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
                     }
                 default:
                     if Self.isRealtimeError(messageType) {
-                        throw PluginTranscriptionError.apiError(Self.errorMessage(from: json) ?? rawText)
+                        throw PluginTranscriptionError.apiError(Self.realtimeErrorMessage(from: json) ?? rawText)
                     }
                 }
             }
@@ -806,7 +892,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         realtimeErrorMessageTypes.contains(messageType) || messageType.localizedCaseInsensitiveContains("error")
     }
 
-    private static func errorMessage(from json: [String: Any]) -> String? {
+    static func realtimeErrorMessage(from json: [String: Any]) -> String? {
         if let error = json["error"] as? String, !error.isEmpty {
             return error
         }
@@ -819,7 +905,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         return nil
     }
 
-    private static func floatToPCM16(_ samples: [Float]) -> Data {
+    static func floatToPCM16(_ samples: [Float]) -> Data {
         var data = Data(capacity: samples.count * 2)
         for sample in samples {
             let clamped = max(-1.0, min(1.0, sample))
@@ -1044,7 +1130,7 @@ private struct ElevenLabsSettingsView: View {
                         plugin.setTranscriptionMode(transcriptionMode)
                     }
 
-                    Text("Auto streams partial results and falls back to batch REST. REST only avoids realtime concurrency limits and uses consistent batch transcription.", bundle: bundle)
+                    Text("Auto streams while you dictate, so the live preview and the final text come from one realtime session, and falls back to batch REST. With active dictionary terms, the final text comes from batch REST, so dictations with a live preview are billed for both. REST only avoids realtime concurrency limits and bills the batch rate.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1203,6 +1289,451 @@ private extension Data {
     }
 }
 
+// MARK: - Live Session
+
+/// The WebSocket a live session talks to, so tests can play the server.
+protocol ElevenLabsRealtimeSocket: Sendable {
+    func send(_ text: String) async throws
+    /// The next text message; throws once the socket is closed.
+    func receive() async throws -> String
+    func close()
+}
+
+final class URLSessionElevenLabsRealtimeSocket: ElevenLabsRealtimeSocket, @unchecked Sendable {
+    private let task: URLSessionWebSocketTask
+
+    init(request: URLRequest) {
+        task = URLSession.shared.webSocketTask(with: request)
+        task.resume()
+    }
+
+    func send(_ text: String) async throws {
+        try await task.send(.string(text))
+    }
+
+    func receive() async throws -> String {
+        while true {
+            switch try await task.receive() {
+            case .string(let text):
+                return text
+            case .data(let data):
+                if let text = String(data: data, encoding: .utf8) { return text }
+            @unknown default:
+                continue
+            }
+        }
+    }
+
+    func close() {
+        // `receive()` ignores task cancellation; only closing the socket ends it.
+        task.cancel(with: .normalClosure, reason: nil)
+    }
+}
+
+/// When a live session commits: in a pause once the audio since the last commit
+/// approaches the length ElevenLabs recommends, and before ElevenLabs would commit
+/// on its own. Without such commits of its own, the session could not tell which
+/// committed transcript answers the final commit.
+/// https://elevenlabs.io/docs/eleven-api/guides/how-to/speech-to-text/realtime/transcripts-and-commit-strategies
+struct ElevenLabsLiveCommitPolicy: Sendable {
+    static let sampleRate = 16_000
+    /// ElevenLabs recommends a commit every 20 to 30 seconds, ideally in a pause.
+    static let pauseCommitAudioDuration: TimeInterval = 20
+    /// ElevenLabs commits on its own after about 36 seconds of audio.
+    static let maximumUncommittedAudioDuration: TimeInterval = 30
+    /// ElevenLabs rejects a commit with less audio than 0.3 s and closes the session.
+    static let minimumCommitAudioDuration: TimeInterval = 0.4
+    static let pauseDuration: TimeInterval = 0.5
+    /// A window counts as quiet below this share of the loudest window since the last commit.
+    static let relativeQuietLevel: Float = 0.15
+    static let absoluteQuietLevel: Float = 0.003
+    private static let windowSampleCount = sampleRate / 10
+
+    private(set) var uncommittedSampleCount = 0
+    private var trailingQuietSampleCount = 0
+    private var loudestWindowLevel: Float = 0
+    private var partialWindow: [Float] = []
+
+    var uncommittedAudioDuration: TimeInterval {
+        Double(uncommittedSampleCount) / Double(Self.sampleRate)
+    }
+
+    mutating func append(_ samples: [Float]) {
+        uncommittedSampleCount += samples.count
+        partialWindow.append(contentsOf: samples)
+        var start = 0
+        while partialWindow.count - start >= Self.windowSampleCount {
+            let window = partialWindow[start..<(start + Self.windowSampleCount)]
+            start += Self.windowSampleCount
+            let level = (window.reduce(Float.zero) { $0 + $1 * $1 } / Float(window.count)).squareRoot()
+            loudestWindowLevel = max(loudestWindowLevel, level)
+            let quietLevel = max(Self.absoluteQuietLevel, loudestWindowLevel * Self.relativeQuietLevel)
+            trailingQuietSampleCount = level < quietLevel ? trailingQuietSampleCount + window.count : 0
+        }
+        partialWindow.removeFirst(start)
+    }
+
+    var shouldCommit: Bool {
+        let duration = uncommittedAudioDuration
+        if duration >= Self.maximumUncommittedAudioDuration { return true }
+        let pause = Double(trailingQuietSampleCount) / Double(Self.sampleRate)
+        return duration >= Self.pauseCommitAudioDuration && pause >= Self.pauseDuration
+    }
+
+    /// Silence to send before the final commit, so it has enough audio.
+    var finalCommitPaddingSampleCount: Int {
+        max(0, Int(Self.minimumCommitAudioDuration * Double(Self.sampleRate)) - uncommittedSampleCount)
+    }
+
+    mutating func didCommit() {
+        uncommittedSampleCount = 0
+        trailingQuietSampleCount = 0
+        loudestWindowLevel = 0
+        partialWindow.removeAll()
+    }
+}
+
+/// Streams a dictation to the realtime API while it is recorded, for the live preview
+/// and the final text.
+///
+/// The session commits on its own (`commit_strategy=manual`, see
+/// `ElevenLabsLiveCommitPolicy`) and once more when the recording stops. Every commit
+/// is answered by one `committed_transcript_with_timestamps`, also with empty text for
+/// silence, so the transcript is complete once all commits are answered. With active
+/// dictionary terms, the final text comes from `finalTranscriber`, the batch API, and the
+/// realtime transcript is only the preview: with keyterms, the realtime API often wraps
+/// the whole transcript in quotation marks.
+actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
+    typealias FinalTranscriber = @Sendable (AudioData) async throws -> PluginTranscriptionResult
+
+    static let startTimeout: Duration = .seconds(10)
+    /// Commits are answered within about 0.2 s; this also covers audio the server has
+    /// not transcribed yet after a slow connection.
+    static let finishTimeout: Duration = .seconds(8)
+    static let maximumChunkSampleCount = ElevenLabsLiveCommitPolicy.sampleRate / 2
+
+    private static let logger = Logger(subsystem: "com.typewhisper.elevenlabs", category: "LiveSession")
+
+    private let socket: any ElevenLabsRealtimeSocket
+    private let language: String?
+    private let onProgress: @Sendable (String) -> Bool
+    private let finalTranscriber: FinalTranscriber?
+    private var receiveTask: Task<Void, Never>?
+
+    private var hasStarted = false
+    private var isClosed = false
+    private var isCancelled = false
+    private var failure: Error?
+    private var commitPolicy = ElevenLabsLiveCommitPolicy()
+    private var sentCommitCount = 0
+    private var answeredCommitCount = 0
+    private var committedTexts: [String] = []
+    private var partialText = ""
+    private var detectedLanguage: String?
+    private var entries: [ElevenLabsTimedTranscriptParser.Entry] = []
+    private var recordedSamples: [Float] = []
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    private init(
+        socket: any ElevenLabsRealtimeSocket,
+        language: String?,
+        finalTranscriber: FinalTranscriber?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) {
+        self.socket = socket
+        self.language = language
+        self.finalTranscriber = finalTranscriber
+        self.onProgress = onProgress
+    }
+
+    /// Opens the session and waits until ElevenLabs started it, so a wrong key or an
+    /// exhausted quota fails here instead of during the recording.
+    static func connect(
+        socket: any ElevenLabsRealtimeSocket,
+        language: String?,
+        finalTranscriber: FinalTranscriber?,
+        startTimeout: Duration = startTimeout,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> ElevenLabsLiveTranscriptionSession {
+        let session = ElevenLabsLiveTranscriptionSession(
+            socket: socket,
+            language: language,
+            finalTranscriber: finalTranscriber,
+            onProgress: onProgress
+        )
+        await session.startReceiving()
+        try await withTaskCancellationHandler {
+            try await session.waitUntilStarted(timeout: startTimeout)
+        } onCancel: {
+            socket.close()
+        }
+        return session
+    }
+
+    var currentText: String {
+        ElevenLabsTimedTranscriptParser.joinedText(committedTexts + [partialText])
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        try throwIfEnded()
+        guard !samples.isEmpty else { return }
+        if finalTranscriber != nil {
+            recordedSamples.append(contentsOf: samples)
+        }
+
+        var start = 0
+        while start < samples.count {
+            let end = min(start + Self.maximumChunkSampleCount, samples.count)
+            let chunk = Array(samples[start..<end])
+            try await send(Self.audioMessage(chunk, commit: false))
+            commitPolicy.append(chunk)
+            start = end
+            if commitPolicy.shouldCommit {
+                try await commit()
+            }
+        }
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        try throwIfEnded()
+
+        var finalCommitError: Error?
+        do {
+            if commitPolicy.uncommittedSampleCount > 0 || sentCommitCount == 0 {
+                let padding = commitPolicy.finalCommitPaddingSampleCount
+                if padding > 0 {
+                    try await send(Self.audioMessage([Float](repeating: 0, count: padding), commit: false))
+                    commitPolicy.append([Float](repeating: 0, count: padding))
+                }
+                try await commit()
+            }
+        } catch {
+            finalCommitError = error
+        }
+
+        if let finalTranscriber {
+            let samples = recordedSamples
+            recordedSamples = []
+            do {
+                let result = try await finalTranscriber(AudioData(
+                    samples: samples,
+                    wavData: PluginWavEncoder.encode(samples),
+                    duration: Double(samples.count) / Double(ElevenLabsLiveCommitPolicy.sampleRate)
+                ))
+                close()
+                Self.logger.info("Live session finished with the batch transcript for dictionary terms")
+                return result
+            } catch {
+                if Task.isCancelled {
+                    close()
+                    throw CancellationError()
+                }
+                Self.logger.warning("Batch transcription with dictionary terms failed, using the realtime transcript: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        if let finalCommitError {
+            close()
+            throw finalCommitError
+        }
+
+        let isComplete = await waitUntilAllCommitsAreAnswered(timeout: Self.finishTimeout)
+        close()
+        guard isComplete else {
+            // Without the answer to the last commit, the end of the speech may be missing;
+            // TypeWhisper then transcribes the whole recording instead.
+            throw failure ?? PluginTranscriptionError.apiError("Realtime API did not answer the last commit")
+        }
+
+        let text = ElevenLabsTimedTranscriptParser.joinedText(committedTexts)
+        guard !text.isEmpty else {
+            throw PluginTranscriptionError.apiError("Realtime API returned no transcript")
+        }
+        let transcript = ElevenLabsTimedTranscriptParser.transcript(
+            text: text,
+            detectedLanguage: detectedLanguage ?? language,
+            entries: entries
+        )
+        PluginWordTimings.report(transcript.words)
+        Self.logger.info("Live session finished with \(self.answeredCommitCount, privacy: .public) committed transcripts")
+        return transcript.result
+    }
+
+    func cancel() async {
+        guard !isCancelled else { return }
+        isCancelled = true
+        recordedSamples = []
+        close()
+        Self.logger.info("Live session cancelled")
+    }
+
+    // MARK: Sending
+
+    private func commit() async throws {
+        let audioDuration = commitPolicy.uncommittedAudioDuration
+        try await send(Self.audioMessage([], commit: true))
+        sentCommitCount += 1
+        commitPolicy.didCommit()
+        Self.logger.info("Realtime commit \(self.sentCommitCount, privacy: .public) after \(String(format: "%.1f", audioDuration), privacy: .public)s of audio")
+    }
+
+    private func send(_ message: String) async throws {
+        do {
+            try await socket.send(message)
+        } catch {
+            let failure = self.failure ?? PluginTranscriptionError.networkError(error.localizedDescription)
+            fail(failure)
+            throw failure
+        }
+    }
+
+    static func audioMessage(_ samples: [Float], commit: Bool) -> String {
+        let audio = ElevenLabsPlugin.floatToPCM16(samples).base64EncodedString()
+        return #"{"message_type":"input_audio_chunk","audio_base_64":"\#(audio)","sample_rate":16000,"commit":\#(commit)}"#
+    }
+
+    // MARK: Receiving
+
+    private func startReceiving() {
+        let socket = self.socket
+        receiveTask = Task {
+            do {
+                while true {
+                    let message = try await socket.receive()
+                    self.handle(message)
+                }
+            } catch {
+                self.receiveEnded(error)
+            }
+        }
+    }
+
+    func handle(_ message: String) {
+        guard let data = message.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messageType = json["message_type"] as? String else {
+            return
+        }
+
+        switch messageType {
+        case "session_started":
+            hasStarted = true
+            resumeWaiters()
+        case "partial_transcript":
+            partialText = (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            reportProgress()
+        case "committed_transcript_with_timestamps":
+            // Each commit also sends `committed_transcript` with the same text, in either
+            // order. Only this one counts, because it has the words and the language.
+            answeredCommitCount += 1
+            let text = (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                committedTexts.append(text)
+            }
+            if let language = ElevenLabsLanguageCode.appCode(json["language_code"] as? String) {
+                detectedLanguage = language
+            }
+            if let words = json["words"] as? [[String: Any]] {
+                entries = ElevenLabsTimedTranscriptParser.appending(
+                    ElevenLabsTimedTranscriptParser.entries(from: words),
+                    to: entries
+                )
+            }
+            partialText = ""
+            reportProgress()
+            resumeWaiters()
+        case "warning":
+            Self.logger.info("Realtime warning: \(json["warning"] as? String ?? "", privacy: .public)")
+        default:
+            if ElevenLabsPlugin.isRealtimeError(messageType) {
+                let message = ElevenLabsPlugin.realtimeErrorMessage(from: json) ?? messageType
+                Self.logger.warning("Realtime session failed (\(messageType, privacy: .public)): \(message, privacy: .public)")
+                fail(PluginTranscriptionError.apiError(message))
+                close()
+            }
+        }
+    }
+
+    private func reportProgress() {
+        let text = currentText
+        guard !text.isEmpty, !isCancelled else { return }
+        _ = onProgress(text)
+    }
+
+    private func receiveEnded(_ error: Error) {
+        isClosed = true
+        if failure == nil, !isCancelled {
+            fail(PluginTranscriptionError.networkError("Realtime session closed: \(error.localizedDescription)"))
+        }
+        resumeWaiters()
+    }
+
+    // MARK: State
+
+    private func throwIfEnded() throws {
+        if isCancelled { throw CancellationError() }
+        if let failure { throw failure }
+    }
+
+    private func fail(_ error: Error) {
+        if failure == nil {
+            failure = error
+        }
+        resumeWaiters()
+    }
+
+    private func close() {
+        isClosed = true
+        socket.close()
+        receiveTask?.cancel()
+        resumeWaiters()
+    }
+
+    private func waitUntilStarted(timeout: Duration) async throws {
+        guard await wait(timeout: timeout, until: { $0.hasStarted }) else {
+            let error = failure ?? PluginTranscriptionError.networkError("Realtime session did not start")
+            close()
+            throw error
+        }
+    }
+
+    private func waitUntilAllCommitsAreAnswered(timeout: Duration) async -> Bool {
+        await wait(timeout: timeout) { $0.answeredCommitCount >= $0.sentCommitCount }
+    }
+
+    /// Waits until `condition` holds, the session fails or closes, or `timeout` passes.
+    private func wait(
+        timeout: Duration,
+        until condition: (isolated ElevenLabsLiveTranscriptionSession) -> Bool
+    ) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let timer = Task {
+            try? await Task.sleep(until: deadline, clock: .continuous)
+            self.resumeWaiters()
+        }
+        defer { timer.cancel() }
+
+        return await withTaskCancellationHandler {
+            while !condition(self) {
+                guard failure == nil, !isClosed, !isCancelled, !Task.isCancelled,
+                      ContinuousClock.now < deadline else {
+                    return false
+                }
+                await withCheckedContinuation { waiters.append($0) }
+            }
+            return true
+        } onCancel: {
+            Task { await self.resumeWaiters() }
+        }
+    }
+
+    private func resumeWaiters() {
+        let waiting = waiters
+        waiters.removeAll()
+        waiting.forEach { $0.resume() }
+    }
+}
+
 // MARK: - Language Codes
 
 /// Scribe's batch endpoint names the detected language in ISO 639-3 ("deu"),
@@ -1246,8 +1777,9 @@ enum ElevenLabsTimedTranscriptParser {
     private static let sentenceEndCharacters: Set<Character> = [".", "!", "?", "…", "。", "！", "？", "؟", "।"]
     private static let trailingClosers: Set<Character> = ["\"", "'", "”", "’", "»", "«", ")", "]", "」", "』"]
 
-    private struct Entry {
-        enum Kind: String {
+    /// One entry of a `words` array: a word, the spacing after it or an audio event.
+    struct Entry: Sendable {
+        enum Kind: String, Sendable {
             case word
             case spacing
             case audioEvent = "audio_event"
@@ -1280,10 +1812,81 @@ enum ElevenLabsTimedTranscriptParser {
 
     /// The word entries of a batch response or realtime commit, without spacing and audio events.
     static func wordTimings(from json: [[String: Any]]) -> [PluginWordTiming] {
-        wordTimings(from: json.compactMap(entry(from:)))
+        wordTimings(from: entries(from: json))
     }
 
-    private static func wordTimings(from entries: [Entry]) -> [PluginWordTiming] {
+    /// The entries of a `words` array. Realtime commits time them from the session start,
+    /// so the entries of all commits of a session join into one transcript.
+    static func entries(from json: [[String: Any]]) -> [Entry] {
+        json.compactMap(entry(from:))
+    }
+
+    /// Joins the entries of a new realtime commit to the earlier ones. A commit ends with a
+    /// word, so without a space its first word would run into the last word of the commit
+    /// before, and segments and subtitles would read "thecat" instead of "the cat".
+    /// Between two words of a script that does not separate words with spaces, such as
+    /// Chinese and Japanese, no space is added ("学校" + "です" stays "学校です"); a mixed
+    /// boundary keeps it ("ใช้" + "ChatGPT" becomes "ใช้ ChatGPT").
+    static func appending(_ newEntries: [Entry], to entries: [Entry]) -> [Entry] {
+        guard let last = entries.last, last.kind != .spacing,
+              let first = newEntries.first, first.kind != .spacing,
+              let lastCharacter = last.text.unicodeScalars.last,
+              let firstCharacter = first.text.unicodeScalars.first,
+              !lastCharacter.properties.isWhitespace, !firstCharacter.properties.isWhitespace,
+              !(writesWithoutSpaces(lastCharacter) && writesWithoutSpaces(firstCharacter)) else {
+            return entries + newEntries
+        }
+        let spacing = Entry(kind: .spacing, text: " ", start: last.end, end: first.start)
+        return entries + [spacing] + newEntries
+    }
+
+    /// Joins the texts of realtime commits (and the current partial text) with a space,
+    /// except where both sides are in a script that writes words without spaces.
+    static func joinedText(_ parts: [String]) -> String {
+        var result = ""
+        for part in parts where !part.isEmpty {
+            if let last = result.unicodeScalars.last, let first = part.unicodeScalars.first,
+               !last.properties.isWhitespace, !first.properties.isWhitespace,
+               !(writesWithoutSpaces(last) && writesWithoutSpaces(first)) {
+                result += " "
+            }
+            result += part
+        }
+        return result
+    }
+
+    /// Han, kana and the Southeast Asian scripts that write words without spaces between them.
+    private static func writesWithoutSpaces(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0E00...0x0EFF, // Thai, Lao
+             0x1000...0x109F, // Myanmar
+             0x1780...0x17FF, // Khmer
+             0x3000...0x30FF, // CJK punctuation, Hiragana, Katakana
+             0x31F0...0x31FF, // Katakana extensions
+             0x3400...0x4DBF, // CJK Extension A
+             0x4E00...0x9FFF, // CJK Unified Ideographs
+             0xF900...0xFAFF, // CJK Compatibility Ideographs
+             0xFF61...0xFF9F, // Halfwidth punctuation and Katakana
+             0x20000...0x3FFFF: // CJK Extensions B and later
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// The transcript of a realtime session from the text and word entries of its commits.
+    static func transcript(text: String, detectedLanguage: String?, entries: [Entry]) -> ElevenLabsTimedTranscript {
+        ElevenLabsTimedTranscript(
+            result: PluginTranscriptionResult(
+                text: text,
+                detectedLanguage: detectedLanguage,
+                segments: segments(from: entries)
+            ),
+            words: wordTimings(from: entries)
+        )
+    }
+
+    static func wordTimings(from entries: [Entry]) -> [PluginWordTiming] {
         entries.compactMap { entry -> PluginWordTiming? in
             guard entry.kind == .word, let start = entry.start, let end = entry.end else { return nil }
             let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
