@@ -1824,15 +1824,16 @@ enum ElevenLabsTimedTranscriptParser {
     /// Joins the entries of a new realtime commit to the earlier ones. A commit ends with a
     /// word, so without a space its first word would run into the last word of the commit
     /// before, and segments and subtitles would read "thecat" instead of "the cat".
-    /// Scripts that do not separate words with spaces, such as Chinese and Japanese, join
-    /// without one ("学校" + "です" stays "学校です").
+    /// Between two words of a script that does not separate words with spaces, such as
+    /// Chinese and Japanese, no space is added ("学校" + "です" stays "学校です"); a mixed
+    /// boundary keeps it ("ใช้" + "ChatGPT" becomes "ใช้ ChatGPT").
     static func appending(_ newEntries: [Entry], to entries: [Entry]) -> [Entry] {
         guard let last = entries.last, last.kind != .spacing,
               let first = newEntries.first, first.kind != .spacing,
               let lastCharacter = last.text.unicodeScalars.last,
               let firstCharacter = first.text.unicodeScalars.first,
               !lastCharacter.properties.isWhitespace, !firstCharacter.properties.isWhitespace,
-              !writesWithoutSpaces(lastCharacter), !writesWithoutSpaces(firstCharacter) else {
+              !(writesWithoutSpaces(lastCharacter) && writesWithoutSpaces(firstCharacter)) else {
             return entries + newEntries
         }
         let spacing = Entry(kind: .spacing, text: " ", start: last.end, end: first.start)
@@ -1840,13 +1841,13 @@ enum ElevenLabsTimedTranscriptParser {
     }
 
     /// Joins the texts of realtime commits (and the current partial text) with a space,
-    /// except where one side is in a script that writes words without spaces.
+    /// except where both sides are in a script that writes words without spaces.
     static func joinedText(_ parts: [String]) -> String {
         var result = ""
         for part in parts where !part.isEmpty {
             if let last = result.unicodeScalars.last, let first = part.unicodeScalars.first,
                !last.properties.isWhitespace, !first.properties.isWhitespace,
-               !writesWithoutSpaces(last), !writesWithoutSpaces(first) {
+               !(writesWithoutSpaces(last) && writesWithoutSpaces(first)) {
                 result += " "
             }
             result += part

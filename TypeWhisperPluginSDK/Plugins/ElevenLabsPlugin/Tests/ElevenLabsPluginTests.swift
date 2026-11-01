@@ -909,6 +909,7 @@ final class ElevenLabsPluginTests: XCTestCase {
     func testRealtimeCommitTextsJoinWithASpaceOnlyBetweenSpacedScripts() {
         XCTAssertEqual(ElevenLabsTimedTranscriptParser.joinedText(["Hello there.", "How are you?"]), "Hello there. How are you?")
         XCTAssertEqual(ElevenLabsTimedTranscriptParser.joinedText(["学校", "です", ""]), "学校です")
+        XCTAssertEqual(ElevenLabsTimedTranscriptParser.joinedText(["ใช้", "ChatGPT"]), "ใช้ ChatGPT")
     }
 
     func testRealtimeCommitsKeepASpaceBetweenTheirWords() {
