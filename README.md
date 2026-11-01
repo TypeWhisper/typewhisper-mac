@@ -401,22 +401,26 @@ curl -X POST http://localhost:8978/v1/transcribe \
 
 ```json
 {
-  "text": "Thank you. We start now.",
+  "text": "Thank you for coming. We start the interview now.",
   "language": "en",
-  "duration": 2.4,
-  "processing_time": 0.9,
+  "duration": 2.9,
+  "processing_time": 0.6,
   "engine": "elevenlabs",
   "model": "scribe_v2",
   "segments": [
-    { "start": 0.12, "end": 0.71, "text": "Thank you." },
-    { "start": 1.65, "end": 2.31, "text": "We start now." }
+    { "start": 0.08, "end": 1.0, "text": "Thank you for coming." },
+    { "start": 1.32, "end": 2.68, "text": "We start the interview now." }
   ],
   "words": [
-    { "word": "Thank", "start": 0.12, "end": 0.38 },
-    { "word": "you.", "start": 0.38, "end": 0.71 },
-    { "word": "We", "start": 1.65, "end": 1.8 },
-    { "word": "start", "start": 1.8, "end": 2.05 },
-    { "word": "now.", "start": 2.05, "end": 2.31 }
+    { "word": "Thank", "start": 0.08, "end": 0.3 },
+    { "word": "you", "start": 0.34, "end": 0.46 },
+    { "word": "for", "start": 0.5, "end": 0.58 },
+    { "word": "coming.", "start": 0.68, "end": 1.0 },
+    { "word": "We", "start": 1.32, "end": 1.42 },
+    { "word": "start", "start": 1.5, "end": 1.74 },
+    { "word": "the", "start": 1.78, "end": 1.88 },
+    { "word": "interview", "start": 1.92, "end": 2.32 },
+    { "word": "now.", "start": 2.4, "end": 2.68 }
   ]
 }
 ```
