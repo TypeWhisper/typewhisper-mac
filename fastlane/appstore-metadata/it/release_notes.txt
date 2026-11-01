@@ -1,18 +1,9 @@
-TypeWhisper 1.8.1 sceglie la lingua giusta quando ne parli più di una, ti permette di correggere l’ultima dettatura in pochi secondi e rende più affidabili i workflow integrati.
+TypeWhisper 1.8.2 rende molto più veloci le dettature con ElevenLabs, carica meno audio per l’anteprima dal vivo con i motori cloud e ti permette di importare i tuoi modelli Parakeet.
 
-• Language Detection: se scegli più lingue parlate e il motore ne accetta solo una, come Parakeet, WhisperKit o Qwen3, TypeWhisper rileva quale stai parlando. Il rilevamento avviene sul tuo Mac e l’audio non lo lascia mai. Aggiungi il plug-in in “Integrations” (Apple silicon).
-• Correct Last Dictation: un comando nella barra dei menu e una scorciatoia facoltativa aprono l’ultima dettatura in un piccolo editor. Salvando, la cronologia si aggiorna e il testo corretto viene copiato.
-• Le dettature in modalità alternata possono terminare da sole dopo un silenzio della durata scelta.
-• L’indicatore di dettatura può mostrare il modello attuale e cambiarlo da un menu.
-• I workflow possono usare come riferimento il testo della finestra in primo piano, per esempio per scrivere i nomi come appaiono sullo schermo. Disattivato per impostazione predefinita.
-• I workflow integrati seguono meglio la tua dettatura: Cleaned Text rimuove intercalari, balbettii e ripetizioni, Email Reply si rivolge direttamente alla persona nominata e Meeting Notes restano nella lingua della dettatura.
-• L’editor dei workflow mostra prima “Behavior” e “Trigger”, e puoi provare una bozza prima di salvarla.
-• Lo spagnolo è disponibile come lingua dell’app.
-• Recorder: scegli la cartella per le nuove registrazioni e avvia la registrazione successiva mentre la precedente viene ancora trascritta. Le registrazioni eliminate finiscono nel Cestino.
-• L’automazione delle riunioni può funzionare senza conti alla rovescia, e i link di Google Meet nel formato meet.google.com/meet/ vengono di nuovo riconosciuti.
-• Importa i tuoi pacchetti di termini da un file JSON in “Dictionary > Term Packs”.
-• I numeri dettati in polacco diventano cifre, e la dettatura in inglese capisce i termini di punteggiatura americani, le virgolette dettate e “hashtag”.
-• Le dettature in cinese e giapponese vengono contate in caratteri per la soglia “Skip AI post-processing”.
-• GigaAM aggiunge la dettatura locale in russo.
-• Premium: se hai acquistato una licenza TypeWhisper fuori dall’App Store, puoi collegarla nella pagina Premium.
-• Corregge un possibile arresto anomalo con più modelli MLX locali attivi. TypeWhisper resta nella barra dei menu quando chiudi l’ultima finestra.
+• ElevenLabs: le dettature brevi non aspettano più circa 15 secondi dopo che hai smesso di parlare. Sono disponibili il nuovo modello Scribe v2 Medical e altre lingue, e il tedesco e le altre lingue vengono formattati correttamente con il rilevamento automatico.
+• Anteprima dal vivo: i motori cloud che non supportano lo streaming, come Groq o ElevenLabs, non ricaricano più gli ultimi secondi di audio ogni pochi secondi. L’anteprima usa un motore locale, mentre il testo finale arriva sempre dal tuo motore di dettatura.
+• Parakeet: importa i tuoi modelli Parakeet convertiti in Core ML, ad esempio un modello ottimizzato per una lingua.
+• Apple Speech: scegli il cantonese di Hong Kong con caratteri cinesi tradizionali. Language Detection distingue il cantonese dal mandarino.
+• La dettatura nelle app Flutter e nel terminale kitty funziona in modo affidabile.
+• L’API HTTP può restituire il tempo di ogni parola.
+• La finestra «New in TypeWhisper» resta davanti alle impostazioni e ha un solo pulsante «Continue».

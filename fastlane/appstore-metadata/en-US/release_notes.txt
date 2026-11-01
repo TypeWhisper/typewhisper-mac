@@ -1,18 +1,9 @@
-TypeWhisper 1.8.1 picks the right language when you speak several, lets you fix your last dictation in seconds and makes the built-in workflows more reliable.
+TypeWhisper 1.8.2 makes ElevenLabs dictations much faster, uploads less audio for the live preview with cloud engines and lets you import your own Parakeet models.
 
-• Language Detection: when you select several spoken languages and the engine accepts only one, such as Parakeet, WhisperKit or Qwen3, TypeWhisper detects which of them you speak. It runs on your Mac, and the audio never leaves it. Add it under Integrations (Apple silicon).
-• Correct Last Dictation: a menu bar action and an optional shortcut open your latest dictation in a small editor. Saving updates History and copies the corrected text.
-• Toggle dictations can stop on their own after a chosen silence.
-• The dictation indicator can show the current model and switch it from a menu.
-• Workflows can use the text of the front window as reference, for example to spell names as they appear on screen. Off by default.
-• The built-in workflows follow your dictation more closely: Cleaned Text removes filler words, stutters and repetitions, Email Reply writes directly to the person you name, and Meeting Notes keep the language of the dictation.
-• The workflow editor shows Behavior and Trigger first and lets you try a draft before saving.
-• Spanish is available as an app language.
-• Recorder: choose the folder for new recordings and start the next recording while the last one is still being transcribed. Deleted recordings go to the Trash.
-• Meeting automation can run without countdowns, and Google Meet links in the meet.google.com/meet/ format are recognized again.
-• Import your own term packs from a JSON file under Dictionary > Term Packs.
-• Polish number words turn into digits, and English dictation understands US punctuation terms, spoken quotes and "hashtag".
-• Chinese and Japanese dictations are counted by characters for the "Skip AI post-processing" threshold.
-• GigaAM adds local Russian dictation.
-• Premium: if you bought a TypeWhisper license outside the App Store, you can connect it on the Premium page.
-• Fixes a possible crash with several local MLX models enabled. TypeWhisper keeps running in the menu bar when you close its last window.
+• ElevenLabs: short dictations no longer wait about 15 seconds after you stop speaking. The new Scribe v2 Medical model and more languages are available, and German and other languages are formatted correctly with automatic detection.
+• Live preview: cloud engines that cannot stream, such as Groq or ElevenLabs, no longer upload the last seconds of audio again every few seconds. The preview runs on a local engine instead, while the final text still comes from your dictation engine.
+• Parakeet: import your own Parakeet models converted to Core ML, for example a fine-tune for one language.
+• Apple Speech: pick Hong Kong Cantonese with Traditional Chinese characters. Language Detection tells Cantonese apart from Mandarin.
+• Dictation into Flutter apps and the kitty terminal works reliably.
+• The HTTP API can return the time of each word.
+• The "New in TypeWhisper" window stays in front of Settings and has a single Continue button.
