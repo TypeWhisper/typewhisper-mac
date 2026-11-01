@@ -285,6 +285,10 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         let modelUsed: String?
         let durationSeconds: Double?
         let pipelineSteps: [String]
+        /// A Recorder recording and its word timestamps, for tools that cut the audio by
+        /// the transcript.
+        var audioFilePath: String?
+        var timestampsFilePath: String?
 
         init(input: String, actionContext: ActionContext) {
             timestamp = Date()
@@ -324,8 +328,10 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
             language = nil
             engineUsed = nil
             modelUsed = nil
-            durationSeconds = nil
+            durationSeconds = payload.durationSeconds
             pipelineSteps = []
+            audioFilePath = payload.audioFilePath
+            timestampsFilePath = ObsidianPlugin.timestampsFilePath(forAudio: payload.audioFilePath)
         }
 
         init(_ payload: HistorySyncPayload, timestamp: Date) {
@@ -419,6 +425,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         lines.append("date: \(formatter.string(from: context.timestamp))")
+        lines += recordingFrontmatterLines(audioFilePath: context.audioFilePath, timestampsFilePath: context.timestampsFilePath)
         if includeAppMetadata, let app = context.appName { lines.append("app: \(yamlScalar(app))") }
         if includeAppMetadata, let bid = context.bundleIdentifier { lines.append("bundleId: \(yamlScalar(bid))") }
         if includeAppMetadata, let url = context.url { lines.append("url: \(yamlScalar(url))") }
@@ -912,7 +919,12 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         if let markdownPath = payload.markdownFilePath,
            let markdown = try? String(contentsOfFile: markdownPath, encoding: .utf8),
            !markdown.isEmpty {
-            return _frontmatterEnabled ? addingTags(to: markdown) : markdownBody(of: markdown)
+            guard _frontmatterEnabled else { return markdownBody(of: markdown) }
+            let recordingLines = recordingFrontmatterLines(
+                audioFilePath: payload.audioFilePath,
+                timestampsFilePath: Self.timestampsFilePath(forAudio: payload.audioFilePath)
+            )
+            return addingFrontmatterLines(recordingLines, to: markdown)
         }
         let context = NoteContext(recording: payload)
         var content = ""
@@ -927,14 +939,32 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         return content
     }
 
-    /// The Recorder's Markdown with the configured tags added to its frontmatter.
-    private func addingTags(to markdown: String) -> String {
-        guard !_frontmatterTags.isEmpty, markdown.hasPrefix("---\n"),
+    /// `<recording>.timestamps.json` next to the recording, when TypeWhisper wrote one.
+    static func timestampsFilePath(forAudio audioFilePath: String) -> String? {
+        let path = (audioFilePath as NSString).deletingPathExtension + ".timestamps.json"
+        return FileManager.default.fileExists(atPath: path) ? path : nil
+    }
+
+    /// `audio:` and `timestamps:` of a recording's note: a manuscript that links the note
+    /// leads tools such as the TypeWhisper REAPER scripts to the recording and the times
+    /// of its words.
+    private func recordingFrontmatterLines(audioFilePath: String?, timestampsFilePath: String?) -> [String] {
+        var lines: [String] = []
+        if let audioFilePath { lines.append("audio: \(yamlScalar(audioFilePath))") }
+        if let timestampsFilePath { lines.append("timestamps: \(yamlScalar(timestampsFilePath))") }
+        return lines
+    }
+
+    /// The Recorder's Markdown with the recording's lines and the configured tags added
+    /// to its frontmatter.
+    private func addingFrontmatterLines(_ recordingLines: [String], to markdown: String) -> String {
+        let tagLines = _frontmatterTags.isEmpty ? [] : ["tags:"] + _frontmatterTags.map { "  - \(yamlScalar($0))" }
+        let lines = recordingLines + tagLines
+        guard !lines.isEmpty, markdown.hasPrefix("---\n"),
               let end = markdown.range(of: "\n---\n", range: markdown.index(markdown.startIndex, offsetBy: 3)..<markdown.endIndex)
         else { return markdown }
-        let tags = (["tags:"] + _frontmatterTags.map { "  - \(yamlScalar($0))" }).joined(separator: "\n")
         var result = markdown
-        result.insert(contentsOf: "\n" + tags, at: end.lowerBound)
+        result.insert(contentsOf: "\n" + lines.joined(separator: "\n"), at: end.lowerBound)
         return result
     }
 

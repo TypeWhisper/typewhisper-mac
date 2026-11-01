@@ -1358,7 +1358,8 @@ final class AudioRecorderViewModel: ObservableObject {
             transcriptDocumentURL(for: item.url),
             transcriptReadyURL(for: item.url),
             recordingIdentityURL(for: item.url),
-            transcriptionFailureURL(for: item.url)
+            transcriptionFailureURL(for: item.url),
+            TranscriptTimestampsFile.url(besideAudio: item.url)
         ]
 
         // The files go to the Trash, so a recording deleted by mistake can be restored.
@@ -1833,7 +1834,13 @@ final class AudioRecorderViewModel: ObservableObject {
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 // The transcript is saved first; adding the speaker record can take seconds.
-                let (outcome, payload) = savingTranscript(text, for: request.outputURL, request: request)
+                // A live session's word times count from the stream, not from the file.
+                let (outcome, payload) = savingTranscript(
+                    text,
+                    for: request.outputURL,
+                    request: request,
+                    result: request.liveSessionResult == nil ? result : nil
+                )
                 let speakerRecordID = await addSpeakerRecordIfWanted(
                     result, request: request, recordingID: payload?.recordingID
                 )
@@ -1891,7 +1898,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 return .failed(recordedFailure)
             }
 
-            let (outcome, payload) = savingTranscript(text, for: request.outputURL, request: request)
+            let (outcome, payload) = savingTranscript(text, for: request.outputURL, request: request, result: result)
             // A recording that already has its speaker record keeps it; the
             // intake tells them apart by the recording ID.
             if let payload {
@@ -2193,10 +2200,13 @@ final class AudioRecorderViewModel: ObservableObject {
         audioURL.deletingPathExtension().appendingPathExtension("txt")
     }
 
+    /// `timestamps` is the content of `<recording>.timestamps.json`; without it an
+    /// older file is removed, as it belongs to an earlier transcript.
     private func saveTranscript(
         _ text: String,
         for audioURL: URL,
-        calendarEvent: CalendarMeetingTranscriptMetadata?
+        calendarEvent: CalendarMeetingTranscriptMetadata?,
+        timestamps: Data? = nil
     ) throws -> RecorderTranscriptReadyPayload {
         defer { recorderTranscriptGeneration &+= 1 }
         let audioURL = audioURL.resolvingSymlinksInPath()
@@ -2228,9 +2238,16 @@ final class AudioRecorderViewModel: ObservableObject {
                 for: audioURL
             )
         }
+        let timestampsURL = TranscriptTimestampsFile.url(besideAudio: audioURL)
+        if let timestamps {
+            writes.append(RecordingFileWrite(url: timestampsURL, data: timestamps))
+        }
         writes.append(RecordingFileWrite(url: recordingIdentityURL(for: audioURL), data: try JSONEncoder().encode(identity)))
         writes.append(RecordingFileWrite(url: receiptURL, data: try JSONEncoder().encode(payload)))
         try writeRecordingFilesTransactionally(writes)
+        if timestamps == nil {
+            try? FileManager.default.removeItem(at: timestampsURL)
+        }
         clearTranscriptionFailure(for: audioURL)
         return payload
     }
@@ -2425,16 +2442,36 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     /// Saves the transcript without emitting its completion, which is returned.
+    /// `result` adds its word timestamps next to the recording.
     private func savingTranscript(
         _ text: String,
         for audioURL: URL,
-        request: FinalTranscriptionRequest
+        request: FinalTranscriptionRequest,
+        result: TranscriptionResult? = nil
     ) -> (FinalTranscriptionOutcome, RecorderTranscriptReadyPayload?) {
+        // The word timestamps are extra: the transcript is saved without them when
+        // they cannot be written.
+        var timestamps: Data?
+        if let result {
+            do {
+                timestamps = try TranscriptTimestampsFile.data(
+                    text: text,
+                    result: result,
+                    model: modelManager.resolvedModelId(
+                        engineOverrideId: request.providerId,
+                        cloudModelOverride: request.modelOverrideId
+                    )
+                )
+            } catch {
+                logger.error("Failed to encode word timestamps: \(error.localizedDescription, privacy: .public)")
+            }
+        }
         do {
             let payload = try saveTranscript(
                 text,
                 for: audioURL,
-                calendarEvent: request.calendarEvent
+                calendarEvent: request.calendarEvent,
+                timestamps: timestamps
             )
             return (.transcriptSaved(recordingID: payload.recordingID), payload)
         } catch {

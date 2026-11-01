@@ -410,6 +410,17 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(input.result.segments.map(\.start), [11, 40])
         XCTAssertEqual(input.result.segments.map(\.end), [19, 43.5])
         XCTAssertEqual(input.result.words, [TranscriptionWord(text: "Thursday.", start: 41.5, end: 43.5)])
+
+        // The word timestamps go next to the recording, in recording time.
+        let audioURL = URL(fileURLWithPath: try XCTUnwrap(session.outputFile))
+        let timestamps = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(contentsOf: TranscriptTimestampsFile.url(besideAudio: audioURL))
+        ) as? [String: Any])
+        XCTAssertEqual(timestamps["text"] as? String, "Hello there. See you Thursday.")
+        let words = try XCTUnwrap(timestamps["words"] as? [[String: Any]])
+        XCTAssertEqual(words.first?["word"] as? String, "Thursday.")
+        XCTAssertEqual(words.first?["start"] as? Double, 41.5)
+        XCTAssertEqual(words.first?["end"] as? Double, 43.5)
     }
 
     func testRecorderDoesNotTranscribeARecordingWithoutSpeech() async throws {
@@ -1701,8 +1712,10 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let trash = makeTemporaryDirectory()
         let audioURL = recordingsDirectory.appendingPathComponent("Interview.wav")
         let transcriptURL = recordingsDirectory.appendingPathComponent("Interview.txt")
+        let timestampsURL = recordingsDirectory.appendingPathComponent("Interview.timestamps.json")
         try Data("audio".utf8).write(to: audioURL)
         try Data("transcript".utf8).write(to: transcriptURL)
+        try Data("timestamps".utf8).write(to: timestampsURL)
         let viewModel = makeViewModel(
             defaults: try makeDefaults(),
             recorderService: makeRecorderService(recordingsDirectory: recordingsDirectory),
@@ -1716,9 +1729,10 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.recordings.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: transcriptURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: timestampsURL.path))
         let trashedContents = try FileManager.default.contentsOfDirectory(at: trash, includingPropertiesForKeys: nil)
             .map { try String(contentsOf: $0, encoding: .utf8) }
-        XCTAssertEqual(Set(trashedContents), ["audio", "transcript"])
+        XCTAssertEqual(Set(trashedContents), ["audio", "transcript", "timestamps"])
     }
 
     func testDeleteRecordingRetainsAudioWhenCalendarMetadataCannotBeDeleted() async throws {

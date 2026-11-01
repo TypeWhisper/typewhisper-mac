@@ -654,72 +654,15 @@ final class APIHandlers: @unchecked Sendable {
             )
 
             if options.responseFormat == "verbose_json" {
-                struct SegmentEntry: Encodable {
-                    let start: Double
-                    let end: Double
-                    let text: String
-                    let speaker: String?
-                    let speakerConfidence: Double?
-
-                    enum CodingKeys: String, CodingKey {
-                        case start
-                        case end
-                        case text
-                        case speaker
-                        case speakerConfidence = "speaker_confidence"
-                    }
-
-                    func encode(to encoder: Encoder) throws {
-                        var container = encoder.container(keyedBy: CodingKeys.self)
-                        try container.encode(start, forKey: .start)
-                        try container.encode(end, forKey: .end)
-                        try container.encode(text, forKey: .text)
-                        try container.encodeIfPresent(speaker, forKey: .speaker)
-                        try container.encodeIfPresent(speakerConfidence, forKey: .speakerConfidence)
-                    }
-                }
-
-                struct WordEntry: Encodable {
-                    let word: String
-                    let start: Double
-                    let end: Double
-                }
-
-                struct VerboseResponse: Encodable {
-                    let text: String
-                    let language: String?
-                    let duration: Double
-                    let processing_time: Double
-                    let engine: String
-                    let model: String?
-                    let segments: [SegmentEntry]
-                    /// Only when word timestamps were requested; empty when the engine has none.
-                    let words: [WordEntry]?
-                }
-
-                let segments = responseSegments.map {
-                    SegmentEntry(
-                        start: $0.start,
-                        end: $0.end,
-                        text: $0.text,
-                        speaker: $0.speakerLabel,
-                        speakerConfidence: $0.speakerConfidence
-                    )
-                }
-
-                return .json(VerboseResponse(
+                // The engine's own words: dictionary corrections, number formatting and
+                // translation change only `text` and `segments`.
+                return .json(VerboseTranscript(
                     text: finalText,
                     language: responseLanguage,
-                    duration: result.duration,
-                    processing_time: result.processingTime,
-                    engine: result.engineUsed,
+                    result: result,
                     model: modelId,
-                    segments: segments,
-                    // The engine's own words: dictionary corrections, number
-                    // formatting and translation change only `text` and `segments`.
-                    words: options.timestampGranularities.contains(.word)
-                        ? result.words.map { WordEntry(word: $0.text, start: $0.start, end: $0.end) }
-                        : nil
+                    segments: responseSegments,
+                    includesWords: options.timestampGranularities.contains(.word)
                 ))
             } else {
                 struct TranscribeResponse: Encodable {
