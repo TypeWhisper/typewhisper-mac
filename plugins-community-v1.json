@@ -4599,6 +4599,17 @@
       "locality": "local",
       "releases": [
         {
+          "version": "1.0.1",
+          "minHostVersion": "1.8.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 17403932,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-language-detection-v1.0.1/LanguageDetectionPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.0",
           "minHostVersion": "1.8.1",
           "sdkCompatibilityVersion": "v1",
