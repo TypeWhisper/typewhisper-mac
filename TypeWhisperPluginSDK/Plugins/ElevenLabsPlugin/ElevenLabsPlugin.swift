@@ -1634,7 +1634,10 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
                 detectedLanguage = language
             }
             if let words = json["words"] as? [[String: Any]] {
-                entries += ElevenLabsTimedTranscriptParser.entries(from: words)
+                entries = ElevenLabsTimedTranscriptParser.appending(
+                    ElevenLabsTimedTranscriptParser.entries(from: words),
+                    to: entries
+                )
             }
             partialText = ""
             reportProgress()
@@ -1816,6 +1819,18 @@ enum ElevenLabsTimedTranscriptParser {
     /// so the entries of all commits of a session join into one transcript.
     static func entries(from json: [[String: Any]]) -> [Entry] {
         json.compactMap(entry(from:))
+    }
+
+    /// Joins the entries of a new realtime commit to the earlier ones. A commit ends with a
+    /// word, so without a space its first word would run into the last word of the commit
+    /// before, and segments and subtitles would read "thecat" instead of "the cat".
+    static func appending(_ newEntries: [Entry], to entries: [Entry]) -> [Entry] {
+        guard let last = entries.last, last.kind != .spacing,
+              let first = newEntries.first, first.kind != .spacing else {
+            return entries + newEntries
+        }
+        let spacing = Entry(kind: .spacing, text: " ", start: last.end, end: first.start)
+        return entries + [spacing] + newEntries
     }
 
     /// The transcript of a realtime session from the text and word entries of its commits.

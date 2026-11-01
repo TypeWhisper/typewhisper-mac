@@ -894,6 +894,24 @@ final class ElevenLabsPluginTests: XCTestCase {
             headerFields: nil
         )!
     }
+
+    func testRealtimeCommitsKeepASpaceBetweenTheirWords() {
+        let first = ElevenLabsTimedTranscriptParser.entries(from: [
+            ["text": "the", "type": "word", "start": 0.0, "end": 0.3],
+        ])
+        let second = ElevenLabsTimedTranscriptParser.entries(from: [
+            ["text": "cat", "type": "word", "start": 0.8, "end": 1.1],
+        ])
+        let entries = ElevenLabsTimedTranscriptParser.appending(
+            second,
+            to: ElevenLabsTimedTranscriptParser.appending(first, to: [])
+        )
+
+        let transcript = ElevenLabsTimedTranscriptParser.transcript(text: "the cat", detectedLanguage: "en", entries: entries)
+
+        XCTAssertEqual(transcript.result.segments.map(\.text), ["the cat"])
+        XCTAssertEqual(transcript.words.map(\.text), ["the", "cat"])
+    }
 }
 
 private final class StringRecorder: @unchecked Sendable {
@@ -986,4 +1004,5 @@ private final class FakeRealtimeSocket: ElevenLabsRealtimeSocket, @unchecked Sen
         }
         continuation?.finish()
     }
+
 }
