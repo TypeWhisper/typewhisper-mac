@@ -2788,9 +2788,9 @@ final class WatchFolderExportTests: XCTestCase {
             date: Date(timeIntervalSince1970: 1_700_000_000)
         )
         XCTAssertEqual(markdown.fileExtension, "md")
+        XCTAssertTrue(markdown.content.hasPrefix("---\n"))
+        XCTAssertTrue(markdown.content.contains("engine: \"WhisperKit\""))
         XCTAssertTrue(markdown.content.contains("# Transcription: meeting.m4a"))
-        XCTAssertTrue(markdown.content.contains("- Date:"))
-        XCTAssertTrue(markdown.content.contains("- Engine: WhisperKit"))
         XCTAssertTrue(markdown.content.contains("Hello world"))
 
         let plainText = try WatchFolderExportBuilder.build(
@@ -2802,6 +2802,85 @@ final class WatchFolderExportTests: XCTestCase {
         )
         XCTAssertEqual(plainText.fileExtension, "txt")
         XCTAssertEqual(plainText.content, "Hello world")
+    }
+
+    func testWatchFolderMarkdownNamesTheRecordingAndTimesEachSpeakerTurn() throws {
+        let result = TranscriptionResult(
+            text: "Speaker 1: Hello there. How are you? Speaker 2: Fine.",
+            detectedLanguage: "en",
+            duration: 130,
+            processingTime: 1,
+            engineUsed: "elevenlabs",
+            segments: [
+                TranscriptionSegment(text: "Speaker 1: Hello there.", start: 3.4, end: 5, speakerLabel: "Speaker 1"),
+                TranscriptionSegment(text: "How are you?", start: 6, end: 7, speakerLabel: "Speaker 1"),
+                TranscriptionSegment(text: "Fine.", start: 8, end: 9, speakerLabel: "Speaker 2"),
+                // A long turn gets a new time after a minute.
+                TranscriptionSegment(text: "Later on.", start: 70, end: 72, speakerLabel: "Speaker 2"),
+            ]
+        )
+
+        let markdown = try WatchFolderExportBuilder.build(
+            format: .markdown,
+            result: result,
+            fileName: "Interview \"A\".wav",
+            engineName: "ElevenLabs",
+            date: Date(timeIntervalSince1970: 1_700_000_000),
+            audioPath: "/Volumes/Card/Interview \"A\".wav",
+            timestampsPath: "/Volumes/Card/Interview \"A\".timestamps.json"
+        ).content
+
+        XCTAssertEqual(markdown, """
+        ---
+        audio: "/Volumes/Card/Interview \\"A\\".wav"
+        timestamps: "/Volumes/Card/Interview \\"A\\".timestamps.json"
+        date: 2023-11-14T22:13:20Z
+        duration: 130.0
+        language: "en"
+        engine: "ElevenLabs"
+        speakers:
+          - "Speaker 1"
+          - "Speaker 2"
+        ---
+
+        # Transcription: Interview "A".wav
+
+        **[00:00:03] Speaker 1:** Hello there. How are you?
+
+        **[00:00:08] Speaker 2:** Fine.
+
+        **[00:01:10] Speaker 2:** Later on.
+
+        """)
+    }
+
+    func testTimestampsFileHasTheAPIFormatAndNeedsWords() throws {
+        let words = [TranscriptionWord(text: "Hello", start: 0.5, end: 0.9)]
+        let result = TranscriptionResult(
+            text: "Hello",
+            detectedLanguage: "en",
+            duration: 2,
+            processingTime: 0.25,
+            engineUsed: "parakeet",
+            segments: [TranscriptionSegment(text: "Hello", start: 0.5, end: 0.9, speakerLabel: "Speaker 1")],
+            words: words
+        )
+
+        XCTAssertEqual(
+            TranscriptTimestampsFile.url(besideAudio: URL(fileURLWithPath: "/a/Interview.wav")).path,
+            "/a/Interview.timestamps.json"
+        )
+        let data = try XCTUnwrap(TranscriptTimestampsFile.data(text: "Hello", result: result, model: "v3"))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["engine"] as? String, "parakeet")
+        XCTAssertEqual(json["model"] as? String, "v3")
+        XCTAssertEqual(json["processing_time"] as? Double, 0.25)
+        XCTAssertEqual((json["segments"] as? [[String: Any]])?.first?["speaker"] as? String, "Speaker 1")
+        XCTAssertEqual((json["words"] as? [[String: Any]])?.first?["word"] as? String, "Hello")
+
+        var withoutWords = result
+        withoutWords.words = []
+        XCTAssertNil(try TranscriptTimestampsFile.data(text: "Hello", result: withoutWords, model: nil))
     }
 
     func testWatchFolderExportBuilderProducesSubtitleFormats() throws {

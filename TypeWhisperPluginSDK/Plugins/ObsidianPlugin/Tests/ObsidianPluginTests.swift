@@ -51,7 +51,7 @@ final class ObsidianPluginTests: XCTestCase {
         )
 
         XCTAssertEqual(manifest.id, "com.typewhisper.obsidian")
-        XCTAssertEqual(manifest.version, "1.2.0")
+        XCTAssertEqual(manifest.version, "1.3.0")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
     }
@@ -214,7 +214,8 @@ final class ObsidianPluginTests: XCTestCase {
     }
 
     /// Recordings can be exported without dictations (#1083). A calendar recording keeps
-    /// the Recorder's Markdown, gains the configured tags, and a retranscription updates it.
+    /// the Recorder's Markdown, gains the recording, its word timestamps and the
+    /// configured tags, and a retranscription updates it.
     func testAutoExportSavesRecorderTranscriptsWithoutDictations() async throws {
         let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultRecorder")
         let recordingsURL = try Self.makeTemporaryDirectory(prefix: "ObsidianRecordings")
@@ -226,6 +227,8 @@ final class ObsidianPluginTests: XCTestCase {
         let markdownURL = recordingsURL.appendingPathComponent("2026-10-22 11-44 Weekly sync.transcript.md")
         try "---\ntitle: \"Weekly sync\"\nattendees:\n  - \"Wijtze\"\n---\n\n# Weekly sync\n\nFirst take\n"
             .write(to: markdownURL, atomically: true, encoding: .utf8)
+        let timestampsURL = recordingsURL.appendingPathComponent("2026-10-22 11-44 Weekly sync.timestamps.json")
+        try Data("{}".utf8).write(to: timestampsURL)
         let eventBus = PluginTestEventBus()
         let host = try PluginTestHostServices(
             defaults: [
@@ -273,7 +276,11 @@ final class ObsidianPluginTests: XCTestCase {
         let files = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
         XCTAssertEqual(files.map(\.lastPathComponent), ["2026-10-22 11-44 Weekly sync.md"], "Dictations stay out")
         let note = try String(contentsOf: files[0], encoding: .utf8)
-        XCTAssertTrue(note.hasPrefix("---\ntitle: \"Weekly sync\"\nattendees:\n  - \"Wijtze\"\ntags:\n  - \"meeting\"\n---\n"), note)
+        XCTAssertTrue(note.hasPrefix(
+            "---\ntitle: \"Weekly sync\"\nattendees:\n  - \"Wijtze\"\n"
+                + "audio: \"\(audioURL.path)\"\ntimestamps: \"\(timestampsURL.path)\"\n"
+                + "tags:\n  - \"meeting\"\n---\n"
+        ), note)
         XCTAssertTrue(note.contains("First take"))
 
         try "---\ntitle: \"Weekly sync\"\n---\n\n# Weekly sync\n\nSecond take\n"

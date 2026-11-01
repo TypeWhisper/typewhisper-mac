@@ -99,28 +99,27 @@ enum WatchFolderExportBuilder {
         }
     }
 
+    /// `audioPath` and `timestampsPath` go into the Markdown's frontmatter, so a
+    /// manuscript that links the note leads to the recording and its word timestamps.
     static func build(
         format: WatchFolderOutputFormat,
         result: TranscriptionResult,
         fileName: String,
         engineName: String,
-        date: Date
+        date: Date,
+        audioPath: String? = nil,
+        timestampsPath: String? = nil
     ) throws -> WatchFolderExportArtifact {
         switch format {
         case .markdown:
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateStyle = .medium
-            dateFormatter.timeStyle = .medium
-            let dateString = dateFormatter.string(from: date)
-
-            let content = """
-            # Transcription: \(fileName)
-            - Date: \(dateString)
-            - Engine: \(engineName)
-
-            \(result.text)
-            """
-
+            let content = TranscriptMarkdown.render(
+                result: result,
+                title: "Transcription: \(fileName)",
+                engineName: engineName,
+                date: date,
+                audioPath: audioPath,
+                timestampsPath: timestampsPath
+            )
             return WatchFolderExportArtifact(fileExtension: format.fileExtension, content: content)
 
         case .plainText:
@@ -144,6 +143,93 @@ enum WatchFolderExportBuilder {
                 content: SubtitleExporter.exportVTT(segments: result.segments)
             )
         }
+    }
+}
+
+/// A Markdown transcript, for example for Obsidian: frontmatter with the recording, its
+/// word timestamps and how it was transcribed, then a paragraph per speaker turn that
+/// starts with its time and speaker.
+enum TranscriptMarkdown {
+    /// A long turn gets a new paragraph with its time after this many seconds.
+    static let paragraphSeconds: TimeInterval = 60
+
+    static func render(
+        result: TranscriptionResult,
+        title: String,
+        engineName: String,
+        date: Date,
+        audioPath: String?,
+        timestampsPath: String?
+    ) -> String {
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime]
+        var lines = ["---"]
+        if let audioPath { lines.append("audio: \(yamlScalar(audioPath))") }
+        if let timestampsPath { lines.append("timestamps: \(yamlScalar(timestampsPath))") }
+        lines.append("date: \(dateFormatter.string(from: date))")
+        if result.duration.isFinite, result.duration > 0 {
+            lines.append("duration: \(String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), result.duration))")
+        }
+        if let language = result.detectedLanguage, !language.isEmpty {
+            lines.append("language: \(yamlScalar(language))")
+        }
+        lines.append("engine: \(yamlScalar(engineName))")
+        var speakers: [String] = []
+        for label in result.segments.compactMap(\.speakerLabel) where !speakers.contains(label) {
+            speakers.append(label)
+        }
+        if !speakers.isEmpty {
+            lines.append("speakers:")
+            lines += speakers.map { "  - \(yamlScalar($0))" }
+        }
+        lines.append("---")
+        lines.append("")
+        lines.append("# \(title)")
+        lines.append("")
+        lines.append(body(result))
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Paragraphs of `**[00:12:03] Speaker 1:** text`, or the plain text when the
+    /// engine returned no segments.
+    static func body(_ result: TranscriptionResult) -> String {
+        var paragraphs: [(start: TimeInterval, label: String?, text: String)] = []
+        for segment in result.segments {
+            var text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Cloud engines also write the label into the text.
+            if let label = segment.speakerLabel, text.hasPrefix("\(label):") {
+                text = String(text.dropFirst(label.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard !text.isEmpty else { continue }
+            if let last = paragraphs.last, last.label == segment.speakerLabel,
+               segment.start - last.start < paragraphSeconds {
+                paragraphs[paragraphs.count - 1].text += " " + text
+            } else {
+                paragraphs.append((segment.start, segment.speakerLabel, text))
+            }
+        }
+        guard !paragraphs.isEmpty else {
+            return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return paragraphs.map { paragraph in
+            let label = paragraph.label.map { " \($0):" } ?? ""
+            return "**[\(clock(paragraph.start))]\(label)** \(paragraph.text)"
+        }.joined(separator: "\n\n")
+    }
+
+    private static func clock(_ seconds: TimeInterval) -> String {
+        let total = seconds.isFinite ? max(0, Int(seconds.rounded(.down))) : 0
+        return String(format: "%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
+    }
+
+    /// A double-quoted YAML scalar; JSON string escaping is valid YAML.
+    private static func yamlScalar(_ value: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard let data = try? encoder.encode(value), let string = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return string
     }
 }
 
@@ -388,12 +474,24 @@ final class WatchFolderService: ObservableObject {
             let engineId = result.engineUsed
             let engineName = PluginManager.shared.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId
 
+            let modelId = modelManagerService.resolvedModelId(
+                engineOverrideId: engineId,
+                cloudModelOverride: engineId == overrides.engineId ? overrides.modelId : nil
+            )
+            // A Markdown transcript gets the word timestamps in a file of their own,
+            // named in its frontmatter, for tools that cut audio by the transcript.
+            let timestampsURL = format == .markdown
+                ? writeTimestampsFile(for: url, result: result, modelId: modelId, outputFolder: outputFolder, keepsSource: !deleteSource)
+                : nil
+
             let artifact = try WatchFolderExportBuilder.build(
                 format: format,
                 result: result,
                 fileName: fileName,
                 engineName: engineName,
-                date: exportDate
+                date: exportDate,
+                audioPath: deleteSource ? nil : url.path,
+                timestampsPath: timestampsURL?.path
             )
             let outputURL = outputFolder
                 .appendingPathComponent(outputName)
@@ -407,10 +505,7 @@ final class WatchFolderService: ObservableObject {
                 outputFormat: artifact.fileExtension,
                 engineId: engineId,
                 engineName: engineName,
-                modelId: modelManagerService.resolvedModelId(
-                    engineOverrideId: engineId,
-                    cloudModelOverride: engineId == overrides.engineId ? overrides.modelId : nil
-                ),
+                modelId: modelId,
                 transcriptText: result.text,
                 detectedLanguage: result.detectedLanguage,
                 segments: result.segments.map {
@@ -463,6 +558,41 @@ final class WatchFolderService: ObservableObject {
             saveProcessedFiles()
             logger.error("Failed to transcribe \(fileName): \(error.localizedDescription)")
         }
+    }
+
+    /// Writes `<file>.timestamps.json` next to the source file, or next to the output
+    /// when the source is deleted afterwards or its folder cannot be written. Returns
+    /// where it went, or nil without word timestamps.
+    private func writeTimestampsFile(
+        for url: URL,
+        result: TranscriptionResult,
+        modelId: String?,
+        outputFolder: URL,
+        keepsSource: Bool
+    ) -> URL? {
+        let data: Data
+        do {
+            guard let encoded = try TranscriptTimestampsFile.data(text: result.text, result: result, model: modelId) else {
+                return nil
+            }
+            data = encoded
+        } catch {
+            logger.error("Failed to encode word timestamps: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        var candidates: [URL] = []
+        if keepsSource { candidates.append(TranscriptTimestampsFile.url(besideAudio: url)) }
+        let besideOutput = TranscriptTimestampsFile.url(besideAudio: outputFolder.appendingPathComponent(url.lastPathComponent))
+        if !candidates.contains(besideOutput) { candidates.append(besideOutput) }
+        for candidate in candidates {
+            do {
+                try data.write(to: candidate, options: .atomic)
+                return candidate
+            } catch {
+                logger.error("Failed to write word timestamps: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return nil
     }
 
     // MARK: - Persistence
