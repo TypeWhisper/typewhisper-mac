@@ -14870,6 +14870,34 @@
         }
       }
     },
+    "About TypeWhisper" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über TypeWhisper"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acerca de TypeWhisper"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperについて"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 TypeWhisper"
+          }
+        }
+      }
+    },
     "Accessibility" : {
       "localizations" : {
         "de" : {

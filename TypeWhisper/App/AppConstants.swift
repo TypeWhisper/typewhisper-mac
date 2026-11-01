@@ -292,6 +292,18 @@ enum AppConstants {
         return channel
     }
 
+    /// Version for the standard About panel. Daily and Release Candidate builds share the
+    /// marketing version with the stable release, so they add their channel ("1.8.2 Daily").
+    static func aboutPanelApplicationVersion(
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
+    ) -> String {
+        let version = infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        guard let channel = bundledReleaseChannel(infoDictionary: infoDictionary).versionDisplayName else {
+            return version
+        }
+        return "\(version) \(channel)"
+    }
+
     static func bundledPreviewRelease(
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary
     ) -> PreviewRelease? {

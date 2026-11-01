@@ -486,6 +486,16 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         }
         .menuBarExtraStyle(.menu)
         .commands {
+            // The standard About panel shows only the marketing version, which Daily and
+            // Release Candidate builds share with the stable release; add their channel.
+            CommandGroup(replacing: .appInfo) {
+                Button(String(localized: "About TypeWhisper")) {
+                    NSApp.orderFrontStandardAboutPanel(options: [
+                        .applicationVersion: AppConstants.aboutPanelApplicationVersion()
+                    ])
+                    NSApp.activate()
+                }
+            }
             CommandGroup(after: .appInfo) {
                 ManagedWindowOpenerRegistrar()
             }
