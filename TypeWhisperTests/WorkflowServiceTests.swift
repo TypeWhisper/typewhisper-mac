@@ -2854,6 +2854,28 @@ final class WatchFolderExportTests: XCTestCase {
         """)
     }
 
+    /// One segment per word (xAI) is formatted on its own, the text as a whole: the
+    /// Markdown keeps the text and only takes its times from the segments.
+    func testWatchFolderMarkdownKeepsTheWholeTextWhenSegmentsDiffer() {
+        let words: [(String, TimeInterval)] = [
+            ("We", 0), ("had", 0.5), ("20", 1), ("three", 1.5), ("guests.", 2),
+            ("Later", 70), ("we", 70.5), ("left.", 71),
+        ]
+        let result = TranscriptionResult(
+            text: "We had 23 guests. Later we left.",
+            detectedLanguage: "en",
+            duration: 72,
+            processingTime: 1,
+            engineUsed: "xai",
+            segments: words.map { TranscriptionSegment(text: $0.0, start: $0.1, end: $0.1 + 0.4) }
+        )
+
+        XCTAssertEqual(
+            TranscriptMarkdown.body(result),
+            "**[00:00:00]** We had 23 guests.\n\n**[00:01:10]** Later we left."
+        )
+    }
+
     func testTimestampsFileHasTheAPIFormatAndNeedsWords() throws {
         let words = [TranscriptionWord(text: "Hello", start: 0.5, end: 0.9)]
         let result = TranscriptionResult(

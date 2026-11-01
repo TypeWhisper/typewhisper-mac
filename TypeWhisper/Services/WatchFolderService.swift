@@ -190,11 +190,23 @@ enum TranscriptMarkdown {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    /// Paragraphs of `**[00:12:03] Speaker 1:** text`, or the plain text when the
-    /// engine returned no segments.
+    /// Paragraphs that start with their time, `**[00:12:03] Speaker 1:** text`, or the
+    /// plain text when the engine returned no segments.
     static func body(_ result: TranscriptionResult) -> String {
+        let segments = result.segments.filter {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.start.isFinite
+        }
+        if segments.contains(where: { $0.speakerLabel != nil }) {
+            return speakerParagraphs(segments)
+        }
+        return timedParagraphs(of: result.text, segments: segments)
+    }
+
+    /// A paragraph per speaker turn. A labelled transcript's text is made of its
+    /// segments, so the paragraphs are too.
+    private static func speakerParagraphs(_ segments: [TranscriptionSegment]) -> String {
         var paragraphs: [(start: TimeInterval, label: String?, text: String)] = []
-        for segment in result.segments {
+        for segment in segments {
             var text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
             // Cloud engines also write the label into the text.
             if let label = segment.speakerLabel, text.hasPrefix("\(label):") {
@@ -208,13 +220,62 @@ enum TranscriptMarkdown {
                 paragraphs.append((segment.start, segment.speakerLabel, text))
             }
         }
-        guard !paragraphs.isEmpty else {
-            return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
         return paragraphs.map { paragraph in
             let label = paragraph.label.map { " \($0):" } ?? ""
             return "**[\(clock(paragraph.start))]\(label)** \(paragraph.text)"
         }.joined(separator: "\n\n")
+    }
+
+    /// The transcript's own text, split into paragraphs about a minute apart. The text
+    /// is kept as it is: corrections and number formatting treat it as a whole, so it
+    /// can differ from its segments ("23" against "20 three" from one segment per word).
+    /// A paragraph starts where the text of a segment is found; a segment the text does
+    /// not contain is passed over for the next one.
+    private static func timedParagraphs(of text: String, segments: [TranscriptionSegment]) -> String {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = segments.first, !text.isEmpty else { return text }
+        // The text without whitespace and where each character is, so a segment is
+        // found whatever spacing joins the segments, also in Chinese or Japanese.
+        var compact: [Character] = []
+        var positions: [String.Index] = []
+        for index in text.indices where !text[index].isWhitespace {
+            compact.append(text[index])
+            positions.append(index)
+        }
+        var starts: [(time: TimeInterval, offset: Int)] = [(first.start, 0)]
+        for index in segments.indices.dropFirst()
+        where segments[index].start - starts[starts.count - 1].time >= paragraphSeconds {
+            // At least a dozen characters, so a short common word is not found too early.
+            var needle: [Character] = []
+            var next = index
+            while next < segments.count, needle.count < 12 {
+                needle += segments[next].text.filter { !$0.isWhitespace }
+                next += 1
+            }
+            if let offset = firstOffset(of: needle, in: compact, after: starts[starts.count - 1].offset) {
+                starts.append((segments[index].start, offset))
+            }
+        }
+        var paragraphs: [String] = []
+        for (number, start) in starts.enumerated() {
+            let from = positions[start.offset]
+            let to = number + 1 < starts.count ? positions[starts[number + 1].offset] : text.endIndex
+            let paragraph = text[from..<to].trimmingCharacters(in: .whitespacesAndNewlines)
+            paragraphs.append("**[\(clock(start.time))]** \(paragraph)")
+        }
+        return paragraphs.joined(separator: "\n\n")
+    }
+
+    private static func firstOffset(of needle: [Character], in haystack: [Character], after start: Int) -> Int? {
+        guard !needle.isEmpty, needle.count <= haystack.count else { return nil }
+        var offset = start + 1
+        while offset + needle.count <= haystack.count {
+            if haystack[offset] == needle[0], haystack[offset..<(offset + needle.count)].elementsEqual(needle) {
+                return offset
+            }
+            offset += 1
+        }
+        return nil
     }
 
     private static func clock(_ seconds: TimeInterval) -> String {
