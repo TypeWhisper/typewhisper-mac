@@ -96,7 +96,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. Granite 5.0 TurboCTC transcribes 7 languages with punctuation; Granite 5.0 2B also translates.",
       "category": "transcription",
-      "downloadCount": 1101,
+      "downloadCount": 1104,
       "descriptions": {
         "de": "Lokale Spracherkennung und \u00dcbersetzung von IBM mit MLX auf Apple Silicon. Granite 5.0 TurboCTC erkennt 7 Sprachen mit Satzzeichen; Granite 5.0 2B \u00fcbersetzt auch.",
         "es": "Voz a texto y traducci\u00f3n locales de IBM, con MLX en Apple Silicon. Granite 5.0 TurboCTC transcribe 7 idiomas con puntuaci\u00f3n; Granite 5.0 2B tambi\u00e9n traduce.",
@@ -115,7 +115,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 17
+          "downloadCount": 19
         },
         {
           "version": "1.1.0",
@@ -151,7 +151,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 50
+          "downloadCount": 51
         },
         {
           "version": "1.0.11",
@@ -174,7 +174,7 @@
       "author": "TypeWhisper",
       "description": "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
       "category": "transcription",
-      "downloadCount": 5356,
+      "downloadCount": 5401,
       "descriptions": {
         "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key n\u00f6tig.",
         "es": "Voz a texto local con Qwen3-ASR y MLX en Apple Silicon. 30 idiomas m\u00e1s dialectos del chino, no necesita clave de API.",
@@ -193,7 +193,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 87
+          "downloadCount": 126
         },
         {
           "version": "1.1.12",
@@ -229,7 +229,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 334
+          "downloadCount": 340
         },
         {
           "version": "1.1.9",
@@ -252,7 +252,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by Voxtral MLX on Apple Silicon. Fast and accurate.",
       "category": "transcription",
-      "downloadCount": 2226,
+      "downloadCount": 2228,
       "descriptions": {
         "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und pr\u00e4zise.",
         "es": "Voz a texto local con Voxtral MLX en Apple Silicon. R\u00e1pido y preciso.",
@@ -271,7 +271,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 25
+          "downloadCount": 27
         },
         {
           "version": "1.0.17",
@@ -318,7 +318,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
       "category": "transcription",
-      "downloadCount": 41047,
+      "downloadCount": 41137,
       "descriptions": {
         "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und pr\u00e4zise, 25 Sprachen.",
         "es": "Voz a texto local con NVIDIA Parakeet TDT. R\u00e1pido y preciso, 25 idiomas.",
@@ -338,7 +338,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 6
+          "downloadCount": 15
         }
       ]
     }
