@@ -21,6 +21,16 @@ env:
 permissions:
   contents: read
 
+# GitHub often starts the schedule hours late, sometimes while a manually started daily is
+# still building the same tag. Daily runs therefore wait for each other; the later one then
+# finds the day's tag and skips. Every waiting run is kept (queue: max), so a scheduled run
+# never cancels a manual one. Tag pushes and runs for an explicit tag queue by tag and do not
+# wait for a daily.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref_name || inputs.release_tag || 'daily' }}
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   prepare:
     runs-on: ubuntu-latest

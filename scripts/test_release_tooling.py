@@ -256,6 +256,14 @@ esac
         self.assertTrue(merged)
         self.assertLess(log.index("pr checks"), log.index("pr merge"))
 
+    def test_daily_runs_wait_for_each_other(self):
+        # A late scheduled daily must not build the day's tag while a manual daily is running.
+        self.assertEqual(self.workflow["concurrency"], {
+            "group": "${{ github.workflow }}-${{ github.event_name == 'push' && github.ref_name"
+                     " || inputs.release_tag || 'daily' }}",
+            "cancel-in-progress": False,
+            "queue": "max"})
+
     def test_homebrew_updates_for_one_release_never_overlap(self):
         concurrency = self.workflow["jobs"]["update-homebrew"]["concurrency"]
         self.assertEqual(concurrency, {"group": "homebrew-tap-${{ needs.prepare.outputs.tag }}",
