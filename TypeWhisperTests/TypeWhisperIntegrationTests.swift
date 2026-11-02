@@ -6491,6 +6491,62 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertFalse(hadAttemptedMutation)
     }
 
+    /// Telegram applies AX writes but reports kAXErrorFailure (#1818).
+    @MainActor
+    func testLiveFieldSessionKeepsUpdatingWhenAXWriteReportsErrorButApplies() async throws {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        var value = ""
+        var selectedRange = NSRange(location: 0, length: 0)
+        var writes: [String] = []
+
+        service.accessibilityGrantedOverride = true
+        service.captureActiveAppOverride = { ("Telegram", "ru.keepcoder.Telegram", nil) }
+        configureLiveFieldIdentity(service)
+        service.focusedTextElementOverride = { element }
+        service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.focusedTextStateOverride = { _ in
+            (value: value, selectedText: nil, selectedRange: selectedRange)
+        }
+        service.setSelectedRangeOverride = { _, range in
+            selectedRange = range
+            return true
+        }
+        service.insertTextAtOverride = { _, text in
+            writes.append(text)
+            value = (value as NSString).replacingCharacters(in: selectedRange, with: text)
+            selectedRange = NSRange(
+                location: selectedRange.location + (text as NSString).length,
+                length: 0
+            )
+            return false
+        }
+
+        let target = try XCTUnwrap(
+            service.captureLiveFieldTarget(expectedBundleIdentifier: "ru.keepcoder.Telegram")
+        )
+        let session = LiveFieldTranscriptSession(
+            sessionID: UUID(),
+            target: target,
+            textInsertionService: service,
+            updateInterval: .milliseconds(1)
+        )
+
+        session.receivePartial("The green kite")
+        try await waitForLiveFieldUpdate("first partial") { writes == ["The green kite"] }
+        session.receivePartial("The green kite is flying")
+        try await waitForLiveFieldUpdate("revised partial") {
+            value == "The green kite is flying"
+        }
+        XCTAssertEqual(session.state, .active)
+
+        guard case .applied = session.finalize(with: "The green kite is flying.") else {
+            return XCTFail("Expected the final transcript to replace the partial in place")
+        }
+        XCTAssertEqual(value, "The green kite is flying.")
+        XCTAssertEqual(session.state, .finalized)
+    }
+
     @MainActor
     func testLiveFieldSessionRebindsToRecreatedWebEditorElement() async throws {
         let service = TextInsertionService()

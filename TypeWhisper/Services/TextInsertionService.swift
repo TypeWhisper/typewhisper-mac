@@ -1327,10 +1327,10 @@ final class TextInsertionService {
         guard setSelectedRange(target.ownedRange, on: target.element) else {
             return .detached
         }
-        guard insertTextAt(element: target.element, text: text) else {
-            _ = setSelectedRange(target.expectedCaret, on: target.element)
-            return .detached
-        }
+        // The field decides whether the write arrived, not the setter result. Telegram applies
+        // the write but reports `kAXErrorFailure`; treating that as ignored left the partial in
+        // the field and inserted the final transcript a second time (#1818, same cause as #1732).
+        let writeSucceeded = insertTextAt(element: target.element, text: text)
 
         if targetWasFocused,
            !liveFieldTarget(
@@ -1379,12 +1379,15 @@ final class TextInsertionService {
                 return .detached
             }
 
-            // AX reported a successful write but the resulting state is not
-            // provably unchanged. Text may be present, so paste is unsafe.
+            // The resulting state is not provably unchanged. Text may be
+            // present, so paste is unsafe.
             target.hasAttemptedMutation = true
             return .detached
         }
 
+        if !writeSucceeded {
+            logger.info("Live-field AX write reported an error, but the field shows the text")
+        }
         target.hasAttemptedMutation = true
         target.element = resultingState.element
         target.expectedValue = expectedValue
