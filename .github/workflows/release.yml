@@ -21,6 +21,14 @@ env:
 permissions:
   contents: read
 
+# GitHub often starts the schedule hours late, sometimes while a manually started daily is
+# still building the same tag. Daily runs therefore wait for each other; the later one then
+# finds the day's tag and skips. Tag pushes and runs for an explicit tag queue by tag, so a
+# daily never replaces them while they wait.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref_name || inputs.release_tag || 'daily' }}
+  cancel-in-progress: false
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
