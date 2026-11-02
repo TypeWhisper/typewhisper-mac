@@ -261,7 +261,8 @@ esac
         self.assertEqual(self.workflow["concurrency"], {
             "group": "${{ github.workflow }}-${{ github.event_name == 'push' && github.ref_name"
                      " || inputs.release_tag || 'daily' }}",
-            "cancel-in-progress": False})
+            "cancel-in-progress": False,
+            "queue": "max"})
 
     def test_homebrew_updates_for_one_release_never_overlap(self):
         concurrency = self.workflow["jobs"]["update-homebrew"]["concurrency"]
