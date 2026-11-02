@@ -259,6 +259,19 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
             inputChannelCount: 3,
             defaultInputUsesBuiltInTransport: false
         ))
+        XCTAssertFalse(BuiltInVoiceProcessingPolicy.isRequired(
+            selectedDeviceID: nil,
+            engineDeviceID: nil,
+            inputChannelCount: 3,
+            defaultInputUsesBuiltInTransport: nil
+        ))
+        XCTAssertTrue(BuiltInVoiceProcessingPolicy.isRequired(
+            selectedDeviceID: nil,
+            engineDeviceID: nil,
+            inputChannelCount: 3,
+            defaultInputUsesBuiltInTransport: nil,
+            unknownTransportCountsAsBuiltIn: true
+        ))
     }
 
     func testUSBInputPreparationAllowsOnlyExplicitSelectedUSBRoute() {

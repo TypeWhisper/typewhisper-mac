@@ -36,12 +36,13 @@ enum BuiltInVoiceProcessingPolicy {
         selectedDeviceID: AudioDeviceID?,
         engineDeviceID: AudioDeviceID?,
         inputChannelCount: AVAudioChannelCount,
-        defaultInputUsesBuiltInTransport: Bool
+        defaultInputUsesBuiltInTransport: Bool?,
+        unknownTransportCountsAsBuiltIn: Bool = false
     ) -> Bool {
         selectedDeviceID == nil
             && engineDeviceID == nil
             && inputChannelCount == 3
-            && defaultInputUsesBuiltInTransport
+            && (defaultInputUsesBuiltInTransport ?? unknownTransportCountsAsBuiltIn)
     }
 }
 
@@ -2862,8 +2863,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             label: label,
             shouldCancel: shouldCancel
         )
+        // If the transport lookup fails here, an idle preparation assumes the route needs voice
+        // processing and stays out of the way rather than preparing an unprocessed 3-channel input.
         if !allowsVoiceProcessing,
-           requiresVoiceProcessing(inputRoute: inputRoute, currentFormat: inputFormat) {
+           requiresVoiceProcessing(inputRoute: inputRoute, currentFormat: inputFormat, unknownTransportCountsAsBuiltIn: true) {
             throw VoiceProcessingNotAllowedError()
         }
         // An idle preparation never enables voice processing, even if a later route lookup would allow it.
@@ -3279,20 +3282,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func requiresVoiceProcessing(
         inputRoute: (selectedDeviceID: AudioDeviceID?, engineDeviceID: AudioDeviceID?),
-        currentFormat: AVAudioFormat
+        currentFormat: AVAudioFormat,
+        unknownTransportCountsAsBuiltIn: Bool = false
     ) -> Bool {
         BuiltInVoiceProcessingPolicy.isRequired(
             selectedDeviceID: inputRoute.selectedDeviceID,
             engineDeviceID: inputRoute.engineDeviceID,
             inputChannelCount: currentFormat.channelCount,
-            defaultInputUsesBuiltInTransport: defaultInputUsesBuiltInTransport()
+            defaultInputUsesBuiltInTransport: defaultInputUsesBuiltInTransport(),
+            unknownTransportCountsAsBuiltIn: unknownTransportCountsAsBuiltIn
         )
     }
 
-    private func defaultInputUsesBuiltInTransport() -> Bool {
+    /// Returns nil when the default input or its transport type can't be read.
+    private func defaultInputUsesBuiltInTransport() -> Bool? {
         guard let defaultInputDeviceID = defaultInputController.defaultInputDeviceID(),
               let transportType = inputTransportResolver.transportType(for: defaultInputDeviceID) else {
-            return false
+            return nil
         }
         return transportType == kAudioDeviceTransportTypeBuiltIn
     }
