@@ -2866,7 +2866,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
            requiresVoiceProcessing(inputRoute: inputRoute, currentFormat: inputFormat) {
             throw VoiceProcessingNotAllowedError()
         }
-        if try enableVoiceProcessingIfNeeded(
+        // An idle preparation never enables voice processing, even if a later route lookup would allow it.
+        if allowsVoiceProcessing, try enableVoiceProcessingIfNeeded(
             on: inputNode,
             inputRoute: inputRoute,
             currentFormat: inputFormat,
