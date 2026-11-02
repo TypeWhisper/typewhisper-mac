@@ -1332,7 +1332,10 @@ final class TextInsertionService {
         // the field and inserted the final transcript a second time (#1818, same cause as #1732).
         let writeSucceeded = insertTextAt(element: target.element, text: text)
 
-        if targetWasFocused,
+        // Only a write the app accepted may move the session to a recreated element. After an
+        // error, the original element has to show the text.
+        if writeSucceeded,
+           targetWasFocused,
            !liveFieldTarget(
                 target.element,
                 hasValue: expectedValue,
