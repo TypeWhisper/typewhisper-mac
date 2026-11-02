@@ -11,6 +11,12 @@ For visible UI changes, always capture screenshots of the final interface in Eng
 - include the relevant screenshots in the pull request description when creating or updating the PR
 - upload them with `gh pr create --body-file body.md --attach ./shot.png` or `gh pr edit <number> --body-file body.md --attach ./shot.png` (`![alt](./shot.png)` in the body becomes a GitHub attachment URL); never commit screenshots to the repository
 
+When a change shows in motion (a flow, an animation, live updates, text inserted into another app), also record a short silent clip of the final behaviour in English:
+
+- record it with `/Users/marco/Projects/typewhisper/typewhisper-dev-tools/record-pr-clip.sh <name> --seconds <5-20>`, which records only the app's window and writes an MP4 under 10 MB
+- attach it like a screenshot, `gh pr edit <number> --body-file body.md --attach ./<name>.mp4` (a `![](./<name>.mp4)` reference becomes a video player), and include it in the user handoff; never commit clips to the repository
+- static changes (texts, layout, settings) keep screenshots only
+
 ## Mac App Store Edition
 
 - `APPSTORE` code must keep the direct-distribution app unchanged; verify both builds when touching shared files.
