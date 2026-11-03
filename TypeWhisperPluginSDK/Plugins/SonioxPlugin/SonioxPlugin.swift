@@ -2045,10 +2045,12 @@ final class SonioxPlugin: NSObject,
     }
 
     /// True when a saved list has real-time or async models but none of that
-    /// mode as new as its default.
+    /// mode as new as its default. An alias counts as the model it points to.
     static func modelCatalogPredatesDefaultModel(_ models: [SonioxFetchedModel]) -> Bool {
         func predates(_ scoped: [SonioxFetchedModel], _ defaultModelId: String) -> Bool {
-            !scoped.isEmpty && scoped.allSatisfy { compareModelIDs($0.id, defaultModelId) }
+            !scoped.isEmpty && scoped.allSatisfy {
+                compareModelIDs($0.aliasedModelId ?? $0.id, defaultModelId)
+            }
         }
         return predates(realtimeModels(from: models), defaultRealtimeModelId)
             || predates(asyncModels(from: models), defaultAsyncModelId)

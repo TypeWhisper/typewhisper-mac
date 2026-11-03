@@ -129,6 +129,9 @@ final class SonioxPluginTests: XCTestCase {
             SonioxFetchedModel(id: "stt-rt-v6", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
             SonioxFetchedModel(id: "stt-async-v5", aliasedModelId: nil, name: nil, transcriptionMode: "async", languages: []),
         ]))
+        XCTAssertFalse(SonioxPlugin.modelCatalogPredatesDefaultModel([
+            SonioxFetchedModel(id: "stt-rt-preview", aliasedModelId: "stt-rt-v6", name: nil, transcriptionMode: "real_time", languages: []),
+        ]))
     }
 
     @MainActor
