@@ -3445,12 +3445,17 @@ final class DictationViewModel: ObservableObject {
                     }
                 } else {
                     let contextualInsertionEnabled = DictationInsertionTextFormatter.contextualInsertionEnabled()
-                    let insertionContext: TextInsertionService.InsertionContext? = if contextualInsertionEnabled {
-                        liveFieldTranscriptSession?.originalInsertionContext
-                            ?? pinnedInsertionTarget?.originalInsertionContext
-                            ?? textInsertionService.captureInsertionContext()
+                    let insertionContext: TextInsertionService.InsertionContext?
+                    var insertionBaseline: TextInsertionService.InsertionBaseline?
+                    if !contextualInsertionEnabled {
+                        insertionContext = nil
+                    } else if let originalInsertionContext = liveFieldTranscriptSession?.originalInsertionContext
+                        ?? pinnedInsertionTarget?.originalInsertionContext {
+                        insertionContext = originalInsertionContext
                     } else {
-                        nil
+                        let fieldRead = textInsertionService.captureInsertionContextAndBaseline()
+                        insertionContext = fieldRead.context
+                        insertionBaseline = fieldRead.baseline
                     }
                     let insertionText = DictationInsertionTextFormatter.textForInsertion(
                         text,
@@ -3545,7 +3550,8 @@ final class DictationViewModel: ObservableObject {
                             autoEnter: shouldAutoEnterAfterInsertion,
                             outputFormat: resolvedOutputFormat,
                             awaitPasteVerification: learningPreInsertionObservation != nil,
-                            detectMissedTextField: true
+                            detectMissedTextField: true,
+                            insertionBaseline: insertionBaseline
                         )
                         if let insertionResult {
                             let timing = textInsertionService.lastInsertionTiming
@@ -4653,9 +4659,10 @@ final class DictationViewModel: ObservableObject {
             defer { self.isInsertingUndeliveredTranscript = false }
             // Format for the field focused now, as a dictation into it would.
             let contextualInsertionEnabled = DictationInsertionTextFormatter.contextualInsertionEnabled()
+            let fieldRead = contextualInsertionEnabled ? textInsertionService.captureInsertionContextAndBaseline() : nil
             let insertionText = DictationInsertionTextFormatter.textForInsertion(
                 transcript.text,
-                insertionContext: contextualInsertionEnabled ? textInsertionService.captureInsertionContext() : nil,
+                insertionContext: fieldRead?.context,
                 contextualInsertionEnabled: contextualInsertionEnabled,
                 standaloneValueFinalPeriodCleanupEnabled: DictationInsertionTextFormatter
                     .standaloneValueFinalPeriodCleanupEnabled()
@@ -4668,7 +4675,8 @@ final class DictationViewModel: ObservableObject {
                     insertionText,
                     preserveClipboard: preserveClipboard,
                     outputFormat: transcript.outputFormat,
-                    detectMissedTextField: true
+                    detectMissedTextField: true,
+                    insertionBaseline: fieldRead?.baseline
                 )
             } catch {
                 guard !startQueuedDictationAfterUndeliveredTranscriptInsertion(),

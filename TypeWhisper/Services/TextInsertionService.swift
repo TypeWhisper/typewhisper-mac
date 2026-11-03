@@ -518,6 +518,26 @@ final class TextInsertionService {
         }
     }
 
+    /// The focused text field as read for an insertion context. `insertText` reuses this read as
+    /// its read before the paste instead of querying and reading the field again, but only while
+    /// nothing can have changed the field since, see `reusableFocusedTextState(of:)`.
+    final class InsertionBaseline: @unchecked Sendable {
+        fileprivate let focusedTextState: FocusedTextState
+        fileprivate let frontmostProcessIdentifier: pid_t?
+        /// Set by a block queued on the main queue at capture. Main-actor work runs on that
+        /// queue in order, so after any suspension the block has run before the caller resumes.
+        /// An earlier paste, another insertion or the user may have changed the field meanwhile.
+        fileprivate var mainQueueRanSinceCapture = false
+
+        fileprivate init(focusedTextState: FocusedTextState, frontmostProcessIdentifier: pid_t?) {
+            self.focusedTextState = focusedTextState
+            self.frontmostProcessIdentifier = frontmostProcessIdentifier
+            DispatchQueue.main.async { [weak self] in
+                self?.mainQueueRanSinceCapture = true
+            }
+        }
+    }
+
     fileprivate struct FocusedTextState: Equatable {
         let element: AXUIElement
         let value: String?
@@ -738,8 +758,14 @@ final class TextInsertionService {
     /// inserted the text twice (#1518, #1732). A write that reported success gets
     /// `accessibilityInsertionVerificationAttempts` to show up. A write that reported an error
     /// gets one check, so apps that reject it still get the paste without a delay.
-    func insertTextAtAndVerifyChange(element: AXUIElement, text: String) async -> InsertionTiming? {
-        guard let initialState = captureFocusedTextState(for: element) else { return nil }
+    ///
+    /// `initialState` is a read of `element` the caller just took, so it is not read again.
+    private func insertTextAtAndVerifyChange(
+        element: AXUIElement,
+        text: String,
+        initialState: FocusedTextState?
+    ) async -> InsertionTiming? {
+        guard let initialState = initialState ?? captureFocusedTextState(for: element) else { return nil }
         let writeSucceeded = insertTextAt(element: element, text: text)
         let insertedUptime = DispatchTime.now().uptimeNanoseconds
         func elapsedMilliseconds() -> UInt64 {
@@ -1025,16 +1051,64 @@ final class TextInsertionService {
     }
 
     func captureInsertionContext() -> InsertionContext? {
-        guard let state = captureFocusedTextState(),
-              let text = insertionText(of: state),
+        captureInsertionContextAndBaseline().context
+    }
+
+    /// Reads the focused text field once for the insertion context. Passing the baseline to
+    /// `insertText` spares it a second query and read of the same field right before the paste.
+    func captureInsertionContextAndBaseline() -> (context: InsertionContext?, baseline: InsertionBaseline?) {
+        guard let state = captureFocusedTextState() else { return (nil, nil) }
+        let baseline = InsertionBaseline(
+            focusedTextState: state,
+            frontmostProcessIdentifier: frontmostProcessIdentifier()
+        )
+        guard let text = insertionText(of: state),
               Range(text.selectedRange, in: text.value) != nil else {
-            return nil
+            return (nil, baseline)
         }
-        return insertionContext(
+        let context = insertionContext(
             value: text.value,
             selectedText: state.selectedText,
             selectedRange: text.selectedRange
         )
+        return (context, baseline)
+    }
+
+    /// The read of `baseline` while nothing can have changed the focused field since: the caller
+    /// did not suspend, the same app is frontmost, and the system still names the same element
+    /// as focused. Checking the focused element takes one query instead of a new search and read.
+    private func reusableFocusedTextState(of baseline: InsertionBaseline?) -> FocusedTextState? {
+        guard let baseline,
+              !baseline.mainQueueRanSinceCapture,
+              frontmostProcessIdentifier() == baseline.frontmostProcessIdentifier,
+              focusedUIElement() == baseline.focusedTextState.element else {
+            return nil
+        }
+        return baseline.focusedTextState
+    }
+
+    private func frontmostProcessIdentifier() -> pid_t? {
+        if let focusedApplicationProcessIdentifierOverride {
+            return focusedApplicationProcessIdentifierOverride()
+        }
+        return captureActiveAppOverride == nil ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
+    }
+
+    /// The element the system names as focused, without searching it for a text element.
+    private func focusedUIElement() -> AXUIElement? {
+        if let focusedTextElementOverride {
+            return focusedTextElementOverride()
+        }
+        guard canInspectOtherApplications else { return nil }
+        var focusedElement: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            AXUIElementCreateSystemWide(),
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedElement
+        ) == .success else {
+            return nil
+        }
+        return axElement(from: focusedElement)
     }
 
     func captureLiveFieldTarget(expectedBundleIdentifier: String?) -> LiveFieldTarget? {
@@ -1468,6 +1542,9 @@ final class TextInsertionService {
     /// `detectMissedTextField` asks for it and the field is readable or known to be absent (see
     /// `InsertionResult.missedTextField`). With `preserveClipboard`, the clipboard restore runs
     /// afterwards and only while the clipboard still holds the generated payload.
+    ///
+    /// `insertionBaseline` is the caller's read of the focused field from
+    /// `captureInsertionContextAndBaseline()`, reused when nothing changed the field since.
     func insertText(
         _ text: String,
         preserveClipboard: Bool = false,
@@ -1475,7 +1552,8 @@ final class TextInsertionService {
         outputFormat: String? = nil,
         deferredClipboardRestore: DeferredClipboardRestore? = nil,
         awaitPasteVerification: Bool = false,
-        detectMissedTextField: Bool = false
+        detectMissedTextField: Bool = false,
+        insertionBaseline: InsertionBaseline? = nil
     ) async throws -> InsertionResult {
 #if !APPSTORE
         guard isAccessibilityGranted else {
@@ -1520,14 +1598,21 @@ final class TextInsertionService {
         defer {
             if holdsAccessibilityVerification { isVerifyingAccessibilityInsertion = false }
         }
+        // Nothing below suspends before this read is used, except the Accessibility write,
+        // which clears it.
+        var baselineState = reusableFocusedTextState(of: insertionBaseline)
         if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
-           let focusedElement = getFocusedTextElement(),
+           let focusedElement = baselineState?.element ?? getFocusedTextElement(),
            !isHiddenTextInputProxy(focusedElement) {
             isVerifyingAccessibilityInsertion = true
             holdsAccessibilityVerification = true
+            let initialState = baselineState
+            // The write may have changed the field even when it did not show.
+            baselineState = nil
             if let accessibilityInsertionTiming = await insertTextAtAndVerifyChange(
                 element: focusedElement,
-                text: text
+                text: text,
+                initialState: initialState
             ) {
                 if autoEnter {
                     try? await Task.sleep(for: autoEnterDelay)
@@ -1557,7 +1642,8 @@ final class TextInsertionService {
             : []
         let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
             || detectMissedTextField
-            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
+            ? baselineState.map { PasteVerificationState(focusedTextState: $0, noTextElementFocused: false) }
+                ?? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
             || (detectMissedTextField && pasteVerificationState?.canVerifyPaste == true)

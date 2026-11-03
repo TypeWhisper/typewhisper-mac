@@ -7102,6 +7102,89 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testInsertTextReusesInsertionBaselineOnlyWhileNothingCanHaveChangedTheField() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let field = AXUIElementCreateApplication(4242)
+        let otherField = AXUIElementCreateApplication(4343)
+        var focusedField = field
+        var frontmostProcess: pid_t = 4242
+        var insertedCount = 0
+        var fieldReads = 0
+        var fieldReadsBeforeWrite: Int?
+        var fieldReadsBeforePaste: Int?
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteVerificationPollingDelay = .milliseconds(1)
+        service.accessibilityInsertionVerificationAttempts = 0
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+        service.focusedTextElementOverride = { focusedField }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.focusedApplicationProcessIdentifierOverride = { frontmostProcess }
+        service.hiddenTextInputProxyOverride = { _ in false }
+        service.focusedTextStateOverride = { _ in
+            fieldReads += 1
+            let value = String(repeating: "Hello ", count: insertedCount)
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.utf16.count, length: 0))
+        }
+        // The Accessibility write is accepted but does not show, so the paste follows.
+        service.insertTextAtOverride = { _, _ in
+            fieldReadsBeforeWrite = fieldReads
+            return true
+        }
+        service.pasteSimulatorOverride = {
+            fieldReadsBeforePaste = fieldReads
+            insertedCount += 1
+        }
+
+        func captureBaseline() throws -> TextInsertionService.InsertionBaseline {
+            let baseline = try XCTUnwrap(service.captureInsertionContextAndBaseline().baseline)
+            fieldReads = 0
+            return baseline
+        }
+
+        // Nothing in between: the paste verification starts from the captured read.
+        var baseline = try captureBaseline()
+        var result = try await service.insertText("Hello", detectMissedTextField: true, insertionBaseline: baseline)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(fieldReadsBeforePaste, 0)
+
+        // Another app came to the front.
+        baseline = try captureBaseline()
+        frontmostProcess = 4343
+        result = try await service.insertText("Hello", detectMissedTextField: true, insertionBaseline: baseline)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(fieldReadsBeforePaste, 1)
+        frontmostProcess = 4242
+
+        // Another element took focus.
+        baseline = try captureBaseline()
+        focusedField = otherField
+        result = try await service.insertText("Hello", detectMissedTextField: true, insertionBaseline: baseline)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(fieldReadsBeforePaste, 1)
+        focusedField = field
+
+        // An earlier paste was still pending, so the insertion waited for it.
+        service.pendingPasteSettleWindow = .milliseconds(20)
+        _ = try await service.insertText("Hello")
+        baseline = try captureBaseline()
+        result = try await service.insertText("Hello", detectMissedTextField: true, insertionBaseline: baseline)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(fieldReadsBeforePaste, 1)
+
+        // The Accessibility write starts from the captured read, and its paste fallback reads
+        // the field again because the write may have changed it.
+        baseline = try captureBaseline()
+        result = try await service.insertText("Hello", preserveClipboard: true, insertionBaseline: baseline)
+        await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(fieldReadsBeforeWrite, 0)
+        XCTAssertEqual(fieldReadsBeforePaste, 2)
+    }
+
+    @MainActor
     func testSyntheticPasteIsUnverifiedWhenFocusedTextBecomesUnreadable() async throws {
         let afterPasteStates: [(label: String, state: TextInsertionService.FocusedTextSnapshot)] = [
             ("all attributes unreadable", (value: nil, selectedText: nil, selectedRange: nil)),
