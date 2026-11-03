@@ -116,15 +116,19 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
         var cache = MeetingAudioProcessIdentityCache()
         var resolved: [AudioObjectID] = []
         var unreadable: Set<AudioObjectID> = [3]
+        var withoutExecutablePath: Set<AudioObjectID> = []
 
         func pass(_ objectIDs: [AudioObjectID]) -> [AudioObjectID: MeetingAudioProcessIdentity] {
             resolved = []
             let identities = cache.identities(for: objectIDs) { objectID in
                 resolved.append(objectID)
                 guard !unreadable.contains(objectID) else { return nil }
-                return MeetingAudioProcessIdentity(
-                    processID: pid_t(objectID) + 900,
-                    bundleIdentifier: objectID == 1 ? "us.zoom.xos" : nil
+                return (
+                    MeetingAudioProcessIdentity(
+                        processID: pid_t(objectID) + 900,
+                        bundleIdentifier: objectID == 1 ? "us.zoom.xos" : nil
+                    ),
+                    cacheable: !withoutExecutablePath.contains(objectID)
                 )
             }
             XCTAssertEqual(identities.map(\.objectID), objectIDs.filter { !unreadable.contains($0) })
@@ -149,6 +153,16 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
         // If its ID is listed again, it is read again.
         _ = pass([1, 2, 3])
         XCTAssertEqual(resolved, [2])
+        XCTAssertEqual(cache.cachedObjectIDs, [1, 2, 3])
+
+        // An identity resolved without the executable path is used for this
+        // pass but read again on the next one.
+        withoutExecutablePath = [4]
+        let withPathless = pass([1, 2, 3, 4])
+        XCTAssertEqual(resolved, [4])
+        XCTAssertEqual(withPathless[4], MeetingAudioProcessIdentity(processID: 904, bundleIdentifier: nil))
+        _ = pass([1, 2, 3, 4])
+        XCTAssertEqual(resolved, [4])
         XCTAssertEqual(cache.cachedObjectIDs, [1, 2, 3])
     }
 

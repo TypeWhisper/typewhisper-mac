@@ -129,11 +129,12 @@ struct MeetingAudioProcessIdentityCache: Sendable {
     var cachedObjectIDs: Set<AudioObjectID> { Set(identities.keys) }
 
     /// Returns the identity of every listed object that could be resolved, in
-    /// list order. Objects that left the list are forgotten, and an object whose
-    /// identity could not be read is tried again on the next pass.
+    /// list order. Objects that left the list are forgotten. An object whose
+    /// identity could not be read, or was resolved without everything it
+    /// depends on (`cacheable == false`), is read again on the next pass.
     mutating func identities(
         for objectIDs: [AudioObjectID],
-        resolve: (AudioObjectID) -> MeetingAudioProcessIdentity?
+        resolve: (AudioObjectID) -> (identity: MeetingAudioProcessIdentity, cacheable: Bool)?
     ) -> [(objectID: AudioObjectID, identity: MeetingAudioProcessIdentity)] {
         let listed = Set(objectIDs)
         identities = identities.filter { listed.contains($0.key) }
@@ -142,8 +143,10 @@ struct MeetingAudioProcessIdentityCache: Sendable {
                 return (objectID, cached)
             }
             guard let resolved = resolve(objectID) else { return nil }
-            identities[objectID] = resolved
-            return (objectID, resolved)
+            if resolved.cacheable {
+                identities[objectID] = resolved.identity
+            }
+            return (objectID, resolved.identity)
         }
     }
 }
@@ -302,7 +305,9 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
         return Array(values.prefix(returnedCount))
     }
 
-    private func readProcessIdentity(objectID: AudioObjectID) -> MeetingAudioProcessIdentity? {
+    private func readProcessIdentity(
+        objectID: AudioObjectID
+    ) -> (identity: MeetingAudioProcessIdentity, cacheable: Bool)? {
         // Reads go straight to GetPropertyData: it fails for a missing property
         // or a vanished object just like a separate HasProperty check would.
         guard let processID: pid_t = readScalar(
@@ -313,14 +318,21 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
             return nil
         }
         guard processID != ownProcessID, bundleIdentifier != ownBundleIdentifier else {
-            return MeetingAudioProcessIdentity(processID: processID, bundleIdentifier: nil)
+            return (MeetingAudioProcessIdentity(processID: processID, bundleIdentifier: nil), true)
         }
-        return MeetingAudioProcessIdentity(
-            processID: processID,
-            bundleIdentifier: Self.canonicalBundleIdentifier(
-                for: bundleIdentifier,
-                executablePath: Self.executablePath(processID: processID)
-            )
+        // Browser helpers are attributed through their executable path. If
+        // proc_pidpath fails, use this result for the current pass only and
+        // read the process again next time, as every pass did before caching.
+        let executablePath = Self.executablePath(processID: processID)
+        return (
+            MeetingAudioProcessIdentity(
+                processID: processID,
+                bundleIdentifier: Self.canonicalBundleIdentifier(
+                    for: bundleIdentifier,
+                    executablePath: executablePath
+                )
+            ),
+            executablePath != nil
         )
     }
 
