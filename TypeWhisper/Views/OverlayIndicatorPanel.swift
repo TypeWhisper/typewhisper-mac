@@ -15,6 +15,7 @@ class OverlayIndicatorPanel: NSPanel {
     private let countdownModel: CalendarMeetingCountdownModel
     private let pointerRegion: IndicatorPointerRegion
     private let pointerTracker: IndicatorPointerTracker
+    private let styleActivation: IndicatorStyleActivation?
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
     private var isActionFeedbackInteractive = false
@@ -36,6 +37,7 @@ class OverlayIndicatorPanel: NSPanel {
         screenResolver: IndicatorScreenResolver,
         countdownModel: CalendarMeetingCountdownModel
     ) {
+        let styleActivation = IndicatorStyleActivation()
         self.init(
             screenResolver: screenResolver,
             displayModeProvider: { DictationViewModel.shared.notchIndicatorDisplay },
@@ -44,8 +46,12 @@ class OverlayIndicatorPanel: NSPanel {
                 DictationViewModel.shared.indicatorVisibleInScreenCaptures
             },
             countdownModel: countdownModel,
+            styleActivation: styleActivation,
             content: {
-                OverlayIndicatorView(countdownModel: countdownModel)
+                IndicatorStyleGate(
+                    activation: styleActivation,
+                    content: OverlayIndicatorView(countdownModel: countdownModel)
+                )
             }
         )
     }
@@ -57,11 +63,13 @@ class OverlayIndicatorPanel: NSPanel {
         indicatorVisibleInScreenCapturesProvider: @escaping () -> Bool = { true },
         countdownModel: CalendarMeetingCountdownModel = .init(),
         pointerLocationProvider: @escaping () -> NSPoint = { NSEvent.mouseLocation },
+        styleActivation: IndicatorStyleActivation? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.screenResolver = screenResolver
         self.displayModeProvider = displayModeProvider
         self.overlayPositionProvider = overlayPositionProvider
+        self.styleActivation = styleActivation
         self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
         self.countdownModel = countdownModel
         let pointerRegion = IndicatorPointerRegion()
@@ -245,8 +253,10 @@ class OverlayIndicatorPanel: NSPanel {
             countdownPresented: isMeetingCountdownPresented
         ) == .overlay else {
             dismiss()
+            styleActivation?.setActive(false)
             return
         }
+        styleActivation?.setActive(true)
 
         let presentation = IndicatorPresentationState.resolve(
             dictationState: vm.state,

@@ -336,6 +336,34 @@ final class IndicatorPointerRegion: ObservableObject {
     @Published fileprivate(set) var isPointerInside = false
 }
 
+/// Whether a panel's indicator style is the one in use. All three panels exist
+/// at all times, but only the active style's panel is ever shown. The others
+/// keep their content out of the SwiftUI graph, so hidden views do not follow
+/// every audio level, duration and transcript update of a recording.
+@MainActor
+final class IndicatorStyleActivation: ObservableObject {
+    @Published private(set) var isActive = false
+
+    func setActive(_ isActive: Bool) {
+        guard self.isActive != isActive else { return }
+        self.isActive = isActive
+    }
+}
+
+/// Shows the indicator content only while its style is active.
+struct IndicatorStyleGate<Content: View>: View {
+    @ObservedObject var activation: IndicatorStyleActivation
+    let content: Content
+
+    var body: some View {
+        if activation.isActive {
+            content
+        } else {
+            Color.clear
+        }
+    }
+}
+
 /// Root of an indicator panel: sets up the coordinate space the surface frame
 /// is measured in and hands the hover state down to the content.
 struct IndicatorPointerHost<Content: View>: View {

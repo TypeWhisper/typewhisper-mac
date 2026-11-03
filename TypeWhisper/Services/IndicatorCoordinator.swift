@@ -415,17 +415,19 @@ final class IndicatorCoordinator {
             preferredStyle: style,
             countdownPresented: countdownModel.presentation != nil
         ) {
+        // An inactive panel's updateVisibility dismisses it and takes its
+        // content out of the SwiftUI graph.
         case .notch:
-            overlayPanel.dismiss()
-            minimalPanel.dismiss()
+            overlayPanel.updateVisibility(vm: vm)
+            minimalPanel.updateVisibility(vm: vm)
             notchPanel.updateVisibility(vm: vm)
         case .overlay:
-            notchPanel.dismiss()
-            minimalPanel.dismiss()
+            notchPanel.updateVisibility(vm: vm)
+            minimalPanel.updateVisibility(vm: vm)
             overlayPanel.updateVisibility(vm: vm)
         case .minimal:
-            notchPanel.dismiss()
-            overlayPanel.dismiss()
+            notchPanel.updateVisibility(vm: vm)
+            overlayPanel.updateVisibility(vm: vm)
             minimalPanel.updateVisibility(vm: vm)
         }
     }

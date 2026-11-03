@@ -43,6 +43,10 @@ class NotchIndicatorPanel: NSPanel {
     private let notchGeometry = NotchGeometry()
     private let pointerRegion: IndicatorPointerRegion
     private let pointerTracker: IndicatorPointerTracker
+    private let styleActivation: IndicatorStyleActivation?
+    /// The notch style is in use. The content stays in the graph while a
+    /// dismissal animates and leaves it once the panel is ordered out.
+    private var isStyleActive = false
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
     private var showTask: Task<Void, Never>?
@@ -64,6 +68,7 @@ class NotchIndicatorPanel: NSPanel {
         screenResolver: IndicatorScreenResolver,
         countdownModel: CalendarMeetingCountdownModel
     ) {
+        let styleActivation = IndicatorStyleActivation()
         self.init(
             screenResolver: screenResolver,
             displayModeProvider: { DictationViewModel.shared.notchIndicatorDisplay },
@@ -71,10 +76,14 @@ class NotchIndicatorPanel: NSPanel {
                 DictationViewModel.shared.indicatorVisibleInScreenCaptures
             },
             countdownModel: countdownModel,
+            styleActivation: styleActivation,
             content: {
-                NotchIndicatorView(
-                    geometry: $0,
-                    countdownModel: countdownModel
+                IndicatorStyleGate(
+                    activation: styleActivation,
+                    content: NotchIndicatorView(
+                        geometry: $0,
+                        countdownModel: countdownModel
+                    )
                 )
             }
         )
@@ -86,10 +95,12 @@ class NotchIndicatorPanel: NSPanel {
         indicatorVisibleInScreenCapturesProvider: @escaping () -> Bool = { true },
         countdownModel: CalendarMeetingCountdownModel = .init(),
         pointerLocationProvider: @escaping () -> NSPoint = { NSEvent.mouseLocation },
+        styleActivation: IndicatorStyleActivation? = nil,
         @ViewBuilder content: (NotchGeometry) -> Content
     ) {
         self.screenResolver = screenResolver
         self.displayModeProvider = displayModeProvider
+        self.styleActivation = styleActivation
         self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
         self.countdownModel = countdownModel
         let pointerRegion = IndicatorPointerRegion()
@@ -267,11 +278,10 @@ class NotchIndicatorPanel: NSPanel {
         vm: DictationViewModel = DictationViewModel.shared,
         recorder: AudioRecorderViewModel = AudioRecorderViewModel.shared
     ) {
-        guard CalendarMeetingCountdownIndicatorPolicy.activeStyle(
+        guard updateStyleActivation(isActive: CalendarMeetingCountdownIndicatorPolicy.activeStyle(
             preferredStyle: vm.indicatorStyle,
             countdownPresented: countdownModel.presentation != nil
-        ) == .notch else {
-            dismiss()
+        ) == .notch) else {
             return
         }
 
@@ -300,6 +310,22 @@ class NotchIndicatorPanel: NSPanel {
         } else {
             dismiss()
         }
+    }
+
+    /// Dismisses the panel when another style is in use. Its content leaves
+    /// the SwiftUI graph once a running dismissal animation has finished.
+    @discardableResult
+    func updateStyleActivation(isActive: Bool) -> Bool {
+        isStyleActive = isActive
+        guard isActive else {
+            dismiss()
+            if !isDismissing {
+                styleActivation?.setActive(false)
+            }
+            return false
+        }
+        styleActivation?.setActive(true)
+        return true
     }
 
     // MARK: - Notch geometry
@@ -473,6 +499,9 @@ class NotchIndicatorPanel: NSPanel {
             }
             self.orderOut(nil)
             self.isDismissing = false
+            if !self.isStyleActive {
+                self.styleActivation?.setActive(false)
+            }
         }
     }
 }
