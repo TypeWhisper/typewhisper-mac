@@ -68,6 +68,10 @@ final class DictionaryService: ObservableObject {
     private var modelContext: ModelContext?
     private var hasDeferredUsageCountChanges = false
     private var regexCorrections: [UUID: NSRegularExpression] = [:]
+    /// Changes with every load, so values derived from the loaded entries know when
+    /// to rebuild.
+    private var entriesGeneration = 0
+    private var promptVocabularyCache: (generation: Int, localeIdentifier: String, limit: Int, vocabulary: [String])?
 
     @Published private(set) var entries: [DictionaryEntry] = []
     @Published private(set) var terms: [DictionaryEntry] = []
@@ -110,6 +114,7 @@ final class DictionaryService: ObservableObject {
 
     func loadEntries() {
         guard let context = modelContext else { return }
+        entriesGeneration &+= 1
 
         do {
             let descriptor = FetchDescriptor<DictionaryEntry>(
@@ -792,7 +797,19 @@ final class DictionaryService: ObservableObject {
     /// Spellings that LLM post-processing must preserve: enabled terms plus the target
     /// spellings of enabled corrections, de-duplicated case- and diacritic-insensitively
     /// (terms win ties) and sorted for a stable prompt.
+    ///
+    /// Every LLM workflow run asks for it before the request is sent. Folding and the
+    /// locale-aware sort take 3–4 µs per entry, so the result is kept until the
+    /// entries are loaded again or the locale changes.
     func vocabularyForPrompt(limit: Int = 400) -> [String] {
+        let localeIdentifier = Locale.current.identifier
+        if let cache = promptVocabularyCache,
+           cache.generation == entriesGeneration,
+           cache.localeIdentifier == localeIdentifier,
+           cache.limit == limit {
+            return cache.vocabulary
+        }
+
         var seenKeys = Set<String>()
         var result: [String] = []
         let candidates = terms.map(\.original) + corrections.compactMap { correction in
@@ -807,11 +824,13 @@ final class DictionaryService: ObservableObject {
             guard seenKeys.insert(key).inserted else { continue }
             result.append(trimmed)
         }
-        return Array(
+        let vocabulary = Array(
             result
                 .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
                 .prefix(limit)
         )
+        promptVocabularyCache = (entriesGeneration, localeIdentifier, limit, vocabulary)
+        return vocabulary
     }
 
     /// Apply all enabled corrections to related text fields while counting each correction once.
