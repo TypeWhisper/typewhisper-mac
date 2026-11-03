@@ -473,10 +473,11 @@ struct DictionarySettingsView: View {
                     )
                 }
 
-                if viewModel.filteredListRows.isEmpty {
+                let listRows = viewModel.filteredListRows
+                if listRows.isEmpty {
                     dictionaryEntriesEmptyState
                 } else {
-                    ForEach(viewModel.filteredListRows) { listRow in
+                    ForEach(listRows) { listRow in
                         dictionaryListRow(listRow)
                     }
                 }

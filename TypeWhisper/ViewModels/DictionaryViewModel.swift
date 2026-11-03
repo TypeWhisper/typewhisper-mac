@@ -187,7 +187,11 @@ class DictionaryViewModel: ObservableObject {
         return instance
     }
 
-    @Published var entries: [DictionaryEntry] = []
+    /// Reassigned after every saved change, including edits of an existing entry,
+    /// so the cached list rows are rebuilt from the new values.
+    @Published var entries: [DictionaryEntry] = [] {
+        didSet { invalidateListRows() }
+    }
     @Published var error: String?
     @Published var importMessage: String?
     @Published private(set) var pendingResetRequest: DictionaryResetRequest?
@@ -217,8 +221,12 @@ class DictionaryViewModel: ObservableObject {
         }
     }
 
-    @Published var filterTab: FilterTab = .all
-    @Published var searchQuery = ""
+    @Published var filterTab: FilterTab = .all {
+        didSet { invalidateListRows() }
+    }
+    @Published var searchQuery = "" {
+        didSet { cachedFilteredListRows = nil }
+    }
 
     // Editor state
     @Published var isEditing = false
@@ -263,6 +271,19 @@ class DictionaryViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var selectedEntry: DictionaryEntry?
 
+    // Every view update of the Dictionary page reads the list rows, including updates for
+    // typing in the search field or the editor sheet. Building a row reads several SwiftData
+    // properties per entry, so the rows are built once per entries or filter change, and
+    // the search only filters the built rows. Plain (not published) storage: filling the
+    // cache during a view update must not publish a change.
+    private var cachedListRowsForSelectedFilter: [DictionaryListRow]?
+    private var cachedFilteredListRows: [DictionaryListRow]?
+
+    private func invalidateListRows() {
+        cachedListRowsForSelectedFilter = nil
+        cachedFilteredListRows = nil
+    }
+
     private var entriesForSelectedFilter: [DictionaryEntry] {
         switch filterTab {
         case .all:
@@ -281,12 +302,14 @@ class DictionaryViewModel: ObservableObject {
     }
 
     var filteredListRows: [DictionaryListRow] {
-        let listRows = groupedListRows(from: entriesForSelectedFilter.map(row))
+        if let cachedFilteredListRows { return cachedFilteredListRows }
+
+        let listRows = cachedListRowsForSelectedFilter
+            ?? groupedListRows(from: entriesForSelectedFilter.map(row))
+        cachedListRowsForSelectedFilter = listRows
 
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return listRows }
-
-        return listRows.filter { listRow in
+        let filteredRows = query.isEmpty ? listRows : listRows.filter { listRow in
             switch listRow {
             case .entry(let row):
                 return rowMatchesSearch(row, query: query)
@@ -295,6 +318,8 @@ class DictionaryViewModel: ObservableObject {
                     group.aliases.contains { rowMatchesSearch($0, query: query) }
             }
         }
+        cachedFilteredListRows = filteredRows
+        return filteredRows
     }
 
     var filteredEntryRows: [DictionaryEntryRow] {
