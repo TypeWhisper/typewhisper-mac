@@ -15,6 +15,50 @@ final class HistoryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testLaunchCountsWordsOfOlderRecordsAndDoesNotRewriteRecordsWithoutWords() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let olderID = UUID()
+        let noWordsID = UUID()
+        let countedID = UUID()
+        do {
+            let (_, context) = try SwiftDataStoreFactory.create(
+                for: [TranscriptionRecord.self], storeName: "history", in: directory
+            )
+            // Versions before the stored count left it at 0.
+            let older = TranscriptionRecord(
+                id: olderID, rawText: "Three words here", finalText: "Three words here", durationSeconds: 1, engineUsed: "e"
+            )
+            older.wordsCount = 0
+            context.insert(older)
+            context.insert(TranscriptionRecord(
+                id: noWordsID, rawText: "...", finalText: "...", durationSeconds: 1, engineUsed: "e"
+            ))
+            context.insert(TranscriptionRecord(
+                id: countedID, rawText: "Two words", finalText: "Two words", durationSeconds: 1, engineUsed: "e"
+            ))
+            try context.save()
+        }
+
+        let firstLaunch = HistoryService(appSupportDirectory: directory)
+        XCTAssertEqual(firstLaunch.record(withID: olderID)?.wordsCount, 3)
+
+        let storeSuffix = directory.lastPathComponent + "/history.store"
+        let write = expectation(forNotification: ModelContext.didSave, object: nil) { notification in
+            let context = notification.object as? ModelContext
+            return context?.container.configurations.contains { $0.url.path.hasSuffix(storeSuffix) } ?? false
+        }
+        write.isInverted = true
+        let secondLaunch = HistoryService(appSupportDirectory: directory)
+        wait(for: [write], timeout: 0.1)
+
+        XCTAssertEqual(secondLaunch.record(withID: olderID)?.wordsCount, 3)
+        XCTAssertEqual(secondLaunch.record(withID: noWordsID)?.wordsCount, 0)
+        XCTAssertEqual(secondLaunch.record(withID: countedID)?.wordsCount, 2)
+        withExtendedLifetime(firstLaunch) {}
+    }
+
+    @MainActor
     func testOpeningRecentRecordClearsFiltersThatHideIt() async throws {
         let fixture = try makeRecordNavigationFixture(startDate: Date().addingTimeInterval(-10 * 86_400))
         defer { TestSupport.remove(fixture.directory) }

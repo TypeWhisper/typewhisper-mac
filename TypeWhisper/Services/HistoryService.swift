@@ -1709,7 +1709,11 @@ final class HistoryService: ObservableObject {
         }
         var needsSave = false
         for record in candidates {
-            record.wordsCount = WordCount.count(in: record.finalText)
+            let wordsCount = WordCount.count(in: record.finalText)
+            // A text without words, such as "...", matches again on every launch. Setting
+            // the same count would still mark the record changed and write it back.
+            guard wordsCount != record.wordsCount else { continue }
+            record.wordsCount = wordsCount
             needsSave = true
         }
         if needsSave {
