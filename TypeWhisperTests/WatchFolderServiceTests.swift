@@ -145,4 +145,29 @@ final class WatchFolderServiceTests: XCTestCase {
         // Assert checksum differs for files that only differ after the shared prefix
         XCTAssertNotEqual(try checksum(from: fingerprint1), try checksum(from: fingerprint2))
     }
+
+    @MainActor
+    func testFingerprintChangesWhenFileIsRewrittenWithSameSizeAndModificationDate() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let fileURL = directory.appendingPathComponent("recording.wav")
+        let date = Date(timeIntervalSince1970: 1_000_000)
+        try Data("first take".utf8).write(to: fileURL)
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: fileURL.path)
+
+        let service = WatchFolderService(
+            audioFileService: AudioFileService(),
+            modelManagerService: ModelManagerService()
+        )
+        let original = try XCTUnwrap(service.fileFingerprint(for: fileURL))
+        XCTAssertEqual(service.fileFingerprint(for: fileURL), original)
+
+        // Same size and modification date: only the content tells the takes apart.
+        let handle = try FileHandle(forWritingTo: fileURL)
+        try handle.write(contentsOf: Data("other take".utf8))
+        try handle.close()
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: fileURL.path)
+
+        XCTAssertNotEqual(service.fileFingerprint(for: fileURL), original)
+    }
 }
