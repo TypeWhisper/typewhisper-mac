@@ -1983,11 +1983,32 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
         XCTAssertTrue(panel.isVisible)
     }
 
+    func testInactiveStyleKeepsContentUntilDismissalAnimationFinishes() async throws {
+        let activation = IndicatorStyleActivation()
+        let panel = try makePanel(styleActivation: activation) { _ in EmptyView() }
+        defer { panel.orderOut(nil) }
+
+        XCTAssertTrue(panel.updateStyleActivation(isActive: true))
+        XCTAssertTrue(activation.isActive)
+        panel.show()
+        await Task.yield()
+
+        // Another style took over: the notch animates out with its content,
+        // then the content leaves the SwiftUI graph.
+        XCTAssertFalse(panel.updateStyleActivation(isActive: false))
+        XCTAssertTrue(activation.isActive)
+        try await Task.sleep(for: .milliseconds(300))
+
+        XCTAssertFalse(panel.isVisible)
+        XCTAssertFalse(activation.isActive)
+    }
+
     private func makePanel() throws -> NotchIndicatorPanel {
         try makePanel { _ in EmptyView() }
     }
 
     private func makePanel<Content: View>(
+        styleActivation: IndicatorStyleActivation? = nil,
         @ViewBuilder content: (NotchGeometry) -> Content
     ) throws -> NotchIndicatorPanel {
         guard let screen = NSScreen.screens.first else {
@@ -2006,6 +2027,7 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
         return NotchIndicatorPanel(
             screenResolver: resolver,
             displayModeProvider: { .activeScreen },
+            styleActivation: styleActivation,
             content: content
         )
     }

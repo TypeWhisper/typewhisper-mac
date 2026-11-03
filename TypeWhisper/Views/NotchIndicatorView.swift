@@ -244,6 +244,15 @@ struct NotchIndicatorView: View {
                     && !presentation.partialText.isEmpty
             }
         }
+        .onAppear {
+            // The view joins an ongoing recording when its style becomes active
+            // mid-session; start what the change to .recording would have started.
+            guard presentation.state == .recording else { return }
+            IndicatorMotion.startRecordingPulse($dotPulse)
+            if showTranscriptPreview, !presentation.partialText.isEmpty {
+                textExpanded = true
+            }
+        }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
                 IndicatorMotion.startRecordingPulse($dotPulse)

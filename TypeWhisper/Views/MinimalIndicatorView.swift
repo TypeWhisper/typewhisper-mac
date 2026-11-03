@@ -164,6 +164,12 @@ struct MinimalIndicatorView: View {
             .animation(IndicatorMotion.expand, value: currentWidth)
             .animation(.easeInOut(duration: 0.2), value: presentation.state)
             .animation(.easeInOut(duration: 1.0), value: dotPulse)
+            .onAppear {
+                // The view joins an ongoing recording when its style becomes active
+                // mid-session; start what the change to .recording would have started.
+                guard presentation.state == .recording else { return }
+                IndicatorMotion.startRecordingPulse($dotPulse)
+            }
             .onChange(of: presentation.state) {
                 if presentation.state == .recording {
                     IndicatorMotion.popIn($revealScale)

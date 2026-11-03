@@ -200,6 +200,13 @@ struct OverlayIndicatorView: View {
                 textExpanded = presentation.source == .preview && !presentation.partialText.isEmpty
             }
         }
+        .onAppear {
+            // The view joins an ongoing recording when its style becomes active
+            // mid-session; start what the change to .recording would have started.
+            guard presentation.state == .recording else { return }
+            IndicatorMotion.startRecordingPulse($dotPulse)
+            expandTranscriptPreviewIfNeeded()
+        }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
                 IndicatorMotion.popIn($revealScale)
