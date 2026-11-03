@@ -323,17 +323,32 @@ extension RawWebSocket: Reson8RealtimeSocket {
     }
 }
 
-/// One connection to Reson8's realtime endpoint. A dictation feeds it while the user
-/// speaks, a finished recording all at once. Reson8 sends a final transcript per
-/// utterance, which ends at a pause, and interim transcripts of the current utterance
-/// in between. A flush request finalizes the rest, and its confirmation follows the
-/// last final transcript.
+/// One connection to Reson8's realtime or turns endpoint. A dictation feeds it while the
+/// user speaks, a finished recording all at once.
+///
+/// - Realtime: Reson8 sends a final transcript per utterance, which ends at a pause, and
+///   interim transcripts of the current utterance in between. A flush request finalizes
+///   the rest, and its confirmation follows the last final transcript.
+/// - Turns: Reson8 sends `turn_start` when speech begins, `turn_end_candidate` with the
+///   transcript of the turn so far when it expects the turn to end, and `turn_end` once the
+///   speaker finished a thought, which a pause in the middle of a sentence is not. A flush
+///   request ends an open turn; without one, Reson8 answers nothing.
+///   https://docs.reson8.dev/speech-to-text/turns/
 actor Reson8RealtimeSession: LiveTranscriptionSession {
+    enum Mode: Sendable {
+        case realtime
+        /// Reports the end of each turn.
+        case turns(onTurnEnd: @Sendable () -> Void)
+    }
+
     /// 256 ms of audio; Reson8 closes the connection on frames above 64 KiB.
     static let maximumFrameByteCount = 8_192
     /// Reson8 confirmed a flush 0.3 s after live audio and 2 s after 72 seconds sent at
     /// once. A recording sent at once gets a tenth of its length on top.
     static let finishTimeout: Duration = .seconds(10)
+    /// How long a turns session waits for speech it heard since the last turn to become a
+    /// turn; Reson8 ended an open turn 0.1 s after a flush.
+    static let pendingSpeechTimeout: Duration = .seconds(2)
 
     private struct Utterance {
         let text: String
@@ -344,9 +359,17 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     private static let logger = Logger(subsystem: "com.typewhisper.reson8", category: "RealtimeSession")
 
     private let socket: any Reson8RealtimeSocket
+    private let mode: Mode
     private let requestedLanguage: String?
     private let onProgress: @Sendable (String) -> Bool
     private var receiveTask: Task<Void, Never>?
+
+    /// The transcript of the open turn so far.
+    private var turnCandidate: Utterance?
+    private var isTurnOpen = false
+    private var endedTurnCount = 0
+    /// Whether the audio since the last turn end holds speech, which can still become a turn.
+    private var hasSpeechSinceTurnEnd = false
 
     private var utterances: [Utterance] = []
     private var interimText = ""
@@ -361,10 +384,12 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
 
     private init(
         socket: any Reson8RealtimeSocket,
+        mode: Mode,
         requestedLanguage: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) {
         self.socket = socket
+        self.mode = mode
         self.requestedLanguage = requestedLanguage
         self.onProgress = onProgress
     }
@@ -373,6 +398,7 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     /// limit fails here instead of during the recording.
     static func connect(
         socket: any Reson8RealtimeSocket,
+        mode: Mode = .realtime,
         language: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> Reson8RealtimeSession {
@@ -387,7 +413,7 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             socket.close()
             throw error
         }
-        let session = Reson8RealtimeSession(socket: socket, requestedLanguage: language, onProgress: onProgress)
+        let session = Reson8RealtimeSession(socket: socket, mode: mode, requestedLanguage: language, onProgress: onProgress)
         await session.startReceiving()
         return session
     }
@@ -409,10 +435,26 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             start = end
         }
         sentSampleCount += samples.count
+        if case .turns = mode, !hasSpeechSinceTurnEnd {
+            hasSpeechSinceTurnEnd = Self.containsSpeech(samples)
+        }
+    }
+
+    /// Speech by the rule of TypeWhisper's silence stop: a 100 ms frame with an RMS of at
+    /// least 0.004.
+    static func containsSpeech(_ samples: [Float]) -> Bool {
+        stride(from: 0, to: samples.count, by: 1_600).contains { start in
+            let frame = samples[start..<min(start + 1_600, samples.count)]
+            let power = frame.reduce(Float(0)) { $0 + $1 * $1 } / Float(frame.count)
+            return power.squareRoot() >= 0.004
+        }
     }
 
     func finish() async throws -> PluginTranscriptionResult {
         try throwIfEnded()
+        if case .turns = mode {
+            return try await finishTurns()
+        }
         isFlushRequested = true
         try await send { try await $0.sendText(#"{"type":"flush_request","id":"typewhisper"}"#) }
 
@@ -426,6 +468,37 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             throw failure ?? PluginTranscriptionError.networkError("Reson8 did not finish the realtime transcript in time")
         }
 
+        return finalResult()
+    }
+
+    /// Ends an open turn with a flush, or waits briefly for speech that has not become a
+    /// turn yet. Otherwise all turns ended, and the result is complete at once.
+    private func finishTurns() async throws -> PluginTranscriptionResult {
+        guard isTurnOpen || hasSpeechSinceTurnEnd else {
+            close()
+            return finalResult()
+        }
+        isFlushRequested = true
+        try await send { try await $0.sendText(#"{"type":"flush_request"}"#) }
+
+        let turnsBefore = endedTurnCount
+        let timeout = isTurnOpen
+            ? Self.finishTimeout + .milliseconds(sentSampleCount / 160)
+            : Self.pendingSpeechTimeout
+        let hasEnded = await wait(timeout: timeout) { $0.endedTurnCount > turnsBefore }
+        close()
+        if !hasEnded {
+            if isCancelled || Task.isCancelled { throw CancellationError() }
+            // A turn that never ended may miss its last words, so TypeWhisper transcribes the
+            // whole recording instead. Speech that never became a turn had no words.
+            if isTurnOpen {
+                throw failure ?? PluginTranscriptionError.networkError("Reson8 did not end the last turn in time")
+            }
+        }
+        return finalResult()
+    }
+
+    private func finalResult() -> PluginTranscriptionResult {
         PluginWordTimings.report(utterances.flatMap(\.words))
         Self.logger.info("Realtime session finished with \(self.utterances.count, privacy: .public) utterances")
         return PluginTranscriptionResult(
@@ -482,6 +555,31 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
         }
 
         switch type {
+        case "turn_start":
+            isTurnOpen = true
+        case "turn_end_candidate":
+            // Each candidate replaces the previous one of the same turn.
+            isTurnOpen = true
+            turnCandidate = Utterance(
+                text: ((json["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                language: json["language"] as? String,
+                words: Reson8Transcript.words(from: json["words"])
+            )
+            interimText = turnCandidate?.text ?? ""
+            reportProgress()
+        case "turn_end":
+            if let turnCandidate, !turnCandidate.text.isEmpty {
+                utterances.append(turnCandidate)
+            }
+            turnCandidate = nil
+            interimText = ""
+            isTurnOpen = false
+            hasSpeechSinceTurnEnd = false
+            endedTurnCount += 1
+            if case .turns(let onTurnEnd) = mode, !isFlushRequested {
+                onTurnEnd()
+            }
+            resumeWaiters()
         case "transcript":
             let text = ((json["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if json["is_final"] as? Bool == true {
@@ -831,6 +929,20 @@ func reson8Result<T: Sendable>(
     }
 }
 
+/// The host's turn end block. The host's handler hops to its main actor, so it can be called
+/// from any thread.
+final class Reson8TurnEndHandler: @unchecked Sendable {
+    private let block: () -> Void
+
+    init(_ block: @escaping @convention(block) () -> Void) {
+        self.block = block
+    }
+
+    func callAsFunction() {
+        block()
+    }
+}
+
 private final class Reson8OnceResumer<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Error>?
@@ -1018,6 +1130,9 @@ final class Reson8Plugin: NSObject,
     fileprivate var _recordingEndpoint: Reson8RecordingEndpoint = .prerecorded
     fileprivate var _dictionaryModelEnabled = false
     fileprivate var _patternSets: [Reson8PatternSet] = []
+    fileprivate var _endsDictationAtTurnEnd = false
+    /// The host's handler for the end of each turn in the live session created next.
+    private let turnEndHandler = OSAllocatedUnfairLock<Reson8TurnEndHandler?>(initialState: nil)
     /// The dictionary's custom model as last synced, for the model list and the settings.
     private let dictionaryModelState = OSAllocatedUnfairLock(initialState: Reson8DictionaryModelState())
     /// Set up on activation with Reson8's custom model endpoints.
@@ -1065,6 +1180,7 @@ final class Reson8Plugin: NSObject,
         _recordingEndpoint = (host.userDefault(forKey: "recordingEndpoint") as? String)
             .flatMap(Reson8RecordingEndpoint.init(rawValue:)) ?? .prerecorded
         _dictionaryModelEnabled = host.userDefault(forKey: "dictionaryModelEnabled") as? Bool ?? false
+        _endsDictationAtTurnEnd = host.userDefault(forKey: "endsDictationAtTurnEnd") as? Bool ?? false
         if let data = host.userDefault(forKey: "patternSets") as? Data,
            let sets = try? JSONDecoder().decode([Reson8PatternSet].self, from: data) {
             _patternSets = sets
@@ -1741,6 +1857,33 @@ final class Reson8Plugin: NSObject,
         model(forModelId: modelId)?.endpoints?.contains("realtime") ?? true
     }
 
+    fileprivate func hasTurnsEndpoint(forModelId modelId: String?) -> Bool {
+        model(forModelId: modelId)?.endpoints?.contains("turns") ?? true
+    }
+
+    // MARK: - Turn Ends
+
+    // TypeWhisper sets a handler right before it creates a live session for a toggle dictation
+    // that stops after silence, and nil right after. Looked up through the Objective-C runtime,
+    // so the plugin stays loadable by hosts that do not know about it.
+    @objc(setLiveTranscriptionTurnEndHandler:)
+    func setLiveTranscriptionTurnEndHandler(_ handler: (@convention(block) () -> Void)?) {
+        let box = handler.map(Reson8TurnEndHandler.init)
+        turnEndHandler.withLock { $0 = box }
+    }
+
+    /// With the setting on and a handler from the host, a live session uses Reson8's turns
+    /// endpoint and reports the end of each turn; otherwise the realtime endpoint, whose
+    /// preview follows the speech more closely.
+    func liveSessionMode(forModelId modelId: String?) -> Reson8RealtimeSession.Mode {
+        guard _endsDictationAtTurnEnd,
+              hasTurnsEndpoint(forModelId: modelId),
+              let handler = turnEndHandler.withLock({ $0 }) else {
+            return .realtime
+        }
+        return .turns(onTurnEnd: handler.callAsFunction)
+    }
+
     /// The final transcripts plus the current interim one cover the whole recording.
     var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
 
@@ -1781,6 +1924,7 @@ final class Reson8Plugin: NSObject,
             language: Self.resolveLanguage(selection: languageSelection),
             prompt: prompt,
             apiKey: apiKey,
+            mode: liveSessionMode(forModelId: nil),
             onProgress: onProgress
         )
     }
@@ -1798,10 +1942,24 @@ final class Reson8Plugin: NSObject,
         return components.string
     }
 
+    /// The turns endpoint with the same parameters. A low `eager_turn_probability` sends a
+    /// candidate transcript at every pause, so the preview does not wait for the end of the
+    /// turn. https://docs.reson8.dev/api/speech-to-text/turns/
+    func turnsPath(language: String?, prompt: String?, dictionaryModelId: String? = nil) -> String? {
+        var components = URLComponents()
+        components.path = "/v1/speech-to-text/turns"
+        components.percentEncodedQuery = Self.percentEncodedQuery(
+            queryItems(language: language, prompt: prompt, dictionaryModelId: dictionaryModelId)
+                + [URLQueryItem(name: "eager_turn_probability", value: "0.05")]
+        )
+        return components.string
+    }
+
     private func openRealtimeSession(
         language: String?,
         prompt: String?,
         apiKey: String,
+        mode: Reson8RealtimeSession.Mode = .realtime,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> Reson8RealtimeSession {
         let dictionaryModelId = await dictionaryModelId(prompt: prompt)
@@ -1811,6 +1969,7 @@ final class Reson8Plugin: NSObject,
                 prompt: prompt,
                 dictionaryModelId: dictionaryModelId,
                 apiKey: apiKey,
+                mode: mode,
                 onProgress: onProgress
             )
         } catch where Self.isUnknownModelError(error, modelId: dictionaryModelId) {
@@ -1824,6 +1983,7 @@ final class Reson8Plugin: NSObject,
                 prompt: prompt,
                 dictionaryModelId: await self.dictionaryModelId(prompt: prompt),
                 apiKey: apiKey,
+                mode: mode,
                 onProgress: onProgress
             )
         }
@@ -1834,6 +1994,7 @@ final class Reson8Plugin: NSObject,
         prompt: String?,
         dictionaryModelId: String?,
         apiKey: String,
+        mode: Reson8RealtimeSession.Mode,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> Reson8RealtimeSession {
         let baseURL = effectiveBaseURL
@@ -1841,7 +2002,14 @@ final class Reson8Plugin: NSObject,
               let host = urlComponents.host else {
             throw PluginTranscriptionError.apiError("Invalid base URL")
         }
-        guard let path = realtimePath(language: language, prompt: prompt, dictionaryModelId: dictionaryModelId) else {
+        let path: String?
+        switch mode {
+        case .realtime:
+            path = realtimePath(language: language, prompt: prompt, dictionaryModelId: dictionaryModelId)
+        case .turns:
+            path = turnsPath(language: language, prompt: prompt, dictionaryModelId: dictionaryModelId)
+        }
+        guard let path else {
             throw PluginTranscriptionError.apiError("Invalid query parameters")
         }
         let usesTLS = baseURL.hasPrefix("https://")
@@ -1852,7 +2020,7 @@ final class Reson8Plugin: NSObject,
             path: path,
             headers: [(effectiveAuthHeader, authHeaderValue(apiKey: apiKey))]
         )
-        return try await Reson8RealtimeSession.connect(socket: socket, language: language, onProgress: onProgress)
+        return try await Reson8RealtimeSession.connect(socket: socket, mode: mode, language: language, onProgress: onProgress)
     }
 
     /// Sends a finished recording through a realtime session, which reports the
@@ -2082,6 +2250,11 @@ final class Reson8Plugin: NSObject,
         host?.setUserDefault(endpoint.rawValue, forKey: "recordingEndpoint")
     }
 
+    fileprivate func setEndsDictationAtTurnEnd(_ enabled: Bool) {
+        _endsDictationAtTurnEnd = enabled
+        host?.setUserDefault(enabled, forKey: "endsDictationAtTurnEnd")
+    }
+
     fileprivate func setDictionaryModelEnabled(_ enabled: Bool) {
         _dictionaryModelEnabled = enabled
         host?.setUserDefault(enabled, forKey: "dictionaryModelEnabled")
@@ -2161,6 +2334,7 @@ private struct Reson8SettingsView: View {
     @State private var isRefreshingModels = false
     @State private var recordingEndpoint: Reson8RecordingEndpoint = .prerecorded
     @State private var dictionaryModelEnabled = false
+    @State private var endsDictationAtTurnEnd = false
     @State private var patternSets: [Reson8PatternSet] = []
     @State private var patternChecks: [String: PatternCheck] = [:]
     private let bundle = Bundle(for: Reson8Plugin.self)
@@ -2183,6 +2357,12 @@ private struct Reson8SettingsView: View {
     private var supportsDictionaryModel: Bool {
         supportsDictionaryTerms && plugin.supportsParameter("custom_model_id", forModelId: selectedModel)
     }
+    /// Whether live dictations can end at the end of a turn: the model streams, takes the turns
+    /// endpoint and does not diarize.
+    private var endsDictationsAtTurnEnds: Bool {
+        choosesRecordingEndpoint && plugin.hasTurnsEndpoint(forModelId: selectedModel)
+    }
+
     /// Whether the endpoint choice for finished audio applies: the model streams and does not diarize.
     private var choosesRecordingEndpoint: Bool {
         plugin.hasRealtimeEndpoint(forModelId: selectedModel) && !(diarizationEnabled && supportsDiarization)
@@ -2385,6 +2565,23 @@ private struct Reson8SettingsView: View {
                     }
                 }
 
+                if endsDictationsAtTurnEnds {
+                    Divider()
+
+                    // End of speech
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(String(localized: "End dictation when you finish speaking", bundle: bundle), isOn: $endsDictationAtTurnEnd)
+                            .onChange(of: endsDictationAtTurnEnd) {
+                                plugin.setEndsDictationAtTurnEnd(endsDictationAtTurnEnd)
+                            }
+
+                        Text("With Stop recording after silence on, Reson8 recognizes when you finished a thought, and a toggle dictation then stops after half the silence duration, at least one second. A pause in the middle of a sentence still waits the full duration. While this is on, the live preview shows your words at pauses rather than while you speak.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
                 if supportsDictionaryModel {
                     Divider()
 
@@ -2521,6 +2718,7 @@ private struct Reson8SettingsView: View {
             customAuthHeader = plugin._customAuthHeader ?? ""
             recordingEndpoint = plugin._recordingEndpoint
             dictionaryModelEnabled = plugin._dictionaryModelEnabled
+            endsDictationAtTurnEnd = plugin._endsDictationAtTurnEnd
             patternSets = plugin._patternSets
             showAdvanced = !customBaseURL.isEmpty || !customAuthHeader.isEmpty || plugin._biasStrength != nil
                 || recordingEndpoint != .prerecorded
