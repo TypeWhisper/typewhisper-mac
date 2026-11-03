@@ -4461,10 +4461,10 @@ final class DictationViewModel: ObservableObject {
         // preview engine stays suppressed, since the preview would still be shown.
         let streamsDictationWithoutPreview = !allowLiveTranscription
             && !hiddenLiveSessionAwaitsWebsiteWorkflow
-            && modelManager.prefersLiveSessionForDictation(
+            && (modelManager.prefersLiveSessionForDictation(
                 engineOverrideId: params.engineOverrideId,
                 selectedProviderId: params.providerId
-            )
+            ) || detectsTurnEndsWithoutPreview(params))
         if streamsDictationWithoutPreview {
             previewEngineOverrideId = params.engineOverrideId
             effectiveAllowLiveTranscription = true
@@ -4504,6 +4504,18 @@ final class DictationViewModel: ObservableObject {
             turnEndHandler: liveTurnEndHandler(previewFollowsDictationEngine: previewFollowsDictationEngine),
             stateCheck: { [weak self] in self?.state == .recording }
         )
+    }
+
+    /// A dictation that can stop after silence keeps the dictation engine's live session when no
+    /// preview is shown, if that session reports turn ends: only the session can tell them.
+    private func detectsTurnEndsWithoutPreview(_ params: StreamingParamsSnapshot) -> Bool {
+        silenceEndpointMonitor.monitoredSessionID != nil
+            && hotkeyService.activeDictationCanBecomeToggle
+            && modelManager.reportsLiveTranscriptionTurnEnds(
+                engineOverrideId: params.engineOverrideId,
+                selectedProviderId: params.providerId,
+                cloudModelOverride: params.cloudModelOverride
+            )
     }
 
     /// Lets the dictation engine's live session shorten the silence stop once the speaker

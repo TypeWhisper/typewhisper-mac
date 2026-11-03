@@ -486,36 +486,50 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
         return finalResult()
     }
 
-    /// Ends an open turn with a flush, or waits briefly for speech that has not become a
-    /// turn yet. Otherwise all turns ended, and the result is complete at once.
+    /// Ends the open turn with a flush and waits until every speech sent belongs to an ended
+    /// turn. A turn end can come late for an earlier sentence while speech after it is still
+    /// pending, so each turn end that leaves speech pending sends another flush. Without an
+    /// open turn and without pending speech, the result is complete at once.
     private func finishTurns() async throws -> PluginTranscriptionResult {
-        guard isTurnOpen || hasSpeechAfterEndedTurns else {
-            close()
-            return finalResult()
-        }
-        // Taken before the flush goes out: its turn end can arrive while the send is in progress.
-        let turnsBefore = endedTurnCount
-        let timeout = isTurnOpen
-            ? Self.finishTimeout + .milliseconds(sentSampleCount / 160)
-            : Self.pendingSpeechTimeout
         isFlushRequested = true
-        try await send { try await $0.sendText(#"{"type":"flush_request"}"#) }
-
-        let hasEnded = await wait(timeout: timeout) { $0.endedTurnCount > turnsBefore }
-        // Closing ends the receive task, which must not count as a failure of the session.
-        let connectionFailure = failure
-        close()
-        if !hasEnded {
-            if isCancelled || Task.isCancelled { throw CancellationError() }
-            // A turn that never ended may miss its last words, and a connection that failed
-            // may have lost speech that had not become a turn, so TypeWhisper transcribes the
-            // whole recording instead. Speech that never became a turn on a healthy
-            // connection had no words.
-            if let connectionFailure { throw connectionFailure }
-            if isTurnOpen {
-                throw PluginTranscriptionError.networkError("Reson8 did not end the last turn in time")
+        var flushedAtTurnCount: Int?
+        while isTurnOpen || hasSpeechAfterEndedTurns {
+            // Taken before the flush goes out: its turn end can arrive while the send is in progress.
+            let turnsBefore = endedTurnCount
+            let wasTurnOpen = isTurnOpen
+            if flushedAtTurnCount != turnsBefore {
+                flushedAtTurnCount = turnsBefore
+                try await send { try await $0.sendText(#"{"type":"flush_request"}"#) }
+            }
+            // An open turn gets the time Reson8 needs to end it; speech that has not become a
+            // turn yet gets a short wait.
+            let timeout = wasTurnOpen
+                ? Self.finishTimeout + .milliseconds(sentSampleCount / 160)
+                : Self.pendingSpeechTimeout
+            let hasProgressed = await wait(timeout: timeout) {
+                $0.endedTurnCount != turnsBefore || $0.isTurnOpen != wasTurnOpen
+                    || !($0.isTurnOpen || $0.hasSpeechAfterEndedTurns)
+            }
+            guard hasProgressed else {
+                if isCancelled || Task.isCancelled {
+                    close()
+                    throw CancellationError()
+                }
+                // Closing ends the receive task, which must not count as a failure of the session.
+                let connectionFailure = failure
+                close()
+                // A turn that never ended may miss its last words, and a connection that failed
+                // may have lost speech that had not become a turn, so TypeWhisper transcribes
+                // the whole recording instead. Speech that never became a turn on a healthy
+                // connection had no words.
+                if let connectionFailure { throw connectionFailure }
+                if isTurnOpen {
+                    throw PluginTranscriptionError.networkError("Reson8 did not end the last turn in time")
+                }
+                return finalResult()
             }
         }
+        close()
         return finalResult()
     }
 
@@ -1905,6 +1919,15 @@ final class Reson8Plugin: NSObject,
     func setLiveTranscriptionTurnEndHandler(_ handler: (@convention(block) () -> Void)?) {
         let box = handler.map(Reson8TurnEndHandler.init)
         turnEndHandler.withLock { $0 = box }
+    }
+
+    // Lets TypeWhisper keep the live session of a dictation that stops after silence when no
+    // preview is shown, since only the session reports turn ends.
+    @objc(reportsLiveTranscriptionTurnEndsForModelId:)
+    func reportsLiveTranscriptionTurnEnds(forModelId modelId: String?) -> NSNumber {
+        NSNumber(value: _endsDictationAtTurnEnd
+            && hasTurnsEndpoint(forModelId: modelId)
+            && supportsLiveTranscriptionSession(forModelId: modelId))
     }
 
     /// With the setting on and a handler from the host, a live session uses Reson8's turns

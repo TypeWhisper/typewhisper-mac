@@ -95,6 +95,7 @@ private let supportsTranslationForModelSelector = NSSelectorFromString("supports
 private let supportsDictionaryTermsForModelSelector = NSSelectorFromString("supportsDictionaryTermsForModelId:")
 private let translationTargetLanguagesForModelSelector = NSSelectorFromString("translationTargetLanguagesForModelId:")
 private let setLiveTranscriptionTurnEndHandlerSelector = NSSelectorFromString("setLiveTranscriptionTurnEndHandler:")
+private let reportsLiveTranscriptionTurnEndsSelector = NSSelectorFromString("reportsLiveTranscriptionTurnEndsForModelId:")
 
 /// The language the user picked to translate into, for engines that translate into more
 /// than English. The Recorder, file transcription, recovery and the local API set it
@@ -195,6 +196,19 @@ extension TranscriptionEnginePlugin {
         let block: @convention(block) () -> Void = { handler() }
         object.perform(setLiveTranscriptionTurnEndHandlerSelector, with: unsafeBitCast(block, to: AnyObject.self))
         return true
+    }
+
+    /// Whether the engine's live sessions with a model report turn ends once they get a handler.
+    /// Plugins opt in through the Objective-C selector `reportsLiveTranscriptionTurnEndsForModelId:`
+    /// returning an `NSNumber`; nil asks about the selected model.
+    func reportsLiveTranscriptionTurnEnds(forModel modelId: String?) -> Bool {
+        guard let object = self as? NSObject,
+              object.responds(to: reportsLiveTranscriptionTurnEndsSelector),
+              let value = object.perform(reportsLiveTranscriptionTurnEndsSelector, with: modelId)?
+                .takeUnretainedValue() as? NSNumber else {
+            return false
+        }
+        return value.boolValue
     }
 
     /// The language a model translates into for the requested target: the request when the
@@ -764,6 +778,22 @@ final class ModelManagerService: ObservableObject {
 
     /// Whether the dictation engine opted in to delivering its final result through a
     /// live session, so dictation should stream even when no transcript preview is shown.
+    /// Whether the dictation engine's live session reports turn ends, so a dictation that stops
+    /// after silence keeps it open even when no transcript preview is shown.
+    func reportsLiveTranscriptionTurnEnds(
+        engineOverrideId: String? = nil,
+        selectedProviderId: String? = nil,
+        cloudModelOverride: String? = nil
+    ) -> Bool {
+        let modelId = effectiveModelOverride(cloudModelOverride)
+        guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
+              let engine = PluginManager.shared.transcriptionEngine(for: providerId),
+              engine.liveTranscriptionPlugin(forModelId: modelId) != nil else {
+            return false
+        }
+        return engine.reportsLiveTranscriptionTurnEnds(forModel: modelId)
+    }
+
     func prefersLiveSessionForDictation(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
         guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
               PluginManager.shared.transcriptionEngine(for: providerId)?.liveTranscriptionPlugin(forModelId: nil) != nil,

@@ -215,6 +215,18 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertNil(plugin.turnEndHandlerDuringCreation, "sessions without silence stop get no handler")
     }
 
+    func testTurnEndReportsFollowTheModelTheDictationUses() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = LiveModelOverrideTranscriptionPlugin()
+        let modelManager = installLivePlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        // The mock reports turn ends with "beta" only.
+        XCTAssertFalse(modelManager.reportsLiveTranscriptionTurnEnds())
+        XCTAssertTrue(modelManager.reportsLiveTranscriptionTurnEnds(cloudModelOverride: "beta"))
+    }
+
     func testBatchTranscriptionForwardsSourceProgressFromOptionalProtocol() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1127,6 +1139,11 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
     @objc(setLiveTranscriptionTurnEndHandler:)
     func setLiveTranscriptionTurnEndHandler(_ handler: (@convention(block) () -> Void)?) {
         turnEndHandler = handler
+    }
+
+    @objc(reportsLiveTranscriptionTurnEndsForModelId:)
+    func reportsLiveTranscriptionTurnEnds(forModelId modelId: String?) -> NSNumber {
+        NSNumber(value: (modelId ?? currentModelId) == "beta")
     }
 
     required override init() {
