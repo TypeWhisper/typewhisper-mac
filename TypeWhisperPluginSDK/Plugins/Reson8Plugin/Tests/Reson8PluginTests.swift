@@ -607,7 +607,9 @@ final class Reson8PluginTests: XCTestCase {
         try await Self.waitUntil { turnEnds.withLock { $0 } == 1 }
         let result = try await session.finish()
 
-        XCTAssertEqual(socket.sentTexts, [#"{"type":"flush_request"}"#])
+        // A turn that opens on the flush gets another one, which Reson8 ignores once it ended.
+        XCTAssertFalse(socket.sentTexts.isEmpty)
+        XCTAssertTrue(socket.sentTexts.allSatisfy { $0 == #"{"type":"flush_request"}"# })
         XCTAssertEqual(result.text, "Send the report. Also copy Ben.")
     }
 
@@ -639,9 +641,34 @@ final class Reson8PluginTests: XCTestCase {
         try await Self.waitUntil { progress.withLock { $0 } == ["Send the report."] }
         let result = try await session.finish()
 
-        // The late turn end leaves the second sentence pending, so a second flush ends it.
-        XCTAssertEqual(socket.sentTexts.count, 2)
+        // The late turn end leaves the second sentence pending, so another flush ends it.
+        XCTAssertGreaterThanOrEqual(socket.sentTexts.count, 2)
         XCTAssertEqual(result.text, "Send the report. Also copy Ben.")
+    }
+
+    func testTurnsSessionFlushesATurnThatOpensAfterTheFinishStarted() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [], answersPerFlush: [
+            // No turn is open yet, so Reson8 does not answer the first flush.
+            [],
+            [
+                #"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":900}"#,
+                #"{"type":"turn_end"}"#,
+            ],
+        ])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        let finishing = Task { try await session.finish() }
+        try await Self.waitUntil { socket.sentTexts.count == 1 }
+        socket.deliver(#"{"type":"turn_start"}"#)
+        let result = try await finishing.value
+
+        XCTAssertEqual(socket.sentTexts.count, 2)
+        XCTAssertEqual(result.text, "Send the report.")
     }
 
     func testTurnsSessionCountsATurnEndThatArrivesWhileTheFlushIsSent() async throws {

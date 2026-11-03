@@ -160,6 +160,14 @@ final class DictationSilenceEndpointDetectorTests: XCTestCase {
         XCTAssertEqual(detector.append(ScriptedAudio.silence(0.1)), .endpointReached)
     }
 
+    func testTurnEndWhileTheSpeakerTalksChangesNothing() {
+        var detector = DictationSilenceEndpointDetector(silenceDuration: 3)
+
+        detector.append(ScriptedAudio.speech(1))
+        XCTAssertEqual(detector.reportTurnEnd(), .listening)
+        XCTAssertNotEqual(detector.append(ScriptedAudio.silence(2.9)), .endpointReached)
+    }
+
     func testTurnEndBeforeSpeechChangesNothing() {
         var detector = DictationSilenceEndpointDetector(silenceDuration: 2)
 
@@ -411,6 +419,24 @@ final class DictationSilenceEndpointMonitorTests: XCTestCase {
 
         XCTAssertEqual(harness.endpoints, [sessionID])
         XCTAssertNil(harness.monitor.monitoredSessionID)
+    }
+
+    func testLateTurnEndReadsTheSpeechRecordedSinceTheLastPoll() {
+        let harness = MonitorHarness()
+        defer { harness.tearDown() }
+        let sessionID = UUID()
+        harness.monitor.start(sessionID: sessionID, silenceDuration: 3)
+        harness.recording.append(ScriptedAudio.speech(1) + ScriptedAudio.silence(1.6))
+        harness.monitor.poll(sessionID: sessionID)
+        // The speaker goes on before the delayed turn end arrives.
+        harness.recording.append(ScriptedAudio.speech(0.2))
+
+        harness.monitor.reportTurnEnd(sessionID: sessionID)
+        XCTAssertTrue(harness.endpoints.isEmpty)
+
+        harness.recording.append(ScriptedAudio.silence(1.5))
+        harness.monitor.poll(sessionID: sessionID)
+        XCTAssertTrue(harness.endpoints.isEmpty, "the configured duration applies to the new speech")
     }
 
     func testPollsFollowTheRecordingAsItGrows() {

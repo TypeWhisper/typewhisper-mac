@@ -487,18 +487,19 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     }
 
     /// Ends the open turn with a flush and waits until every speech sent belongs to an ended
-    /// turn. A turn end can come late for an earlier sentence while speech after it is still
-    /// pending, so each turn end that leaves speech pending sends another flush. Without an
-    /// open turn and without pending speech, the result is complete at once.
+    /// turn. Reson8 ignores a flush while no turn is open, and a turn end can come late for an
+    /// earlier sentence while speech after it is still pending, so a turn that opens or ends
+    /// while speech is pending gets another flush. Without an open turn and without pending
+    /// speech, the result is complete at once.
     private func finishTurns() async throws -> PluginTranscriptionResult {
         isFlushRequested = true
-        var flushedAtTurnCount: Int?
+        var lastFlushState: (endedTurns: Int, isTurnOpen: Bool)?
         while isTurnOpen || hasSpeechAfterEndedTurns {
             // Taken before the flush goes out: its turn end can arrive while the send is in progress.
             let turnsBefore = endedTurnCount
             let wasTurnOpen = isTurnOpen
-            if flushedAtTurnCount != turnsBefore {
-                flushedAtTurnCount = turnsBefore
+            if lastFlushState?.endedTurns != turnsBefore || lastFlushState?.isTurnOpen != wasTurnOpen {
+                lastFlushState = (turnsBefore, wasTurnOpen)
                 try await send { try await $0.sendText(#"{"type":"flush_request"}"#) }
             }
             // An open turn gets the time Reson8 needs to end it; speech that has not become a
@@ -592,9 +593,14 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
         switch type {
         case "turn_start":
             isTurnOpen = true
+            // A finish waiting for pending speech flushes the turn that opened.
+            resumeWaiters()
         case "turn_end_candidate":
             // Each candidate replaces the previous one of the same turn.
-            isTurnOpen = true
+            if !isTurnOpen {
+                isTurnOpen = true
+                resumeWaiters()
+            }
             let words = Reson8Transcript.words(from: json["words"])
             let startMs = json["start_ms"] as? Double
             let durationMs = json["duration_ms"] as? Double

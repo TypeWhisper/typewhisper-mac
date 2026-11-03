@@ -128,10 +128,11 @@ struct DictationSilenceEndpointDetector: Sendable {
 
     /// Notes that the live engine heard the speaker finish a turn, a completed thought rather
     /// than a pause in the middle of a sentence. The session then ends after the shorter turn
-    /// end silence, counted from the last speech, unless the speaker goes on.
+    /// end silence, counted from the last speech, unless the speaker goes on. A report that
+    /// arrives while the speaker talks again belongs to an earlier sentence and changes nothing.
     @discardableResult
     mutating func reportTurnEnd() -> Phase {
-        guard phase != .endpointReached, heardSpeech else { return phase }
+        guard phase != .endpointReached, heardSpeech, trailingSilentFrames > 0 else { return phase }
         turnEnded = true
         phase = currentPhase
         if phase == .endpointReached {
@@ -270,6 +271,10 @@ final class DictationSilenceEndpointMonitor {
     func reportTurnEnd(sessionID: UUID) {
         guard var session, session.id == sessionID else { return }
         let previousPhase = session.detector.phase
+        // Audio recorded since the last poll comes first: the speaker may have gone on.
+        let delta = readSamples(session.sampleOffset)
+        session.sampleOffset = delta.nextOffset
+        session.detector.append(delta.samples)
         let phase = session.detector.reportTurnEnd()
         self.session = session
 
