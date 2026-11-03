@@ -428,6 +428,7 @@ final class WatchFolderService: ObservableObject {
             options: [.skipsHiddenFiles]
         ) else { return }
 
+        pruneChecksumCache(keeping: Set(contents.map(\.path)))
         let audioFiles = contents.compactMap { url -> (url: URL, fingerprint: String)? in
             let ext = url.pathExtension.lowercased()
             guard AudioFileService.supportedExtensions.contains(ext),
@@ -705,6 +706,36 @@ final class WatchFolderService: ObservableObject {
         try? data.write(to: processedHistoryURL, options: .atomic)
     }
 
+    // MARK: - Fingerprints
+
+    /// One version of a file on disk. Rewriting a file in place may keep its size and
+    /// modification date, but its inode change time (ctime) always moves.
+    private struct FileVersion: Equatable {
+        let device: Int64
+        let inode: UInt64
+        let size: Int64
+        let modifiedSeconds: Int
+        let modifiedNanoseconds: Int
+        let changedSeconds: Int
+        let changedNanoseconds: Int
+
+        init?(path: String) {
+            var info = stat()
+            guard stat(path, &info) == 0 else { return nil }
+            device = Int64(info.st_dev)
+            inode = UInt64(info.st_ino)
+            size = Int64(info.st_size)
+            modifiedSeconds = info.st_mtimespec.tv_sec
+            modifiedNanoseconds = info.st_mtimespec.tv_nsec
+            changedSeconds = info.st_ctimespec.tv_sec
+            changedNanoseconds = info.st_ctimespec.tv_nsec
+        }
+    }
+
+    /// Every scan fingerprints all audio files in the folder, including the ones already
+    /// processed, so unchanged files reuse their checksum instead of being read again.
+    private var checksumCache: [String: (version: FileVersion, checksum: String)] = [:]
+
     func fileFingerprint(for url: URL) -> String? {
         let resourceKeys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
         let values = try? url.resourceValues(forKeys: resourceKeys)
@@ -712,16 +743,31 @@ final class WatchFolderService: ObservableObject {
         let fileSize = values?.fileSize ?? 0
         let modifiedAt = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
 
-        var checksum = "no-data"
-        if let fileHandle = try? FileHandle(forReadingFrom: url) {
-            var hasher = SHA256()
-            while let data = try? fileHandle.read(upToCount: 8192), !data.isEmpty {
-                hasher.update(data: data)
-            }
-            checksum = hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
-            try? fileHandle.close()
+        return "\(url.path)|\(fileSize)|\(modifiedAt)|\(checksum(for: url))"
+    }
+
+    private func checksum(for url: URL) -> String {
+        // Taken before reading, so a write during hashing invalidates the entry.
+        let version = FileVersion(path: url.path)
+        if let version, let cached = checksumCache[url.path], cached.version == version {
+            return cached.checksum
         }
 
-        return "\(url.path)|\(fileSize)|\(modifiedAt)|\(checksum)"
+        guard let fileHandle = try? FileHandle(forReadingFrom: url) else { return "no-data" }
+        var hasher = SHA256()
+        while let data = try? fileHandle.read(upToCount: 1 << 20), !data.isEmpty {
+            hasher.update(data: data)
+        }
+        let checksum = hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
+        try? fileHandle.close()
+
+        if let version {
+            checksumCache[url.path] = (version, checksum)
+        }
+        return checksum
+    }
+
+    private func pruneChecksumCache(keeping paths: Set<String>) {
+        checksumCache = checksumCache.filter { paths.contains($0.key) }
     }
 }
