@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import AppKit
 import CoreGraphics
@@ -1118,6 +1119,19 @@ final class MenuBarIconStateTests: XCTestCase {
 }
 
 final class IndicatorPresentationStateTests: XCTestCase {
+    func testLevelMeterPublishesOnlyChangedLevels() {
+        let meter = IndicatorLevelMeter()
+        var published: [Float] = []
+        let cancellable = meter.$level.dropFirst().sink { published.append($0) }
+        defer { cancellable.cancel() }
+
+        for level: Float in [0, 0, 0.4, 0.4, 0] {
+            meter.update(level)
+        }
+
+        XCTAssertEqual(published, [0.4, 0])
+    }
+
     private func makeRecordingPresentation(
         isInputReady: Bool,
         isModelLoading: Bool = false
@@ -1126,7 +1140,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             source: .dictation,
             state: .recording,
             recordingDuration: 0,
-            audioLevel: 0,
+            levelMeter: IndicatorLevelMeter(),
             partialText: "",
             activeRuleName: nil,
             activeAppIcon: nil,
@@ -1152,7 +1166,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             source: .dictation,
             state: .inserting,
             recordingDuration: 0,
-            audioLevel: 0,
+            levelMeter: IndicatorLevelMeter(),
             partialText: "",
             activeRuleName: nil,
             activeAppIcon: nil,

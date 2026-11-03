@@ -316,7 +316,13 @@ final class DictationViewModel: ObservableObject {
             }
         }
     }
-    @Published var audioLevel: Float = 0
+    /// Only the indicator's recording dot and waveform observe the input level, so a
+    /// level update at about 30 Hz does not re-render every view of this view model.
+    let indicatorLevelMeter = IndicatorLevelMeter()
+    var audioLevel: Float {
+        get { indicatorLevelMeter.level }
+        set { indicatorLevelMeter.update(newValue) }
+    }
     @Published var recordingDuration: TimeInterval = 0
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""

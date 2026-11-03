@@ -224,7 +224,8 @@ struct IndicatorPresentationData {
     let source: IndicatorPresentationState.Source
     let state: DictationViewModel.State
     let recordingDuration: TimeInterval
-    let audioLevel: Float
+    /// Only the recording dot and the waveform observe the level.
+    let levelMeter: IndicatorLevelMeter
     let partialText: String
     let activeRuleName: String?
     let activeAppIcon: NSImage?
@@ -289,7 +290,7 @@ struct IndicatorPresentationData {
                 source: .preview,
                 state: .recording,
                 recordingDuration: preview.recordingDuration,
-                audioLevel: preview.audioLevel,
+                levelMeter: preview.levelMeter,
                 partialText: preview.partialText,
                 activeRuleName: preview.activeRuleName,
                 activeAppIcon: preview.appIcon,
@@ -310,7 +311,7 @@ struct IndicatorPresentationData {
                 source: .dictation,
                 state: presentation.state,
                 recordingDuration: dictation.recordingDuration,
-                audioLevel: dictation.audioLevel,
+                levelMeter: dictation.indicatorLevelMeter,
                 partialText: dictation.partialText,
                 activeRuleName: dictation.activeRuleName,
                 activeAppIcon: dictation.activeAppIcon,
@@ -340,7 +341,7 @@ struct IndicatorPresentationData {
                 source: .recorder,
                 state: presentation.state,
                 recordingDuration: recorder.duration,
-                audioLevel: max(recorder.micLevel, recorder.systemLevel),
+                levelMeter: recorder.indicatorLevelMeter,
                 partialText: recorder.partialText,
                 activeRuleName: nil,
                 activeAppIcon: nil,
@@ -357,6 +358,18 @@ struct IndicatorPresentationData {
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
             )
         }
+    }
+}
+
+/// The input level an indicator shows. Sources publish the level here instead of
+/// on their view models, so a level update at about 30 Hz re-renders the recording
+/// dot and the waveform instead of every view that observes the dictation state.
+final class IndicatorLevelMeter: ObservableObject {
+    @Published private(set) var level: Float = 0
+
+    func update(_ level: Float) {
+        guard self.level != level else { return }
+        self.level = level
     }
 }
 

@@ -217,12 +217,6 @@ struct NotchIndicatorView: View {
         .animation(IndicatorMotion.expand, value: currentWidth)
         .animation(IndicatorMotion.expand, value: expandedBodyHeight)
         .animation(.easeInOut(duration: 0.18), value: presentation.state)
-        // Matches the ~30 Hz (33ms) level-publish throttle shared by both
-        // audio level sources (AudioRecordingService's dictation pipeline and
-        // AudioRecorderService's Recorder tab) — a shorter duration here
-        // finishes each segment before the next value lands, producing a
-        // tiny stutter instead of a continuous glide.
-        .animation(.linear(duration: 0.033), value: presentation.audioLevel)
         .onChange(of: presentation.partialText) {
             if presentation.source == .preview, presentation.partialText.isEmpty {
                 // The preview loop restarts: collapse so the expand animation replays.

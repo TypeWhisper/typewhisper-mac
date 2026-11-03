@@ -353,8 +353,14 @@ final class AudioRecorderViewModel: ObservableObject {
     /// The Recorder state the indicator shows: idle while the recording is hidden.
     var indicatorState: RecorderState { isIndicatorHidden ? .idle : state }
     @Published var duration: TimeInterval = 0
-    @Published var micLevel: Float = 0
-    @Published var systemLevel: Float = 0
+    @Published var micLevel: Float = 0 {
+        didSet { indicatorLevelMeter.update(max(micLevel, systemLevel)) }
+    }
+    @Published var systemLevel: Float = 0 {
+        didSet { indicatorLevelMeter.update(max(micLevel, systemLevel)) }
+    }
+    /// The larger of both levels, for the indicator.
+    let indicatorLevelMeter = IndicatorLevelMeter()
     @Published var micEnabled: Bool {
         didSet { defaults.set(micEnabled, forKey: UserDefaultsKeys.recorderMicEnabled) }
     }
