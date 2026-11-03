@@ -12,27 +12,29 @@ final class SonioxPluginTests: XCTestCase {
         super.tearDown()
     }
 
-    func testDefaultRealtimeModelUsesRTV5AndPersistsSelection() throws {
+    func testDefaultRealtimeModelUsesRTV6AndPersistsSelection() throws {
         let host = try PluginTestHostServices()
         let plugin = SonioxPlugin()
 
         plugin.activate(host: host)
 
-        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
-        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5"])
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v6")
+        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v6"])
         XCTAssertGreaterThan(plugin.transcriptionModels[0].languageCount, 1)
         XCTAssertEqual(plugin.transcriptionModels[0].sizeDescription, "Cloud")
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "automatic")
     }
 
-    func testRetiredRealtimeModelMigratesToRTV5() throws {
-        let host = try PluginTestHostServices(defaults: ["selectedModel": "stt-rt-v4"])
-        let plugin = SonioxPlugin()
+    func testRetiredRealtimeModelsMigrateToAutomaticRTV6() throws {
+        for retired in ["stt-rt-v4", "stt-rt-v5"] {
+            let host = try PluginTestHostServices(defaults: ["selectedModel": retired])
+            let plugin = SonioxPlugin()
 
-        plugin.activate(host: host)
+            plugin.activate(host: host)
 
-        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "automatic")
+            XCTAssertEqual(plugin.selectedModelId, "stt-rt-v6", retired)
+            XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "automatic", retired)
+        }
     }
 
     func testFetchedRealtimeModelsDriveAutomaticLatestSelection() throws {
@@ -75,6 +77,93 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "stt-rt-v6")
         XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5", "stt-rt-v6"])
         XCTAssertEqual(plugin.transcriptionModels.map(\.languageCount), [2, 3])
+    }
+
+    func testModelListSavedBeforeV6RefreshesInBackgroundOnActivation() async throws {
+        let cached = [
+            SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: "STT RT v5", transcriptionMode: "real_time", languages: []),
+            SonioxFetchedModel(id: "stt-async-v5", aliasedModelId: nil, name: "STT Async v5", transcriptionMode: "async", languages: []),
+        ]
+        let host = try PluginTestHostServices(
+            defaults: ["fetchedModels": try JSONEncoder().encode(cached)],
+            secrets: ["api-key": "soniox-key"]
+        )
+        let store = PluginHTTPClientSessionStore()
+        let listing = #"{"models":[{"id":"stt-rt-v5","transcription_mode":"real_time","languages":[]},{"id":"stt-rt-v6","transcription_mode":"real_time","languages":[]},{"id":"stt-async-v6","transcription_mode":"async","languages":[]}]}"#
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(listing.utf8), Self.httpResponse(url: "https://api.soniox.com/v1/models", statusCode: 200)),
+            ])
+        }
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
+        await plugin.modelCatalogRefreshTask?.value
+
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v6")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.absoluteString, "https://api.soniox.com/v1/models")
+        let saved = try XCTUnwrap(host.userDefault(forKey: "fetchedModels") as? Data)
+        XCTAssertEqual(try JSONDecoder().decode([SonioxFetchedModel].self, from: saved).map(\.id), ["stt-rt-v5", "stt-async-v6", "stt-rt-v6"])
+    }
+
+    func testCurrentOrMissingModelListDoesNotRefreshOnActivation() throws {
+        let current = [
+            SonioxFetchedModel(id: "stt-rt-v6", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+        ]
+        for defaults in [["fetchedModels": try JSONEncoder().encode(current)], [:]] as [[String: Any]] {
+            let host = try PluginTestHostServices(defaults: defaults, secrets: ["api-key": "soniox-key"])
+            let plugin = SonioxPlugin()
+
+            plugin.activate(host: host)
+
+            XCTAssertNil(plugin.modelCatalogRefreshTask)
+        }
+        XCTAssertFalse(SonioxPlugin.modelCatalogPredatesDefaultModel([]))
+        XCTAssertTrue(SonioxPlugin.modelCatalogPredatesDefaultModel([
+            SonioxFetchedModel(id: "stt-rt-preview", aliasedModelId: "stt-rt-v5", name: nil, transcriptionMode: "real_time", languages: []),
+            SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+        ]))
+        XCTAssertTrue(SonioxPlugin.modelCatalogPredatesDefaultModel([
+            SonioxFetchedModel(id: "stt-rt-v6", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+            SonioxFetchedModel(id: "stt-async-v5", aliasedModelId: nil, name: nil, transcriptionMode: "async", languages: []),
+        ]))
+        XCTAssertFalse(SonioxPlugin.modelCatalogPredatesDefaultModel([
+            SonioxFetchedModel(id: "stt-rt-preview", aliasedModelId: "stt-rt-v6", name: nil, transcriptionMode: "real_time", languages: []),
+        ]))
+        // Automatic picks stt-rt-v5 here, so the list still needs a refresh.
+        XCTAssertTrue(SonioxPlugin.modelCatalogPredatesDefaultModel([
+            SonioxFetchedModel(id: "stt-rt-preview", aliasedModelId: "stt-rt-v6", name: nil, transcriptionMode: "real_time", languages: []),
+            SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+        ]))
+    }
+
+    @MainActor
+    func testModelListRefreshFinishingAfterDeactivationIsDropped() async throws {
+        let cached = [
+            SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+        ]
+        let host = try PluginTestHostServices(
+            defaults: ["fetchedModels": try JSONEncoder().encode(cached)],
+            secrets: ["api-key": "soniox-key"]
+        )
+        let listing = #"{"models":[{"id":"stt-rt-v6","transcription_mode":"real_time","languages":[]}]}"#
+        PluginHTTPClientTestHarness.configure { _ in
+            PluginHTTPClientSessionStore().makeSession(outcomes: [
+                .success(Data(listing.utf8), Self.httpResponse(url: "https://api.soniox.com/v1/models", statusCode: 200)),
+            ])
+        }
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+        let refresh = try XCTUnwrap(plugin.modelCatalogRefreshTask)
+        plugin.deactivate()
+        await refresh.value
+
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
+        let saved = try XCTUnwrap(host.userDefault(forKey: "fetchedModels") as? Data)
+        XCTAssertEqual(try JSONDecoder().decode([SonioxFetchedModel].self, from: saved).map(\.id), ["stt-rt-v5"])
     }
 
     func testDefaultRegionUsesUSAndPersistsSelection() throws {
@@ -142,7 +231,7 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertTrue(plugin is any LiveLanguageHintTranscriptionCapablePlugin)
     }
 
-    func testCreateTranscriptionRequestUsesAsyncV5Model() throws {
+    func testCreateTranscriptionRequestUsesAsyncV6Model() throws {
         let request = try SonioxPlugin.makeCreateTranscriptionRequest(
             fileId: "file_123",
             language: "de",
@@ -160,7 +249,7 @@ final class SonioxPluginTests: XCTestCase {
 
         let body = try Self.jsonBody(from: request)
         XCTAssertEqual(body["file_id"] as? String, "file_123")
-        XCTAssertEqual(body["model"] as? String, "stt-async-v5")
+        XCTAssertEqual(body["model"] as? String, "stt-async-v6")
         XCTAssertEqual(body["language_hints"] as? [String], ["en", "de"])
 
         let translation = try XCTUnwrap(body["translation"] as? [String: Any])
@@ -238,9 +327,9 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertNil(startPayload["api_key"])
     }
 
-    func testRealtimeConfigUsesRealtimeV5AndLanguageHints() throws {
+    func testRealtimeConfigUsesRealtimeV6AndLanguageHints() throws {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
-            modelID: "stt-rt-v5",
+            modelID: "stt-rt-v6",
             language: "de",
             languageHints: ["en", "de"],
             translate: true,
@@ -248,7 +337,7 @@ final class SonioxPluginTests: XCTestCase {
         )
 
         XCTAssertNil(payload["api_key"])
-        XCTAssertEqual(payload["model"] as? String, "stt-rt-v5")
+        XCTAssertEqual(payload["model"] as? String, "stt-rt-v6")
         XCTAssertEqual(payload["audio_format"] as? String, "s16le")
         XCTAssertEqual(payload["sample_rate"] as? Int, 16_000)
         XCTAssertEqual(payload["num_channels"] as? Int, 1)
@@ -271,7 +360,7 @@ final class SonioxPluginTests: XCTestCase {
             prompt: nil
         )
 
-        XCTAssertEqual(payload["model"] as? String, "stt-rt-v5")
+        XCTAssertEqual(payload["model"] as? String, "stt-rt-v6")
         XCTAssertEqual(payload["language_hints"] as? [String], ["de"])
         XCTAssertNil(payload["translation"])
         XCTAssertNil(payload["context"])
@@ -382,7 +471,7 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(body["sample_rate"] as? Int, 24_000)
     }
 
-    func testSourceProgressTranscriptionUsesAsyncV5RESTPathAndEmitsFinalProgress() async throws {
+    func testSourceProgressTranscriptionUsesAsyncV6RESTPathAndEmitsFinalProgress() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
         let plugin = SonioxPlugin()
         plugin.activate(host: host)
@@ -466,7 +555,7 @@ final class SonioxPluginTests: XCTestCase {
 
         let createRequest = try XCTUnwrap(session.requestedRequests.first { $0.url?.path == "/v1/transcriptions" })
         let body = try Self.jsonBody(from: createRequest)
-        XCTAssertEqual(body["model"] as? String, "stt-async-v5")
+        XCTAssertEqual(body["model"] as? String, "stt-async-v6")
         XCTAssertEqual(body["language_hints"] as? [String], ["en", "de"])
     }
 
@@ -542,7 +631,7 @@ final class SonioxPluginTests: XCTestCase {
 
         let createBody = try Self.jsonBody(from: requests[2])
         XCTAssertEqual(createBody["file_id"] as? String, "file_123")
-        XCTAssertEqual(createBody["model"] as? String, "stt-async-v5")
+        XCTAssertEqual(createBody["model"] as? String, "stt-async-v6")
         XCTAssertEqual(createBody["language_hints"] as? [String], ["en", "de"])
         let context = try XCTUnwrap(createBody["context"] as? [String: Any])
         XCTAssertEqual(context["terms"] as? [String], ["TypeWhisper"])
