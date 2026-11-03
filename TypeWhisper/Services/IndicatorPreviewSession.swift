@@ -12,7 +12,10 @@ final class IndicatorPreviewSession: NSObject, ObservableObject {
 
     @Published private(set) var isActive = false
     @Published private(set) var recordingDuration: TimeInterval = 0
-    @Published private(set) var audioLevel: Float = 0
+    @Published private(set) var audioLevel: Float = 0 {
+        didSet { levelMeter.update(audioLevel) }
+    }
+    let levelMeter = IndicatorLevelMeter()
     @Published private(set) var partialText = ""
 
     nonisolated static let tickInterval: TimeInterval = 1.0 / 30.0

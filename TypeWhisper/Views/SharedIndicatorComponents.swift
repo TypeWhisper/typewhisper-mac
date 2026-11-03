@@ -144,6 +144,8 @@ enum IndicatorMotion {
 // MARK: - Sizing
 
 struct IndicatorSizing {
+    /// Notch and overlay glide the recording dot between level updates.
+    var animatesLevel = true
     let iconSize: CGFloat
     let iconCornerRadius: CGFloat
     let dotSize: CGFloat
@@ -185,6 +187,7 @@ struct IndicatorSizing {
     )
 
     static let minimal = IndicatorSizing(
+        animatesLevel: false,
         iconSize: 14,
         iconCornerRadius: 3,
         dotSize: 6,
@@ -262,7 +265,7 @@ struct IndicatorLeftStatus: View {
             } else if let icon = presentation.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
             } else {
-                IndicatorDot(audioLevel: presentation.audioLevel, dotPulse: dotPulse, sizing: sizing)
+                IndicatorDot(meter: presentation.levelMeter, dotPulse: dotPulse, sizing: sizing)
             }
         case .processing:
             if let icon = presentation.activeAppIcon {
@@ -507,7 +510,7 @@ struct IndicatorPreparingLabel: View {
 // MARK: - Recording Dot
 
 struct IndicatorDot: View {
-    let audioLevel: Float
+    @ObservedObject var meter: IndicatorLevelMeter
     let dotPulse: Bool
     let sizing: IndicatorSizing
 
@@ -515,9 +518,30 @@ struct IndicatorDot: View {
         Circle()
             .fill(Color.red)
             .frame(width: sizing.dotSize, height: sizing.dotSize)
-            .scaleEffect(1.0 + CGFloat(audioLevel) * 0.8)
+            .scaleEffect(1.0 + CGFloat(meter.level) * 0.8)
             .shadow(color: .yellow.opacity(dotPulse ? 0.8 : 0.2), radius: dotPulse ? 6 : 2)
+            // Matches the ~30 Hz (33ms) level-publish throttle shared by both
+            // audio level sources (AudioRecordingService's dictation pipeline and
+            // AudioRecorderService's Recorder tab) — a shorter duration here
+            // finishes each segment before the next value lands, producing a
+            // tiny stutter instead of a continuous glide.
+            .animation(sizing.animatesLevel ? .linear(duration: 0.033) : nil, value: meter.level)
             .accessibilityHidden(true)
+    }
+}
+
+/// The waveform of an indicator, fed from the source's level meter.
+private struct IndicatorWaveform: View {
+    @ObservedObject var meter: IndicatorLevelMeter
+    let isPreparingMicrophone: Bool
+    let recordingDuration: TimeInterval
+
+    var body: some View {
+        AudioWaveformView(
+            audioLevel: meter.level,
+            isSetup: isPreparingMicrophone || (recordingDuration < 0.5 && meter.level < 0.05),
+            compact: true
+        )
     }
 }
 
@@ -535,7 +559,7 @@ struct IndicatorRecordingContent: View {
             if presentation.isPreparingMicrophone {
                 IndicatorPreparingView(sizing: sizing)
             } else {
-                IndicatorDot(audioLevel: presentation.audioLevel, dotPulse: dotPulse, sizing: sizing)
+                IndicatorDot(meter: presentation.levelMeter, dotPulse: dotPulse, sizing: sizing)
             }
         case .timer:
             if presentation.isPreparingMicrophone {
@@ -550,10 +574,10 @@ struct IndicatorRecordingContent: View {
                     .accessibilityValue(formatDuration(presentation.recordingDuration))
             }
         case .waveform:
-            AudioWaveformView(
-                audioLevel: presentation.audioLevel,
-                isSetup: presentation.isPreparingMicrophone || (presentation.recordingDuration < 0.5 && presentation.audioLevel < 0.05),
-                compact: true
+            IndicatorWaveform(
+                meter: presentation.levelMeter,
+                isPreparingMicrophone: presentation.isPreparingMicrophone,
+                recordingDuration: presentation.recordingDuration
             )
         case .profile:
             if let name = presentation.activeRuleName {
