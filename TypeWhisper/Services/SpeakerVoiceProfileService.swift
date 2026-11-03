@@ -85,9 +85,10 @@ final class SpeakerVoiceProfileService: ObservableObject {
         store.recordingEmbeddings[recordID]
     }
 
-    /// Drops embeddings of recordings that were deleted.
+    /// Drops embeddings of recordings that were deleted. Keeps everything when
+    /// the history can't be read, so a read error deletes no voices.
     func removeEmbeddingsOfDeletedRecordings() {
-        let kept = Set(store.storedRecordIDs.filter { historyService.record(withID: $0) != nil })
+        guard let kept = historyService.existingRecordIDs(among: store.storedRecordIDs) else { return }
         store.removeEmbeddings(exceptForRecordIDs: kept)
     }
 

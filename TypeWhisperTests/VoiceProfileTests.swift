@@ -512,6 +512,22 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
         XCTAssertEqual(Set(store.recordingEmbeddings.keys), [kept])
     }
 
+    func testStartupCleanupKeepsTheVoicesOfEveryRecordingStillInHistory() throws {
+        let ids = try (0..<5).map { _ in try addRecording() }
+        // Deleted without the immediate cleanup, as when the app quit in between.
+        history.onRecordsDeleted = nil
+        XCTAssertTrue(history.deleteRecord(withID: ids[1]))
+        XCTAssertTrue(history.deleteRecord(withID: ids[3]))
+        XCTAssertEqual(store.recordingEmbeddings.count, 5)
+
+        service.removeEmbeddingsOfDeletedRecordings()
+
+        let kept: Set<UUID> = [ids[0], ids[2], ids[4]]
+        XCTAssertEqual(Set(store.recordingEmbeddings.keys), kept)
+        let reloaded = VoiceProfileStore(directoryURL: directory.appendingPathComponent("VoiceProfiles"))
+        XCTAssertEqual(reloaded.storedRecordIDs, kept)
+    }
+
     func testDeletingRecordingsRemovesTheirEmbeddingsRightAway() throws {
         let kept = try addRecording()
         let deleted = try addRecording()

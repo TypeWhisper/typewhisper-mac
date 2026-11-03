@@ -1156,6 +1156,23 @@ final class HistoryService: ObservableObject {
         }
     }
 
+    /// The IDs among `ids` that have a record, found with one fetch instead of one per ID.
+    /// Nil when the history can't be read.
+    func existingRecordIDs(among ids: Set<UUID>) -> Set<UUID>? {
+        guard !ids.isEmpty else { return [] }
+        let candidates = Array(ids)
+        var descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { candidates.contains($0.id) }
+        )
+        descriptor.propertiesToFetch = [\TranscriptionRecord.id]
+        do {
+            return Set(try modelContext.fetch(descriptor).map(\.id))
+        } catch {
+            logger.error("Failed to fetch history record IDs: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     @discardableResult
     func deleteRecord(withID id: UUID) -> Bool {
         guard let record = record(withID: id) else { return false }
