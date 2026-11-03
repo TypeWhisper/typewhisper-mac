@@ -3445,6 +3445,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/reson8/",
       "releases": [
         {
+          "version": "1.2.0",
+          "minHostVersion": "1.8.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 627143,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-reson8-v1.2.0/Reson8Plugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.0",
           "minHostVersion": "1.8.1",
           "sdkCompatibilityVersion": "v1",
