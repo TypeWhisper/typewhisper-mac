@@ -131,6 +131,7 @@ final class SonioxPluginTests: XCTestCase {
         ]))
     }
 
+    @MainActor
     func testModelListRefreshFinishingAfterDeactivationIsDropped() async throws {
         let cached = [
             SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
