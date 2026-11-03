@@ -1,5 +1,14 @@
 ## Pull Requests
 
+Start every pull request title with its category in parentheses, followed by the usual sentence-style title:
+
+- `(feature)` new or changed functionality that users notice
+- `(bug)` fixes for wrong behaviour
+- `(perf)` measured speed, CPU, memory or energy improvements without a behaviour change
+- `(chore)` everything else: build, CI, release notes, documentation, dependencies, refactoring
+
+Example: `(perf) Skip indicator screen refreshes on clicks and app switches while no indicator is visible`. With squash merges the prefix also becomes part of the commit message on `main`.
+
 When a pull request fixes or implements a GitHub issue, always:
 - include the issue context in the PR body
 - include an auto-close reference such as `Closes #123`
