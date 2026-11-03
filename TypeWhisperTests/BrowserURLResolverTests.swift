@@ -197,33 +197,85 @@ final class BrowserURLResolverTests: XCTestCase {
     }
 
     func testMeetingScriptPreservesOutputAndDistinguishesFailureFromEmptyResult() async {
-        let output = await Task.detached {
-            BrowserURLResolver.executeMeetingTabScript(
-                "return \"https://example.com/?a=1,b=2\" & linefeed & \"https://example.com/c\""
+        let runner = MeetingTabScriptRunner()
+        let (output, empty, nonText, failure, invalid) = await Task.detached {
+            (
+                runner.run(
+                    "return \"https://example.com/?a=1,b=2\" & linefeed & \"https://example.com/c\""
+                ),
+                runner.run("return \"\""),
+                runner.run("return {1, 2}"),
+                runner.run("error \"Test failure\""),
+                runner.run("return \"unterminated")
             )
         }.value
-        let empty = await Task.detached {
-            BrowserURLResolver.executeMeetingTabScript("return \"\"")
-        }.value
-        let failure = await Task.detached {
-            BrowserURLResolver.executeMeetingTabScript("error \"Test failure\"")
-        }.value
 
-        XCTAssertEqual(output, "https://example.com/?a=1,b=2\nhttps://example.com/c\n")
-        XCTAssertEqual(empty, "\n")
+        XCTAssertEqual(output, "https://example.com/?a=1,b=2\nhttps://example.com/c")
+        XCTAssertEqual(empty, "")
+        XCTAssertEqual(nonText, "")
         XCTAssertNil(failure)
+        XCTAssertNil(invalid)
     }
 
-    func testMeetingScriptTimeoutDoesNotBlockTheNextQuery() async {
-        let result = await Task.detached {
-            BrowserURLResolver.executeMeetingTabScript("delay 10\nreturn \"late\"")
+    func testMeetingScriptIsCompiledOnceAndReused() async {
+        let runner = MeetingTabScriptRunner()
+        // A property keeps its value only while the same compiled script is reused.
+        let source = "property runCount : 0\nset runCount to runCount + 1\nreturn runCount as text"
+        let results = await Task.detached {
+            (0..<3).map { _ in runner.run(source) }
         }.value
-        XCTAssertNil(result)
+        XCTAssertEqual(results, ["1", "2", "3"])
+    }
 
-        let next = await Task.detached {
-            BrowserURLResolver.executeMeetingTabScript("return \"next\"")
+    func testMeetingScriptFailureStartsTheNextQueryFromAFreshCompile() async {
+        let runner = MeetingTabScriptRunner()
+        let source = """
+            property runCount : 0
+            set runCount to runCount + 1
+            if runCount is 2 then error "Test failure"
+            return runCount as text
+            """
+        let results = await Task.detached {
+            (0..<4).map { _ in runner.run(source) }
         }.value
-        XCTAssertEqual(next, "next\n")
+        XCTAssertEqual(results, ["1", nil, "1", nil])
+    }
+
+    func testMeetingScriptTimeoutFreesTheCallerWithoutStackingRuns() async throws {
+        let runner = MeetingTabScriptRunner(executionTimeout: 1)
+        let slow = """
+            property runCount : 0
+            set runCount to runCount + 1
+            if runCount is 1 then delay 2.5
+            return runCount as text
+            """
+        let other = "return \"next\""
+        let warmedUp = await Task.detached { runner.run(other) }.value
+        XCTAssertEqual(warmedUp, "next")
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        let timedOut = await Task.detached { runner.run(slow) }.value
+        XCTAssertNil(timedOut)
+        XCTAssertLessThan(clock.now - start, .seconds(2))
+
+        // The stuck run keeps its slot: a repeat query fails at once instead of
+        // starting a second run, and other scripts are not held up.
+        let busyStart = clock.now
+        let busy = await Task.detached { runner.run(slow) }.value
+        XCTAssertNil(busy)
+        XCTAssertLessThan(clock.now - busyStart, .milliseconds(500))
+        let next = await Task.detached { runner.run(other) }.value
+        XCTAssertEqual(next, "next")
+
+        // Once the stuck run returns, the same compiled script runs again.
+        var recovered: String?
+        let deadline = clock.now + .seconds(6)
+        while recovered == nil, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+            recovered = await Task.detached { runner.run(slow) }.value
+        }
+        XCTAssertEqual(recovered, "2")
     }
 
     func testLiveMeetingTabsResolveWhileActiveAppleScriptIsBlocked() async throws {

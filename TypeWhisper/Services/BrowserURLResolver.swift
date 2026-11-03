@@ -1,5 +1,8 @@
 import AppKit
 import Foundation
+#if !APPSTORE
+import OSAKit
+#endif
 import os
 
 private let browserURLResolverLogger = Logger(
@@ -132,52 +135,13 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
                 end tell
             end timeout
             """
-        guard let output = executeMeetingTabScript(script) else { return nil }
+        guard let output = meetingTabScriptRunner.run(script) else { return nil }
         return output.split(separator: "\n").compactMap { validURL(String($0)) }
     }
 
-    // Isolate the AppleScript runtime as well as the queue: concurrent in-process
-    // NSAppleScript calls must not contend with a stalled dictation URL query.
-    static func executeMeetingTabScript(_ source: String) -> String? {
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", source]
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        defer { try? output.fileHandleForReading.close() }
-        do {
-            try process.run()
-        } catch {
-            browserURLResolverLogger.warning("Browser meeting-tab AppleScript could not start")
-            return nil
-        }
-
-        let timeout = DispatchWorkItem {
-            if process.isRunning {
-                browserURLResolverLogger.warning("Browser meeting-tab AppleScript timed out")
-                process.terminate()
-            }
-        }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2, execute: timeout)
-        defer { timeout.cancel() }
-
-        let data: Data
-        do {
-            data = try output.fileHandleForReading.readToEnd() ?? Data()
-        } catch {
-            process.terminate()
-            process.waitUntilExit()
-            return nil
-        }
-        process.waitUntilExit()
-        guard process.terminationReason == .exit, process.terminationStatus == 0 else {
-            browserURLResolverLogger.warning("Browser meeting-tab AppleScript failed")
-            return nil
-        }
-        return String(data: data, encoding: .utf8)
-    }
+    // The meeting-tab query runs every second while a browser plays audio, so
+    // its script is compiled once per browser and reused in process.
+    private static let meetingTabScriptRunner = MeetingTabScriptRunner()
 #endif
 
     private func resolve(
@@ -329,3 +293,121 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
+
+#if !APPSTORE
+/// Runs the meeting-tab AppleScript in process. Each distinct script is compiled
+/// once and reused, instead of starting and compiling an `osascript` process for
+/// every query. Every script gets its own AppleScript instance, so it shares no
+/// interpreter state with the NSAppleScript calls of the dictation URL lookup.
+final class MeetingTabScriptRunner: Sendable {
+    private final class CompiledScript: @unchecked Sendable {
+        // Only the call that holds its slot as running touches the script.
+        let script: OSAScript
+
+        init(_ script: OSAScript) {
+            self.script = script
+        }
+    }
+
+    private enum Slot: Sendable {
+        case idle(CompiledScript)
+        case running
+    }
+
+    private enum Claim: Sendable {
+        case busy
+        case claimed(CompiledScript?)
+    }
+
+    private let executionTimeout: TimeInterval
+    private let slots = OSAllocatedUnfairLock(initialState: [String: Slot]())
+    private let executionQueue = DispatchQueue(
+        label: "com.typewhisper.meeting-tab-script",
+        qos: .utility,
+        attributes: .concurrent
+    )
+
+    init(executionTimeout: TimeInterval = 2) {
+        self.executionTimeout = executionTimeout
+    }
+
+    /// Returns the script's text result, or "" when the result is not text.
+    /// Returns nil when the script cannot compile, fails, does not finish within
+    /// the execution timeout, or is still running from an earlier call.
+    func run(_ source: String) -> String? {
+        let claim = slots.withLock { slots -> Claim in
+            switch slots[source] {
+            case .running:
+                return .busy
+            case .idle(let compiled):
+                slots[source] = .running
+                return .claimed(compiled)
+            case nil:
+                slots[source] = .running
+                return .claimed(nil)
+            }
+        }
+        guard case .claimed(let compiled) = claim else {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript is still running")
+            return nil
+        }
+
+        let output = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let finished = DispatchSemaphore(value: 0)
+        executionQueue.async { [slots] in
+            let (reusable, result) = Self.execute(source, compiled: compiled)
+            output.withLock { $0 = result }
+            slots.withLock { $0[source] = reusable.map(Slot.idle) }
+            finished.signal()
+        }
+        // A hung Apple Event cannot be terminated in process. Stop waiting after
+        // the timeout so the caller's worker is free again. The slot stays busy
+        // until the script returns, so a stuck browser runs one script at most.
+        guard finished.wait(timeout: .now() + executionTimeout) == .success else {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript timed out")
+            return nil
+        }
+        return output.withLock { $0 }
+    }
+
+    /// Returns the script to reuse for the next call (nil after any failure, so
+    /// the next call starts from a fresh compile) and the result.
+    private static func execute(
+        _ source: String,
+        compiled: CompiledScript?
+    ) -> (CompiledScript?, String?) {
+        autoreleasepool {
+            guard let compiled = compiled ?? compile(source) else { return (nil, nil) }
+            var errorInfo: NSDictionary?
+            let descriptor = compiled.script.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                let number = (errorInfo[OSAScriptErrorNumberKey] as? NSNumber)?.intValue ?? 0
+                browserURLResolverLogger.warning(
+                    "Browser meeting-tab AppleScript failed (\(number, privacy: .public))"
+                )
+                return (nil, nil)
+            }
+            return (compiled, descriptor?.stringValue ?? "")
+        }
+    }
+
+    private static func compile(_ source: String) -> CompiledScript? {
+        guard let language = OSALanguage(forName: "AppleScript") else {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript is unavailable")
+            return nil
+        }
+        let script = OSAScript(
+            source: source,
+            from: nil,
+            languageInstance: OSALanguageInstance(language: language),
+            using: []
+        )
+        var errorInfo: NSDictionary?
+        guard script.compileAndReturnError(&errorInfo) else {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript could not compile")
+            return nil
+        }
+        return CompiledScript(script)
+    }
+}
+#endif
