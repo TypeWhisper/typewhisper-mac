@@ -39,6 +39,25 @@ private func assertNoAllCapsWorkflowSafetyProse(
     }
 }
 
+/// Counts the installed-apps scans, and how many of them ran on the main thread.
+private final class InstalledAppsScanRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    private var mainThreadCalls = 0
+
+    var callCount: Int { lock.withLock { calls } }
+    var mainThreadCallCount: Int { lock.withLock { mainThreadCalls } }
+
+    func run() -> [InstalledApp] {
+        let isMainThread = Thread.isMainThread
+        lock.withLock {
+            calls += 1
+            if isMainThread { mainThreadCalls += 1 }
+        }
+        return [InstalledApp(id: "com.example.notes", name: "Notes", icon: nil)]
+    }
+}
+
 @MainActor
 final class WorkflowServiceTests: XCTestCase {
     func testAvailableRuleNamesExposeWorkflowsButNotLegacyProfiles() throws {
@@ -249,6 +268,25 @@ final class WorkflowServiceTests: XCTestCase {
 
         XCTAssertEqual(store.suggestions(for: "", excluding: []), ["github.com"])
         XCTAssertEqual(loadCount, 2)
+    }
+
+    @MainActor
+    func testInstalledAppsScanOnceOffTheMainThreadOnFirstLoad() async {
+        let scan = InstalledAppsScanRecorder()
+        let viewModel = InstalledAppsViewModel { scan.run() }
+
+        // The service container creates the view model at launch, so creating it must not scan.
+        XCTAssertEqual(scan.callCount, 0)
+        XCTAssertTrue(viewModel.installedApps.isEmpty)
+
+        let concurrentLoad = Task { await viewModel.loadIfNeeded() }
+        await viewModel.loadIfNeeded()
+        await concurrentLoad.value
+        await viewModel.loadIfNeeded()
+
+        XCTAssertEqual(viewModel.installedApps.map(\.id), ["com.example.notes"])
+        XCTAssertEqual(scan.callCount, 1)
+        XCTAssertEqual(scan.mainThreadCallCount, 0)
     }
 
     func testWorkflowDraftPreservesSpokenAutoEnterMode() {
