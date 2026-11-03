@@ -37,6 +37,10 @@ enum NumberWordNormalizer {
         let tokens = tokenize(text)
         guard tokens.contains(where: \.isWord) else { return text }
 
+        let wordParser = latinWordParser(for: languageCode)
+        // A number candidate runs from a word to the next punctuation, so every word
+        // takes part in many candidates. Each word is normalized only once per call.
+        var normalizedWords = [String?](repeating: nil, count: tokens.count)
         var result = ""
         var index = 0
         while index < tokens.count {
@@ -44,7 +48,13 @@ enum NumberWordNormalizer {
                 result.append(decimal.replacement)
                 index = decimal.endIndex
             } else if tokens[index].isWord,
-               let parsed = parseNumber(startingAt: index, in: tokens, languageCode: languageCode) {
+               let parsed = parseNumber(
+                   startingAt: index,
+                   in: tokens,
+                   languageCode: languageCode,
+                   wordParser: wordParser,
+                   normalizedWords: &normalizedWords
+               ) {
                 let isPreservedWord = parsed.endIndex == index + 1
                     && preservedStandaloneWords.contains(tokens[index].text.lowercased())
                 if !isPreservedWord, parsed.words.shouldNormalize(minimumValue: minimumValue) {
@@ -170,31 +180,78 @@ enum NumberWordNormalizer {
             .lowercased()
     }
 
-    private static func parseNumber(startingAt index: Int, in tokens: [Token], languageCode: String) -> ParsedNumber? {
+    /// A Latin-script parser and the word normalization it expects.
+    private struct LatinWordParser {
+        let normalizeWord: (String) -> String
+        let parse: ([String]) -> ParsedWords?
+    }
+
+    private static func latinWordParser(for languageCode: String) -> LatinWordParser? {
+        switch languageCode {
+        case "en":
+            LatinWordParser(
+                normalizeWord: EnglishNumberWordParser.normalizeWord,
+                parse: EnglishNumberWordParser.parse(normalizedWords:)
+            )
+        case "de":
+            LatinWordParser(
+                normalizeWord: GermanNumberWordParser.normalizeWord,
+                parse: GermanNumberWordParser.parse(normalizedWords:)
+            )
+        case "fr":
+            LatinWordParser(
+                normalizeWord: FrenchNumberWordParser.normalizeWord,
+                parse: FrenchNumberWordParser.parse(normalizedWords:)
+            )
+        case "es":
+            LatinWordParser(
+                normalizeWord: SpanishNumberWordParser.normalizeWord,
+                parse: SpanishNumberWordParser.parse(normalizedWords:)
+            )
+        case "nl":
+            LatinWordParser(
+                normalizeWord: DutchNumberWordParser.normalizeWord,
+                parse: DutchNumberWordParser.parse(normalizedWords:)
+            )
+        case "pl":
+            LatinWordParser(
+                normalizeWord: PolishNumberWordParser.normalizeWord,
+                parse: PolishNumberWordParser.parse(normalizedWords:)
+            )
+        default:
+            nil
+        }
+    }
+
+    private static func parseNumber(
+        startingAt index: Int,
+        in tokens: [Token],
+        languageCode: String,
+        wordParser: LatinWordParser?,
+        normalizedWords: inout [String?]
+    ) -> ParsedNumber? {
         let words = wordCandidates(startingAt: index, in: tokens)
         guard !words.isEmpty else { return nil }
 
-        let wordTexts = words.map(\.text)
         let parsed: ParsedWords?
-        switch languageCode {
-        case "en":
-            parsed = EnglishNumberWordParser.parse(wordTexts)
-        case "de":
-            parsed = GermanNumberWordParser.parse(wordTexts)
-        case "fr":
-            parsed = FrenchNumberWordParser.parse(wordTexts)
-        case "es":
-            parsed = SpanishNumberWordParser.parse(wordTexts)
-        case "nl":
-            parsed = DutchNumberWordParser.parse(wordTexts)
-        case "pl":
-            parsed = PolishNumberWordParser.parse(wordTexts)
-        case "zh":
-            parsed = ChineseNumberWordParser.parse(wordTexts)
-        case "ja":
-            parsed = JapaneseNumberWordParser.parse(wordTexts)
-        default:
-            parsed = nil
+        if let wordParser {
+            let normalized = words.map { word in
+                if let cached = normalizedWords[word.tokenIndex] { return cached }
+                let normalizedWord = wordParser.normalizeWord(word.text)
+                normalizedWords[word.tokenIndex] = normalizedWord
+                return normalizedWord
+            }
+            parsed = wordParser.parse(normalized)
+        } else {
+            let wordTexts = words.map(\.text)
+            switch languageCode {
+            case "zh":
+                parsed = ChineseNumberWordParser.parse(wordTexts)
+            case "ja":
+                parsed = JapaneseNumberWordParser.parse(wordTexts)
+            default:
+                parsed = nil
+            }
         }
 
         guard let parsed, parsed.consumedWords > 0, parsed.consumedWords <= words.count else {

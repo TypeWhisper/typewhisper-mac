@@ -18,8 +18,12 @@ enum DutchNumberWordParser {
     ]
 
     static func parse(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
-        guard !words.isEmpty else { return nil }
-        let normalizedWords = words.map(normalizeWord)
+        parse(normalizedWords: words.map(normalizeWord))
+    }
+
+    /// Parses words that already went through `normalizeWord`.
+    static func parse(normalizedWords: [String]) -> NumberWordNormalizer.ParsedWords? {
+        guard !normalizedWords.isEmpty else { return nil }
         var index = 0
         var isNegative = false
 
@@ -302,8 +306,10 @@ enum DutchNumberWordParser {
         index + 1 < words.count && words[index] == "een" && words[index + 1] == "komma"
     }
 
-    private static func normalizeWord(_ word: String) -> String {
-        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "nl_NL"))
+    private static let wordLocale = Locale(identifier: "nl_NL")
+
+    static func normalizeWord(_ word: String) -> String {
+        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: wordLocale)
             .lowercased()
     }
 }

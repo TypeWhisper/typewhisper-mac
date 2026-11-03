@@ -40,8 +40,12 @@ enum PolishNumberWordParser {
     private static let decimalSeparatorWord = "przecinek"
 
     static func parse(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
-        guard !words.isEmpty else { return nil }
-        let normalizedWords = words.map(normalizeWord)
+        parse(normalizedWords: words.map(normalizeWord))
+    }
+
+    /// Parses words that already went through `normalizeWord`.
+    static func parse(normalizedWords: [String]) -> NumberWordNormalizer.ParsedWords? {
+        guard !normalizedWords.isEmpty else { return nil }
         var index = 0
         var isNegative = false
 
@@ -179,7 +183,9 @@ enum PolishNumberWordParser {
         return (digits, index)
     }
 
-    private static func normalizeWord(_ word: String) -> String {
-        word.precomposedStringWithCanonicalMapping.lowercased(with: Locale(identifier: "pl_PL"))
+    private static let wordLocale = Locale(identifier: "pl_PL")
+
+    static func normalizeWord(_ word: String) -> String {
+        word.precomposedStringWithCanonicalMapping.lowercased(with: wordLocale)
     }
 }

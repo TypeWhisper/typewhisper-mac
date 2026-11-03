@@ -31,8 +31,12 @@ enum SpanishNumberWordParser {
     ]
 
     static func parse(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
-        guard !words.isEmpty else { return nil }
-        let normalizedWords = words.map(normalizeWord)
+        parse(normalizedWords: words.map(normalizeWord))
+    }
+
+    /// Parses words that already went through `normalizeWord`.
+    static func parse(normalizedWords: [String]) -> NumberWordNormalizer.ParsedWords? {
+        guard !normalizedWords.isEmpty else { return nil }
         var index = 0
         var isNegative = false
 
@@ -232,8 +236,10 @@ enum SpanishNumberWordParser {
         return ["mil", "millon", "millones"].contains(words[index + 1])
     }
 
-    private static func normalizeWord(_ word: String) -> String {
-        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "es_ES"))
+    private static let wordLocale = Locale(identifier: "es_ES")
+
+    static func normalizeWord(_ word: String) -> String {
+        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: wordLocale)
             .lowercased()
     }
 }
