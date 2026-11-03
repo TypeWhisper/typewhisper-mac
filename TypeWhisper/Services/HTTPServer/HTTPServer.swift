@@ -1,6 +1,13 @@
 import Foundation
 import Network
 
+/// Bytes received so far on one connection. Only used on the server queue.
+/// Appending through a reference keeps the buffer unique, so a large upload is
+/// not copied again for every chunk that arrives.
+private final class ReceiveBuffer: @unchecked Sendable {
+    var data = Data()
+}
+
 final class HTTPServer: @unchecked Sendable {
     private let router: APIRouter
     private var listener: NWListener?
@@ -67,30 +74,29 @@ final class HTTPServer: @unchecked Sendable {
         activeConnections[ObjectIdentifier(connection)] = connection
         activeWork.unlock()
         connection.start(queue: serverQueue)
-        receiveData(on: connection, buffer: Data())
+        receiveData(on: connection, buffer: ReceiveBuffer())
     }
 
-    private func receiveData(on connection: NWConnection, buffer: Data) {
+    private func receiveData(on connection: NWConnection, buffer: ReceiveBuffer) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] content, _, isComplete, error in
             guard let self else {
                 connection.cancel()
                 return
             }
 
-            var accumulated = buffer
             if let content {
-                accumulated.append(content)
+                buffer.data.append(content)
             }
 
             // Guard against oversized requests before parsing
-            if accumulated.count > HTTPRequestParser.maxBodySize + 8192 {
+            if buffer.data.count > HTTPRequestParser.maxBodySize + 8192 {
                 let response = HTTPResponse.error(status: 413, message: "Payload too large")
                 self.send(response, on: connection)
                 return
             }
 
             do {
-                let request = try HTTPRequestParser.parse(accumulated)
+                let request = try HTTPRequestParser.parse(buffer.data)
                 let router = self.router
                 let task = Task {
                     let response = await router.route(request)
@@ -104,7 +110,7 @@ final class HTTPServer: @unchecked Sendable {
                     let response = HTTPResponse.error(status: 400, message: "Incomplete request")
                     self.send(response, on: connection)
                 } else {
-                    self.receiveData(on: connection, buffer: accumulated)
+                    self.receiveData(on: connection, buffer: buffer)
                 }
             } catch HTTPParseError.bodyTooLarge {
                 let response = HTTPResponse.error(status: 413, message: "Payload too large. Maximum request body size is 256 MiB.")

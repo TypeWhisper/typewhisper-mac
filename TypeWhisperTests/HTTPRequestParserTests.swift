@@ -7,6 +7,33 @@ final class HTTPRequestParserTests: XCTestCase {
         XCTAssertEqual(HTTPRequestParser.maxBodySize, 256 * 1024 * 1024)
     }
 
+    func testServerReassemblesBodyReceivedInManyChunks() async throws {
+        let router = APIRouter()
+        router.register("POST", "/echo") { request in
+            HTTPResponse(status: 200, contentType: "application/octet-stream", body: request.body)
+        }
+        let server = HTTPServer(router: router)
+        let ready = expectation(description: "Loopback API listening")
+        server.onStateChange = { if $0 { ready.fulfill() } }
+        let port = UInt16.random(in: 49_152...65_535)
+        try server.start(port: port)
+        defer { server.stopAndCancelActiveRequests() }
+        await fulfillment(of: [ready], timeout: 5)
+
+        // The server receives at most 64 KiB per read, so this arrives in many chunks.
+        let body = Data((0..<600_000).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/echo")!)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.timeoutInterval = 10
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let (data, response) = try await session.data(for: request)
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(data, body)
+    }
+
     func testParseExtractsHeadersQueryAndBody() throws {
         let body = Data("hello".utf8)
         let requestData = Data("""
