@@ -478,21 +478,27 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             close()
             return finalResult()
         }
-        isFlushRequested = true
-        try await send { try await $0.sendText(#"{"type":"flush_request"}"#) }
-
+        // Taken before the flush goes out: its turn end can arrive while the send is in progress.
         let turnsBefore = endedTurnCount
         let timeout = isTurnOpen
             ? Self.finishTimeout + .milliseconds(sentSampleCount / 160)
             : Self.pendingSpeechTimeout
+        isFlushRequested = true
+        try await send { try await $0.sendText(#"{"type":"flush_request"}"#) }
+
         let hasEnded = await wait(timeout: timeout) { $0.endedTurnCount > turnsBefore }
+        // Closing ends the receive task, which must not count as a failure of the session.
+        let connectionFailure = failure
         close()
         if !hasEnded {
             if isCancelled || Task.isCancelled { throw CancellationError() }
-            // A turn that never ended may miss its last words, so TypeWhisper transcribes the
-            // whole recording instead. Speech that never became a turn had no words.
+            // A turn that never ended may miss its last words, and a connection that failed
+            // may have lost speech that had not become a turn, so TypeWhisper transcribes the
+            // whole recording instead. Speech that never became a turn on a healthy
+            // connection had no words.
+            if let connectionFailure { throw connectionFailure }
             if isTurnOpen {
-                throw failure ?? PluginTranscriptionError.networkError("Reson8 did not end the last turn in time")
+                throw PluginTranscriptionError.networkError("Reson8 did not end the last turn in time")
             }
         }
         return finalResult()
@@ -812,13 +818,21 @@ actor Reson8DictionaryModelSync {
     private func sync(to terms: [String]) async throws -> String {
         if let modelId = state.modelId {
             do {
-                let synced = Set(state.terms)
+                // Each batch is saved once Reson8 applied it, so a sync that fails halfway
+                // leaves a state that matches the model and the next sync repairs the rest.
+                var synced = state.terms
                 let wanted = Set(terms)
                 for batch in Self.batches(state.terms.filter { !wanted.contains($0) }) {
                     try await api.deletePhrases(batch, fromModel: modelId)
+                    let deleted = Set(batch)
+                    synced.removeAll { deleted.contains($0) }
+                    save(Reson8DictionaryModelState(modelId: modelId, terms: synced))
                 }
-                for batch in Self.batches(terms.filter { !synced.contains($0) }) {
+                let present = Set(synced)
+                for batch in Self.batches(terms.filter { !present.contains($0) }) {
                     try await api.addPhrases(batch, toModel: modelId)
+                    synced += batch
+                    save(Reson8DictionaryModelState(modelId: modelId, terms: synced))
                 }
                 save(Reson8DictionaryModelState(modelId: modelId, terms: terms))
                 return modelId

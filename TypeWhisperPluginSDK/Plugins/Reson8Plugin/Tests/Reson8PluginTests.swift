@@ -562,6 +562,51 @@ final class Reson8PluginTests: XCTestCase {
         XCTAssertEqual(turnEnds.withLock { $0 }, 0)
     }
 
+    // TypeWhisper then transcribes the whole recording instead of losing the speech.
+    func testTurnsSessionWhoseConnectionFailsBeforePendingSpeechBecomesATurnFails() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [], closesOnFlush: true)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 8_000))
+
+        do {
+            _ = try await session.finish()
+            XCTFail("Expected the session to fail")
+        } catch PluginTranscriptionError.networkError {
+            XCTAssertTrue(socket.isClosed)
+        }
+    }
+
+    func testTurnsSessionCountsATurnEndThatArrivesWhileTheFlushIsSent() async throws {
+        let socket = FakeRealtimeSocket(
+            flushAnswers: [#"{"type":"turn_end_candidate","text":"Add the numbers.","language":"en"}"#, #"{"type":"turn_end"}"#],
+            sendTextDelay: .milliseconds(200)
+        )
+        let progress = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { text in
+            progress.withLock { $0.append(text) }
+            return true
+        }
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Add the","language":"en"}"#)
+        try await Self.waitUntil { progress.withLock { $0 } == ["Add the"] }
+
+        let start = ContinuousClock.now
+        let result = try await session.finish()
+
+        XCTAssertEqual(result.text, "Add the numbers.")
+        // Without waiting out the two seconds for speech that has not become a turn.
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1))
+    }
+
     private static func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<400 {
             if condition() { return }
@@ -618,6 +663,28 @@ final class Reson8PluginTests: XCTestCase {
         let withCustomModel = Self.queryItems(of: try await Self.request(ofTranscriptionWith: plugin, prompt: "Reson8"))
         XCTAssertEqual(withCustomModel["custom_model_id"], "custom-1")
         XCTAssertEqual(withCustomModel["phrases"], "Reson8")
+    }
+
+    func testDictionarySyncThatFailsHalfwayIsRepairedByTheNextSync() async throws {
+        let api = FakeCustomModelAPI()
+        let sync = Reson8DictionaryModelSync(state: Reson8DictionaryModelState(), api: api, persist: { _ in })
+        _ = try await sync.modelId(for: ["Reson8"])
+
+        await api.failNextAdd()
+        do {
+            _ = try await sync.modelId(for: ["Parakeet"])
+            XCTFail("Expected the sync to fail")
+        } catch {}
+        // Reson8 deleted "Reson8" before the add failed; asking for it again adds it back.
+        _ = try await sync.modelId(for: ["Reson8"])
+
+        let calls = await api.calls
+        XCTAssertEqual(calls, [
+            "create dictionary-1: Reson8",
+            "delete dictionary-1: Reson8",
+            "failed add dictionary-1: Parakeet",
+            "add dictionary-1: Reson8",
+        ])
     }
 
     func testDictionaryModelDeletedAtReson8IsCreatedAgain() async throws {
@@ -862,6 +929,11 @@ final class Reson8PluginTests: XCTestCase {
 private actor FakeCustomModelAPI: Reson8CustomModelAPI {
     private(set) var calls: [String] = []
     private var createdModelCount = 0
+    private var failsNextAdd = false
+
+    func failNextAdd() {
+        failsNextAdd = true
+    }
 
     func createModel(name: String, description: String, phrases: [String]) -> String {
         createdModelCount += 1
@@ -870,7 +942,12 @@ private actor FakeCustomModelAPI: Reson8CustomModelAPI {
         return modelId
     }
 
-    func addPhrases(_ phrases: [String], toModel modelId: String) {
+    func addPhrases(_ phrases: [String], toModel modelId: String) throws {
+        if failsNextAdd {
+            failsNextAdd = false
+            calls.append("failed add \(modelId): \(phrases.joined(separator: ", "))")
+            throw URLError(.timedOut)
+        }
         calls.append("add \(modelId): \(phrases.joined(separator: ", "))")
     }
 
@@ -892,11 +969,14 @@ private final class FakeRealtimeSocket: Reson8RealtimeSocket, @unchecked Sendabl
     private let continuation: AsyncThrowingStream<String, Error>.Continuation
     private let flushAnswers: [String]
     private let closesOnFlush: Bool
+    /// How long sending a text message takes after Reson8 already answered it.
+    private let sendTextDelay: Duration
 
-    init(flushAnswers: [String], closesOnFlush: Bool = false) {
+    init(flushAnswers: [String], closesOnFlush: Bool = false, sendTextDelay: Duration = .zero) {
         (messages, continuation) = AsyncThrowingStream<String, Error>.makeStream()
         self.flushAnswers = flushAnswers
         self.closesOnFlush = closesOnFlush
+        self.sendTextDelay = sendTextDelay
     }
 
     var audioFrameSizes: [Int] { state.withLock { $0.audioFrameSizes } }
@@ -920,6 +1000,9 @@ private final class FakeRealtimeSocket: Reson8RealtimeSocket, @unchecked Sendabl
             continuation.finish(throwing: URLError(.networkConnectionLost))
         } else {
             flushAnswers.forEach { continuation.yield($0) }
+        }
+        if sendTextDelay > .zero {
+            try await Task.sleep(for: sendTextDelay)
         }
     }
 
