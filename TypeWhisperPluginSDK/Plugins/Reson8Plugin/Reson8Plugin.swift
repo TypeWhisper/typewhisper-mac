@@ -267,13 +267,35 @@ private final class RawWebSocket: @unchecked Sendable {
 private actor TranscriptCollector {
     private var finals: [String] = []
     private var interim: String = ""
+    private var languages: [String] = []
+    private var finalWords: [[PluginWordTiming]] = []
 
-    func addFinal(_ text: String) {
+    func addFinal(_ text: String, language: String?, words: [PluginWordTiming]) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             finals.append(trimmed)
         }
+        if let language, !language.isEmpty {
+            languages.append(language)
+        }
+        if !words.isEmpty {
+            finalWords.append(words)
+        }
         interim = ""
+    }
+
+    func words() -> [PluginWordTiming] {
+        finalWords.flatMap { $0 }
+    }
+
+    /// Sentence segments of each final transcript, which is one utterance.
+    func segments() -> [PluginTranscriptionSegment] {
+        finalWords.flatMap { Reson8Transcript.sentenceSegments(from: $0) }
+            .map { PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+    }
+
+    func detectedLanguage() -> String? {
+        Reson8Transcript.mostFrequentLanguage(languages)
     }
 
     func setInterim(_ text: String) {
@@ -293,7 +315,17 @@ private actor TranscriptCollector {
     }
 }
 
-// MARK: - Custom Model
+// MARK: - Models
+
+/// A speech-to-text model as `GET /v1/model` lists it. The list is not in the
+/// API reference, so every field the plugin relies on beyond the name is optional.
+struct Reson8Model: Codable, Sendable {
+    let id: String
+    let displayName: String
+    let endpoints: [String]?
+    let languages: [String]?
+    let isDefault: Bool?
+}
 
 struct Reson8CustomModel: Codable, Sendable {
     let id: String
@@ -302,10 +334,153 @@ struct Reson8CustomModel: Codable, Sendable {
     let phraseCount: Int?
 }
 
+/// How the transcript treats filler words such as "um" and "uh". `natural` sends
+/// no `filler_mode`, which is the API's default.
+enum Reson8FillerMode: String, CaseIterable, Sendable {
+    case natural
+    case clean
+    case verbatim
+}
+
+// MARK: - Transcript Parsing
+
+/// The text, segments and word timings of a prerecorded response.
+struct Reson8Transcript {
+    let result: PluginStructuredTranscriptionResult
+    let words: [PluginWordTiming]
+
+    /// With diarization Reson8 returns one segment per speaker turn, each with its own
+    /// `language` and none for the whole response. Each turn becomes a segment with its
+    /// speaker label, from which the host builds its speaker transcript and subtitles.
+    init(json: [String: Any], requestedLanguage: String?) {
+        guard let speakerSegments = json["segments"] as? [[String: Any]], !speakerSegments.isEmpty else {
+            let words = Self.words(from: json["words"])
+            self.words = words
+            result = PluginStructuredTranscriptionResult(
+                text: (json["text"] as? String) ?? "",
+                detectedLanguage: Reson8Plugin.detectedLanguage(json["language"] as? String, requested: requestedLanguage),
+                segments: Self.sentenceSegments(from: words)
+            )
+            return
+        }
+
+        var words: [PluginWordTiming] = []
+        var segments: [PluginStructuredTranscriptionSegment] = []
+        for speakerSegment in speakerSegments {
+            let text = ((speakerSegment["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let segmentWords = Self.words(from: speakerSegment["words"])
+            words += segmentWords
+            guard !text.isEmpty else { continue }
+            let start = segmentWords.first?.start ?? ((speakerSegment["start_ms"] as? Double) ?? 0) / 1000
+            let end = segmentWords.last?.end
+                ?? start + ((speakerSegment["duration_ms"] as? Double) ?? 0) / 1000
+            segments.append(PluginStructuredTranscriptionSegment(
+                text: text,
+                start: start,
+                end: end,
+                speakerLabel: (speakerSegment["speaker_id"] as? Int).map { "Speaker \($0 + 1)" }
+            ))
+        }
+        self.words = words
+        let detected = Self.mostFrequentLanguage(speakerSegments.compactMap { $0["language"] as? String })
+        result = PluginStructuredTranscriptionResult(
+            text: Self.unlabeledText(of: segments),
+            detectedLanguage: Reson8Plugin.detectedLanguage(detected, requested: requestedLanguage),
+            segments: segments
+        )
+    }
+
+    /// The host cannot tell a dictation from a recording, and dictated text must not
+    /// start with "Speaker 1:", so the labels stay on the segments only. Unlike the
+    /// "Speaker N: text" lines of AssemblyAI and Microsoft AI.
+    static func unlabeledText(of segments: [PluginStructuredTranscriptionSegment]) -> String {
+        segments.map(\.text).joined(separator: " ")
+    }
+
+    /// The language most utterances were detected as; the earliest one wins a tie.
+    /// Same as PluginAudioChunking's private helper.
+    static func mostFrequentLanguage(_ languages: [String]) -> String? {
+        var counts: [String: Int] = [:]
+        for language in languages where !language.isEmpty {
+            counts[language, default: 0] += 1
+        }
+        return languages.filter { !$0.isEmpty }.max { counts[$0, default: 0] < counts[$1, default: 0] }
+    }
+
+    static func words(from value: Any?) -> [PluginWordTiming] {
+        (value as? [[String: Any]] ?? []).compactMap { word in
+            guard let text = word["text"] as? String,
+                  let start = word["start_ms"] as? Double,
+                  let duration = word["duration_ms"] as? Double else {
+                return nil
+            }
+            return PluginWordTiming(text: text, start: start / 1000, end: (start + duration) / 1000)
+        }
+    }
+
+    // Segmentation follows ElevenLabsTimedTranscriptParser. Reson8 returns words with
+    // their punctuation, and only for Resonant-1, whose languages separate words with
+    // spaces, so the words are joined with one.
+
+    /// A silence longer than this starts a new segment.
+    static let pauseThreshold: TimeInterval = 1.0
+    /// A sentence end splits only after this many words, so short answers
+    /// such as "Yes." join the next sentence instead of standing alone.
+    static let minimumSentenceWordCount = 3
+    /// A segment without sentence end or pause is split at the next word
+    /// after this length, like the 30-second windows of Whisper.
+    static let maximumSegmentDuration: TimeInterval = 30
+
+    private static let sentenceEndCharacters: Set<Character> = [".", "!", "?", "…", "。", "！", "？", "؟", "।"]
+    private static let trailingClosers: Set<Character> = ["\"", "'", "”", "’", "»", "«", ")", "]", "」", "』"]
+
+    /// Splits words into subtitle-sized segments.
+    static func sentenceSegments(from words: [PluginWordTiming]) -> [PluginStructuredTranscriptionSegment] {
+        var segments: [PluginStructuredTranscriptionSegment] = []
+        var current: [PluginWordTiming] = []
+        func close() {
+            guard let first = current.first, let last = current.last else { return }
+            segments.append(PluginStructuredTranscriptionSegment(
+                text: current.map(\.text).joined(separator: " "),
+                start: first.start,
+                end: last.end
+            ))
+            current = []
+        }
+
+        for word in words {
+            if let first = current.first, let last = current.last,
+               word.start - last.end > pauseThreshold || word.end - first.start > maximumSegmentDuration {
+                close()
+            }
+            current.append(word)
+            if current.count >= minimumSentenceWordCount, endsSentence(word.text) {
+                close()
+            }
+        }
+        close()
+        return segments
+    }
+
+    private static func endsSentence(_ word: String) -> Bool {
+        var trimmed = Substring(word)
+        while let last = trimmed.last, trailingClosers.contains(last) {
+            trimmed = trimmed.dropLast()
+        }
+        return trimmed.last.map(sentenceEndCharacters.contains) ?? false
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(Reson8Plugin)
-final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class Reson8Plugin: NSObject,
+    StructuredLanguageHintTranscriptionEnginePlugin,
+    LanguageHintTranscriptionEnginePlugin,
+    DictionaryTermsCapabilityProviding,
+    DictionaryTermsBudgetProviding,
+    @unchecked Sendable
+{
     static let pluginId = "com.typewhisper.reson8"
     static let pluginName = "Reson8"
     private static let logger = Logger(subsystem: "com.typewhisper.reson8", category: "Plugin")
@@ -316,9 +491,31 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
     fileprivate var _selectedModelId: String?
     fileprivate var _customBaseURL: String?
     fileprivate var _customAuthHeader: String?
+    fileprivate var _fetchedModels: [Reson8Model] = []
     fileprivate var _fetchedCustomModels: [Reson8CustomModel] = []
+    /// The settings fetch the models on their own once per activation.
+    fileprivate var _didRefreshModelsOnAppear = false
+    fileprivate var _fillerMode: Reson8FillerMode = .natural
+    /// Nil keeps Reson8's default.
+    fileprivate var _biasStrength: Double?
+    fileprivate static let defaultBiasStrength = 0.45
+    fileprivate var _diarizationEnabled = false
+    /// Nil lets Reson8 determine the number of speakers.
+    fileprivate var _maxSpeakers: Int?
+    /// Reson8 tells up to eight speakers apart per request.
+    fileprivate static let maximumSpeakerCount = 8
+    fileprivate static let automaticSpeakerCount = 0
 
     private static let defaultBaseURL = "https://api.reson8.dev"
+
+    /// Query parameters a model rejects, as https://docs.reson8.dev/speech-to-text/models/
+    /// lists them; `GET /v1/model` does not. Models not listed take every parameter.
+    private static let unsupportedParameters: [String: Set<String>] = [
+        "rumble-2-flash": [
+            "diarize", "include_timestamps", "include_words", "phrases",
+            "custom_model_id", "patterns", "filler_mode",
+        ],
+    ]
 
     required override init() {
         super.init()
@@ -331,6 +528,16 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             ?? Self.defaultModelSentinel
         _customBaseURL = host.userDefault(forKey: "customBaseURL") as? String
         _customAuthHeader = host.userDefault(forKey: "customAuthHeader") as? String
+        _fillerMode = (host.userDefault(forKey: "fillerMode") as? String)
+            .flatMap(Reson8FillerMode.init(rawValue:)) ?? .natural
+        _biasStrength = host.userDefault(forKey: "biasStrength") as? Double
+        _diarizationEnabled = host.userDefault(forKey: "speakerDiarizationEnabled") as? Bool ?? false
+        _maxSpeakers = (host.userDefault(forKey: "maxSpeakers") as? Int)
+            .flatMap { (1...Self.maximumSpeakerCount).contains($0) ? $0 : nil }
+        if let data = host.userDefault(forKey: "fetchedModels") as? Data,
+           let models = try? JSONDecoder().decode([Reson8Model].self, from: data) {
+            _fetchedModels = models
+        }
         if let data = host.userDefault(forKey: "fetchedCustomModels") as? Data,
            let models = try? JSONDecoder().decode([Reson8CustomModel].self, from: data) {
             _fetchedCustomModels = models
@@ -351,14 +558,33 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         return !key.isEmpty
     }
 
+    /// The default model keeps the sentinel ID so saved selections stay valid, then
+    /// come the other models Reson8 lists and the custom models, which run on the
+    /// default model.
     var transcriptionModels: [PluginModelInfo] {
+        let defaultName = defaultModel?.displayName
+            ?? String(localized: "Default model", bundle: Bundle(for: Reson8Plugin.self))
+        let defaultLanguageCount = supportedLanguages(forModelId: Self.defaultModelSentinel).count
         var list: [PluginModelInfo] = [
-            PluginModelInfo(id: Self.defaultModelSentinel, displayName: String(localized: "Default model", bundle: Bundle(for: Reson8Plugin.self)))
+            PluginModelInfo(id: Self.defaultModelSentinel, displayName: defaultName, languageCount: defaultLanguageCount)
         ]
+        list.append(contentsOf: _fetchedModels.filter { $0.isDefault != true }.map {
+            PluginModelInfo(id: $0.id, displayName: $0.displayName, languageCount: $0.languages?.count ?? 0)
+        })
         list.append(contentsOf: _fetchedCustomModels.map {
-            PluginModelInfo(id: $0.id, displayName: $0.name)
+            PluginModelInfo(id: $0.id, displayName: $0.name, languageCount: defaultLanguageCount)
         })
         return list
+    }
+
+    private var defaultModel: Reson8Model? {
+        _fetchedModels.first { $0.isDefault == true }
+    }
+
+    /// The listed model a selection transcribes with. The default selection and
+    /// custom models use the default model.
+    private func model(forModelId modelId: String?) -> Reson8Model? {
+        _fetchedModels.first { $0.isDefault != true && $0.id == modelId } ?? defaultModel
     }
 
     var selectedModelId: String? { _selectedModelId }
@@ -369,11 +595,89 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
     }
 
     var supportsTranslation: Bool { false }
-    var supportsStreaming: Bool { true }
+
+    /// Streams through the realtime endpoint when the selected model offers it.
+    /// Before the model list was fetched, the default model is assumed to. Speaker
+    /// labels need the prerecorded endpoint's segments, so diarizing does not stream.
+    var supportsStreaming: Bool {
+        guard !diarizes else { return false }
+        return model(forModelId: _selectedModelId)?.endpoints?.contains("realtime") ?? true
+    }
+
+    /// Labels speakers when the user turned it on and the selected model can.
+    private var diarizes: Bool {
+        _diarizationEnabled && supportsParameter("diarize", forModelId: _selectedModelId)
+    }
+
+    /// Word timings feed the host's subtitles, speaker alignment and playback.
+    private var includesWordTimings: Bool {
+        supportsParameter("include_timestamps", forModelId: _selectedModelId)
+            && supportsParameter("include_words", forModelId: _selectedModelId)
+    }
+
+    // MARK: - Dictionary Terms
+
+    /// The host sends the dictionary in `prompt`; it goes to Reson8 as `phrases`.
+    var dictionaryTermsSupport: DictionaryTermsSupport {
+        supportsParameter("phrases", forModelId: _selectedModelId) ? .supported : .unsupported
+    }
+
+    /// Reson8 takes up to 250 phrases of up to 255 characters per request. The host
+    /// counts characters; terms outside ASCII take more room once percent-encoded and
+    /// are cut further in `phrasesQueryItem(prompt:)`.
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        DictionaryTermsBudget(maxTerms: 250, maxCharsPerTerm: 255, maxTotalChars: Self.maximumPhrasesCharacterCount)
+    }
+
+    // Lets the host resolve dictionary support for a per-flow model override, looked up
+    // through the Objective-C runtime like `supportedLanguagesForModelId:`.
+    @objc(supportsDictionaryTermsForModelId:)
+    func supportsDictionaryTerms(forModelId modelId: String?) -> NSNumber {
+        NSNumber(value: supportsParameter("phrases", forModelId: modelId))
+    }
+
+    /// Reson8 answers 414 once the query string passes about 4,000 characters, so the
+    /// percent-encoded phrases stay well below that.
+    private static let maximumEncodedPhrasesLength = 2_500
+    /// The same room for ASCII terms, which encode to themselves.
+    private static let maximumPhrasesCharacterCount = 2_500
+
+    private static let queryValueAllowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
+
+    private func phrasesQueryItem(prompt: String?) -> URLQueryItem? {
+        guard supportsParameter("phrases", forModelId: _selectedModelId) else { return nil }
+        let terms = PluginDictionaryTerms.clippedTerms(
+            from: PluginDictionaryTerms.terms(fromPrompt: prompt),
+            budget: dictionaryTermsBudget
+        )
+        var phrases: [String] = []
+        var encodedLength = 0
+        for term in terms {
+            let encodedTerm = term.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowed)
+            let length = encodedLength + (phrases.isEmpty ? 0 : 1) + (encodedTerm?.count ?? term.utf8.count * 3)
+            guard length <= Self.maximumEncodedPhrasesLength else { break }
+            phrases.append(term)
+            encodedLength = length
+        }
+        return phrases.isEmpty ? nil : URLQueryItem(name: "phrases", value: phrases.joined(separator: ","))
+    }
 
     var supportedLanguages: [String] {
-        ["nl", "en", "fr", "de", "it", "pl", "pt", "es", "sv"]
+        supportedLanguages(forModelId: _selectedModelId)
     }
+
+    // Lets the host resolve languages for a per-flow model override. It is looked up through the
+    // Objective-C runtime, so the plugin stays loadable by hosts that do not know about it.
+    @objc(supportedLanguagesForModelId:)
+    func supportedLanguages(forModelId modelId: String?) -> [String] {
+        if let languages = model(forModelId: modelId)?.languages, !languages.isEmpty {
+            return languages
+        }
+        return Self.fallbackLanguages
+    }
+
+    /// Languages of the default model, for use until the model list was fetched.
+    private static let fallbackLanguages = ["nl", "en", "fr", "de", "it", "pl", "pt", "es", "sv"]
 
     // MARK: - URL Helpers
 
@@ -400,24 +704,55 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         return apiKey
     }
 
-    private func customModelQueryItem() -> URLQueryItem? {
+    /// A listed model goes in `model`, a custom model in `custom_model_id` without
+    /// `model`, so it runs on the default model as before.
+    private func modelQueryItem() -> URLQueryItem? {
         guard let modelId = _selectedModelId,
               modelId != Self.defaultModelSentinel,
               !modelId.isEmpty else {
             return nil
         }
+        if _fetchedModels.contains(where: { $0.id == modelId }) {
+            return URLQueryItem(name: "model", value: modelId)
+        }
         return URLQueryItem(name: "custom_model_id", value: modelId)
     }
 
-    // MARK: - Transcription (single language)
+    /// Natural is the API's default and is left out, as is a mode for a model that rejects it.
+    private func fillerModeQueryItem() -> URLQueryItem? {
+        guard _fillerMode != .natural,
+              supportsParameter("filler_mode", forModelId: _selectedModelId) else {
+            return nil
+        }
+        return URLQueryItem(name: "filler_mode", value: _fillerMode.rawValue)
+    }
+
+    /// Only phrases and custom models bias the transcription, so the strength goes
+    /// along with them.
+    private func biasStrengthQueryItem(for queryItems: [URLQueryItem]) -> URLQueryItem? {
+        guard let strength = _biasStrength,
+              queryItems.contains(where: { $0.name == "custom_model_id" || $0.name == "phrases" }) else {
+            return nil
+        }
+        return URLQueryItem(name: "bias_strength", value: String(format: "%.2f", strength))
+    }
+
+    /// Whether the model a selection transcribes with takes `parameter`. Custom models
+    /// run on the default model.
+    fileprivate func supportsParameter(_ parameter: String, forModelId modelId: String?) -> Bool {
+        guard let id = model(forModelId: modelId)?.id else { return true }
+        return Self.unsupportedParameters[id]?.contains(parameter) != true
+    }
+
+    // MARK: - Transcription
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        try await transcribe(
+        Self.legacyResult(from: try await transcribeStructured(
             audio: audio,
-            languageSelection: PluginLanguageSelection(requestedLanguage: language, languageHints: []),
+            language: language,
             translate: translate,
             prompt: prompt
-        )
+        ))
     }
 
     func transcribe(
@@ -436,23 +771,18 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         )
     }
 
-    // MARK: - Transcription (selection helper)
-
     func transcribe(
         audio: AudioData,
         languageSelection: PluginLanguageSelection,
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
-            throw PluginTranscriptionError.notConfigured
-        }
-        let resolved = Self.resolveLanguage(selection: languageSelection)
-        return try await transcribeREST(
+        Self.legacyResult(from: try await transcribeStructured(
             audio: audio,
-            language: resolved,
-            apiKey: apiKey
-        )
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt
+        ))
     }
 
     func transcribe(
@@ -466,25 +796,71 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             throw PluginTranscriptionError.notConfigured
         }
         let resolved = Self.resolveLanguage(selection: languageSelection)
-        guard Self.streamsAudio(ofDuration: audio.duration) else {
-            return try await transcribeREST(audio: audio, language: resolved, apiKey: apiKey)
+        guard supportsStreaming, Self.streamsAudio(ofDuration: audio.duration) else {
+            return Self.legacyResult(from: try await transcribeREST(
+                audio: audio,
+                language: resolved,
+                prompt: prompt,
+                apiKey: apiKey
+            ))
         }
 
         do {
             return try await transcribeWebSocket(
                 audio: audio,
                 language: resolved,
+                prompt: prompt,
                 apiKey: apiKey,
                 onProgress: onProgress
             )
         } catch {
             Self.logger.warning("Realtime transcription failed, falling back to REST: \(error.localizedDescription)")
-            return try await transcribeREST(
+            return Self.legacyResult(from: try await transcribeREST(
                 audio: audio,
                 language: resolved,
+                prompt: prompt,
                 apiKey: apiKey
-            )
+            ))
         }
+    }
+
+    func transcribeStructured(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult {
+        try await transcribeStructured(
+            audio: audio,
+            languageSelection: PluginLanguageSelection(requestedLanguage: language, languageHints: []),
+            translate: translate,
+            prompt: prompt
+        )
+    }
+
+    func transcribeStructured(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        return try await transcribeREST(
+            audio: audio,
+            language: Self.resolveLanguage(selection: languageSelection),
+            prompt: prompt,
+            apiKey: apiKey
+        )
+    }
+
+    private static func legacyResult(from result: PluginStructuredTranscriptionResult) -> PluginTranscriptionResult {
+        PluginTranscriptionResult(
+            text: result.text,
+            detectedLanguage: result.detectedLanguage,
+            segments: result.segments.map { PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+        )
     }
 
     /// The realtime endpoint takes a recording as one stream and documents no
@@ -494,13 +870,74 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         duration <= maximumRequestDuration
     }
 
-    /// Reson8 accepts one language query parameter, not an ordered hint list.
-    /// If multiple hints reach this helper, keep #627 semantics by using the first.
+    /// A requested language pins the transcription. Several hints go as a comma-separated
+    /// list, which restricts Reson8's per-utterance auto-detection to them.
     static func resolveLanguage(selection: PluginLanguageSelection) -> String? {
         if let req = selection.requestedLanguage, !req.isEmpty {
             return req
         }
-        return selection.languageHints.first.flatMap { $0.isEmpty ? nil : $0 }
+        let hints = selection.languageHints.filter { !$0.isEmpty }
+        return hints.isEmpty ? nil : hints.joined(separator: ",")
+    }
+
+    /// The language Reson8 detected, or the language the request pinned. Rumble-2-Flash
+    /// reports an empty language for a list of languages.
+    static func detectedLanguage(_ detected: String?, requested language: String?) -> String? {
+        if let detected, !detected.isEmpty {
+            return detected
+        }
+        guard let language, !language.isEmpty, !language.contains(",") else { return nil }
+        return language
+    }
+
+    // MARK: - Query Parameters
+
+    /// The parameters both endpoints take. Diarization is left to the prerecorded
+    /// endpoint, since a diarizing selection does not stream.
+    private func queryItems(language: String?, prompt: String?) -> [URLQueryItem] {
+        var items = [
+            URLQueryItem(name: "encoding", value: "pcm_s16le"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
+            URLQueryItem(name: "include_language", value: "true"),
+        ]
+        if let lang = language, !lang.isEmpty {
+            items.append(URLQueryItem(name: "language", value: lang))
+        }
+        if let modelItem = modelQueryItem() {
+            items.append(modelItem)
+        }
+        if let fillerModeItem = fillerModeQueryItem() {
+            items.append(fillerModeItem)
+        }
+        if let phrasesItem = phrasesQueryItem(prompt: prompt) {
+            items.append(phrasesItem)
+        }
+        if let biasItem = biasStrengthQueryItem(for: items) {
+            items.append(biasItem)
+        }
+        if includesWordTimings {
+            items.append(URLQueryItem(name: "include_timestamps", value: "true"))
+            items.append(URLQueryItem(name: "include_words", value: "true"))
+        }
+        return items
+    }
+
+    private func diarizationQueryItems() -> [URLQueryItem] {
+        guard diarizes else { return [] }
+        var items = [URLQueryItem(name: "diarize", value: "true")]
+        if let maxSpeakers = _maxSpeakers {
+            items.append(URLQueryItem(name: "max_speakers", value: String(maxSpeakers)))
+        }
+        return items
+    }
+
+    /// URLComponents leaves `+` unencoded, which servers read as a space, so a
+    /// dictionary term such as "C++" is encoded by hand.
+    static func percentEncodedQuery(_ items: [URLQueryItem]) -> String? {
+        var components = URLComponents()
+        components.queryItems = items
+        return components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
     }
 
     // MARK: - REST Implementation
@@ -508,33 +945,34 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
     private func transcribeREST(
         audio: AudioData,
         language: String?,
+        prompt: String?,
         apiKey: String
-    ) async throws -> PluginTranscriptionResult {
+    ) async throws -> PluginStructuredTranscriptionResult {
         guard var components = URLComponents(string: "\(effectiveBaseURL)/v1/speech-to-text/prerecorded") else {
             throw PluginTranscriptionError.apiError("Invalid base URL: \(effectiveBaseURL)")
         }
-        var queryItems = [
-            URLQueryItem(name: "encoding", value: "pcm_s16le"),
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "channels", value: "1"),
-        ]
-        if let lang = language, !lang.isEmpty {
-            queryItems.append(URLQueryItem(name: "language", value: lang))
-        }
-        if let modelItem = customModelQueryItem() {
-            queryItems.append(modelItem)
-        }
-        components.queryItems = queryItems
+        components.percentEncodedQuery = Self.percentEncodedQuery(
+            queryItems(language: language, prompt: prompt) + diarizationQueryItems()
+        )
 
         guard let url = components.url else {
             throw PluginTranscriptionError.apiError("Failed to construct request URL")
         }
-        return try await PluginAudioChunking.transcribe(
+        // Reson8 numbers the speakers anew in every request; the chunks of a
+        // longer recording keep their labels under numbers of their own.
+        let result = try await PluginAudioChunking.transcribeStructured(
             audio,
             maximumChunkDuration: Self.maximumRequestDuration
         ) { chunk in
             try await transcribeRESTRequest(url: url, samples: chunk.samples, language: language, apiKey: apiKey)
         }
+        // PluginAudioChunking writes the labels of a chunked recording into its text.
+        guard result.segments.contains(where: { $0.speakerLabel != nil }) else { return result }
+        return PluginStructuredTranscriptionResult(
+            text: Reson8Transcript.unlabeledText(of: result.segments),
+            detectedLanguage: result.detectedLanguage,
+            segments: result.segments
+        )
     }
 
     /// The prerecorded endpoint rejects bodies above an undocumented size with
@@ -547,7 +985,7 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         samples: [Float],
         language: String?,
         apiKey: String
-    ) async throws -> PluginTranscriptionResult {
+    ) async throws -> PluginStructuredTranscriptionResult {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
@@ -568,12 +1006,18 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                 "Invalid request: \(Self.errorMessage(from: data, response: httpResponse))"
             )
         case 401: throw PluginTranscriptionError.invalidApiKey
-        case 404:
+        case 402:
             throw PluginTranscriptionError.apiError(
-                "Custom model not found: \(Self.errorMessage(from: data, response: httpResponse))"
+                "Reson8 credit limit reached: \(Self.errorMessage(from: data, response: httpResponse))"
+            )
+        case 404:
+            let subject = url.query?.contains("custom_model_id=") == true ? "Custom model" : "Model"
+            throw PluginTranscriptionError.apiError(
+                "\(subject) not found: \(Self.errorMessage(from: data, response: httpResponse))"
             )
         case 413: throw PluginTranscriptionError.fileTooLarge
-        case 429: throw PluginTranscriptionError.rateLimited
+        // Reson8 answers 429 when the account's concurrent connection limit is reached.
+        case 429: throw PluginTranscriptionError.rateLimitOrQuota(from: data)
         case 500:
             throw PluginTranscriptionError.apiError(
                 "Reson8 server error: \(Self.errorMessage(from: data, response: httpResponse))"
@@ -592,9 +1036,11 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             )
         }
 
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let text = (json?["text"] as? String) ?? ""
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        let transcript = Reson8Transcript(json: json, requestedLanguage: language)
+        // Times are relative to this request; chunking shifts them.
+        PluginWordTimings.report(transcript.words)
+        return transcript.result
     }
 
     // MARK: - WebSocket Implementation (Raw RFC 6455)
@@ -602,21 +1048,12 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
     private func transcribeWebSocket(
         audio: AudioData,
         language: String?,
+        prompt: String?,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        var queryItems = [
-            URLQueryItem(name: "encoding", value: "pcm_s16le"),
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "channels", value: "1"),
-            URLQueryItem(name: "include_interim", value: "true"),
-        ]
-        if let lang = language, !lang.isEmpty {
-            queryItems.append(URLQueryItem(name: "language", value: lang))
-        }
-        if let modelItem = customModelQueryItem() {
-            queryItems.append(modelItem)
-        }
+        let queryItems = queryItems(language: language, prompt: prompt)
+            + [URLQueryItem(name: "include_interim", value: "true")]
 
         let baseURL = effectiveBaseURL
         guard let urlComponents = URLComponents(string: baseURL),
@@ -628,7 +1065,7 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
 
         var pathComponents = URLComponents()
         pathComponents.path = "/v1/speech-to-text/realtime"
-        pathComponents.queryItems = queryItems
+        pathComponents.percentEncodedQuery = Self.percentEncodedQuery(queryItems)
         guard let pathWithQuery = pathComponents.string else {
             throw PluginTranscriptionError.apiError("Invalid query parameters")
         }
@@ -671,7 +1108,11 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                     let isFinal = (json["is_final"] as? Bool) ?? false
 
                     if isFinal {
-                        await collector.addFinal(transcript)
+                        await collector.addFinal(
+                            transcript,
+                            language: json["language"] as? String,
+                            words: Reson8Transcript.words(from: json["words"])
+                        )
                     } else {
                         await collector.setInterim(transcript)
                     }
@@ -703,7 +1144,12 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         ws.cancel()
 
         let finalText = await collector.finalResult()
-        return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
+        PluginWordTimings.report(await collector.words())
+        return PluginTranscriptionResult(
+            text: finalText,
+            detectedLanguage: Self.detectedLanguage(await collector.detectedLanguage(), requested: language),
+            segments: await collector.segments()
+        )
     }
 
     // MARK: - JSON Error Body Helper
@@ -769,12 +1215,52 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         }
     }
 
+    // MARK: - Models
+
+    /// The models Reson8 offers, or nil when they could not be fetched, so a
+    /// failed refresh keeps the models fetched before.
+    func fetchModels() async -> [Reson8Model]? {
+        await fetchList(path: "/v1/model")
+    }
+
+    fileprivate func setFetchedModels(_ models: [Reson8Model]) {
+        _fetchedModels = models
+        if let data = try? JSONEncoder().encode(models) {
+            host?.setUserDefault(data, forKey: "fetchedModels")
+        }
+        host?.notifyCapabilitiesChanged()
+    }
+
     // MARK: - Custom Models
 
-    fileprivate func fetchCustomModels() async -> [Reson8CustomModel] {
+    fileprivate func fetchCustomModels() async -> [Reson8CustomModel]? {
+        await fetchList(path: "/v1/custom-model")
+    }
+
+    // MARK: - Model Catalog
+
+    /// Fetches both lists. A list that cannot be fetched, as after a timeout or from a
+    /// proxy without `/v1/model`, keeps the one fetched before, and with it the
+    /// selection. A selection that is no longer offered falls back to the default model.
+    @MainActor
+    func refreshModels() async {
+        let models = await fetchModels()
+        let customModels = await fetchCustomModels()
+        if let models {
+            setFetchedModels(models)
+        }
+        if let customModels {
+            setFetchedCustomModels(customModels)
+        }
+        if let selected = _selectedModelId, !transcriptionModels.contains(where: { $0.id == selected }) {
+            selectModel(Self.defaultModelSentinel)
+        }
+    }
+
+    private func fetchList<Item: Decodable>(path: String) async -> [Item]? {
         guard let apiKey = _apiKey, !apiKey.isEmpty,
-              let url = URL(string: "\(effectiveBaseURL)/v1/custom-model") else {
-            return []
+              let url = URL(string: "\(effectiveBaseURL)\(path)") else {
+            return nil
         }
         var request = URLRequest(url: url)
         request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
@@ -783,11 +1269,11 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         do {
             let (data, response) = try await PluginHTTPClient.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                return []
+                return nil
             }
-            return (try? JSONDecoder().decode([Reson8CustomModel].self, from: data)) ?? []
+            return try? JSONDecoder().decode([Item].self, from: data)
         } catch {
-            return []
+            return nil
         }
     }
 
@@ -837,6 +1323,29 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         host?.setUserDefault(trimmed.isEmpty ? nil : trimmed, forKey: "customBaseURL")
     }
 
+    fileprivate func setFillerMode(_ mode: Reson8FillerMode) {
+        _fillerMode = mode
+        host?.setUserDefault(mode.rawValue, forKey: "fillerMode")
+    }
+
+    fileprivate func setDiarizationEnabled(_ enabled: Bool) {
+        _diarizationEnabled = enabled
+        host?.setUserDefault(enabled, forKey: "speakerDiarizationEnabled")
+        // Diarizing turns streaming off.
+        host?.notifyCapabilitiesChanged()
+    }
+
+    fileprivate func setMaxSpeakers(_ count: Int?) {
+        _maxSpeakers = count
+        host?.setUserDefault(count, forKey: "maxSpeakers")
+    }
+
+    fileprivate func setBiasStrength(_ strength: Double) {
+        let isDefault = abs(strength - Self.defaultBiasStrength) < 0.001
+        _biasStrength = isDefault ? nil : strength
+        host?.setUserDefault(_biasStrength, forKey: "biasStrength")
+    }
+
     fileprivate func setCustomAuthHeader(_ header: String) {
         let trimmed = header.trimmingCharacters(in: .whitespacesAndNewlines)
         _customAuthHeader = trimmed.isEmpty ? nil : trimmed
@@ -853,12 +1362,46 @@ private struct Reson8SettingsView: View {
     @State private var validationResult: Bool?
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
+    @State private var fillerMode: Reson8FillerMode = .natural
+    @State private var biasStrength = Reson8Plugin.defaultBiasStrength
+    @State private var diarizationEnabled = false
+    @State private var maxSpeakers = Reson8Plugin.automaticSpeakerCount
     @State private var showAdvanced = false
     @State private var customBaseURL = ""
     @State private var customAuthHeader = ""
     @State private var fetchedCustomModels: [Reson8CustomModel] = []
     @State private var isRefreshingModels = false
     private let bundle = Bundle(for: Reson8Plugin.self)
+
+    private var selectedModelName: String? {
+        plugin.transcriptionModels.first { $0.id == selectedModel }?.displayName
+    }
+
+    // Settings the selected model cannot use are hidden; their values stay saved for
+    // the models that can.
+    private var supportsFillerMode: Bool { plugin.supportsParameter("filler_mode", forModelId: selectedModel) }
+    private var supportsDiarization: Bool { plugin.supportsParameter("diarize", forModelId: selectedModel) }
+    private var supportsDictionaryTerms: Bool { plugin.supportsParameter("phrases", forModelId: selectedModel) }
+
+    /// What the selected model does without, as a list for the note under the model.
+    private var unsupportedFeatureList: String? {
+        var features: [String] = []
+        if !supportsFillerMode {
+            features.append(String(localized: "filler words", bundle: bundle))
+        }
+        if !supportsDiarization {
+            features.append(String(localized: "speaker diarization", bundle: bundle))
+        }
+        if !supportsDictionaryTerms {
+            features.append(String(localized: "dictionary terms", bundle: bundle))
+        }
+        return features.isEmpty ? nil : features.formatted(.list(type: .and))
+    }
+
+    /// Formatted like the slider's value, which follows the region's decimal separator.
+    private var defaultBiasStrengthText: String {
+        Reson8Plugin.defaultBiasStrength.formatted(.number.precision(.fractionLength(2)))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -941,7 +1484,7 @@ private struct Reson8SettingsView: View {
                         Spacer()
 
                         Button {
-                            refreshCustomModels()
+                            refreshModels()
                         } label: {
                             if isRefreshingModels {
                                 ProgressView().controlSize(.small)
@@ -963,12 +1506,77 @@ private struct Reson8SettingsView: View {
                     .labelsHidden()
                     .onChange(of: selectedModel) {
                         plugin.selectModel(selectedModel)
+                        // Models differ in languages and in whether they stream.
+                        plugin.host?.notifyCapabilitiesChanged()
                     }
 
-                    if fetchedCustomModels.isEmpty {
+                    if fetchedCustomModels.isEmpty, selectedModel == Reson8Plugin.defaultModelSentinel {
                         Text("No custom models yet — using default model", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+
+                    if let modelName = selectedModelName, let unsupportedFeatures = unsupportedFeatureList {
+                        Text("\(modelName) does not support \(unsupportedFeatures).", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if supportsFillerMode {
+                    Divider()
+
+                    // Filler Words
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Filler words", bundle: bundle)
+                            .font(.headline)
+
+                        Picker(String(localized: "Filler words", bundle: bundle), selection: $fillerMode) {
+                            ForEach(Reson8FillerMode.allCases, id: \.self) { mode in
+                                Text(mode.displayName(bundle: bundle)).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .onChange(of: fillerMode) {
+                            plugin.setFillerMode(fillerMode)
+                        }
+
+                        Text(fillerMode.explanation(bundle: bundle))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if supportsDiarization {
+                    Divider()
+
+                    // Speaker Diarization
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(String(localized: "Speaker diarization", bundle: bundle), isOn: $diarizationEnabled)
+                            .onChange(of: diarizationEnabled) {
+                                plugin.setDiarizationEnabled(diarizationEnabled)
+                            }
+
+                        if diarizationEnabled {
+                            Picker(String(localized: "Maximum speakers", bundle: bundle), selection: $maxSpeakers) {
+                                Text("Automatic", bundle: bundle).tag(Reson8Plugin.automaticSpeakerCount)
+                                ForEach(1...Reson8Plugin.maximumSpeakerCount, id: \.self) { count in
+                                    Text(count, format: .number).tag(count)
+                                }
+                            }
+                            .fixedSize()
+                            .onChange(of: maxSpeakers) {
+                                plugin.setMaxSpeakers(maxSpeakers == Reson8Plugin.automaticSpeakerCount ? nil : maxSpeakers)
+                            }
+                        }
+
+                        Text("Reson8 labels who spoke when, up to eight speakers. With Detect Speakers on, recordings and file transcriptions use these labels instead of detecting speakers on this Mac. Dictated text stays without labels. While this is on, transcripts appear once the whole recording is done. Recordings longer than five minutes are labelled in five-minute parts, so one person can appear under several numbers.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -978,6 +1586,41 @@ private struct Reson8SettingsView: View {
             // Advanced Section
             DisclosureGroup(String(localized: "Advanced", bundle: bundle), isExpanded: $showAdvanced) {
                 VStack(alignment: .leading, spacing: 12) {
+                    if supportsDictionaryTerms {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Bias strength", bundle: bundle)
+                                    .font(.subheadline)
+
+                                Spacer()
+
+                                Text(biasStrength, format: .number.precision(.fractionLength(2)))
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+
+                                if abs(biasStrength - Reson8Plugin.defaultBiasStrength) >= 0.001 {
+                                    Button(String(localized: "Reset", bundle: bundle)) {
+                                        biasStrength = Reson8Plugin.defaultBiasStrength
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .controlSize(.small)
+                                    .accessibilityLabel(Text("Reset bias strength", bundle: bundle))
+                                }
+                            }
+
+                            Slider(value: $biasStrength, in: 0...1, step: 0.05)
+                                .onChange(of: biasStrength) {
+                                    plugin.setBiasStrength(biasStrength)
+                                }
+                                .accessibilityLabel(Text("Bias strength", bundle: bundle))
+
+                            Text("How strongly custom models and dictionary terms steer recognition. Higher values recover these terms more often, but can also turn similar-sounding words into them. Default: \(defaultBiasStrengthText).", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Custom Base URL", bundle: bundle)
                             .font(.subheadline)
@@ -1021,10 +1664,19 @@ private struct Reson8SettingsView: View {
                 apiKeyInput = key
             }
             selectedModel = plugin.selectedModelId ?? Reson8Plugin.defaultModelSentinel
+            fillerMode = plugin._fillerMode
+            biasStrength = plugin._biasStrength ?? Reson8Plugin.defaultBiasStrength
+            diarizationEnabled = plugin._diarizationEnabled
+            maxSpeakers = plugin._maxSpeakers ?? Reson8Plugin.automaticSpeakerCount
             customBaseURL = plugin._customBaseURL ?? ""
             customAuthHeader = plugin._customAuthHeader ?? ""
-            showAdvanced = !customBaseURL.isEmpty || !customAuthHeader.isEmpty
+            showAdvanced = !customBaseURL.isEmpty || !customAuthHeader.isEmpty || plugin._biasStrength != nil
             fetchedCustomModels = plugin._fetchedCustomModels
+            // Fetches the models once for keys saved before the plugin listed them.
+            if plugin.isConfigured, plugin._fetchedModels.isEmpty, !plugin._didRefreshModelsOnAppear {
+                plugin._didRefreshModelsOnAppear = true
+                refreshModels()
+            }
         }
     }
 
@@ -1039,12 +1691,11 @@ private struct Reson8SettingsView: View {
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             if isValid {
-                let models = await plugin.fetchCustomModels()
+                await plugin.refreshModels()
                 await MainActor.run {
                     isValidating = false
                     validationResult = true
-                    fetchedCustomModels = models
-                    plugin.setFetchedCustomModels(models)
+                    showRefreshedModels()
                 }
             } else {
                 await MainActor.run {
@@ -1055,20 +1706,41 @@ private struct Reson8SettingsView: View {
         }
     }
 
-    private func refreshCustomModels() {
+    private func refreshModels() {
         isRefreshingModels = true
         Task {
-            let models = await plugin.fetchCustomModels()
+            await plugin.refreshModels()
             await MainActor.run {
                 isRefreshingModels = false
-                fetchedCustomModels = models
-                plugin.setFetchedCustomModels(models)
-                if !models.contains(where: { $0.id == selectedModel }),
-                   selectedModel != Reson8Plugin.defaultModelSentinel {
-                    selectedModel = Reson8Plugin.defaultModelSentinel
-                    plugin.selectModel(Reson8Plugin.defaultModelSentinel)
-                }
+                showRefreshedModels()
             }
+        }
+    }
+
+    private func showRefreshedModels() {
+        fetchedCustomModels = plugin._fetchedCustomModels
+        selectedModel = plugin.selectedModelId ?? Reson8Plugin.defaultModelSentinel
+    }
+}
+
+private extension Reson8FillerMode {
+    func displayName(bundle: Bundle) -> String {
+        switch self {
+        case .natural: return String(localized: "Natural", bundle: bundle)
+        case .clean: return String(localized: "Clean", bundle: bundle)
+        case .verbatim: return String(localized: "Verbatim", bundle: bundle)
+        }
+    }
+
+    // Follows https://docs.reson8.dev/speech-to-text/features/filler-words/
+    func explanation(bundle: Bundle) -> String {
+        switch self {
+        case .natural:
+            return String(localized: "Default. The model gets no instruction, so filler words such as “um” may appear in some places and be left out in others.", bundle: bundle)
+        case .clean:
+            return String(localized: "Leaves filler words such as “um” and “uh” out of the transcript. Suits dictation, notes and text that is processed further.", bundle: bundle)
+        case .verbatim:
+            return String(localized: "Transcribes filler words as they are spoken. Suits transcripts that must reflect exactly what was said, such as interviews.", bundle: bundle)
         }
     }
 }

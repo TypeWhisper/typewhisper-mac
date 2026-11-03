@@ -560,6 +560,538 @@
           }
         }
       }
+    },
+    "Filler words": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füllwörter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muletillas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィラー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填充词"
+          }
+        }
+      }
+    },
+    "Natural": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natürlich"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natural"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自然"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自然"
+          }
+        }
+      }
+    },
+    "Clean": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereinigt"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpio"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "除去"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "去除"
+          }
+        }
+      }
+    },
+    "Verbatim": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörtlich"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Literal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐語"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐字"
+          }
+        }
+      }
+    },
+    "Default. The model gets no instruction, so filler words such as “um” may appear in some places and be left out in others.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard. Das Modell erhält keine Vorgabe, daher können Füllwörter wie „äh“ an manchen Stellen erscheinen und an anderen fehlen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado. El modelo no recibe ninguna instrucción, así que las muletillas como «eh» pueden aparecer en algunos sitios y faltar en otros."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準。モデルに指示を与えないため、「えー」などのフィラーが入る箇所と入らない箇所があります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认。不向模型发出指示，因此“嗯”之类的填充词可能在某些地方出现，在另一些地方被省略。"
+          }
+        }
+      }
+    },
+    "Leaves filler words such as “um” and “uh” out of the transcript. Suits dictation, notes and text that is processed further.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lässt Füllwörter wie „äh“ und „ähm“ im Transkript weg. Geeignet für Diktate, Notizen und Text, der weiterverarbeitet wird."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omite de la transcripción las muletillas como «eh» y «este». Adecuado para dictados, notas y textos que se procesan después."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「えー」「あの」などのフィラーを文字起こしから除きます。口述筆記、メモ、後で処理するテキストに向いています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从转写中去除“嗯”“呃”之类的填充词。适合听写、笔记以及需要进一步处理的文本。"
+          }
+        }
+      }
+    },
+    "Transcribes filler words as they are spoken. Suits transcripts that must reflect exactly what was said, such as interviews.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schreibt Füllwörter so mit, wie sie gesprochen werden. Geeignet für Transkripte, die genau wiedergeben müssen, was gesagt wurde, etwa Interviews."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe las muletillas tal como se pronuncian. Adecuado para transcripciones que deben reflejar exactamente lo que se dijo, como entrevistas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィラーを話されたとおりに文字起こしします。インタビューなど、発言をそのまま記録する必要がある文字起こしに向いています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按原样转写填充词。适合必须如实反映所说内容的转写，例如访谈。"
+          }
+        }
+      }
+    },
+    "Bias strength": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biasstärke"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensidad del sesgo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バイアス強度"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "偏置强度"
+          }
+        }
+      }
+    },
+    "Reset": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurücksetzen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restablecer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リセット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置"
+          }
+        }
+      }
+    },
+    "Reset bias strength": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biasstärke zurücksetzen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restablecer la intensidad del sesgo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バイアス強度をリセット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置偏置强度"
+          }
+        }
+      }
+    },
+    "Speaker diarization": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprechererkennung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detección de hablantes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者分離"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话人分离"
+          }
+        }
+      }
+    },
+    "Automatic": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automático"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动"
+          }
+        }
+      }
+    },
+    "Maximum speakers": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maximale Sprecherzahl"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máximo de hablantes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大話者数"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多说话人数"
+          }
+        }
+      }
+    },
+    "How strongly custom models and dictionary terms steer recognition. Higher values recover these terms more often, but can also turn similar-sounding words into them. Default: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie stark eigene Modelle und Wörterbuchbegriffe die Erkennung lenken. Höhere Werte erkennen diese Begriffe häufiger, können aber auch ähnlich klingende Wörter in sie verwandeln. Standard: %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuánto orientan el reconocimiento los modelos personalizados y los términos del diccionario. Los valores más altos reconocen estos términos con más frecuencia, pero también pueden convertir en ellos palabras de sonido parecido. Predeterminado: %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独自のモデルと辞書の用語が認識をどれだけ強く誘導するかを指定します。値を高くするとこれらの用語がより多く認識されますが、似た響きの語がその用語に置き換わることもあります。標準: %@。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义模型和词典术语对识别的引导强度。数值越高，这些术语越容易被识别，但发音相近的词也可能被误识别为这些术语。默认值：%@。"
+          }
+        }
+      }
+    },
+    "Reson8 labels who spoke when, up to eight speakers. With Detect Speakers on, recordings and file transcriptions use these labels instead of detecting speakers on this Mac. Dictated text stays without labels. While this is on, transcripts appear once the whole recording is done. Recordings longer than five minutes are labelled in five-minute parts, so one person can appear under several numbers.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 kennzeichnet, wer wann gesprochen hat, bis zu acht Sprecher. Ist „Sprecher erkennen“ aktiv, verwenden Aufnahmen und Dateitranskriptionen diese Bezeichnungen, statt die Sprecher auf diesem Mac zu erkennen. Diktierter Text bleibt ohne Bezeichnungen. Solange diese Option aktiv ist, erscheinen Transkripte erst, wenn die ganze Aufnahme fertig ist. Aufnahmen über fünf Minuten werden in Abschnitten von fünf Minuten gekennzeichnet, daher kann eine Person unter mehreren Nummern erscheinen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 indica quién habló y cuándo, hasta ocho hablantes. Con «Detectar hablantes» activado, las grabaciones y las transcripciones de archivos usan estas etiquetas en lugar de detectar los hablantes en este Mac. El texto dictado queda sin etiquetas. Mientras esta opción está activada, las transcripciones aparecen cuando termina toda la grabación. Las grabaciones de más de cinco minutos se etiquetan en partes de cinco minutos, así que una persona puede aparecer con varios números."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 が誰がいつ話したかを最大8人まで区別します。「話者を検出」がオンのとき、録音とファイル文字起こしはこのMacで話者を検出する代わりにこのラベルを使用します。口述筆記のテキストにはラベルを付けません。このオプションがオンの間は、録音全体の処理が終わってから文字起こしが表示されます。5分を超える録音は5分ごとに区別されるため、同じ人が複数の番号で表示されることがあります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 标注谁在何时发言，最多八位说话人。开启“检测说话人”时，录音和文件转写会使用这些标签，而不是在这台 Mac 上检测说话人。听写文本不带标签。此选项开启期间，转写结果会在整段录音处理完后显示。超过五分钟的录音按五分钟分段标注，因此同一个人可能以多个编号出现。"
+          }
+        }
+      }
+    },
+    "%@ does not support %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ unterstützt %@ nicht."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ no admite %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ は%@に対応していません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 不支持%@。"
+          }
+        }
+      }
+    },
+    "filler words": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füllwörter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "muletillas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィラー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填充词"
+          }
+        }
+      }
+    },
+    "speaker diarization": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprechererkennung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "detección de hablantes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者分離"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话人分离"
+          }
+        }
+      }
+    },
+    "dictionary terms": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörterbuchbegriffe"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "términos del diccionario"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辞書の用語"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "词典术语"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
