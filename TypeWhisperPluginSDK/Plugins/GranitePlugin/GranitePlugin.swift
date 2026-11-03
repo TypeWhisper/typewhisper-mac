@@ -631,10 +631,14 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     private func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
         guard Self.runtimeUsage.withLock({ $0 }) else { return }
-        runtimeCacheClearTask = Task {
-            try? await PluginLocalInferenceGate.shared.withLock {
-                Stream.gpu.synchronize()
-                Memory.clearCache()
+        // A model under construction is released only when its load ends, so wait
+        // for the load gate first, in the same lock order as `loadModel`.
+        runtimeCacheClearTask = Task { [modelLoadGate] in
+            try? await modelLoadGate.withLock {
+                try await PluginLocalInferenceGate.shared.withLock {
+                    Stream.gpu.synchronize()
+                    Memory.clearCache()
+                }
             }
         }
     }
