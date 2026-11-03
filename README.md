@@ -13,14 +13,16 @@ models - or use cloud APIs for faster processing.
   <img src=".github/screenshots/app-store/01-indicator.png" width="800" alt="TypeWhisper settings window under the headline &quot;Dictate into any Mac app&quot;">
 </p>
 
-TypeWhisper `1.7.0` is the current stable release for macOS. It adds iCloud sync
-for History and Inbox, a visual keyboard shortcut editor, Undo Last Dictation
-and Restore Raw Transcript, new indicator styles, expanded dictation recovery,
-Finder transcription, and compatible local model imports.
+TypeWhisper `1.8.2` is the current stable release for macOS, available as a
+direct download and on the Mac App Store. The `1.8` line adds Premium speaker
+detection, transcription for paired iPhones with this Mac's models, managed
+settings for organizations, History re-transcription, the Language Detection
+plugin, Correct Last Dictation, and imports of custom Parakeet models.
 
-Development on `main` targets `1.8`; daily builds use the `v1.8.0-daily.*` line.
+Development on `main` continues the `1.8` line; release candidates and daily
+builds are published as GitHub prereleases.
 
-See the [1.7.0 release notes](docs/release-notes/1.7.0.md),
+See the [1.8.2 release notes](docs/release-notes/1.8.2.md),
 [release readiness guide](docs/release-readiness.md),
 [support matrix](docs/support-matrix.md), and
 [release validation process](docs/release-checklist.md) for the shipped feature
@@ -93,30 +95,34 @@ candidate with the
 
 The localized macOS screenshot workflow is documented in [docs/screenshot-automation.md](docs/screenshot-automation.md).
 
-## What's New in 1.7
+## What's New in 1.8
 
-- **iCloud sync and a redesigned History** - History and Inbox sync between
-  your Macs through TypeWhisper's private iCloud container, and History groups
-  entries by device with filters and search
-- **Undo and recovery** - Undo Last Dictation and Restore Raw Transcript are
-  available from the menu bar and as global hotkeys, and Dictation Recovery
-  keeps the last three successful dictations for up to 24 hours so an
-  incomplete provider response can be retried
-- **Shortcuts and cancellation** - Shortcuts are set on a visual Mac keyboard
-  that follows the active input source and shows conflicts, and cancellation
-  can use double Escape, single Escape, immediate cancellation, or be disabled
-- **Indicator themes** - Classic, Glass, and Light indicators with a live
-  preview on the new Appearance settings page
-- **Import and export** - Vocabulary import from Wispr Flow, Handy, and
-  compatible CSV files, export or deletion of all app data in Advanced
-  settings, and settings backups from the CLI with `typewhisper export` and
-  `typewhisper import`
-- **More ways to transcribe** - File transcription from Finder, web media
-  through the optional Web Link plugin, custom local speech models from
-  Hugging Face or a local folder, the Canary ASR plugin, and Parakeet Ultra
-- **Text handling** - A minimum threshold for number formatting, dictionary
-  corrections before workflow LLM processing, and segmented processing for
-  long dictations
+Highlights from 1.8.0 to 1.8.2. Full details are in the
+[1.8.0](docs/release-notes/1.8.0.md), [1.8.1](docs/release-notes/1.8.1.md), and
+[1.8.2](docs/release-notes/1.8.2.md) release notes.
+
+- **Speaker detection (Premium)** - See who said what, play recordings with a
+  speaker-colored scrubber, show transcripts as a conversation, and rename,
+  merge, or split speakers. Detection runs on the Mac
+- **iPhone and iPad (Premium)** - A paired iPhone running TypeWhisper for iOS
+  can transcribe with this Mac's models, and optionally use its language models
+  and workflows, over an encrypted local connection
+- **Mac App Store** - TypeWhisper is available on the Mac App Store, built from
+  the same commit and version as the direct download
+- **Managed settings** - Administrators can configure TypeWhisper through macOS
+  configuration profiles, see the [managed settings guide](docs/mdm/managed-settings.md)
+- **History re-transcription** - Re-run saved recordings with another engine,
+  model, language, or workflow and compare the results side by side
+- **Language Detection plugin** - Detects which of your selected languages you
+  speak, on the Mac, for engines that accept only one language
+- **Correct Last Dictation** - A menu bar action and shortcut to fix the latest
+  dictation, update History, and learn the corrected word
+- **Models** - Granite Speech 5.0, the Local LLM (llama.cpp) plugin, GigaAM for
+  Russian, Fluid Speech Mini, Parakeet Ultra as default, and imports of your own
+  Parakeet models
+- **Local API and CLI** - API token required by default, word timestamps in
+  `verbose_json`, text processing with this Mac's models and workflows, and
+  shell completion for the `typewhisper` CLI
 
 ## Features
 
