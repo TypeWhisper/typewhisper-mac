@@ -605,6 +605,249 @@ enum Reson8FillerMode: String, CaseIterable, Sendable {
     case verbatim
 }
 
+/// The endpoint for audio that is complete before it is sent: Recorder recordings,
+/// file transcriptions and dictations without a live session. Prerecorded costs 1
+/// credit per minute and finished 72 seconds of audio in 0.9 s in our tests; realtime
+/// costs 2 credits per minute, took 2.0 s and shows the text while it arrives.
+enum Reson8RecordingEndpoint: String, CaseIterable, Sendable {
+    case prerecorded
+    case realtime
+}
+
+/// Patterns that describe structured tokens such as order codes, offered as a model of
+/// its own so that a profile or workflow can select them where such tokens are spoken.
+/// Reson8 advises against applying patterns to every request:
+/// https://docs.reson8.dev/speech-to-text/features/patterns/
+struct Reson8PatternSet: Codable, Equatable, Identifiable, Sendable {
+    static let modelIdPrefix = "patterns:"
+
+    var id: String
+    var name: String
+    /// One pattern per entry, such as `AMZ[0-9]{6}`.
+    var patterns: [String]
+
+    var modelId: String { Self.modelIdPrefix + id }
+
+    /// The patterns as Reson8 takes them, without empty lines.
+    var queryValue: String? {
+        let patterns = patterns
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return patterns.isEmpty ? nil : patterns.joined(separator: ",")
+    }
+}
+
+// MARK: - Dictionary Custom Model
+
+/// The custom model that holds the dictionary, and the terms it held after the last sync.
+struct Reson8DictionaryModelState: Codable, Equatable, Sendable {
+    var modelId: String?
+    var terms: [String] = []
+}
+
+/// The custom model endpoints the dictionary sync uses.
+/// https://docs.reson8.dev/speech-to-text/features/custom-models/
+protocol Reson8CustomModelAPI: Sendable {
+    /// Creates a model; Reson8 requires at least one phrase.
+    func createModel(name: String, description: String, phrases: [String]) async throws -> String
+    func addPhrases(_ phrases: [String], toModel modelId: String) async throws
+    func deletePhrases(_ phrases: [String], fromModel modelId: String) async throws
+}
+
+enum Reson8CustomModelError: Error, Equatable {
+    /// The model was deleted, for example in the Reson8 console.
+    case modelNotFound
+    /// Reson8 creates no model without phrases.
+    case noTerms
+}
+
+/// Keeps the dictionary in a custom model, so Reson8 gets up to 50,000 terms per request
+/// instead of 250 phrases in the query string. Only changes go to Reson8: terms added to
+/// or removed from the dictionary since the last sync. Calls run one at a time.
+actor Reson8DictionaryModelSync {
+    static let modelName = "TypeWhisper Dictionary"
+    static let modelDescription = "Dictionary terms from TypeWhisper. TypeWhisper updates this model when the dictionary changes."
+    /// Phrases per request; Reson8 documents no limit.
+    static let batchSize = 1_000
+
+    private let api: any Reson8CustomModelAPI
+    private let persist: @Sendable (Reson8DictionaryModelState) -> Void
+    private(set) var state: Reson8DictionaryModelState
+    private var running: Task<String, Error>?
+
+    init(
+        state: Reson8DictionaryModelState,
+        api: any Reson8CustomModelAPI,
+        persist: @escaping @Sendable (Reson8DictionaryModelState) -> Void
+    ) {
+        self.state = state
+        self.api = api
+        self.persist = persist
+    }
+
+    /// The model that holds exactly `terms`, created or updated first when needed.
+    func modelId(for terms: [String]) async throws -> String {
+        if let running {
+            _ = try? await running.value
+        }
+        if let modelId = state.modelId, Set(state.terms) == Set(terms) {
+            return modelId
+        }
+        let task = Task { try await self.sync(to: terms) }
+        running = task
+        defer {
+            if running == task { running = nil }
+        }
+        return try await task.value
+    }
+
+    /// Forgets a model Reson8 no longer has, so the next sync creates a new one.
+    func forget(modelId: String) {
+        guard state.modelId == modelId else { return }
+        save(Reson8DictionaryModelState())
+    }
+
+    func reset() {
+        save(Reson8DictionaryModelState())
+    }
+
+    private func sync(to terms: [String]) async throws -> String {
+        if let modelId = state.modelId {
+            do {
+                let synced = Set(state.terms)
+                let wanted = Set(terms)
+                for batch in Self.batches(state.terms.filter { !wanted.contains($0) }) {
+                    try await api.deletePhrases(batch, fromModel: modelId)
+                }
+                for batch in Self.batches(terms.filter { !synced.contains($0) }) {
+                    try await api.addPhrases(batch, toModel: modelId)
+                }
+                save(Reson8DictionaryModelState(modelId: modelId, terms: terms))
+                return modelId
+            } catch Reson8CustomModelError.modelNotFound {
+                save(Reson8DictionaryModelState())
+            }
+        }
+
+        let batches = Self.batches(terms)
+        guard let first = batches.first else { throw Reson8CustomModelError.noTerms }
+        let modelId = try await api.createModel(name: Self.modelName, description: Self.modelDescription, phrases: first)
+        var synced = first
+        save(Reson8DictionaryModelState(modelId: modelId, terms: synced))
+        for batch in batches.dropFirst() {
+            try await api.addPhrases(batch, toModel: modelId)
+            synced += batch
+            save(Reson8DictionaryModelState(modelId: modelId, terms: synced))
+        }
+        return modelId
+    }
+
+    private func save(_ newState: Reson8DictionaryModelState) {
+        state = newState
+        persist(newState)
+    }
+
+    private static func batches(_ terms: [String]) -> [[String]] {
+        stride(from: 0, to: terms.count, by: batchSize).map {
+            Array(terms[$0..<min($0 + batchSize, terms.count)])
+        }
+    }
+}
+
+/// Reson8's custom model endpoints, with the base URL and key at the time of each call.
+struct Reson8HTTPCustomModelAPI: Reson8CustomModelAPI {
+    /// An authorized request for a path, or nil without a key.
+    let makeRequest: @Sendable (_ path: String) -> URLRequest?
+
+    func createModel(name: String, description: String, phrases: [String]) async throws -> String {
+        let data = try await send(
+            "/v1/custom-model",
+            body: ["name": name, "description": description, "phrases": phrases]
+        )
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = json["id"] as? String else {
+            throw PluginTranscriptionError.apiError("Reson8 returned no custom model ID")
+        }
+        return id
+    }
+
+    func addPhrases(_ phrases: [String], toModel modelId: String) async throws {
+        _ = try await send("/v1/custom-model/\(modelId)/phrases", body: ["phrases": phrases])
+    }
+
+    func deletePhrases(_ phrases: [String], fromModel modelId: String) async throws {
+        _ = try await send("/v1/custom-model/\(modelId)/phrases/delete", body: ["phrases": phrases])
+    }
+
+    private func send(_ path: String, body: [String: Any]) async throws -> Data {
+        guard var request = makeRequest(path) else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 30
+
+        let (data, response) = try await PluginHTTPClient.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginTranscriptionError.apiError("No HTTP response")
+        }
+        switch httpResponse.statusCode {
+        case 200..<300:
+            return data
+        case 401:
+            throw PluginTranscriptionError.invalidApiKey
+        case 404:
+            throw Reson8CustomModelError.modelNotFound
+        default:
+            throw PluginTranscriptionError.apiError(
+                "Reson8 custom model: HTTP \(httpResponse.statusCode): \(Reson8Plugin.errorMessage(from: data, response: httpResponse))"
+            )
+        }
+    }
+}
+
+/// The result of `operation`, or a timeout error after `timeout`. Unlike a task group, it
+/// does not wait for an operation that ignores cancellation, such as a sync that should
+/// finish in the background.
+func reson8Result<T: Sendable>(
+    within timeout: Duration,
+    of operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let resumer = Reson8OnceResumer<T>()
+    return try await withCheckedThrowingContinuation { continuation in
+        resumer.set(continuation)
+        Task {
+            do {
+                resumer.resume(with: .success(try await operation()))
+            } catch {
+                resumer.resume(with: .failure(error))
+            }
+        }
+        Task {
+            try? await Task.sleep(for: timeout)
+            resumer.resume(with: .failure(PluginTranscriptionError.networkError("Reson8 did not answer in time")))
+        }
+    }
+}
+
+private final class Reson8OnceResumer<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+
+    func set(_ continuation: CheckedContinuation<T, Error>) {
+        lock.withLock { self.continuation = continuation }
+    }
+
+    func resume(with result: Result<T, Error>) {
+        let continuation = lock.withLock {
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        continuation?.resume(with: result)
+    }
+}
+
 // MARK: - Transcript Parsing
 
 /// The text, segments and word timings of a prerecorded response.
@@ -772,6 +1015,16 @@ final class Reson8Plugin: NSObject,
     /// Reson8 tells up to eight speakers apart per request.
     fileprivate static let maximumSpeakerCount = 8
     fileprivate static let automaticSpeakerCount = 0
+    fileprivate var _recordingEndpoint: Reson8RecordingEndpoint = .prerecorded
+    fileprivate var _dictionaryModelEnabled = false
+    fileprivate var _patternSets: [Reson8PatternSet] = []
+    /// The dictionary's custom model as last synced, for the model list and the settings.
+    private let dictionaryModelState = OSAllocatedUnfairLock(initialState: Reson8DictionaryModelState())
+    /// Set up on activation with Reson8's custom model endpoints.
+    private(set) var dictionaryModelSync: Reson8DictionaryModelSync?
+    /// How long a transcription waits for the dictionary's custom model before it sends
+    /// the terms as phrases instead; the sync goes on in the background.
+    static let dictionaryModelTimeout: Duration = .seconds(5)
 
     private static let defaultBaseURL = "https://api.reson8.dev"
 
@@ -809,6 +1062,18 @@ final class Reson8Plugin: NSObject,
            let models = try? JSONDecoder().decode([Reson8CustomModel].self, from: data) {
             _fetchedCustomModels = models
         }
+        _recordingEndpoint = (host.userDefault(forKey: "recordingEndpoint") as? String)
+            .flatMap(Reson8RecordingEndpoint.init(rawValue:)) ?? .prerecorded
+        _dictionaryModelEnabled = host.userDefault(forKey: "dictionaryModelEnabled") as? Bool ?? false
+        if let data = host.userDefault(forKey: "patternSets") as? Data,
+           let sets = try? JSONDecoder().decode([Reson8PatternSet].self, from: data) {
+            _patternSets = sets
+        }
+        let modelState = (host.userDefault(forKey: "dictionaryModel") as? Data)
+            .flatMap { try? JSONDecoder().decode(Reson8DictionaryModelState.self, from: $0) }
+            ?? Reson8DictionaryModelState()
+        dictionaryModelState.withLock { $0 = modelState }
+        useCustomModelAPI(Reson8HTTPCustomModelAPI { [weak self] path in self?.customModelRequest(path: path) })
     }
 
     func deactivate() {
@@ -826,8 +1091,8 @@ final class Reson8Plugin: NSObject,
     }
 
     /// The default model keeps the sentinel ID so saved selections stay valid, then
-    /// come the other models Reson8 lists and the custom models, which run on the
-    /// default model.
+    /// come the other models Reson8 lists, the custom models and the pattern sets, which
+    /// run on the default model. The custom model that holds the dictionary is left out.
     var transcriptionModels: [PluginModelInfo] {
         let defaultName = defaultModel?.displayName
             ?? String(localized: "Default model", bundle: Bundle(for: Reson8Plugin.self))
@@ -838,10 +1103,31 @@ final class Reson8Plugin: NSObject,
         list.append(contentsOf: _fetchedModels.filter { $0.isDefault != true }.map {
             PluginModelInfo(id: $0.id, displayName: $0.displayName, languageCount: $0.languages?.count ?? 0)
         })
-        list.append(contentsOf: _fetchedCustomModels.map {
+        list.append(contentsOf: customModels.map {
             PluginModelInfo(id: $0.id, displayName: $0.name, languageCount: defaultLanguageCount)
         })
+        list.append(contentsOf: _patternSets.map {
+            PluginModelInfo(id: $0.modelId, displayName: Self.displayName(of: $0), languageCount: defaultLanguageCount)
+        })
         return list
+    }
+
+    /// The custom models to choose from, without the one that holds the dictionary.
+    fileprivate var customModels: [Reson8CustomModel] {
+        let dictionaryModelId = dictionaryModelState.withLock { $0.modelId }
+        return _fetchedCustomModels.filter { $0.id != dictionaryModelId }
+    }
+
+    fileprivate static func displayName(of patternSet: Reson8PatternSet) -> String {
+        let bundle = Bundle(for: Reson8Plugin.self)
+        let name = patternSet.name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return String(localized: "Pattern set", bundle: bundle) }
+        return String(localized: "\(name) (patterns)", bundle: bundle)
+    }
+
+    fileprivate func patternSet(forModelId modelId: String?) -> Reson8PatternSet? {
+        guard let modelId, modelId.hasPrefix(Reson8PatternSet.modelIdPrefix) else { return nil }
+        return _patternSets.first { $0.modelId == modelId }
     }
 
     private var defaultModel: Reson8Model? {
@@ -882,23 +1168,104 @@ final class Reson8Plugin: NSObject,
 
     // MARK: - Dictionary Terms
 
-    /// The host sends the dictionary in `prompt`; it goes to Reson8 as `phrases`.
+    /// The host sends the dictionary in `prompt`; it goes to Reson8 as `phrases` or into
+    /// the dictionary's custom model.
     var dictionaryTermsSupport: DictionaryTermsSupport {
-        supportsParameter("phrases", forModelId: _selectedModelId) ? .supported : .unsupported
+        takesDictionaryTerms(forModelId: _selectedModelId) ? .supported : .unsupported
     }
 
     /// Reson8 takes up to 250 phrases of up to 255 characters per request. The host
     /// counts characters; terms outside ASCII take more room once percent-encoded and
-    /// are cut further in `phrasesQueryItem(prompt:)`.
+    /// are cut further in `phrasesQueryItem(prompt:)`. A custom model holds up to 50,000.
     var dictionaryTermsBudget: DictionaryTermsBudget {
-        DictionaryTermsBudget(maxTerms: 250, maxCharsPerTerm: 255, maxTotalChars: Self.maximumPhrasesCharacterCount)
+        _dictionaryModelEnabled ? Self.customModelBudget : Self.phrasesBudget
     }
+
+    private static let phrasesBudget = DictionaryTermsBudget(
+        maxTerms: 250,
+        maxCharsPerTerm: 255,
+        maxTotalChars: maximumPhrasesCharacterCount
+    )
+    static let customModelBudget = DictionaryTermsBudget(maxTerms: 50_000, maxCharsPerTerm: 255)
 
     // Lets the host resolve dictionary support for a per-flow model override, looked up
     // through the Objective-C runtime like `supportedLanguagesForModelId:`.
     @objc(supportsDictionaryTermsForModelId:)
     func supportsDictionaryTerms(forModelId modelId: String?) -> NSNumber {
-        NSNumber(value: supportsParameter("phrases", forModelId: modelId))
+        NSNumber(value: takesDictionaryTerms(forModelId: modelId))
+    }
+
+    /// Patterns cannot be combined with phrases or a custom model.
+    fileprivate func takesDictionaryTerms(forModelId modelId: String?) -> Bool {
+        supportsParameter("phrases", forModelId: modelId) && patternSet(forModelId: modelId) == nil
+    }
+
+    /// The dictionary goes into its custom model when the user turned that on and the
+    /// request has no custom model of its own: Resonant-1 without a custom model the user
+    /// selected, or another listed model that takes one.
+    fileprivate func usesDictionaryModel(forModelId modelId: String?) -> Bool {
+        guard _dictionaryModelEnabled,
+              takesDictionaryTerms(forModelId: modelId),
+              supportsParameter("custom_model_id", forModelId: modelId) else {
+            return false
+        }
+        guard let modelId, modelId != Self.defaultModelSentinel else { return true }
+        return _fetchedModels.contains { $0.id == modelId }
+    }
+
+    /// The dictionary's custom model for a request, created or updated first when the
+    /// dictionary changed. Nil sends the terms as phrases: when the custom model is off or
+    /// does not apply, the prompt holds no terms, or Reson8 could not update it in time.
+    /// Without terms the model stays as it is, since a cloud text restriction also
+    /// withholds them.
+    private func dictionaryModelId(prompt: String?) async -> String? {
+        guard usesDictionaryModel(forModelId: _selectedModelId), let sync = dictionaryModelSync else { return nil }
+        let terms = PluginDictionaryTerms.clippedTerms(
+            from: PluginDictionaryTerms.terms(fromPrompt: prompt),
+            budget: Self.customModelBudget
+        )
+        guard !terms.isEmpty else { return nil }
+        do {
+            return try await reson8Result(within: Self.dictionaryModelTimeout) {
+                try await sync.modelId(for: terms)
+            }
+        } catch {
+            Self.logger.warning("Dictionary custom model unavailable, sending phrases: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Reson8 answers a request for a custom model it no longer has with 400 and
+    /// "Unknown vocabulary: <id>".
+    private static func isUnknownModelError(_ error: Error, modelId: String?) -> Bool {
+        guard let modelId else { return false }
+        return error.localizedDescription.contains(modelId)
+    }
+
+    fileprivate func customModelRequest(path: String) -> URLRequest? {
+        guard let apiKey = _apiKey, !apiKey.isEmpty,
+              let url = URL(string: "\(effectiveBaseURL)\(path)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
+        return request
+    }
+
+    /// The endpoints the dictionary sync calls; tests pass a fake.
+    func useCustomModelAPI(_ api: any Reson8CustomModelAPI) {
+        dictionaryModelSync = Reson8DictionaryModelSync(
+            state: dictionaryModelState.withLock { $0 },
+            api: api,
+            persist: { [weak self] state in self?.saveDictionaryModelState(state) }
+        )
+    }
+
+    private func saveDictionaryModelState(_ state: Reson8DictionaryModelState) {
+        dictionaryModelState.withLock { $0 = state }
+        if let data = try? JSONEncoder().encode(state) {
+            host?.setUserDefault(data, forKey: "dictionaryModel")
+        }
     }
 
     /// Reson8 answers 414 once the query string passes about 4,000 characters, so the
@@ -910,10 +1277,10 @@ final class Reson8Plugin: NSObject,
     private static let queryValueAllowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
 
     private func phrasesQueryItem(prompt: String?) -> URLQueryItem? {
-        guard supportsParameter("phrases", forModelId: _selectedModelId) else { return nil }
+        guard takesDictionaryTerms(forModelId: _selectedModelId) else { return nil }
         let terms = PluginDictionaryTerms.clippedTerms(
             from: PluginDictionaryTerms.terms(fromPrompt: prompt),
-            budget: dictionaryTermsBudget
+            budget: Self.phrasesBudget
         )
         var phrases: [String] = []
         var encodedLength = 0
@@ -970,11 +1337,13 @@ final class Reson8Plugin: NSObject,
     }
 
     /// A listed model goes in `model`, a custom model in `custom_model_id` without
-    /// `model`, so it runs on the default model as before.
+    /// `model`, so it runs on the default model as before. A pattern set runs on the
+    /// default model too.
     private func modelQueryItem() -> URLQueryItem? {
         guard let modelId = _selectedModelId,
               modelId != Self.defaultModelSentinel,
-              !modelId.isEmpty else {
+              !modelId.isEmpty,
+              !modelId.hasPrefix(Reson8PatternSet.modelIdPrefix) else {
             return nil
         }
         if _fetchedModels.contains(where: { $0.id == modelId }) {
@@ -1061,7 +1430,7 @@ final class Reson8Plugin: NSObject,
             throw PluginTranscriptionError.notConfigured
         }
         let resolved = Self.resolveLanguage(selection: languageSelection)
-        guard supportsStreaming, Self.streamsAudio(ofDuration: audio.duration) else {
+        guard transcribesThroughRealtime(duration: audio.duration) else {
             return Self.legacyResult(from: try await transcribeREST(
                 audio: audio,
                 language: resolved,
@@ -1131,6 +1500,12 @@ final class Reson8Plugin: NSObject,
         )
     }
 
+    /// Whether finished audio goes through the realtime endpoint: when the user chose it
+    /// for recordings and files, the selected model streams, and the audio fits one request.
+    func transcribesThroughRealtime(duration: TimeInterval) -> Bool {
+        _recordingEndpoint == .realtime && supportsStreaming && Self.streamsAudio(ofDuration: duration)
+    }
+
     /// The realtime endpoint takes a recording as one stream and documents no
     /// session length. Longer files go to the prerecorded endpoint, which takes
     /// them in five-minute requests.
@@ -1162,7 +1537,8 @@ final class Reson8Plugin: NSObject,
 
     /// The parameters both endpoints take. Diarization is left to the prerecorded
     /// endpoint, since a diarizing selection does not stream.
-    private func queryItems(language: String?, prompt: String?) -> [URLQueryItem] {
+    /// Patterns, the dictionary's custom model and phrases exclude each other.
+    private func queryItems(language: String?, prompt: String?, dictionaryModelId: String?) -> [URLQueryItem] {
         var items = [
             URLQueryItem(name: "encoding", value: "pcm_s16le"),
             URLQueryItem(name: "sample_rate", value: "16000"),
@@ -1178,7 +1554,12 @@ final class Reson8Plugin: NSObject,
         if let fillerModeItem = fillerModeQueryItem() {
             items.append(fillerModeItem)
         }
-        if let phrasesItem = phrasesQueryItem(prompt: prompt) {
+        if let patterns = patternSet(forModelId: _selectedModelId)?.queryValue,
+           supportsParameter("patterns", forModelId: _selectedModelId) {
+            items.append(URLQueryItem(name: "patterns", value: patterns))
+        } else if let dictionaryModelId {
+            items.append(URLQueryItem(name: "custom_model_id", value: dictionaryModelId))
+        } else if let phrasesItem = phrasesQueryItem(prompt: prompt) {
             items.append(phrasesItem)
         }
         if let biasItem = biasStrengthQueryItem(for: items) {
@@ -1216,11 +1597,44 @@ final class Reson8Plugin: NSObject,
         prompt: String?,
         apiKey: String
     ) async throws -> PluginStructuredTranscriptionResult {
+        let dictionaryModelId = await dictionaryModelId(prompt: prompt)
+        do {
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                prompt: prompt,
+                dictionaryModelId: dictionaryModelId,
+                apiKey: apiKey
+            )
+        } catch where Self.isUnknownModelError(error, modelId: dictionaryModelId) {
+            // The dictionary's custom model was deleted, for example in the Reson8 console.
+            Self.logger.warning("Dictionary custom model is gone, creating it again")
+            if let dictionaryModelId {
+                await dictionaryModelSync?.forget(modelId: dictionaryModelId)
+            }
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                prompt: prompt,
+                dictionaryModelId: await self.dictionaryModelId(prompt: prompt),
+                apiKey: apiKey
+            )
+        }
+    }
+
+    private func transcribeREST(
+        audio: AudioData,
+        language: String?,
+        prompt: String?,
+        dictionaryModelId: String?,
+        apiKey: String
+    ) async throws -> PluginStructuredTranscriptionResult {
         guard var components = URLComponents(string: "\(effectiveBaseURL)/v1/speech-to-text/prerecorded") else {
             throw PluginTranscriptionError.apiError("Invalid base URL: \(effectiveBaseURL)")
         }
         components.percentEncodedQuery = Self.percentEncodedQuery(
-            queryItems(language: language, prompt: prompt) + diarizationQueryItems()
+            queryItems(language: language, prompt: prompt, dictionaryModelId: dictionaryModelId)
+                + diarizationQueryItems()
         )
 
         guard let url = components.url else {
@@ -1320,7 +1734,11 @@ final class Reson8Plugin: NSObject,
     func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
         let modelId = modelId ?? _selectedModelId
         guard !diarizes(forModelId: modelId) else { return false }
-        return model(forModelId: modelId)?.endpoints?.contains("realtime") ?? true
+        return hasRealtimeEndpoint(forModelId: modelId)
+    }
+
+    fileprivate func hasRealtimeEndpoint(forModelId modelId: String?) -> Bool {
+        model(forModelId: modelId)?.endpoints?.contains("realtime") ?? true
     }
 
     /// The final transcripts plus the current interim one cover the whole recording.
@@ -1370,11 +1788,12 @@ final class Reson8Plugin: NSObject,
     // MARK: - Realtime Implementation (Raw RFC 6455)
 
     /// The realtime endpoint with the parameters both endpoints take, plus interim transcripts.
-    func realtimePath(language: String?, prompt: String?) -> String? {
+    func realtimePath(language: String?, prompt: String?, dictionaryModelId: String? = nil) -> String? {
         var components = URLComponents()
         components.path = "/v1/speech-to-text/realtime"
         components.percentEncodedQuery = Self.percentEncodedQuery(
-            queryItems(language: language, prompt: prompt) + [URLQueryItem(name: "include_interim", value: "true")]
+            queryItems(language: language, prompt: prompt, dictionaryModelId: dictionaryModelId)
+                + [URLQueryItem(name: "include_interim", value: "true")]
         )
         return components.string
     }
@@ -1385,12 +1804,44 @@ final class Reson8Plugin: NSObject,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> Reson8RealtimeSession {
+        let dictionaryModelId = await dictionaryModelId(prompt: prompt)
+        do {
+            return try await openRealtimeSession(
+                language: language,
+                prompt: prompt,
+                dictionaryModelId: dictionaryModelId,
+                apiKey: apiKey,
+                onProgress: onProgress
+            )
+        } catch where Self.isUnknownModelError(error, modelId: dictionaryModelId) {
+            // Reson8 rejects the connection and names the model in `X-Error-Message`.
+            Self.logger.warning("Dictionary custom model is gone, creating it again")
+            if let dictionaryModelId {
+                await dictionaryModelSync?.forget(modelId: dictionaryModelId)
+            }
+            return try await openRealtimeSession(
+                language: language,
+                prompt: prompt,
+                dictionaryModelId: await self.dictionaryModelId(prompt: prompt),
+                apiKey: apiKey,
+                onProgress: onProgress
+            )
+        }
+    }
+
+    private func openRealtimeSession(
+        language: String?,
+        prompt: String?,
+        dictionaryModelId: String?,
+        apiKey: String,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> Reson8RealtimeSession {
         let baseURL = effectiveBaseURL
         guard let urlComponents = URLComponents(string: baseURL),
               let host = urlComponents.host else {
             throw PluginTranscriptionError.apiError("Invalid base URL")
         }
-        guard let path = realtimePath(language: language, prompt: prompt) else {
+        guard let path = realtimePath(language: language, prompt: prompt, dictionaryModelId: dictionaryModelId) else {
             throw PluginTranscriptionError.apiError("Invalid query parameters")
         }
         let usesTLS = baseURL.hasPrefix("https://")
@@ -1585,6 +2036,8 @@ final class Reson8Plugin: NSObject,
 
     fileprivate func removeApiKey() {
         _apiKey = nil
+        // The next key may belong to another account.
+        Task { [dictionaryModelSync] in await dictionaryModelSync?.reset() }
         if let host {
             do {
                 try host.storeSecret(key: "api-key", value: "")
@@ -1624,6 +2077,63 @@ final class Reson8Plugin: NSObject,
         host?.setUserDefault(_biasStrength, forKey: "biasStrength")
     }
 
+    fileprivate func setRecordingEndpoint(_ endpoint: Reson8RecordingEndpoint) {
+        _recordingEndpoint = endpoint
+        host?.setUserDefault(endpoint.rawValue, forKey: "recordingEndpoint")
+    }
+
+    fileprivate func setDictionaryModelEnabled(_ enabled: Bool) {
+        _dictionaryModelEnabled = enabled
+        host?.setUserDefault(enabled, forKey: "dictionaryModelEnabled")
+        // The dictionary budget changes.
+        host?.notifyCapabilitiesChanged()
+    }
+
+    /// Saves the pattern sets, which are models, and falls back to the default model when
+    /// the selected set was removed.
+    fileprivate func setPatternSets(_ sets: [Reson8PatternSet]) {
+        _patternSets = sets
+        if let data = try? JSONEncoder().encode(sets) {
+            host?.setUserDefault(data, forKey: "patternSets")
+        }
+        if let selected = _selectedModelId,
+           selected.hasPrefix(Reson8PatternSet.modelIdPrefix),
+           patternSet(forModelId: selected) == nil {
+            selectModel(Self.defaultModelSentinel)
+        }
+        host?.notifyCapabilitiesChanged()
+    }
+
+    /// Sends half a second of silence with the patterns, so Reson8 checks them. Nil when
+    /// Reson8 accepts them, otherwise its reason, such as invalid syntax or an API client
+    /// with a custom model configured, which patterns cannot be combined with.
+    fileprivate func checkPatterns(of patternSet: Reson8PatternSet) async -> String? {
+        guard let apiKey = _apiKey, !apiKey.isEmpty, let patterns = patternSet.queryValue,
+              var components = URLComponents(string: "\(effectiveBaseURL)/v1/speech-to-text/prerecorded") else {
+            return nil
+        }
+        components.percentEncodedQuery = Self.percentEncodedQuery([
+            URLQueryItem(name: "encoding", value: "pcm_s16le"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
+            URLQueryItem(name: "patterns", value: patterns),
+        ])
+        guard let url = components.url else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.floatToPCM16([Float](repeating: 0, count: 8_000))
+        request.timeoutInterval = 20
+        do {
+            let (data, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return "No HTTP response" }
+            return httpResponse.statusCode == 200 ? nil : Self.errorMessage(from: data, response: httpResponse)
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     fileprivate func setCustomAuthHeader(_ header: String) {
         let trimmed = header.trimmingCharacters(in: .whitespacesAndNewlines)
         _customAuthHeader = trimmed.isEmpty ? nil : trimmed
@@ -1649,7 +2159,17 @@ private struct Reson8SettingsView: View {
     @State private var customAuthHeader = ""
     @State private var fetchedCustomModels: [Reson8CustomModel] = []
     @State private var isRefreshingModels = false
+    @State private var recordingEndpoint: Reson8RecordingEndpoint = .prerecorded
+    @State private var dictionaryModelEnabled = false
+    @State private var patternSets: [Reson8PatternSet] = []
+    @State private var patternChecks: [String: PatternCheck] = [:]
     private let bundle = Bundle(for: Reson8Plugin.self)
+
+    private enum PatternCheck: Equatable {
+        case checking
+        case accepted
+        case rejected(String)
+    }
 
     private var selectedModelName: String? {
         plugin.transcriptionModels.first { $0.id == selectedModel }?.displayName
@@ -1659,7 +2179,14 @@ private struct Reson8SettingsView: View {
     // the models that can.
     private var supportsFillerMode: Bool { plugin.supportsParameter("filler_mode", forModelId: selectedModel) }
     private var supportsDiarization: Bool { plugin.supportsParameter("diarize", forModelId: selectedModel) }
-    private var supportsDictionaryTerms: Bool { plugin.supportsParameter("phrases", forModelId: selectedModel) }
+    private var supportsDictionaryTerms: Bool { plugin.takesDictionaryTerms(forModelId: selectedModel) }
+    private var supportsDictionaryModel: Bool {
+        supportsDictionaryTerms && plugin.supportsParameter("custom_model_id", forModelId: selectedModel)
+    }
+    /// Whether the endpoint choice for finished audio applies: the model streams and does not diarize.
+    private var choosesRecordingEndpoint: Bool {
+        plugin.hasRealtimeEndpoint(forModelId: selectedModel) && !(diarizationEnabled && supportsDiarization)
+    }
 
     /// What the selected model does without, as a list for the note under the model.
     private var unsupportedFeatureList: String? {
@@ -1857,6 +2384,27 @@ private struct Reson8SettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                if supportsDictionaryModel {
+                    Divider()
+
+                    // Dictionary
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(String(localized: "Keep dictionary in a custom model", bundle: bundle), isOn: $dictionaryModelEnabled)
+                            .onChange(of: dictionaryModelEnabled) {
+                                plugin.setDictionaryModelEnabled(dictionaryModelEnabled)
+                            }
+
+                        Text("TypeWhisper keeps your dictionary terms in a custom model named “TypeWhisper Dictionary” in your Reson8 account and updates it when the dictionary changes. Reson8 then takes up to 50,000 terms instead of 250 per request. The model replaces a custom model configured on your API client; with a custom model selected above, the terms go as phrases.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Divider()
+
+                patternsSection
             }
 
             Divider()
@@ -1864,6 +2412,29 @@ private struct Reson8SettingsView: View {
             // Advanced Section
             DisclosureGroup(String(localized: "Advanced", bundle: bundle), isExpanded: $showAdvanced) {
                 VStack(alignment: .leading, spacing: 12) {
+                    if plugin.isConfigured, choosesRecordingEndpoint {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Recordings and files", bundle: bundle)
+                                .font(.subheadline)
+
+                            Picker(String(localized: "Recordings and files", bundle: bundle), selection: $recordingEndpoint) {
+                                Text("Prerecorded", bundle: bundle).tag(Reson8RecordingEndpoint.prerecorded)
+                                Text("Realtime", bundle: bundle).tag(Reson8RecordingEndpoint.realtime)
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
+                            .onChange(of: recordingEndpoint) {
+                                plugin.setRecordingEndpoint(recordingEndpoint)
+                            }
+
+                            Text("For the Recorder, file transcriptions and dictations without live preview. Prerecorded costs 1 credit per minute and is faster for finished audio. Realtime costs 2 credits per minute and shows the text while it arrives. Dictations with live preview stream either way.", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
                     if supportsDictionaryTerms {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -1948,13 +2519,139 @@ private struct Reson8SettingsView: View {
             maxSpeakers = plugin._maxSpeakers ?? Reson8Plugin.automaticSpeakerCount
             customBaseURL = plugin._customBaseURL ?? ""
             customAuthHeader = plugin._customAuthHeader ?? ""
+            recordingEndpoint = plugin._recordingEndpoint
+            dictionaryModelEnabled = plugin._dictionaryModelEnabled
+            patternSets = plugin._patternSets
             showAdvanced = !customBaseURL.isEmpty || !customAuthHeader.isEmpty || plugin._biasStrength != nil
-            fetchedCustomModels = plugin._fetchedCustomModels
+                || recordingEndpoint != .prerecorded
+            fetchedCustomModels = plugin.customModels
             // Fetches the models once per activation, so models Reson8 added since and
             // keys saved before the plugin listed models get the current list.
             if plugin.isConfigured, !plugin._didRefreshModelsOnAppear {
                 plugin._didRefreshModelsOnAppear = true
                 refreshModels()
+            }
+        }
+    }
+
+    // MARK: Patterns
+
+    private var patternsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Patterns", bundle: bundle)
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    patternSets.append(Reson8PatternSet(id: UUID().uuidString, name: "", patterns: []))
+                } label: {
+                    Label(String(localized: "Add pattern set", bundle: bundle), systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            Text("Patterns recover structured tokens such as order codes, reference numbers or licence plates. Each pattern set appears as a model, so a profile or workflow can use it where such tokens are spoken; Reson8 advises against applying patterns everywhere. They replace dictionary terms and do not work with an API client that has a custom model configured.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach($patternSets) { $patternSet in
+                patternSetEditor($patternSet)
+            }
+
+            if !patternSets.isEmpty {
+                Text("One pattern per line: [0-9] is a digit, [A-Z] a letter, {n} or {m,n} repeats what comes before, (…)? marks an optional part, and a space or hyphen separates parts. Example: AMZ[0-9]{6}", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: patternSets) { oldSets, newSets in
+            // A check applies to the patterns it checked.
+            for set in newSets where oldSets.first(where: { $0.id == set.id })?.patterns != set.patterns {
+                patternChecks[set.id] = nil
+            }
+            plugin.setPatternSets(newSets)
+        }
+    }
+
+    private func patternSetEditor(_ patternSet: Binding<Reson8PatternSet>) -> some View {
+        let id = patternSet.wrappedValue.id
+        let patternsText = Binding<String>(
+            get: { patternSet.wrappedValue.patterns.joined(separator: "\n") },
+            set: { patternSet.wrappedValue.patterns = $0.components(separatedBy: "\n") }
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                TextField(String(localized: "Name", bundle: bundle), text: patternSet.name)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(Text("Pattern set name", bundle: bundle))
+
+                Button {
+                    patternSets.removeAll { $0.id == id }
+                    patternChecks[id] = nil
+                } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(Text("Remove pattern set", bundle: bundle))
+            }
+
+            TextEditor(text: patternsText)
+                .font(.system(.body, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .frame(height: 52)
+                .padding(4)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+                .accessibilityLabel(Text("Patterns, one per line", bundle: bundle))
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Button(String(localized: "Check with Reson8", bundle: bundle)) {
+                    checkPatterns(of: patternSet.wrappedValue)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(patternSet.wrappedValue.queryValue == nil || patternChecks[id] == .checking)
+
+                switch patternChecks[id] {
+                case .checking:
+                    ProgressView().controlSize(.small)
+                case .accepted:
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .accessibilityHidden(true)
+                    Text("Reson8 accepts these patterns.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .rejected(let reason):
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .accessibilityHidden(true)
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                case nil:
+                    EmptyView()
+                }
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.06)))
+    }
+
+    private func checkPatterns(of patternSet: Reson8PatternSet) {
+        patternChecks[patternSet.id] = .checking
+        Task {
+            let reason = await plugin.checkPatterns(of: patternSet)
+            await MainActor.run {
+                // A newer edit cleared the check.
+                guard patternChecks[patternSet.id] == .checking else { return }
+                patternChecks[patternSet.id] = reason.map(PatternCheck.rejected) ?? .accepted
             }
         }
     }
@@ -1997,7 +2694,7 @@ private struct Reson8SettingsView: View {
     }
 
     private func showRefreshedModels() {
-        fetchedCustomModels = plugin._fetchedCustomModels
+        fetchedCustomModels = plugin.customModels
         selectedModel = plugin.selectedModelId ?? Reson8Plugin.defaultModelSentinel
     }
 }

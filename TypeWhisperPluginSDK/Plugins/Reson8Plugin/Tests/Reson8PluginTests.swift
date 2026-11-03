@@ -477,6 +477,115 @@ final class Reson8PluginTests: XCTestCase {
         }
     }
 
+    // MARK: - Recordings and files
+
+    func testFinishedAudioGoesToThePrerecordedEndpointUnlessRealtimeIsChosen() throws {
+        let plugin = try Self.pluginWithFetchedModels()
+        XCTAssertFalse(plugin.transcribesThroughRealtime(duration: 10))
+        // Dictations still stream live.
+        XCTAssertTrue(plugin.supportsLiveTranscriptionSession(forModelId: nil))
+
+        let realtimePlugin = try Self.pluginWithFetchedModels(extraDefaults: ["recordingEndpoint": "realtime"])
+        XCTAssertTrue(realtimePlugin.transcribesThroughRealtime(duration: 10))
+        XCTAssertFalse(realtimePlugin.transcribesThroughRealtime(duration: Reson8Plugin.maximumRequestDuration + 1))
+        realtimePlugin.selectModel("rumble-2-flash")
+        XCTAssertFalse(realtimePlugin.transcribesThroughRealtime(duration: 10))
+    }
+
+    // MARK: - Dictionary custom model
+
+    func testDictionaryGoesIntoItsCustomModelAndOnlyChangesAreSynced() async throws {
+        let customModels = #"[{"id":"custom-1","name":"Cardiology","description":null,"phraseCount":3},"# +
+            #"{"id":"dictionary-1","name":"TypeWhisper Dictionary","description":null,"phraseCount":2}]"#
+        let plugin = try Self.pluginWithFetchedModels(extraDefaults: [
+            "dictionaryModelEnabled": true,
+            "fetchedCustomModels": Data(customModels.utf8),
+        ])
+        let api = FakeCustomModelAPI()
+        plugin.useCustomModelAPI(api)
+
+        let first = Self.queryItems(of: try await Self.request(ofTranscriptionWith: plugin, prompt: "Reson8, TypeWhisper"))
+        let second = Self.queryItems(of: try await Self.request(ofTranscriptionWith: plugin, prompt: "Reson8, Parakeet"))
+        let third = Self.queryItems(of: try await Self.request(ofTranscriptionWith: plugin, prompt: "Parakeet, Reson8"))
+
+        XCTAssertEqual(plugin.dictionaryTermsBudget.maxTerms, 50_000)
+        XCTAssertEqual([first, second, third].map { $0["custom_model_id"] }, ["dictionary-1", "dictionary-1", "dictionary-1"])
+        XCTAssertNil(first["phrases"])
+        let calls = await api.calls
+        XCTAssertEqual(calls, [
+            "create dictionary-1: Reson8, TypeWhisper",
+            "delete dictionary-1: TypeWhisper",
+            "add dictionary-1: Parakeet",
+        ])
+        // The model that holds the dictionary is no model to choose.
+        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["__default__", "rumble-2-flash", "custom-1"])
+
+        // A custom model the user selected keeps the terms as phrases.
+        plugin.selectModel("custom-1")
+        let withCustomModel = Self.queryItems(of: try await Self.request(ofTranscriptionWith: plugin, prompt: "Reson8"))
+        XCTAssertEqual(withCustomModel["custom_model_id"], "custom-1")
+        XCTAssertEqual(withCustomModel["phrases"], "Reson8")
+    }
+
+    func testDictionaryModelDeletedAtReson8IsCreatedAgain() async throws {
+        let plugin = try Self.pluginWithFetchedModels(extraDefaults: ["dictionaryModelEnabled": true])
+        let api = FakeCustomModelAPI()
+        plugin.useCustomModelAPI(api)
+        _ = try await Self.request(ofTranscriptionWith: plugin, prompt: "Reson8")
+
+        let url = "https://api.reson8.dev/v1/speech-to-text/prerecorded"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"status":400,"detail":"Unknown vocabulary: dictionary-1","code":"session_rejected"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 400)
+                ),
+                .success(Data(#"{"text":"hallo"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+            ])
+        }
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [Float](repeating: 0.3, count: 16_000), wavData: Data(), duration: 1),
+            language: "nl",
+            translate: false,
+            prompt: "Reson8"
+        )
+
+        XCTAssertEqual(result.text, "hallo")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { Self.queryItems(of: $0)["custom_model_id"] }, ["dictionary-1", "dictionary-2"])
+        let calls = await api.calls
+        XCTAssertEqual(calls, ["create dictionary-1: Reson8", "create dictionary-2: Reson8"])
+    }
+
+    // MARK: - Patterns
+
+    func testPatternSetIsAModelThatSendsPatternsInsteadOfDictionaryTerms() async throws {
+        let sets = #"[{"id":"orders","name":"Orders","patterns":["AMZ[0-9]{6}"," ","(INV)?[0-9]{4,5}"]}]"#
+        let plugin = try Self.pluginWithFetchedModels(extraDefaults: [
+            "patternSets": Data(sets.utf8),
+            "dictionaryModelEnabled": true,
+        ])
+        let api = FakeCustomModelAPI()
+        plugin.useCustomModelAPI(api)
+
+        XCTAssertEqual(plugin.transcriptionModels.last?.id, "patterns:orders")
+        XCTAssertEqual(plugin.transcriptionModels.last?.displayName, "Orders (patterns)")
+        plugin.selectModel("patterns:orders")
+        let query = Self.queryItems(of: try await Self.request(ofTranscriptionWith: plugin, prompt: "Reson8"))
+
+        // Reson8 rejects patterns together with phrases or a custom model.
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .unsupported)
+        XCTAssertEqual(plugin.supportsDictionaryTerms(forModelId: "patterns:orders"), false)
+        XCTAssertTrue(plugin.supportsLiveTranscriptionSession(forModelId: nil))
+        XCTAssertEqual(query["patterns"], "AMZ[0-9]{6},(INV)?[0-9]{4,5}")
+        XCTAssertNil(query["phrases"])
+        XCTAssertNil(query["custom_model_id"])
+        XCTAssertNil(query["model"])
+        let calls = await api.calls
+        XCTAssertTrue(calls.isEmpty)
+    }
+
     // MARK: - Model catalog
 
     func testFailedRefreshKeepsTheModelsAndTheSelection() async throws {
@@ -598,7 +707,8 @@ final class Reson8PluginTests: XCTestCase {
         fillerMode: String? = nil,
         biasStrength: Double? = nil,
         diarizationEnabled: Bool? = nil,
-        maxSpeakers: Int? = nil
+        maxSpeakers: Int? = nil,
+        extraDefaults: [String: Any] = [:]
     ) throws -> Reson8Plugin {
         let customModels = #"[{"id":"custom-1","name":"Cardiology","description":null,"phraseCount":3}]"#
         var defaults: [String: Any] = [
@@ -609,6 +719,7 @@ final class Reson8PluginTests: XCTestCase {
         defaults["biasStrength"] = biasStrength
         defaults["speakerDiarizationEnabled"] = diarizationEnabled
         defaults["maxSpeakers"] = maxSpeakers
+        defaults.merge(extraDefaults) { _, extra in extra }
         let host = try PluginTestHostServices(defaults: defaults, secrets: ["api-key": "test-key"])
         let plugin = Reson8Plugin()
         plugin.activate(host: host)
@@ -651,6 +762,27 @@ final class Reson8PluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+}
+
+/// Reson8's custom model endpoints, numbering the models it creates.
+private actor FakeCustomModelAPI: Reson8CustomModelAPI {
+    private(set) var calls: [String] = []
+    private var createdModelCount = 0
+
+    func createModel(name: String, description: String, phrases: [String]) -> String {
+        createdModelCount += 1
+        let modelId = "dictionary-\(createdModelCount)"
+        calls.append("create \(modelId): \(phrases.joined(separator: ", "))")
+        return modelId
+    }
+
+    func addPhrases(_ phrases: [String], toModel modelId: String) {
+        calls.append("add \(modelId): \(phrases.joined(separator: ", "))")
+    }
+
+    func deletePhrases(_ phrases: [String], fromModel modelId: String) {
+        calls.append("delete \(modelId): \(phrases.joined(separator: ", "))")
     }
 }
 
