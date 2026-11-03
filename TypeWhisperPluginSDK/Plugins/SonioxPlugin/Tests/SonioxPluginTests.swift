@@ -132,6 +132,11 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertFalse(SonioxPlugin.modelCatalogPredatesDefaultModel([
             SonioxFetchedModel(id: "stt-rt-preview", aliasedModelId: "stt-rt-v6", name: nil, transcriptionMode: "real_time", languages: []),
         ]))
+        // Automatic picks stt-rt-v5 here, so the list still needs a refresh.
+        XCTAssertTrue(SonioxPlugin.modelCatalogPredatesDefaultModel([
+            SonioxFetchedModel(id: "stt-rt-preview", aliasedModelId: "stt-rt-v6", name: nil, transcriptionMode: "real_time", languages: []),
+            SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+        ]))
     }
 
     @MainActor

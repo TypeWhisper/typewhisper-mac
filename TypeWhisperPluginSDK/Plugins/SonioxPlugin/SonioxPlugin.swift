@@ -2044,16 +2044,18 @@ final class SonioxPlugin: NSObject,
         }
     }
 
-    /// True when a saved list has real-time or async models but none of that
-    /// mode as new as its default. An alias counts as the model it points to.
+    /// True when Automatic would pick a real-time or async model from a saved
+    /// list that is older than that mode's default. An alias counts as the
+    /// model it points to.
     static func modelCatalogPredatesDefaultModel(_ models: [SonioxFetchedModel]) -> Bool {
-        func predates(_ scoped: [SonioxFetchedModel], _ defaultModelId: String) -> Bool {
-            !scoped.isEmpty && scoped.allSatisfy {
-                compareModelIDs($0.aliasedModelId ?? $0.id, defaultModelId)
-            }
+        func predates(_ scoped: [SonioxFetchedModel], mode: String, defaultModelId: String) -> Bool {
+            guard !scoped.isEmpty else { return false }
+            let picked = preferredSTTModelId(from: models, transcriptionMode: mode, fallback: defaultModelId)
+            let target = scoped.first { $0.id == picked }?.aliasedModelId ?? picked
+            return compareModelIDs(target, defaultModelId)
         }
-        return predates(realtimeModels(from: models), defaultRealtimeModelId)
-            || predates(asyncModels(from: models), defaultAsyncModelId)
+        return predates(realtimeModels(from: models), mode: "real_time", defaultModelId: defaultRealtimeModelId)
+            || predates(asyncModels(from: models), mode: "async", defaultModelId: defaultAsyncModelId)
     }
 
     fileprivate func setFetchedModels(_ models: [SonioxFetchedModel]) {
