@@ -69,7 +69,9 @@ final class DictionaryService: ObservableObject {
     private var hasDeferredUsageCountChanges = false
     private var regexCorrections: [UUID: NSRegularExpression] = [:]
 
-    @Published private(set) var entries: [DictionaryEntry] = []
+    @Published private(set) var entries: [DictionaryEntry] = [] {
+        didSet { entriesByIdentity = nil }
+    }
     @Published private(set) var terms: [DictionaryEntry] = []
     @Published private(set) var corrections: [DictionaryEntry] = []
     /// Enabled corrections in application order: longer originals first, so a multi-word
@@ -216,11 +218,20 @@ final class DictionaryService: ObservableObject {
         return "\(type.rawValue):\(original.lowercased())"
     }
 
+    /// `entries` grouped by `entryIdentity`, each group in `entries` order. The entry editor
+    /// checks for a duplicate twice on every keystroke, and comparing with every entry reads
+    /// four SwiftData properties per entry. Built on first use; dropped when `entries` is
+    /// reassigned and by every function that changes the original or regex mode of a loaded
+    /// entry in place, since a failed save keeps that change without reloading.
+    private var entriesByIdentity: [String: [DictionaryEntry]]?
+
     func duplicateEntry(type: DictionaryEntryType, original: String, isRegex: Bool, excluding id: UUID? = nil) -> DictionaryEntry? {
         let key = Self.entryIdentity(type: type, original: original, isRegex: isRegex)
-        return entries.first {
-            $0.id != id && Self.entryIdentity(type: $0.type, original: $0.original, isRegex: $0.isRegex) == key
+        let index = entriesByIdentity ?? Dictionary(grouping: entries) {
+            Self.entryIdentity(type: $0.type, original: $0.original, isRegex: $0.isRegex)
         }
+        entriesByIdentity = index
+        return index[key]?.first { $0.id != id }
     }
 
     @discardableResult
@@ -278,6 +289,7 @@ final class DictionaryService: ObservableObject {
         guard duplicateEntry(type: entry.type, original: original, isRegex: isRegex ?? entry.isRegex, excluding: entry.id) == nil else {
             return false
         }
+        entriesByIdentity = nil
 
         let previous = (
             original: entry.original,
@@ -559,6 +571,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
+        entriesByIdentity = nil
 
         let normalized = PluginDictionaryTerms.normalizedTerms(from: rawTerms)
         let normalizedByKey = Dictionary(uniqueKeysWithValues: normalized.map {
@@ -602,6 +615,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
+        entriesByIdentity = nil
 
         let normalized = PluginDictionaryTerms.normalizedTermHints(from: rawTerms.map {
             PluginDictionaryTermHint(
@@ -1512,6 +1526,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
+        entriesByIdentity = nil
 
         if let entry = apiCorrection(original: original, isRegex: isRegex) {
             entry.original = original
@@ -1611,6 +1626,7 @@ final class DictionaryService: ObservableObject {
             throw DictionaryServiceMutationError.unavailable
         }
         guard !mutations.isEmpty else { return }
+        entriesByIdentity = nil
 
         for mutation in mutations {
             switch mutation {
