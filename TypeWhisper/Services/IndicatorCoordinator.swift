@@ -471,7 +471,24 @@ final class IndicatorCoordinator {
         minimalPanel.refreshPlacementForActiveContextChange()
     }
 
-    private func scheduleActiveScreenRefreshes() {
+    /// Hidden panels ignore placement refreshes, and `show()` resolves the
+    /// screen again when a hidden panel appears.
+    private var hasVisibleIndicatorPanel: Bool {
+        notchPanel.isVisible || overlayPanel.isVisible || minimalPanel.isVisible
+    }
+
+    var hasPendingActiveScreenRefresh: Bool {
+        deferredRefreshTask != nil
+    }
+
+    func scheduleActiveScreenRefreshes() {
+        // Most of the time no indicator is on screen, yet every mouse click
+        // and app switch lands here. Skip the refresh and its delayed retry.
+        guard hasVisibleIndicatorPanel else {
+            deferredRefreshTask?.cancel()
+            deferredRefreshTask = nil
+            return
+        }
         refreshVisibleIndicatorPanels()
 
         deferredRefreshTask?.cancel()
