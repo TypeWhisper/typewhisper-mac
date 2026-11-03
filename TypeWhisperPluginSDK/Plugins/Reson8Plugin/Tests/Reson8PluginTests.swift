@@ -671,6 +671,52 @@ final class Reson8PluginTests: XCTestCase {
         XCTAssertEqual(result.text, "Send the report.")
     }
 
+    func testTurnsSessionIgnoresAClickAfterTheLastTurn() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [])
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: { turnEnds.withLock { $0 += 1 } }),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":1000}"#)
+        socket.deliver(#"{"type":"turn_end"}"#)
+        try await Self.waitUntil { turnEnds.withLock { $0 } == 1 }
+        // The key that stops the dictation clicks for 100 ms after a pause.
+        try await session.appendAudio(
+            samples: [Float](repeating: 0, count: 8_000) + [Float](repeating: 0.2, count: 1_600)
+                + [Float](repeating: 0, count: 1_600)
+        )
+        let start = ContinuousClock.now
+        let result = try await session.finish()
+
+        XCTAssertEqual(socket.sentTexts, [])
+        XCTAssertEqual(result.text, "Send the report.")
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1))
+    }
+
+    // TypeWhisper then transcribes the whole recording instead of dropping the speech.
+    func testTurnsSessionFailsWhenSpeechNeverBecomesATurn() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 8_000))
+
+        do {
+            _ = try await session.finish()
+            XCTFail("Expected the session to fail")
+        } catch PluginTranscriptionError.networkError {
+            XCTAssertEqual(socket.sentTexts, [#"{"type":"flush_request"}"#])
+        }
+    }
+
     func testTurnsSessionCountsATurnEndThatArrivesWhileTheFlushIsSent() async throws {
         let socket = FakeRealtimeSocket(
             flushAnswers: [#"{"type":"turn_end_candidate","text":"Add the numbers.","language":"en"}"#, #"{"type":"turn_end"}"#],

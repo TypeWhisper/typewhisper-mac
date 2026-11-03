@@ -375,6 +375,10 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     private var endedTurnCount = 0
     /// Where the last speech sent ends in the stream, in milliseconds.
     private var lastSpeechEndMs: Int?
+    /// Samples of a 100 ms frame that the next audio completes.
+    private var partialFrameSamples: [Float] = []
+    /// Speech frames in a row; a silent frame starts the count again.
+    private var speechRunFrames = 0
     /// Where the last ended turn ends in the stream, in milliseconds.
     private var endedTurnsEndMs = 0
 
@@ -441,21 +445,38 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             try await send { try await $0.sendAudio(frame) }
             start = end
         }
-        if case .turns = mode, let speechEnd = Self.lastSpeechEnd(in: samples) {
-            lastSpeechEndMs = (sentSampleCount + speechEnd) / 16
+        if case .turns = mode {
+            trackSpeech(samples)
         }
         sentSampleCount += samples.count
     }
 
-    /// Where the last speech in `samples` ends, by the rule of TypeWhisper's silence stop: a
-    /// 100 ms frame with an RMS of at least 0.004.
-    static func lastSpeechEnd(in samples: [Float]) -> Int? {
-        stride(from: 0, to: samples.count, by: 1_600).reversed().lazy.compactMap { start -> Int? in
-            let end = min(start + 1_600, samples.count)
-            let frame = samples[start..<end]
-            let power = frame.reduce(Float(0)) { $0 + $1 * $1 } / Float(frame.count)
-            return power.squareRoot() >= 0.004 ? end : nil
-        }.first
+    /// Speech frames in a row that count as speech, as TypeWhisper's silence stop needs before
+    /// it arms: 0.3 s. A click, such as the key that stops the dictation, does not.
+    static let minimumSpeechRunFrames = 3
+
+    /// Follows the speech in the audio sent, by the rule of TypeWhisper's silence stop: 100 ms
+    /// frames with an RMS of at least 0.004, in runs of at least `minimumSpeechRunFrames`.
+    private func trackSpeech(_ samples: [Float]) {
+        var frameStart = sentSampleCount - partialFrameSamples.count
+        var buffer = partialFrameSamples + samples
+        var offset = 0
+        while buffer.count - offset >= 1_600 {
+            let frame = buffer[offset..<(offset + 1_600)]
+            let power = frame.reduce(Float(0)) { $0 + $1 * $1 } / 1_600
+            offset += 1_600
+            frameStart += 1_600
+            if power.squareRoot() >= 0.004 {
+                speechRunFrames += 1
+                if speechRunFrames >= Self.minimumSpeechRunFrames {
+                    lastSpeechEndMs = frameStart / 16
+                }
+            } else {
+                speechRunFrames = 0
+            }
+        }
+        buffer.removeFirst(offset)
+        partialFrameSamples = buffer
     }
 
     /// Speech after the end of the last turn, which can still become a turn. Audio can reach
@@ -519,15 +540,14 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
                 // Closing ends the receive task, which must not count as a failure of the session.
                 let connectionFailure = failure
                 close()
-                // A turn that never ended may miss its last words, and a connection that failed
-                // may have lost speech that had not become a turn, so TypeWhisper transcribes
-                // the whole recording instead. Speech that never became a turn on a healthy
-                // connection had no words.
+                // A turn that never ended may miss its last words, and speech that never became
+                // a turn may be lost, so TypeWhisper transcribes the whole recording instead.
                 if let connectionFailure { throw connectionFailure }
-                if isTurnOpen {
-                    throw PluginTranscriptionError.networkError("Reson8 did not end the last turn in time")
-                }
-                return finalResult()
+                throw PluginTranscriptionError.networkError(
+                    isTurnOpen
+                        ? "Reson8 did not end the last turn in time"
+                        : "Reson8 did not transcribe the last speech in time"
+                )
             }
         }
         close()
