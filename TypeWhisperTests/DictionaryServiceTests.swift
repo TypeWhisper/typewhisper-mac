@@ -1605,6 +1605,46 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDictionaryListRowsRebuildOnlyWhenEntriesFilterOrSearchChange() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "Kubernetes")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        let term = try XCTUnwrap(service.entries.first { $0.original == "Kubernetes" })
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["teh", "Kubernetes"])
+        XCTAssertTrue(viewModel.filteredEntryRows.allSatisfy(\.isEnabled))
+
+        // The service saves and reloads now; the view model receives the reloaded
+        // entries on the next main-queue turn.
+        let entriesDelivered = expectation(description: "Reloaded entries reach the view model")
+        let subscription = viewModel.$entries.dropFirst().sink { _ in entriesDelivered.fulfill() }
+        defer { subscription.cancel() }
+        service.setEntryEnabled(term, enabled: false)
+
+        // Typing in the editor sheet and searching reuse the built rows.
+        viewModel.startCreating(type: .correction)
+        viewModel.editOriginal = "k"
+        viewModel.editReplacement = "K"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.isEnabled), [true, true])
+        viewModel.searchQuery = "KUBE"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["Kubernetes"])
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.isEnabled), [true])
+
+        // The reloaded entries rebuild the rows with the edited value; the search still applies.
+        wait(for: [entriesDelivered], timeout: 2)
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["Kubernetes"])
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.isEnabled), [false])
+
+        viewModel.filterTab = .corrections
+        XCTAssertTrue(viewModel.filteredEntryRows.isEmpty)
+        viewModel.searchQuery = ""
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["teh"])
+    }
+
+    @MainActor
     func testDictionaryEntryIDActionsEditSetEnabledToggleAndDeleteMatchingEntry() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
