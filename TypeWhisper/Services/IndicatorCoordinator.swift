@@ -371,6 +371,7 @@ final class IndicatorCoordinator {
     private var cancellables = Set<AnyCancellable>()
     private var globalMouseMonitor: Any?
     private var deferredRefreshTask: Task<Void, Never>?
+    private var deferredRefreshGeneration = 0
     private var isObserving = false
 
     init(countdownModel: CalendarMeetingCountdownModel) {
@@ -492,6 +493,8 @@ final class IndicatorCoordinator {
         refreshVisibleIndicatorPanels()
 
         deferredRefreshTask?.cancel()
+        deferredRefreshGeneration += 1
+        let generation = deferredRefreshGeneration
         deferredRefreshTask = Task { @MainActor [weak self] in
             await Task.yield()
             guard !Task.isCancelled else { return }
@@ -500,6 +503,10 @@ final class IndicatorCoordinator {
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
             self?.refreshVisibleIndicatorPanels()
+            // A newer request may have replaced this task in the meantime.
+            if self?.deferredRefreshGeneration == generation {
+                self?.deferredRefreshTask = nil
+            }
         }
     }
 }
