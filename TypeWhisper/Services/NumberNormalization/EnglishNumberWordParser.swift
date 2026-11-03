@@ -53,8 +53,12 @@ enum EnglishNumberWordParser {
     ]
 
     static func parse(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
-        guard !words.isEmpty else { return nil }
-        let normalizedWords = words.map(normalizeWord)
+        parse(normalizedWords: words.map(normalizeWord))
+    }
+
+    /// Parses words that already went through `normalizeWord`.
+    static func parse(normalizedWords: [String]) -> NumberWordNormalizer.ParsedWords? {
+        guard !normalizedWords.isEmpty else { return nil }
 
         // A long run of bare single digits is a sequence ("one nine eight four"
         // -> 1984), not a cardinal. Checked first because the cardinal path
@@ -250,8 +254,10 @@ enum EnglishNumberWordParser {
         unitValues[word] ?? teenValues[word]
     }
 
-    private static func normalizeWord(_ word: String) -> String {
-        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US"))
+    private static let wordLocale = Locale(identifier: "en_US")
+
+    static func normalizeWord(_ word: String) -> String {
+        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: wordLocale)
             .lowercased()
     }
 }
