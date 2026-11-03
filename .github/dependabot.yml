@@ -5,6 +5,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    commit-message:
+      prefix: "(chore) "
     allow:
       - dependency-name: "*"
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
@@ -20,6 +22,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    commit-message:
+      prefix: "(chore) "
     allow:
       - dependency-name: "*"
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
@@ -34,6 +38,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    commit-message:
+      prefix: "(chore) "
     allow:
       - dependency-name: "*"
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
@@ -48,6 +54,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    commit-message:
+      prefix: "(chore) "
     allow:
       - dependency-name: "*"
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
