@@ -5,6 +5,7 @@ import HuggingFace
 import MLX
 import MLXAudioCore
 import MLXAudioSTT
+import os
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 // MARK: - Plugin Entry Point
@@ -33,6 +34,11 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         requiredFiles: ["config.json", "tokenizer.json"],
         weightFileExtensions: ["safetensors"]
     )
+
+    /// MLX creates its Metal device lazily, so clearing the cache can be the
+    /// first MLX call in this process. Set before this plugin first enters MLX
+    /// and never reset: the runtime outlives deactivation.
+    static let runtimeUsage = OSAllocatedUnfairLock(initialState: false)
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
@@ -87,6 +93,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
+            scheduleRuntimeCacheClearWhenInferenceIsIdle()
             host = nil
         }
     }
@@ -333,6 +340,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             guard let model else {
                 throw PluginTranscriptionError.notConfigured
             }
+            defer { Self.clearCacheAfterInference() }
             if translate, model.family == .turboCTC { throw Self.turboCTCTranslationError }
             guard !audio.samples.isEmpty else {
                 return PluginTranscriptionResult(text: "", detectedLanguage: language)
@@ -369,6 +377,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             guard let model else {
                 throw PluginTranscriptionError.notConfigured
             }
+            defer { Self.clearCacheAfterInference() }
             if translate, model.family == .turboCTC { throw Self.turboCTCTranslationError }
             guard !audio.samples.isEmpty else {
                 return PluginTranscriptionResult(text: "", detectedLanguage: language)
@@ -508,6 +517,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             }
             try await PluginLocalInferenceGate.shared.withLock {
                 try Task.checkCancellation()
+                Self.runtimeUsage.withLock { $0 = true }
                 Stream.gpu.synchronize()
                 Memory.clearCache()
             }
@@ -602,10 +612,34 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
+            // The released weights stay in MLX's cache until it is cleared.
+            scheduleRuntimeCacheClearWhenInferenceIsIdle()
             if clearPersistence {
                 host?.setUserDefault(nil, forKey: "loadedModel")
             }
             host?.notifyCapabilitiesChanged()
+        }
+    }
+
+    /// TurboCTC's buffers grow with the clip length, so MLX rarely reuses them and
+    /// keeps the freed ones in its cache: memory grew with every dictated second (#1835).
+    private static func clearCacheAfterInference() {
+        Memory.clearCache()
+    }
+
+    private(set) var runtimeCacheClearTask: Task<Void, Never>?
+
+    private func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        guard Self.runtimeUsage.withLock({ $0 }) else { return }
+        // A model under construction is released only when its load ends, so wait
+        // for the load gate first, in the same lock order as `loadModel`.
+        runtimeCacheClearTask = Task { [modelLoadGate] in
+            try? await modelLoadGate.withLock {
+                try await PluginLocalInferenceGate.shared.withLock {
+                    Stream.gpu.synchronize()
+                    Memory.clearCache()
+                }
+            }
         }
     }
 

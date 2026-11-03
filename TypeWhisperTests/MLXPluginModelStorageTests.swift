@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MLX
 import MLXLLM
 import os
 import SwiftUI
@@ -64,6 +65,44 @@ final class MLXPluginModelStorageTests: XCTestCase {
                     }
                 }
             }
+        }
+    }
+
+    /// Released Granite weights stayed in MLX's cache, so auto-unload freed no memory (#1835).
+    @MainActor
+    func testGraniteUnloadAndDeactivationClearCacheOnlyAfterInferenceAndLoadsAreIdle() async throws {
+        let plugin = GranitePlugin()
+        // The allocation below enters MLX on the plugin's behalf, as a model load would.
+        let previousUsage = GranitePlugin.runtimeUsage.withLock { $0 }
+        GranitePlugin.runtimeUsage.withLock { $0 = true }
+        defer { GranitePlugin.runtimeUsage.withLock { $0 = previousUsage } }
+        let previousLimit = Memory.cacheLimit
+        Memory.cacheLimit = 64 * 1024 * 1024
+        defer { Memory.cacheLimit = previousLimit }
+        // A model load keeps the stale runtime alive until it ends, so cleanup waits for both gates.
+        for (gate, deactivate) in [
+            (PluginLocalInferenceGate.shared, false), (PluginLocalInferenceGate.shared, true),
+            (plugin.modelLoadGate, false), (plugin.modelLoadGate, true),
+        ] {
+            let cleanup = try await gate.withLock {
+                Memory.clearCache()
+                autoreleasepool {
+                    let allocation = MLXArray.ones([4 * 1024 * 1024], stream: .gpu)
+                    eval(allocation)
+                }
+                Stream.gpu.synchronize()
+                XCTAssertGreaterThan(Memory.cacheMemory, 0)
+                let task = await MainActor.run {
+                    if deactivate { plugin.deactivate() } else { plugin.unloadModel() }
+                    return plugin.runtimeCacheClearTask
+                }
+                XCTAssertNotNil(task)
+                for _ in 0..<10 { await Task.yield() }
+                XCTAssertGreaterThan(Memory.cacheMemory, 0, "Cleanup must wait for active inference and loads")
+                return task
+            }
+            await cleanup?.value
+            XCTAssertEqual(Memory.cacheMemory, 0, deactivate ? "deactivate" : "unload")
         }
     }
 

@@ -196,7 +196,7 @@ final class PluginManifestValidationTests: XCTestCase {
             ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.15", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/CanaryPlugin/manifest.json", "1.1.1", "1.8.1"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.20", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.2.0", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.2.1", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/manifest.json", "1.0.7", "1.8.0"),
         ]
 
