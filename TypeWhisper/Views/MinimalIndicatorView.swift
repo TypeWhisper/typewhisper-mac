@@ -22,6 +22,24 @@ struct MinimalIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var preview = IndicatorPreviewSession.shared
+    private let countdownModel: CalendarMeetingCountdownModel
+
+    init(countdownModel: CalendarMeetingCountdownModel) {
+        self.countdownModel = countdownModel
+    }
+
+    // The layout reads the presentation dozens of times per update, and building
+    // it reads about twenty published properties. It is built once per update here.
+    var body: some View {
+        MinimalIndicatorPresentationView(
+            presentation: IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview),
+            countdownModel: countdownModel
+        )
+    }
+}
+
+private struct MinimalIndicatorPresentationView: View {
+    @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var modelMenu = IndicatorModelMenuController.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @Environment(\.colorScheme) private var systemColorScheme
@@ -36,12 +54,11 @@ struct MinimalIndicatorView: View {
     private let insertingWidth: CGFloat = 44
     private let messageWidth = IndicatorFeedbackPanelLayout.minimalFeedbackWidth
 
-    init(countdownModel: CalendarMeetingCountdownModel) {
-        _countdownModel = ObservedObject(wrappedValue: countdownModel)
-    }
+    let presentation: IndicatorPresentationData
 
-    private var presentation: IndicatorPresentationData {
-        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview)
+    init(presentation: IndicatorPresentationData, countdownModel: CalendarMeetingCountdownModel) {
+        self.presentation = presentation
+        _countdownModel = ObservedObject(wrappedValue: countdownModel)
     }
 
     private var countdownPresentation: CalendarMeetingCountdownPresentation? {
