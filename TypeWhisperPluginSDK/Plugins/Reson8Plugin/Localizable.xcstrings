@@ -560,6 +560,1042 @@
           }
         }
       }
+    },
+    "Filler words": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füllwörter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muletillas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィラー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填充词"
+          }
+        }
+      }
+    },
+    "Natural": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natürlich"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natural"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自然"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自然"
+          }
+        }
+      }
+    },
+    "Clean": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereinigt"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpio"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "除去"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "去除"
+          }
+        }
+      }
+    },
+    "Verbatim": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörtlich"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Literal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐語"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐字"
+          }
+        }
+      }
+    },
+    "Default. The model gets no instruction, so filler words such as “um” may appear in some places and be left out in others.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard. Das Modell erhält keine Vorgabe, daher können Füllwörter wie „äh“ an manchen Stellen erscheinen und an anderen fehlen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado. El modelo no recibe ninguna instrucción, así que las muletillas como «eh» pueden aparecer en algunos sitios y faltar en otros."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準。モデルに指示を与えないため、「えー」などのフィラーが入る箇所と入らない箇所があります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认。不向模型发出指示，因此“嗯”之类的填充词可能在某些地方出现，在另一些地方被省略。"
+          }
+        }
+      }
+    },
+    "Leaves filler words such as “um” and “uh” out of the transcript. Suits dictation, notes and text that is processed further.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lässt Füllwörter wie „äh“ und „ähm“ im Transkript weg. Geeignet für Diktate, Notizen und Text, der weiterverarbeitet wird."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omite de la transcripción las muletillas como «eh» y «este». Adecuado para dictados, notas y textos que se procesan después."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「えー」「あの」などのフィラーを文字起こしから除きます。口述筆記、メモ、後で処理するテキストに向いています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从转写中去除“嗯”“呃”之类的填充词。适合听写、笔记以及需要进一步处理的文本。"
+          }
+        }
+      }
+    },
+    "Transcribes filler words as they are spoken. Suits transcripts that must reflect exactly what was said, such as interviews.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schreibt Füllwörter so mit, wie sie gesprochen werden. Geeignet für Transkripte, die genau wiedergeben müssen, was gesagt wurde, etwa Interviews."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe las muletillas tal como se pronuncian. Adecuado para transcripciones que deben reflejar exactamente lo que se dijo, como entrevistas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィラーを話されたとおりに文字起こしします。インタビューなど、発言をそのまま記録する必要がある文字起こしに向いています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按原样转写填充词。适合必须如实反映所说内容的转写，例如访谈。"
+          }
+        }
+      }
+    },
+    "Bias strength": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biasstärke"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intensidad del sesgo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バイアス強度"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "偏置强度"
+          }
+        }
+      }
+    },
+    "Reset": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurücksetzen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restablecer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リセット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置"
+          }
+        }
+      }
+    },
+    "Reset bias strength": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biasstärke zurücksetzen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restablecer la intensidad del sesgo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バイアス強度をリセット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置偏置强度"
+          }
+        }
+      }
+    },
+    "Speaker diarization": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprechererkennung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detección de hablantes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者分離"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话人分离"
+          }
+        }
+      }
+    },
+    "Automatic": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automático"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动"
+          }
+        }
+      }
+    },
+    "Maximum speakers": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maximale Sprecherzahl"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máximo de hablantes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大話者数"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多说话人数"
+          }
+        }
+      }
+    },
+    "How strongly custom models and dictionary terms steer recognition. Higher values recover these terms more often, but can also turn similar-sounding words into them. Default: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie stark eigene Modelle und Wörterbuchbegriffe die Erkennung lenken. Höhere Werte erkennen diese Begriffe häufiger, können aber auch ähnlich klingende Wörter in sie verwandeln. Standard: %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuánto orientan el reconocimiento los modelos personalizados y los términos del diccionario. Los valores más altos reconocen estos términos con más frecuencia, pero también pueden convertir en ellos palabras de sonido parecido. Predeterminado: %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独自のモデルと辞書の用語が認識をどれだけ強く誘導するかを指定します。値を高くするとこれらの用語がより多く認識されますが、似た響きの語がその用語に置き換わることもあります。標準: %@。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义模型和词典术语对识别的引导强度。数值越高，这些术语越容易被识别，但发音相近的词也可能被误识别为这些术语。默认值：%@。"
+          }
+        }
+      }
+    },
+    "Reson8 labels who spoke when, up to eight speakers. With Detect Speakers on, recordings and file transcriptions use these labels instead of detecting speakers on this Mac. Dictated text stays without labels. While this is on, transcripts appear once the whole recording is done. Recordings longer than five minutes are labelled in five-minute parts, so one person can appear under several numbers.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 kennzeichnet, wer wann gesprochen hat, bis zu acht Sprecher. Ist „Sprecher erkennen“ aktiv, verwenden Aufnahmen und Dateitranskriptionen diese Bezeichnungen, statt die Sprecher auf diesem Mac zu erkennen. Diktierter Text bleibt ohne Bezeichnungen. Solange diese Option aktiv ist, erscheinen Transkripte erst, wenn die ganze Aufnahme fertig ist. Aufnahmen über fünf Minuten werden in Abschnitten von fünf Minuten gekennzeichnet, daher kann eine Person unter mehreren Nummern erscheinen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 indica quién habló y cuándo, hasta ocho hablantes. Con «Detectar hablantes» activado, las grabaciones y las transcripciones de archivos usan estas etiquetas en lugar de detectar los hablantes en este Mac. El texto dictado queda sin etiquetas. Mientras esta opción está activada, las transcripciones aparecen cuando termina toda la grabación. Las grabaciones de más de cinco minutos se etiquetan en partes de cinco minutos, así que una persona puede aparecer con varios números."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 が誰がいつ話したかを最大8人まで区別します。「話者を検出」がオンのとき、録音とファイル文字起こしはこのMacで話者を検出する代わりにこのラベルを使用します。口述筆記のテキストにはラベルを付けません。このオプションがオンの間は、録音全体の処理が終わってから文字起こしが表示されます。5分を超える録音は5分ごとに区別されるため、同じ人が複数の番号で表示されることがあります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 标注谁在何时发言，最多八位说话人。开启“检测说话人”时，录音和文件转写会使用这些标签，而不是在这台 Mac 上检测说话人。听写文本不带标签。此选项开启期间，转写结果会在整段录音处理完后显示。超过五分钟的录音按五分钟分段标注，因此同一个人可能以多个编号出现。"
+          }
+        }
+      }
+    },
+    "%@ does not support %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ unterstützt %@ nicht."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ no admite %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ は%@に対応していません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 不支持%@。"
+          }
+        }
+      }
+    },
+    "filler words": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füllwörter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "muletillas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィラー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填充词"
+          }
+        }
+      }
+    },
+    "speaker diarization": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprechererkennung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "detección de hablantes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者分離"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话人分离"
+          }
+        }
+      }
+    },
+    "dictionary terms": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörterbuchbegriffe"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "términos del diccionario"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辞書の用語"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "词典术语"
+          }
+        }
+      }
+    },
+    "Keep dictionary in a custom model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörterbuch in einem eigenen Modell führen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar el diccionario en un modelo personalizado"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辞書を独自のモデルで管理"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将词典保存在自定义模型中"
+          }
+        }
+      }
+    },
+    "TypeWhisper keeps your dictionary terms in a custom model named “TypeWhisper Dictionary” in your Reson8 account and updates it when the dictionary changes. Reson8 then takes up to 50,000 terms instead of 250 per request. The model replaces a custom model configured on your API client; with a custom model selected above, the terms go as phrases.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper führt deine Wörterbuchbegriffe in einem eigenen Modell namens „TypeWhisper Dictionary“ in deinem Reson8-Konto und aktualisiert es, wenn sich das Wörterbuch ändert. Reson8 berücksichtigt dann bis zu 50.000 Begriffe statt 250 pro Anfrage. Das Modell ersetzt ein eigenes Modell, das für deinen API-Client eingerichtet ist; ist oben ein eigenes Modell ausgewählt, gehen die Begriffe als Phrasen mit."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper guarda los términos de tu diccionario en un modelo personalizado llamado «TypeWhisper Dictionary» en tu cuenta de Reson8 y lo actualiza cuando cambia el diccionario. Así Reson8 tiene en cuenta hasta 50 000 términos en lugar de 250 por solicitud. El modelo sustituye a un modelo personalizado configurado en tu cliente de API; si arriba hay un modelo personalizado seleccionado, los términos se envían como frases."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper は辞書の用語を Reson8 アカウント内の「TypeWhisper Dictionary」という独自のモデルで管理し、辞書が変わると更新します。これにより Reson8 はリクエストごとに 250 件ではなく最大 50,000 件の用語を使用します。このモデルは API クライアントに設定された独自のモデルの代わりに使われます。上で独自のモデルを選択している場合、用語はフレーズとして送信されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper 会将你的词典术语保存在 Reson8 账户中名为“TypeWhisper Dictionary”的自定义模型里，并在词典变化时更新它。这样 Reson8 每次请求最多可使用 50,000 个术语，而不是 250 个。该模型会取代 API 客户端上配置的自定义模型；如果上方已选择自定义模型，术语会以短语形式发送。"
+          }
+        }
+      }
+    },
+    "Patterns": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muster"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Patrones"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パターン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模式"
+          }
+        }
+      }
+    },
+    "Add pattern set": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mustergruppe hinzufügen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir grupo de patrones"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パターンセットを追加"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加模式组"
+          }
+        }
+      }
+    },
+    "Patterns recover structured tokens such as order codes, reference numbers or licence plates. Each pattern set appears as a model, so a profile or workflow can use it where such tokens are spoken; Reson8 advises against applying patterns everywhere. They replace dictionary terms and do not work with an API client that has a custom model configured.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muster erkennen strukturierte Angaben wie Bestellnummern, Aktenzeichen oder Kennzeichen. Jede Mustergruppe erscheint als Modell, sodass ein Profil oder Workflow sie dort nutzen kann, wo solche Angaben gesprochen werden; Reson8 rät davon ab, Muster überall zu verwenden. Sie ersetzen Wörterbuchbegriffe und funktionieren nicht mit einem API-Client, für den ein eigenes Modell eingerichtet ist."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los patrones reconocen datos estructurados como números de pedido, referencias o matrículas. Cada grupo de patrones aparece como un modelo, así que un perfil o flujo de trabajo puede usarlo donde se dicten esos datos; Reson8 desaconseja aplicar patrones en todas partes. Sustituyen a los términos del diccionario y no funcionan con un cliente de API que tenga configurado un modelo personalizado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パターンは注文番号、参照番号、ナンバープレートなどの構造化された文字列を認識します。各パターンセットはモデルとして表示されるため、プロファイルやワークフローでそのような文字列を話す場面に使えます。Reson8 はパターンをすべての場面に適用しないよう勧めています。パターンは辞書の用語の代わりに使われ、独自のモデルが設定された API クライアントでは機能しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模式可识别订单号、参考编号或车牌等结构化内容。每个模式组都会显示为一个模型，因此配置文件或工作流可以在会说出此类内容的场景中使用它；Reson8 不建议在所有场景中使用模式。模式会取代词典术语，并且不适用于已配置自定义模型的 API 客户端。"
+          }
+        }
+      }
+    },
+    "One pattern per line: [0-9] is a digit, [A-Z] a letter, {n} or {m,n} repeats what comes before, (…)? marks an optional part, and a space or hyphen separates parts. Example: AMZ[0-9]{6}": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Muster pro Zeile: [0-9] ist eine Ziffer, [A-Z] ein Buchstabe, {n} oder {m,n} wiederholt das Vorangehende, (…)? kennzeichnet einen optionalen Teil, und ein Leerzeichen oder Bindestrich trennt Teile. Beispiel: AMZ[0-9]{6}"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un patrón por línea: [0-9] es un dígito, [A-Z] una letra, {n} o {m,n} repite lo anterior, (…)? marca una parte opcional, y un espacio o guion separa partes. Ejemplo: AMZ[0-9]{6}"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 行に 1 つのパターン: [0-9] は数字、[A-Z] は英字、{n} または {m,n} は直前の要素の繰り返し、(…)? は省略可能な部分を表し、スペースまたはハイフンで区切ります。例: AMZ[0-9]{6}"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每行一个模式：[0-9] 表示一位数字，[A-Z] 表示一个字母，{n} 或 {m,n} 重复前面的内容，(…)? 表示可选部分，空格或连字符用于分隔。示例：AMZ[0-9]{6}"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名前"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名称"
+          }
+        }
+      }
+    },
+    "Pattern set name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name der Mustergruppe"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del grupo de patrones"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パターンセット名"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模式组名称"
+          }
+        }
+      }
+    },
+    "Remove pattern set": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mustergruppe entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar grupo de patrones"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パターンセットを削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除模式组"
+          }
+        }
+      }
+    },
+    "Patterns, one per line": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muster, eines pro Zeile"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Patrones, uno por línea"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パターン（1 行に 1 つ）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模式，每行一个"
+          }
+        }
+      }
+    },
+    "Check with Reson8": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei Reson8 prüfen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobar con Reson8"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 で確認"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 Reson8 检查"
+          }
+        }
+      }
+    },
+    "Reson8 accepts these patterns.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 akzeptiert diese Muster."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 acepta estos patrones."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 はこれらのパターンを受け付けます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 接受这些模式。"
+          }
+        }
+      }
+    },
+    "Recordings and files": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahmen und Dateien"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grabaciones y archivos"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音とファイル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音和文件"
+          }
+        }
+      }
+    },
+    "Prerecorded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorab aufgenommen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pregrabado"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预录"
+          }
+        }
+      }
+    },
+    "Realtime": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echtzeit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiempo real"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リアルタイム"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时"
+          }
+        }
+      }
+    },
+    "For the Recorder, file transcriptions and dictations without live preview. Prerecorded costs 1 credit per minute and is faster for finished audio. Realtime costs 2 credits per minute and shows the text while it arrives. Dictations with live preview stream either way.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für den Recorder, Dateitranskriptionen und Diktate ohne Live-Vorschau. „Vorab aufgenommen“ kostet 1 Credit pro Minute und ist bei fertigen Aufnahmen schneller. „Echtzeit“ kostet 2 Credits pro Minute und zeigt den Text, während er eintrifft. Diktate mit Live-Vorschau streamen in beiden Fällen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para la Grabadora, las transcripciones de archivos y los dictados sin vista previa en directo. Pregrabado cuesta 1 crédito por minuto y es más rápido con audio ya terminado. Tiempo real cuesta 2 créditos por minuto y muestra el texto a medida que llega. Los dictados con vista previa en directo se transmiten en ambos casos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダー、ファイル文字起こし、ライブプレビューのない口述筆記に使用します。録音済みは 1 分あたり 1 クレジットで、完成した音声ではより高速です。リアルタイムは 1 分あたり 2 クレジットで、届いたテキストを順に表示します。ライブプレビューのある口述筆記はどちらの場合もストリーミングされます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用于录音、文件转写以及没有实时预览的听写。预录每分钟 1 个积分，处理已完成的音频更快。实时每分钟 2 个积分，会在文本到达时显示。带实时预览的听写在两种情况下都会流式传输。"
+          }
+        }
+      }
+    },
+    "Pattern set": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mustergruppe"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grupo de patrones"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パターンセット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模式组"
+          }
+        }
+      }
+    },
+    "%@ (patterns)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (Muster)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (patrones)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（パターン）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（模式）"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
