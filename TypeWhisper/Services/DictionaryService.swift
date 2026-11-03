@@ -829,7 +829,7 @@ final class DictionaryService: ObservableObject {
         deferUsageCountSave: Bool,
         countedCorrectionIDs: inout Set<UUID>
     ) -> [String] {
-        var results = texts
+        var results = texts.map(CorrectionTarget.init)
         var needsSave = false
         var regexBudget = RegexCorrectionBudget()
 
@@ -847,8 +847,11 @@ final class DictionaryService: ObservableObject {
                     interrupted = true
                     break
                 }
-                correctionResults[index] = corrected
-                correctionWasApplied = correctionWasApplied || corrected != before
+                let changed = corrected != before.text
+                if changed {
+                    correctionResults[index] = CorrectionTarget(corrected)
+                }
+                correctionWasApplied = correctionWasApplied || changed
             }
             // A timed-out rule must not leave the full transcript and its segments inconsistent.
             guard !interrupted else {
@@ -871,7 +874,7 @@ final class DictionaryService: ObservableObject {
             }
         }
 
-        return results
+        return results.map(\.text)
     }
 
     /// Applies all enabled corrections without touching usage counters, for text that is
@@ -885,24 +888,23 @@ final class DictionaryService: ObservableObject {
     /// text to `appliedCorrectionIDs`, so a caller can count their usage later with
     /// `recordUsage(ofCorrectionIDs:deferUsageCountSave:)` once the result is actually used.
     func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>, includeRegex: Bool = true) -> String {
-        var result = text
+        var result = CorrectionTarget(text)
         var regexBudget = RegexCorrectionBudget()
         for correction in correctionsForApplication {
             guard includeRegex || !correction.isRegex else { continue }
             guard let replacement = correction.replacement else { continue }
-            let before = result
             guard let corrected = applyCorrection(
-                correction, to: before, replacement: replacement, regexBudget: &regexBudget
+                correction, to: result, replacement: replacement, regexBudget: &regexBudget
             ) else {
                 logger.notice("Regex correction interrupted; skipped rule \(correction.id, privacy: .public)")
                 continue
             }
-            result = corrected
-            if result != before {
+            if corrected != result.text {
+                result = CorrectionTarget(corrected)
                 appliedCorrectionIDs.insert(correction.id)
             }
         }
-        return result
+        return result.text
     }
 
     /// Counts one use for each enabled correction whose id is in `correctionIDs`.
@@ -936,12 +938,37 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    /// Text that corrections are applied to, with an NSString copy for the quick check
+    /// whether a rule's original occurs at all. Searching a Swift string bridges it to
+    /// UTF-16 for every rule, and most rules of a dictionary do not occur in a text.
+    private struct CorrectionTarget {
+        let text: String
+        private let searchText: NSString
+
+        init(_ text: String) {
+            self.text = text
+            searchText = NSString(string: text)
+        }
+
+        /// The same search the replacement starts with, so a miss means it would
+        /// return the text unchanged.
+        func contains(_ original: String, options: String.CompareOptions, locale: Locale?) -> Bool {
+            searchText.range(
+                of: original,
+                options: options,
+                range: NSRange(location: 0, length: searchText.length),
+                locale: locale
+            ).location != NSNotFound
+        }
+    }
+
     private func applyCorrection(
         _ correction: DictionaryEntry,
-        to text: String,
+        to target: CorrectionTarget,
         replacement: String,
         regexBudget: inout RegexCorrectionBudget
     ) -> String? {
+        let text = target.text
         if correction.isRegex {
             guard let regex = regexCorrections[correction.id] else { return text }
             return regexBudget.perform { deadline in
@@ -953,14 +980,20 @@ final class DictionaryService: ObservableObject {
         case .exact:
             return textMatches(text, correction.original, caseSensitive: correction.caseSensitive) ? replacement : text
         case .boundary:
+            let original = correction.original
+            let caseSensitive = correction.caseSensitive
+            guard target.contains(original, options: caseSensitive ? [] : [.caseInsensitive], locale: .current) else {
+                return text
+            }
             return replacingBoundaryMatches(
-                of: correction.original,
+                of: original,
                 in: text,
                 with: replacement,
-                caseSensitive: correction.caseSensitive
+                caseSensitive: caseSensitive
             )
         case .substring:
             let options: String.CompareOptions = correction.caseSensitive ? [] : [.caseInsensitive]
+            guard target.contains(correction.original, options: options, locale: nil) else { return text }
             let contexts = Self.reexpansionContexts(of: correction.original, in: replacement, options: options, locale: nil)
             guard !contexts.isEmpty else {
                 if correction.caseSensitive {
