@@ -135,6 +135,46 @@ final class DictationSilenceEndpointDetectorTests: XCTestCase {
         XCTAssertEqual(detector.append(ScriptedAudio.silence(0.1)), .endpointReached)
     }
 
+    func testTurnEndShortensTheSilenceToHalfTheDuration() {
+        var detector = DictationSilenceEndpointDetector(silenceDuration: 4)
+
+        detector.append(ScriptedAudio.speech(1))
+        detector.append(ScriptedAudio.silence(0.5))
+        // Two seconds of silence end the session now, so the countdown starts at once.
+        XCTAssertEqual(detector.reportTurnEnd(), .stopping(remaining: 1.5))
+
+        XCTAssertNotEqual(detector.append(ScriptedAudio.silence(1.4)), .endpointReached)
+        XCTAssertEqual(detector.append(ScriptedAudio.silence(0.1)), .endpointReached)
+    }
+
+    func testSpeechAfterATurnEndRestoresTheConfiguredDuration() {
+        var detector = DictationSilenceEndpointDetector(silenceDuration: 4)
+
+        detector.append(ScriptedAudio.speech(1))
+        detector.append(ScriptedAudio.silence(0.5))
+        detector.reportTurnEnd()
+        // The speaker goes on after a sentence.
+        detector.append(ScriptedAudio.speech(1))
+
+        XCTAssertNotEqual(detector.append(ScriptedAudio.silence(3.9)), .endpointReached)
+        XCTAssertEqual(detector.append(ScriptedAudio.silence(0.1)), .endpointReached)
+    }
+
+    func testTurnEndBeforeSpeechChangesNothing() {
+        var detector = DictationSilenceEndpointDetector(silenceDuration: 2)
+
+        XCTAssertEqual(detector.reportTurnEnd(), .waitingForSpeech)
+        detector.append(ScriptedAudio.speech(1))
+        XCTAssertNotEqual(detector.append(ScriptedAudio.silence(1.9)), .endpointReached)
+    }
+
+    func testTurnEndSilenceIsHalfTheDurationButAtLeastOneSecond() {
+        XCTAssertEqual(DictationSilenceEndpointDetector.turnEndSilenceDuration(for: 1), 1)
+        XCTAssertEqual(DictationSilenceEndpointDetector.turnEndSilenceDuration(for: 1.5), 1)
+        XCTAssertEqual(DictationSilenceEndpointDetector.turnEndSilenceDuration(for: 3), 1.5)
+        XCTAssertEqual(DictationSilenceEndpointDetector.turnEndSilenceDuration(for: 10), 5)
+    }
+
     func testCountdownCoversTheLastTwoSecondsOfLongerDurations() {
         var detector = DictationSilenceEndpointDetector(silenceDuration: 5)
         detector.append(ScriptedAudio.speech(1))
@@ -354,6 +394,23 @@ final class DictationSilenceEndpointMonitorTests: XCTestCase {
         // Stopped: no further poll is scheduled.
         await harness.yieldRepeatedly()
         XCTAssertEqual(harness.clock.pendingSleepCount, 0)
+    }
+
+    func testTurnEndAfterEnoughSilenceEndsTheSessionAtOnce() {
+        let harness = MonitorHarness()
+        defer { harness.tearDown() }
+        let sessionID = UUID()
+        harness.monitor.start(sessionID: sessionID, silenceDuration: 3)
+        harness.recording.append(ScriptedAudio.speech(1) + ScriptedAudio.silence(1.5))
+        harness.monitor.poll(sessionID: sessionID)
+        XCTAssertTrue(harness.endpoints.isEmpty)
+
+        harness.monitor.reportTurnEnd(sessionID: UUID())
+        XCTAssertTrue(harness.endpoints.isEmpty, "a report for another session does nothing")
+        harness.monitor.reportTurnEnd(sessionID: sessionID)
+
+        XCTAssertEqual(harness.endpoints, [sessionID])
+        XCTAssertNil(harness.monitor.monitoredSessionID)
     }
 
     func testPollsFollowTheRecordingAsItGrows() {

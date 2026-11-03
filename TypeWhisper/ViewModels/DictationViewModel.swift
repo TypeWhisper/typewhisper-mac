@@ -4501,8 +4501,32 @@ final class DictationViewModel: ObservableObject {
             normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: effectiveAllowLiveTranscription,
             previewHidden: streamsDictationWithoutPreview,
+            turnEndHandler: liveTurnEndHandler(previewFollowsDictationEngine: previewFollowsDictationEngine),
             stateCheck: { [weak self] in self?.state == .recording }
         )
+    }
+
+    /// Lets the dictation engine's live session shorten the silence stop once the speaker
+    /// finished a turn (`setLiveTranscriptionTurnEndHandler:`). Only while the silence stop
+    /// watches the session, only for the engine that transcribes the dictation, and not for
+    /// push-to-talk, which never stops on silence.
+    private func liveTurnEndHandler(previewFollowsDictationEngine: Bool) -> (@Sendable () -> Void)? {
+        guard previewFollowsDictationEngine,
+              hotkeyService.currentMode != .pushToTalk,
+              let sessionID = silenceEndpointMonitor.monitoredSessionID else {
+            return nil
+        }
+        return { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleLiveTurnEnd(sessionID: sessionID)
+            }
+        }
+    }
+
+    private func handleLiveTurnEnd(sessionID: UUID) {
+        guard sessionID == activeDictationSessionID, state == .recording, !isStopInFlight else { return }
+        logger.info("Live session reported a turn end, shortening the silence stop")
+        silenceEndpointMonitor.reportTurnEnd(sessionID: sessionID)
     }
 
     private func captureLiveFieldTargetAtRecordingRequestIfEligible() {

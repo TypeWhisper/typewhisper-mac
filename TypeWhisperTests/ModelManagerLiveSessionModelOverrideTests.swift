@@ -185,6 +185,36 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(plugin.receivedDictionaryHints, hints)
     }
 
+    func testLiveSessionGetsTheTurnEndHandlerOnlyWhileItIsCreated() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = LiveModelOverrideTranscriptionPlugin()
+        let modelManager = installLivePlugin(plugin, appSupportDirectory: appSupportDirectory)
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+
+        let sessionHandle = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            turnEndHandler: { turnEnds.withLock { $0 += 1 } },
+            onProgress: { _ in true }
+        )
+
+        XCTAssertNotNil(sessionHandle)
+        // The plugin reached the handler through the Objective-C selector, and calls reach the host.
+        let handler = try XCTUnwrap(plugin.turnEndHandlerDuringCreation)
+        handler()
+        XCTAssertEqual(turnEnds.withLock { $0 }, 1)
+        XCTAssertNil(plugin.turnEndHandler, "the host removes the handler after creating the session")
+
+        _ = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            onProgress: { _ in true }
+        )
+        XCTAssertNil(plugin.turnEndHandlerDuringCreation, "sessions without silence stop get no handler")
+    }
+
     func testBatchTranscriptionForwardsSourceProgressFromOptionalProtocol() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1091,6 +1121,13 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
     private var modelAliases: [String: String] = [:]
     private var currentModelId: String? = "alpha"
     private(set) var receivedDictionaryHints: [PluginDictionaryTermHint] = []
+    private(set) var turnEndHandler: (() -> Void)?
+    private(set) var turnEndHandlerDuringCreation: (() -> Void)?
+
+    @objc(setLiveTranscriptionTurnEndHandler:)
+    func setLiveTranscriptionTurnEndHandler(_ handler: (@convention(block) () -> Void)?) {
+        turnEndHandler = handler
+    }
 
     required override init() {
         super.init()
@@ -1137,6 +1174,7 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> any LiveTranscriptionSession {
         receivedLanguage = language
+        turnEndHandlerDuringCreation = turnEndHandler
         return LiveModelOverrideSession(modelId: currentModelId)
     }
 
