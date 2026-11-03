@@ -915,6 +915,33 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testVocabularyForPromptFollowsEveryDictionaryChange() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "Claude")
+        XCTAssertEqual(service.vocabularyForPrompt(), ["Claude"])
+        XCTAssertEqual(service.vocabularyForPrompt(), ["Claude"])
+
+        service.addEntry(type: .correction, original: "dev and think", replacement: "DEVONthink")
+        XCTAssertEqual(service.vocabularyForPrompt(), ["Claude", "DEVONthink"])
+        XCTAssertEqual(service.vocabularyForPrompt(limit: 1), ["Claude"])
+        XCTAssertEqual(service.vocabularyForPrompt(), ["Claude", "DEVONthink"])
+
+        let term = try XCTUnwrap(service.terms.first)
+        XCTAssertTrue(service.updateEntry(term, original: "Wikipeadia", replacement: nil, caseSensitive: false))
+        XCTAssertEqual(service.vocabularyForPrompt(), ["DEVONthink", "Wikipeadia"])
+
+        let correction = try XCTUnwrap(service.corrections.first)
+        service.setEntryEnabled(correction, enabled: false)
+        XCTAssertEqual(service.vocabularyForPrompt(), ["Wikipeadia"])
+
+        service.deleteEntry(try XCTUnwrap(service.terms.first))
+        XCTAssertEqual(service.vocabularyForPrompt(), [])
+    }
+
+    @MainActor
     func testBatchCorrectionsUpdateRelatedTextsAndCountEachCorrectionOnce() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
