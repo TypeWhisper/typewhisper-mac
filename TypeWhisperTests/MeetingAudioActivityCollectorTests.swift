@@ -1,3 +1,4 @@
+import CoreAudio
 import Foundation
 import os
 import XCTest
@@ -88,6 +89,67 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
             throw XCTSkip("CoreAudio process metadata is unavailable on this host")
         }
         XCTAssertEqual(client.snapshot(at: Date()).availability, .available)
+    }
+
+    func testCoreAudioClientForgetsProcessIdentitiesOnRestartAndStop() throws {
+        let client = CoreAudioMeetingProcessClient()
+        defer { client.stop() }
+        guard client.start(changeHandler: { _ in }) else {
+            throw XCTSkip("CoreAudio process metadata is unavailable on this host")
+        }
+
+        // The test process talks to the HAL, so it is always listed itself.
+        _ = client.snapshot(at: Date())
+        XCTAssertFalse(client.cachedProcessObjectIDs.isEmpty)
+
+        // A restarted coreaudiod can reuse object IDs for other processes.
+        XCTAssertTrue(client.restart(changeHandler: { _ in }))
+        XCTAssertTrue(client.cachedProcessObjectIDs.isEmpty)
+
+        _ = client.snapshot(at: Date())
+        XCTAssertFalse(client.cachedProcessObjectIDs.isEmpty)
+        client.stop()
+        XCTAssertTrue(client.cachedProcessObjectIDs.isEmpty)
+    }
+
+    func testProcessIdentityCacheReusesIdentitiesUntilTheProcessLeavesTheList() {
+        var cache = MeetingAudioProcessIdentityCache()
+        var resolved: [AudioObjectID] = []
+        var unreadable: Set<AudioObjectID> = [3]
+
+        func pass(_ objectIDs: [AudioObjectID]) -> [AudioObjectID: MeetingAudioProcessIdentity] {
+            resolved = []
+            let identities = cache.identities(for: objectIDs) { objectID in
+                resolved.append(objectID)
+                guard !unreadable.contains(objectID) else { return nil }
+                return MeetingAudioProcessIdentity(
+                    processID: pid_t(objectID) + 900,
+                    bundleIdentifier: objectID == 1 ? "us.zoom.xos" : nil
+                )
+            }
+            XCTAssertEqual(identities.map(\.objectID), objectIDs.filter { !unreadable.contains($0) })
+            return Dictionary(uniqueKeysWithValues: identities.map { ($0.objectID, $0.identity) })
+        }
+
+        let first = pass([1, 2, 3])
+        XCTAssertEqual(resolved, [1, 2, 3])
+        XCTAssertEqual(first[1], MeetingAudioProcessIdentity(processID: 901, bundleIdentifier: "us.zoom.xos"))
+        XCTAssertEqual(first[2], MeetingAudioProcessIdentity(processID: 902, bundleIdentifier: nil))
+
+        // Known objects are not read again; an unreadable one is retried.
+        XCTAssertEqual(pass([1, 2, 3]), first)
+        XCTAssertEqual(resolved, [3])
+
+        // Object 2 leaves the list and is forgotten.
+        unreadable = []
+        _ = pass([1, 3])
+        XCTAssertEqual(resolved, [3])
+        XCTAssertEqual(cache.cachedObjectIDs, [1, 3])
+
+        // If its ID is listed again, it is read again.
+        _ = pass([1, 2, 3])
+        XCTAssertEqual(resolved, [2])
+        XCTAssertEqual(cache.cachedObjectIDs, [1, 2, 3])
     }
 
     func testLiveBrowserAudioIsAttributedToItsHostBrowser() throws {
