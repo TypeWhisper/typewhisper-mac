@@ -105,8 +105,8 @@ Highlights from 1.8.0 to 1.8.2. Full details are in the
   speaker-colored scrubber, show transcripts as a conversation, and rename,
   merge, or split speakers. Detection runs on the Mac
 - **iPhone and iPad (Premium)** - A paired iPhone running TypeWhisper for iOS
-  can transcribe with this Mac's models, and optionally use its language models
-  and workflows, over an encrypted local connection
+  can transcribe with this Mac's speech models, and optionally use the Mac's
+  language models and workflows, over an encrypted local connection
 - **Mac App Store** - TypeWhisper is available on the Mac App Store, built from
   the same commit and version as the direct download
 - **Managed settings** - Administrators can configure TypeWhisper through macOS
