@@ -357,6 +357,21 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testCorrectionToCanonicallyEqualSpellingKeepsReplacementCharacters() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        // A decomposed "e" + combining acute accent replaced by the precomposed "é".
+        service.addEntry(type: .correction, original: "cafe\u{301}", replacement: "caf\u{e9}")
+
+        let corrected = service.applyCorrections(to: ["cafe\u{301} au lait"])[0]
+        let preview = service.previewCorrections(to: "cafe\u{301} au lait")
+
+        XCTAssertEqual(Array(corrected.unicodeScalars), Array("caf\u{e9} au lait".unicodeScalars))
+        XCTAssertEqual(Array(preview.unicodeScalars), Array("caf\u{e9} au lait".unicodeScalars))
+    }
+
+    @MainActor
     func testLiteralCorrectionsKeepRegexSyntaxAndReplacementEscapesLiteral() throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }
