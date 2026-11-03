@@ -830,8 +830,8 @@ final class SonioxPlugin: NSObject,
     @unchecked Sendable {
     static let pluginId = "com.typewhisper.soniox"
     static let pluginName = "Soniox"
-    static let defaultAsyncModelId = "stt-async-v5"
-    static let defaultRealtimeModelId = "stt-rt-v5"
+    static let defaultAsyncModelId = "stt-async-v6"
+    static let defaultRealtimeModelId = "stt-rt-v6"
     static let defaultTTSModelId = "tts-rt-v1"
     static let ttsSampleRate = 24_000
     static let defaultVoiceId = "Maya"
@@ -880,6 +880,8 @@ final class SonioxPlugin: NSObject,
     fileprivate var _transcriptionContext: String = ""
     fileprivate var _fetchedModels: [SonioxFetchedModel] = []
     fileprivate var _fetchedTTSModels: [SonioxFetchedTTSModel] = []
+    private(set) var modelCatalogRefreshTask: Task<Void, Never>?
+    private var modelCatalogRefreshGeneration = 0
 
     private let logger = Logger(subsystem: "com.typewhisper.soniox", category: "Plugin")
 
@@ -913,9 +915,13 @@ final class SonioxPlugin: NSObject,
         if let data = host.userDefault(forKey: SonioxDefaultsKey.fetchedTTSModels) as? Data {
             _fetchedTTSModels = (try? JSONDecoder().decode([SonioxFetchedTTSModel].self, from: data)) ?? []
         }
+        refreshOutdatedModelCatalogIfNeeded()
     }
 
     func deactivate() {
+        modelCatalogRefreshGeneration += 1
+        modelCatalogRefreshTask?.cancel()
+        modelCatalogRefreshTask = nil
         host = nil
     }
 
@@ -935,7 +941,7 @@ final class SonioxPlugin: NSObject,
         guard !models.isEmpty else {
             return [Self.pluginModelInfo(
                 id: Self.defaultRealtimeModelId,
-                displayName: "STT RT v5",
+                displayName: "STT RT v6",
                 languages: []
             )]
         }
@@ -2017,6 +2023,34 @@ final class SonioxPlugin: NSObject,
         }
     }
 
+    /// A model list saved before Soniox released the plugin's default model keeps
+    /// Automatic on the older model until someone presses Refresh. Refresh such a
+    /// list once in the background when the plugin starts.
+    private func refreshOutdatedModelCatalogIfNeeded() {
+        guard let apiKey = normalizedAPIKey,
+              Self.modelCatalogPredatesDefaultModel(_fetchedModels) else { return }
+
+        let generation = modelCatalogRefreshGeneration
+        modelCatalogRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            let models = await self.fetchSTTModels(apiKey: apiKey)
+            guard !Task.isCancelled, !models.isEmpty else { return }
+            await MainActor.run {
+                // Drop a result that arrives after deactivation or a key change.
+                guard self.modelCatalogRefreshGeneration == generation,
+                      self.normalizedAPIKey == apiKey else { return }
+                self.setFetchedModels(models)
+            }
+        }
+    }
+
+    /// True when a saved list has real-time models but none as new as the default.
+    static func modelCatalogPredatesDefaultModel(_ models: [SonioxFetchedModel]) -> Bool {
+        let realtime = realtimeModels(from: models)
+        guard !realtime.isEmpty else { return false }
+        return realtime.allSatisfy { compareModelIDs($0.id, defaultRealtimeModelId) }
+    }
+
     fileprivate func setFetchedModels(_ models: [SonioxFetchedModel]) {
         _fetchedModels = Self.sortedModels(models)
         if let data = try? JSONEncoder().encode(_fetchedModels) {
@@ -2110,7 +2144,7 @@ final class SonioxPlugin: NSObject,
         let trimmedModelId = storedModelId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let modelId: String
         switch trimmedModelId {
-        case nil, "", "stt-rt-v3", "stt-rt-v4", Self.defaultRealtimeModelId:
+        case nil, "", "stt-rt-v3", "stt-rt-v4", "stt-rt-v5", Self.defaultRealtimeModelId:
             modelId = SonioxModelSelection.automatic
         case let value?:
             modelId = value
