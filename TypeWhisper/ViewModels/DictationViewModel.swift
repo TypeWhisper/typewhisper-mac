@@ -4918,11 +4918,11 @@ final class DictationViewModel: ObservableObject {
                 return lastStreamingParams != nil
             }
             // Nothing streams yet, but a workflow may have switched to an engine that
-            // streams dictation even with the preview hidden.
+            // streams dictation even with the preview hidden, or that reports turn ends.
             guard modelManager.prefersLiveSessionForDictation(
                 engineOverrideId: newParams.engineOverrideId,
                 selectedProviderId: newParams.providerId
-            ) else { return false }
+            ) || detectsTurnEndsWithoutPreview(newParams) else { return false }
             startLiveStreaming(allowLiveTranscription: allowLive)
             return lastStreamingParams != nil
         }
