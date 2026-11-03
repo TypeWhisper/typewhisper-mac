@@ -621,6 +621,79 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDuplicateLookupMatchesAScanOfAllEntriesThroughEditsAndFailedSaves() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        // Synced or older stores can hold several entries with the same identity.
+        try autoreleasepool {
+            let (_, context) = try SwiftDataStoreFactory.create(
+                for: [DictionaryEntry.self], storeName: "dictionary", in: directory
+            )
+            let seeded: [(DictionaryEntryType, String, Bool)] = [
+                (.term, "Kubernetes", false), (.term, "kubernetes", false), (.term, "Café", false),
+                (.correction, "teh", false), (.correction, "TEH", false), (.correction, "kubernetes", false),
+                (.correction, #"\d+"#, true), (.correction, #"\D+"#, true), (.correction, #"\d+"#, false),
+            ]
+            for (type, original, isRegex) in seeded {
+                context.insert(DictionaryEntry(
+                    type: type, original: original, replacement: type == .term ? nil : "x", isRegex: isRegex
+                ))
+            }
+            try context.save()
+        }
+        let service = DictionaryService(appSupportDirectory: directory)
+        XCTAssertEqual(service.entries.count, 9)
+
+        // The comparison the lookup replaces: the first entry in `entries` order with the same identity.
+        func scan(_ type: DictionaryEntryType, _ original: String, _ isRegex: Bool, excluding id: UUID?) -> DictionaryEntry? {
+            let key = DictionaryService.entryIdentity(type: type, original: original, isRegex: isRegex)
+            return service.entries.first {
+                $0.id != id && DictionaryService.entryIdentity(type: $0.type, original: $0.original, isRegex: $0.isRegex) == key
+            }
+        }
+        let probes: [(DictionaryEntryType, String, Bool)] = [
+            (.term, "KUBERNETES", false), (.term, "kubernetes", true), (.term, "cafe", false), (.term, "CAFÉ", false),
+            (.correction, "Teh", false), (.correction, "teh", true), (.correction, #"\d+"#, true),
+            (.correction, #"\D+"#, true), (.correction, #"\d+"#, false), (.correction, "tehh", false),
+        ]
+        func assertLookupsMatchScan(line: UInt = #line) {
+            for (type, original, isRegex) in probes {
+                for excluded in [nil] + service.entries.map({ $0.id as UUID? }) {
+                    XCTAssertTrue(
+                        service.duplicateEntry(type: type, original: original, isRegex: isRegex, excluding: excluded)
+                            === scan(type, original, isRegex, excluding: excluded),
+                        "\(type) \(original) regex: \(isRegex)", line: line
+                    )
+                }
+            }
+        }
+        assertLookupsMatchScan()
+
+        // The editor reads the validation on every keystroke.
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        let teh = try XCTUnwrap(service.entries.first { $0.original == "teh" })
+        viewModel.startEditing(teh)
+        for typed in ["t", "te", "teh", "Teh", "tehh"] {
+            viewModel.editOriginal = typed
+            XCTAssertEqual(viewModel.canSaveEditing, scan(.correction, typed, false, excluding: teh.id) == nil, typed)
+        }
+
+        // A failed save restores the edit without loading the entries again.
+        service.updateEntrySaveOverride = { throw NSError(domain: "DictionaryLookupTest", code: 1) }
+        XCTAssertFalse(service.updateEntry(teh, original: "tehh", replacement: "the", caseSensitive: false))
+        service.updateEntrySaveOverride = nil
+        assertLookupsMatchScan()
+        XCTAssertTrue(service.updateEntry(teh, original: "tehh", replacement: "the", caseSensitive: false))
+        assertLookupsMatchScan()
+        try service.upsertAPICorrection(original: "Teh", replacement: "the", caseSensitive: false)
+        assertLookupsMatchScan()
+        try service.setAPITerms(["KUBERNETES"], replaceExisting: false)
+        assertLookupsMatchScan()
+        service.deleteEntry(try XCTUnwrap(service.entries.first { $0.type == .term && $0.original == "KUBERNETES" }))
+        assertLookupsMatchScan()
+    }
+
+    @MainActor
     func testSyncRoundTripPreservesRegexAndDecodesLegacyEntriesAsLiteral() throws {
         let sourceDirectory = try TestSupport.makeTemporaryDirectory()
         let destinationDirectory = try TestSupport.makeTemporaryDirectory()
