@@ -806,6 +806,20 @@ public protocol DictionaryTermsSettingEnabling: DictionaryTermsCapabilityProvidi
     func enableDictionaryTermsSetting() async throws
 }
 
+// Turn ends: an engine whose live sessions can tell when the speaker finished a turn, a
+// completed thought rather than a pause in the middle of a sentence, implements the
+// Objective-C method `setLiveTranscriptionTurnEndHandler:`, which takes a block
+// `void (^)(void)` or nil. TypeWhisper versions after 1.8.2 set a handler right before they
+// create a live session for a toggle dictation with "Stop recording after silence" on, and
+// nil right after. A session created meanwhile calls the handler at the end of each turn;
+// TypeWhisper then stops the recording after half the silence duration, at least one second,
+// unless the speaker goes on. An engine whose sessions report turn ends only with some
+// models or settings also implements `reportsLiveTranscriptionTurnEndsForModelId:`, which
+// takes a model ID or nil for the selected model and returns an `NSNumber`; with true,
+// TypeWhisper keeps the live session for such a dictation even when no transcript preview is
+// shown. The host looks both methods up through the Objective-C runtime, so plugins stay
+// loadable by older hosts, which never call them.
+
 public protocol LiveTranscriptionSession: AnyObject, Sendable {
     func appendAudio(samples: [Float]) async throws
     func finish() async throws -> PluginTranscriptionResult

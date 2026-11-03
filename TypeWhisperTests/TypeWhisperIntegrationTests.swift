@@ -20189,6 +20189,32 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testHybridPressCanBecomeAToggleDictationButPushToTalkCannot() {
+        let hotkey = UnifiedHotkey(
+            keyCode: 0x02,
+            modifierFlags: NSEvent.ModifierFlags([.control, .option]).rawValue,
+            isFn: false
+        )
+        let hybrid = HotkeyService()
+        hybrid.suspendMonitoring()
+        hybrid.setHotkeyForTesting(hotkey, for: .hybrid)
+        hybrid.processCarbonHotkeyForTesting(slotType: .hybrid, hotkey: hotkey, isPressed: true)
+        // A hybrid press starts as push-to-talk; a quick release makes it a toggle.
+        XCTAssertEqual(hybrid.currentMode, .pushToTalk)
+        XCTAssertTrue(hybrid.activeDictationCanBecomeToggle)
+        hybrid.processCarbonHotkeyForTesting(slotType: .hybrid, hotkey: hotkey, isPressed: false)
+        XCTAssertEqual(hybrid.currentMode, .toggle)
+        XCTAssertTrue(hybrid.activeDictationCanBecomeToggle)
+
+        let pushToTalk = HotkeyService()
+        pushToTalk.suspendMonitoring()
+        pushToTalk.setHotkeyForTesting(hotkey, for: .pushToTalk)
+        pushToTalk.processCarbonHotkeyForTesting(slotType: .pushToTalk, hotkey: hotkey, isPressed: true)
+        XCTAssertEqual(pushToTalk.currentMode, .pushToTalk)
+        XCTAssertFalse(pushToTalk.activeDictationCanBecomeToggle)
+    }
+
+    @MainActor
     func testDisabledModeEscapeDuringPushToTalkRecordingPassesThrough() throws {
         let service = HotkeyService()
         service.suspendMonitoring()

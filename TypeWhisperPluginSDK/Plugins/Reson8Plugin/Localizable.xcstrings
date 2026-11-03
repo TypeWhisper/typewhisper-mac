@@ -1596,6 +1596,62 @@
           }
         }
       }
+    },
+    "End dictation when you finish speaking": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat beenden, wenn du fertig gesprochen hast"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminar el dictado cuando acabes de hablar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話し終えたら口述筆記を終了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说完后结束听写"
+          }
+        }
+      }
+    },
+    "With Stop recording after silence on, Reson8 recognizes when you finished a thought, and a toggle dictation then stops after half the silence duration, at least one second. A pause in the middle of a sentence still waits the full duration. While this is on, the live preview shows your words at pauses rather than while you speak.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ist „Aufnahme nach Stille beenden“ aktiv, erkennt Reson8, wenn du einen Gedanken abgeschlossen hast, und ein Diktat im Umschaltmodus endet dann schon nach der halben Dauer der Stille, mindestens nach einer Sekunde. Eine Pause mitten im Satz wartet weiterhin die volle Dauer ab. Solange diese Option aktiv ist, zeigt die Live-Vorschau deine Worte bei Pausen statt während du sprichst."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con «Detener la grabación tras un silencio» activado, Reson8 reconoce cuándo has terminado una idea, y un dictado en modo Alternar se detiene tras la mitad de la duración del silencio, como mínimo un segundo. Una pausa en mitad de una frase sigue esperando la duración completa. Mientras esta opción está activada, la vista previa en directo muestra tus palabras en las pausas en lugar de mientras hablas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「無音が続いたら録音を停止」がオンのとき、Reson8 は考えを言い終えたことを認識し、切り替えモードの口述筆記は無音時間の半分（最短 1 秒）で停止します。文の途中の間では、引き続き設定した時間だけ待ちます。このオプションがオンの間、ライブプレビューは話している最中ではなく、間を置いたときに言葉を表示します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启“静音后停止录音”时，Reson8 会识别你何时说完一个完整的意思，切换模式的听写会在静音时长的一半后停止，至少一秒。句子中间的停顿仍会等待完整时长。开启此选项期间，实时预览会在停顿时显示你说的话，而不是在你说话时显示。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

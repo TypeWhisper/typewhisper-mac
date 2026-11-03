@@ -129,6 +129,7 @@ final class StreamingHandler: @unchecked Sendable {
         normalizeNumbers: Bool? = nil,
         allowLiveTranscription: Bool,
         previewHidden: Bool = false,
+        turnEndHandler: (@Sendable () -> Void)? = nil,
         stateCheck: @escaping @MainActor @Sendable () -> Bool
     ) {
         let pendingStopTask = stop()
@@ -169,6 +170,7 @@ final class StreamingHandler: @unchecked Sendable {
                 cloudModelOverride: cloudModelOverride,
                 prompt: streamPrompt,
                 dictionaryTermHints: dictionaryTermHints,
+                turnEndHandler: turnEndHandler,
                 onProgress: { [weak self] text in
                     guard let self else { return false }
                     // Text the preview suppresses during sustained silence is likely a

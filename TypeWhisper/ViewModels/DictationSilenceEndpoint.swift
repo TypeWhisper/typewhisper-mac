@@ -41,6 +41,15 @@ struct DictationSilenceEndpointDetector: Sendable {
     /// The countdown runs for the last two seconds at most, and for at most half the
     /// silence duration, so a short pause does not bring it up.
     static let maximumWarningDuration: TimeInterval = 2
+    /// The shortest silence that ends the session after the live engine reported the end of a
+    /// turn, so a short breath after a sentence does not end it.
+    static let minimumTurnEndSilenceDuration: TimeInterval = 1
+
+    /// The silence that ends the session once the speaker finished a turn: half the configured
+    /// duration, at least `minimumTurnEndSilenceDuration`, at most the configured duration.
+    static func turnEndSilenceDuration(for silenceDuration: TimeInterval) -> TimeInterval {
+        min(silenceDuration, max(minimumTurnEndSilenceDuration, silenceDuration / 2))
+    }
 
     static func clampedSilenceDuration(_ value: TimeInterval?) -> TimeInterval {
         guard let value, value.isFinite else { return defaultSilenceDuration }
@@ -55,6 +64,7 @@ struct DictationSilenceEndpointDetector: Sendable {
     let silenceDuration: TimeInterval
     private let requiredSpeechFrames: Int
     private let requiredSilentFrames: Int
+    private let turnEndSilentFrames: Int
     private let warningFrames: Int
     private var pendingSamples: [Float] = []
     /// Speech frames in a row; a silent frame starts the count again.
@@ -62,6 +72,8 @@ struct DictationSilenceEndpointDetector: Sendable {
     /// Set once one continuous run of speech reached the minimum duration.
     private var heardSpeech = false
     private var trailingSilentFrames = 0
+    /// Set when the live engine reported that the speaker finished a turn; speech clears it.
+    private var turnEnded = false
     private(set) var phase: Phase = .waitingForSpeech
 
     init(silenceDuration: TimeInterval) {
@@ -69,6 +81,7 @@ struct DictationSilenceEndpointDetector: Sendable {
         self.silenceDuration = silenceDuration
         requiredSpeechFrames = Self.frameCount(for: Self.minimumSpeechDuration)
         requiredSilentFrames = max(1, Self.frameCount(for: silenceDuration))
+        turnEndSilentFrames = max(1, Self.frameCount(for: Self.turnEndSilenceDuration(for: silenceDuration)))
         warningFrames = Self.frameCount(for: min(Self.maximumWarningDuration, silenceDuration / 2))
     }
 
@@ -92,6 +105,8 @@ struct DictationSilenceEndpointDetector: Sendable {
                 speechRunFrames += 1
                 if speechRunFrames >= requiredSpeechFrames { heardSpeech = true }
                 trailingSilentFrames = 0
+                // The speaker goes on, so the configured silence applies again.
+                turnEnded = false
             } else {
                 // Separate noise bursts (a click, a cough) never add up to speech.
                 speechRunFrames = 0
@@ -99,7 +114,7 @@ struct DictationSilenceEndpointDetector: Sendable {
             }
             // The first frame that completes the silence ends the session, even when the
             // same delivery continues with speech.
-            if heardSpeech, trailingSilentFrames >= requiredSilentFrames {
+            if heardSpeech, trailingSilentFrames >= currentRequiredSilentFrames {
                 break
             }
         }
@@ -111,9 +126,28 @@ struct DictationSilenceEndpointDetector: Sendable {
         return phase
     }
 
+    /// Notes that the live engine heard the speaker finish a turn, a completed thought rather
+    /// than a pause in the middle of a sentence. The session then ends after the shorter turn
+    /// end silence, counted from the last speech, unless the speaker goes on. A report that
+    /// arrives while the speaker talks again belongs to an earlier sentence and changes nothing.
+    @discardableResult
+    mutating func reportTurnEnd() -> Phase {
+        guard phase != .endpointReached, heardSpeech, trailingSilentFrames > 0 else { return phase }
+        turnEnded = true
+        phase = currentPhase
+        if phase == .endpointReached {
+            pendingSamples.removeAll()
+        }
+        return phase
+    }
+
+    private var currentRequiredSilentFrames: Int {
+        turnEnded ? turnEndSilentFrames : requiredSilentFrames
+    }
+
     private var currentPhase: Phase {
         guard heardSpeech else { return .waitingForSpeech }
-        let remainingFrames = requiredSilentFrames - trailingSilentFrames
+        let remainingFrames = currentRequiredSilentFrames - trailingSilentFrames
         if remainingFrames <= 0 {
             return .endpointReached
         }
@@ -230,6 +264,26 @@ final class DictationSilenceEndpointMonitor {
         pollTask?.cancel()
         pollTask = nil
         session = nil
+    }
+
+    /// Shortens the silence that ends the session once the live engine reported that the
+    /// speaker finished a turn. A report for a session that ended or was replaced does nothing.
+    func reportTurnEnd(sessionID: UUID) {
+        guard var session, session.id == sessionID else { return }
+        let previousPhase = session.detector.phase
+        // Audio recorded since the last poll comes first: the speaker may have gone on.
+        let delta = readSamples(session.sampleOffset)
+        session.sampleOffset = delta.nextOffset
+        session.detector.append(delta.samples)
+        let phase = session.detector.reportTurnEnd()
+        self.session = session
+
+        if phase != previousPhase {
+            onPhaseChange?(sessionID, phase)
+        }
+        guard phase == .endpointReached else { return }
+        stop()
+        onEndpoint?(sessionID)
     }
 
     /// Reads the audio recorded since the last poll. A poll for a session that ended or was

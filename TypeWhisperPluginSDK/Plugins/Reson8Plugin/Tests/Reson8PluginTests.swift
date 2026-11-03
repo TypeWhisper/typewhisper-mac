@@ -477,6 +477,308 @@ final class Reson8PluginTests: XCTestCase {
         }
     }
 
+    // MARK: - Turn ends
+
+    func testLiveSessionsUseTheTurnsEndpointOnlyWithTheSettingAndAHostHandler() throws {
+        let plugin = try Self.pluginWithFetchedModels(extraDefaults: ["endsDictationAtTurnEnd": true])
+        guard case .realtime = plugin.liveSessionMode(forModelId: nil) else {
+            return XCTFail("Without a handler from the host, live sessions stay on realtime")
+        }
+
+        // The host hands the handler over through the Objective-C runtime.
+        let calls = OSAllocatedUnfairLock(initialState: 0)
+        let block: @convention(block) () -> Void = { calls.withLock { $0 += 1 } }
+        let selector = NSSelectorFromString("setLiveTranscriptionTurnEndHandler:")
+        plugin.perform(selector, with: unsafeBitCast(block, to: AnyObject.self))
+        guard case .turns(let onTurnEnd) = plugin.liveSessionMode(forModelId: nil) else {
+            return XCTFail("With the setting and a handler, live sessions report turn ends")
+        }
+        onTurnEnd()
+        XCTAssertEqual(calls.withLock { $0 }, 1)
+        // TypeWhisper keeps such a session even without a preview; Rumble-2-Flash does not stream.
+        XCTAssertEqual(plugin.reportsLiveTranscriptionTurnEnds(forModelId: nil), true)
+        XCTAssertEqual(plugin.reportsLiveTranscriptionTurnEnds(forModelId: "rumble-2-flash"), false)
+
+        let path = try XCTUnwrap(plugin.turnsPath(language: "en", prompt: nil))
+        let query = Self.queryItems(of: URLRequest(url: try XCTUnwrap(URL(string: "wss://api.reson8.dev\(path)"))))
+        XCTAssertTrue(path.hasPrefix("/v1/speech-to-text/turns?"))
+        XCTAssertEqual(query["eager_turn_probability"], "0.05")
+        XCTAssertNil(query["include_interim"])
+
+        let withoutSetting = try Self.pluginWithFetchedModels()
+        XCTAssertEqual(withoutSetting.reportsLiveTranscriptionTurnEnds(forModelId: nil), false)
+        withoutSetting.perform(selector, with: unsafeBitCast(block, to: AnyObject.self))
+        guard case .realtime = withoutSetting.liveSessionMode(forModelId: nil) else {
+            return XCTFail("Without the setting, live sessions stay on realtime")
+        }
+    }
+
+    func testTurnsSessionReportsTurnEndsAndFinishesAtOnceWithoutAnOpenTurn() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [])
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: { turnEnds.withLock { $0 += 1 } }),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Please send the report.","language":"en","words":[\#(Self.wordsJSON("Please send the report.", startMs: 0))]}"#)
+        socket.deliver(#"{"type":"turn_end"}"#)
+        try await Self.waitUntil { turnEnds.withLock { $0 } == 1 }
+        try await session.appendAudio(samples: [Float](repeating: 0, count: 16_000))
+        let result = try await session.finish()
+
+        // Every turn ended and the silence after it holds no speech, so nothing is flushed.
+        XCTAssertEqual(socket.sentTexts, [])
+        XCTAssertEqual(result.text, "Please send the report.")
+        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.segments.map(\.text), ["Please send the report."])
+        XCTAssertTrue(socket.isClosed)
+    }
+
+    func testTurnsSessionFlushesAnOpenTurnWithoutReportingItsEnd() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [
+            #"{"type":"turn_end_candidate","text":"Add the numbers.","language":"en"}"#,
+            #"{"type":"turn_end"}"#,
+        ])
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+        let progress = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: { turnEnds.withLock { $0 += 1 } }),
+            language: "en"
+        ) { text in
+            progress.withLock { $0.append(text) }
+            return true
+        }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 8_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Add the","language":"en"}"#)
+        try await Self.waitUntil { progress.withLock { $0 } == ["Add the"] }
+        let result = try await session.finish()
+
+        XCTAssertEqual(socket.sentTexts, [#"{"type":"flush_request"}"#])
+        XCTAssertEqual(result.text, "Add the numbers.")
+        // The host stopped this dictation itself.
+        XCTAssertEqual(turnEnds.withLock { $0 }, 0)
+    }
+
+    // TypeWhisper then transcribes the whole recording instead of losing the speech.
+    func testTurnsSessionWhoseConnectionFailsBeforePendingSpeechBecomesATurnFails() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [], closesOnFlush: true)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 8_000))
+
+        do {
+            _ = try await session.finish()
+            XCTFail("Expected the session to fail")
+        } catch PluginTranscriptionError.networkError {
+            XCTAssertTrue(socket.isClosed)
+        }
+    }
+
+    func testTurnsSessionFlushesSpeechSentBeforeThePreviousTurnEndArrived() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [
+            #"{"type":"turn_end_candidate","text":"Also copy Ben.","language":"en","start_ms":1500,"duration_ms":500}"#,
+            #"{"type":"turn_end"}"#,
+        ])
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: { turnEnds.withLock { $0 += 1 } }),
+            language: "en"
+        ) { _ in true }
+
+        // The second sentence is sent before Reson8 ends the turn of the first one.
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        try await session.appendAudio(samples: [Float](repeating: 0, count: 8_000))
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 8_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":1000}"#)
+        socket.deliver(#"{"type":"turn_end"}"#)
+        try await Self.waitUntil { turnEnds.withLock { $0 } == 1 }
+        let result = try await session.finish()
+
+        // A turn that opens on the flush gets another one, which Reson8 ignores once it ended.
+        XCTAssertFalse(socket.sentTexts.isEmpty)
+        XCTAssertTrue(socket.sentTexts.allSatisfy { $0 == #"{"type":"flush_request"}"# })
+        XCTAssertEqual(result.text, "Send the report. Also copy Ben.")
+    }
+
+    func testTurnsSessionWaitsForSpeechAfterALateTurnEndOfAnEarlierSentence() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [], answersPerFlush: [
+            // The end of the first sentence arrives only after the dictation stopped.
+            [#"{"type":"turn_end"}"#],
+            [
+                #"{"type":"turn_start"}"#,
+                #"{"type":"turn_end_candidate","text":"Also copy Ben.","language":"en","start_ms":1500,"duration_ms":500}"#,
+                #"{"type":"turn_end"}"#,
+            ],
+        ])
+        let progress = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { text in
+            progress.withLock { $0.append(text) }
+            return true
+        }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        try await session.appendAudio(samples: [Float](repeating: 0, count: 8_000))
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 8_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":1000}"#)
+        try await Self.waitUntil { progress.withLock { $0 } == ["Send the report."] }
+        let result = try await session.finish()
+
+        // The late turn end leaves the second sentence pending, so another flush ends it.
+        XCTAssertGreaterThanOrEqual(socket.sentTexts.count, 2)
+        XCTAssertEqual(result.text, "Send the report. Also copy Ben.")
+    }
+
+    func testTurnsSessionFlushesATurnThatOpensAfterTheFinishStarted() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [], answersPerFlush: [
+            // No turn is open yet, so Reson8 does not answer the first flush.
+            [],
+            [
+                #"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":900}"#,
+                #"{"type":"turn_end"}"#,
+            ],
+        ])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        let finishing = Task { try await session.finish() }
+        try await Self.waitUntil { socket.sentTexts.count == 1 }
+        socket.deliver(#"{"type":"turn_start"}"#)
+        let result = try await finishing.value
+
+        XCTAssertEqual(socket.sentTexts.count, 2)
+        XCTAssertEqual(result.text, "Send the report.")
+    }
+
+    func testTurnsSessionIgnoresAClickAfterTheLastTurn() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [])
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: { turnEnds.withLock { $0 += 1 } }),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":1000}"#)
+        socket.deliver(#"{"type":"turn_end"}"#)
+        try await Self.waitUntil { turnEnds.withLock { $0 } == 1 }
+        // The key that stops the dictation clicks for 100 ms after a pause.
+        try await session.appendAudio(
+            samples: [Float](repeating: 0, count: 8_000) + [Float](repeating: 0.2, count: 1_600)
+                + [Float](repeating: 0, count: 1_600)
+        )
+        let start = ContinuousClock.now
+        let result = try await session.finish()
+
+        // Reson8 does not answer the flush for a click, which ends after the short wait.
+        XCTAssertEqual(result.text, "Send the report.")
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1.5))
+    }
+
+    func testTurnsSessionKeepsAShortWordAfterTheLastTurn() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [
+            #"{"type":"turn_start"}"#,
+            #"{"type":"turn_end_candidate","text":"No.","language":"en","start_ms":1500,"duration_ms":200}"#,
+            #"{"type":"turn_end"}"#,
+        ])
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: { turnEnds.withLock { $0 += 1 } }),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":1000}"#)
+        socket.deliver(#"{"type":"turn_end"}"#)
+        try await Self.waitUntil { turnEnds.withLock { $0 } == 1 }
+        // "No" after a pause, 200 ms, shorter than the run that arms the silence stop.
+        try await session.appendAudio(
+            samples: [Float](repeating: 0, count: 8_000) + [Float](repeating: 0.1, count: 3_200)
+        )
+        let result = try await session.finish()
+
+        XCTAssertFalse(socket.sentTexts.isEmpty)
+        XCTAssertEqual(result.text, "Send the report. No.")
+    }
+
+    // TypeWhisper then transcribes the whole recording instead of dropping the speech.
+    func testTurnsSessionFailsWhenSpeechNeverBecomesATurn() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 8_000))
+
+        do {
+            _ = try await session.finish()
+            XCTFail("Expected the session to fail")
+        } catch PluginTranscriptionError.networkError {
+            XCTAssertEqual(socket.sentTexts, [#"{"type":"flush_request"}"#])
+        }
+    }
+
+    func testTurnsSessionCountsATurnEndThatArrivesWhileTheFlushIsSent() async throws {
+        let socket = FakeRealtimeSocket(
+            flushAnswers: [#"{"type":"turn_end_candidate","text":"Add the numbers.","language":"en"}"#, #"{"type":"turn_end"}"#],
+            sendTextDelay: .milliseconds(200)
+        )
+        let progress = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: {}),
+            language: "en"
+        ) { text in
+            progress.withLock { $0.append(text) }
+            return true
+        }
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Add the","language":"en"}"#)
+        try await Self.waitUntil { progress.withLock { $0 } == ["Add the"] }
+
+        let start = ContinuousClock.now
+        let result = try await session.finish()
+
+        XCTAssertEqual(result.text, "Add the numbers.")
+        // Without waiting out the two seconds for speech that has not become a turn.
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1))
+    }
+
+    private static func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<400 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTFail("Condition not reached")
+    }
+
     // MARK: - Recordings and files
 
     func testFinishedAudioGoesToThePrerecordedEndpointUnlessRealtimeIsChosen() throws {
@@ -525,6 +827,28 @@ final class Reson8PluginTests: XCTestCase {
         let withCustomModel = Self.queryItems(of: try await Self.request(ofTranscriptionWith: plugin, prompt: "Reson8"))
         XCTAssertEqual(withCustomModel["custom_model_id"], "custom-1")
         XCTAssertEqual(withCustomModel["phrases"], "Reson8")
+    }
+
+    func testDictionarySyncThatFailsHalfwayIsRepairedByTheNextSync() async throws {
+        let api = FakeCustomModelAPI()
+        let sync = Reson8DictionaryModelSync(state: Reson8DictionaryModelState(), api: api, persist: { _ in })
+        _ = try await sync.modelId(for: ["Reson8"])
+
+        await api.failNextAdd()
+        do {
+            _ = try await sync.modelId(for: ["Parakeet"])
+            XCTFail("Expected the sync to fail")
+        } catch {}
+        // Reson8 deleted "Reson8" before the add failed; asking for it again adds it back.
+        _ = try await sync.modelId(for: ["Reson8"])
+
+        let calls = await api.calls
+        XCTAssertEqual(calls, [
+            "create dictionary-1: Reson8",
+            "delete dictionary-1: Reson8",
+            "failed add dictionary-1: Parakeet",
+            "add dictionary-1: Reson8",
+        ])
     }
 
     func testDictionaryModelDeletedAtReson8IsCreatedAgain() async throws {
@@ -769,6 +1093,11 @@ final class Reson8PluginTests: XCTestCase {
 private actor FakeCustomModelAPI: Reson8CustomModelAPI {
     private(set) var calls: [String] = []
     private var createdModelCount = 0
+    private var failsNextAdd = false
+
+    func failNextAdd() {
+        failsNextAdd = true
+    }
 
     func createModel(name: String, description: String, phrases: [String]) -> String {
         createdModelCount += 1
@@ -777,7 +1106,12 @@ private actor FakeCustomModelAPI: Reson8CustomModelAPI {
         return modelId
     }
 
-    func addPhrases(_ phrases: [String], toModel modelId: String) {
+    func addPhrases(_ phrases: [String], toModel modelId: String) throws {
+        if failsNextAdd {
+            failsNextAdd = false
+            calls.append("failed add \(modelId): \(phrases.joined(separator: ", "))")
+            throw URLError(.timedOut)
+        }
         calls.append("add \(modelId): \(phrases.joined(separator: ", "))")
     }
 
@@ -798,12 +1132,23 @@ private final class FakeRealtimeSocket: Reson8RealtimeSocket, @unchecked Sendabl
     private let messages: AsyncThrowingStream<String, Error>
     private let continuation: AsyncThrowingStream<String, Error>.Continuation
     private let flushAnswers: [String]
+    /// Answers for one flush each, in order; when given, they replace `flushAnswers`.
+    private let answersPerFlush = OSAllocatedUnfairLock<[[String]]>(initialState: [])
     private let closesOnFlush: Bool
+    /// How long sending a text message takes after Reson8 already answered it.
+    private let sendTextDelay: Duration
 
-    init(flushAnswers: [String], closesOnFlush: Bool = false) {
+    init(
+        flushAnswers: [String],
+        answersPerFlush: [[String]] = [],
+        closesOnFlush: Bool = false,
+        sendTextDelay: Duration = .zero
+    ) {
         (messages, continuation) = AsyncThrowingStream<String, Error>.makeStream()
         self.flushAnswers = flushAnswers
+        self.answersPerFlush.withLock { $0 = answersPerFlush }
         self.closesOnFlush = closesOnFlush
+        self.sendTextDelay = sendTextDelay
     }
 
     var audioFrameSizes: [Int] { state.withLock { $0.audioFrameSizes } }
@@ -826,7 +1171,13 @@ private final class FakeRealtimeSocket: Reson8RealtimeSocket, @unchecked Sendabl
         if closesOnFlush {
             continuation.finish(throwing: URLError(.networkConnectionLost))
         } else {
-            flushAnswers.forEach { continuation.yield($0) }
+            let answers = answersPerFlush.withLock { queued -> [String]? in
+                queued.isEmpty ? nil : queued.removeFirst()
+            }
+            (answers ?? flushAnswers).forEach { continuation.yield($0) }
+        }
+        if sendTextDelay > .zero {
+            try await Task.sleep(for: sendTextDelay)
         }
     }
 

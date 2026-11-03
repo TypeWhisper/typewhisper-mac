@@ -4461,10 +4461,10 @@ final class DictationViewModel: ObservableObject {
         // preview engine stays suppressed, since the preview would still be shown.
         let streamsDictationWithoutPreview = !allowLiveTranscription
             && !hiddenLiveSessionAwaitsWebsiteWorkflow
-            && modelManager.prefersLiveSessionForDictation(
+            && (modelManager.prefersLiveSessionForDictation(
                 engineOverrideId: params.engineOverrideId,
                 selectedProviderId: params.providerId
-            )
+            ) || detectsTurnEndsWithoutPreview(params))
         if streamsDictationWithoutPreview {
             previewEngineOverrideId = params.engineOverrideId
             effectiveAllowLiveTranscription = true
@@ -4501,8 +4501,46 @@ final class DictationViewModel: ObservableObject {
             normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: effectiveAllowLiveTranscription,
             previewHidden: streamsDictationWithoutPreview,
+            turnEndHandler: liveTurnEndHandler(previewFollowsDictationEngine: previewFollowsDictationEngine),
             stateCheck: { [weak self] in self?.state == .recording }
         )
+    }
+
+    /// A dictation that can stop after silence keeps the dictation engine's live session when no
+    /// preview is shown, if that session reports turn ends: only the session can tell them.
+    private func detectsTurnEndsWithoutPreview(_ params: StreamingParamsSnapshot) -> Bool {
+        silenceEndpointMonitor.monitoredSessionID != nil
+            && hotkeyService.activeDictationCanBecomeToggle
+            && modelManager.reportsLiveTranscriptionTurnEnds(
+                engineOverrideId: params.engineOverrideId,
+                selectedProviderId: params.providerId,
+                cloudModelOverride: params.cloudModelOverride
+            )
+    }
+
+    /// Lets the dictation engine's live session shorten the silence stop once the speaker
+    /// finished a turn (`setLiveTranscriptionTurnEndHandler:`). Only while the silence stop
+    /// watches the session and only for the engine that transcribes the dictation. A hybrid
+    /// press starts as push-to-talk and becomes a toggle when released quickly, after the
+    /// session opened, so only a push-to-talk shortcut, which never stops on silence, goes
+    /// without.
+    private func liveTurnEndHandler(previewFollowsDictationEngine: Bool) -> (@Sendable () -> Void)? {
+        guard previewFollowsDictationEngine,
+              hotkeyService.activeDictationCanBecomeToggle,
+              let sessionID = silenceEndpointMonitor.monitoredSessionID else {
+            return nil
+        }
+        return { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleLiveTurnEnd(sessionID: sessionID)
+            }
+        }
+    }
+
+    private func handleLiveTurnEnd(sessionID: UUID) {
+        guard sessionID == activeDictationSessionID, state == .recording, !isStopInFlight else { return }
+        logger.info("Live session reported a turn end, shortening the silence stop")
+        silenceEndpointMonitor.reportTurnEnd(sessionID: sessionID)
     }
 
     private func captureLiveFieldTargetAtRecordingRequestIfEligible() {
@@ -4880,11 +4918,11 @@ final class DictationViewModel: ObservableObject {
                 return lastStreamingParams != nil
             }
             // Nothing streams yet, but a workflow may have switched to an engine that
-            // streams dictation even with the preview hidden.
+            // streams dictation even with the preview hidden, or that reports turn ends.
             guard modelManager.prefersLiveSessionForDictation(
                 engineOverrideId: newParams.engineOverrideId,
                 selectedProviderId: newParams.providerId
-            ) else { return false }
+            ) || detectsTurnEndsWithoutPreview(newParams) else { return false }
             startLiveStreaming(allowLiveTranscription: allowLive)
             return lastStreamingParams != nil
         }
