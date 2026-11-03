@@ -2044,11 +2044,14 @@ final class SonioxPlugin: NSObject,
         }
     }
 
-    /// True when a saved list has real-time models but none as new as the default.
+    /// True when a saved list has real-time or async models but none of that
+    /// mode as new as its default.
     static func modelCatalogPredatesDefaultModel(_ models: [SonioxFetchedModel]) -> Bool {
-        let realtime = realtimeModels(from: models)
-        guard !realtime.isEmpty else { return false }
-        return realtime.allSatisfy { compareModelIDs($0.id, defaultRealtimeModelId) }
+        func predates(_ scoped: [SonioxFetchedModel], _ defaultModelId: String) -> Bool {
+            !scoped.isEmpty && scoped.allSatisfy { compareModelIDs($0.id, defaultModelId) }
+        }
+        return predates(realtimeModels(from: models), defaultRealtimeModelId)
+            || predates(asyncModels(from: models), defaultAsyncModelId)
     }
 
     fileprivate func setFetchedModels(_ models: [SonioxFetchedModel]) {

@@ -125,6 +125,36 @@ final class SonioxPluginTests: XCTestCase {
             SonioxFetchedModel(id: "stt-rt-preview", aliasedModelId: "stt-rt-v5", name: nil, transcriptionMode: "real_time", languages: []),
             SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
         ]))
+        XCTAssertTrue(SonioxPlugin.modelCatalogPredatesDefaultModel([
+            SonioxFetchedModel(id: "stt-rt-v6", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+            SonioxFetchedModel(id: "stt-async-v5", aliasedModelId: nil, name: nil, transcriptionMode: "async", languages: []),
+        ]))
+    }
+
+    func testModelListRefreshFinishingAfterDeactivationIsDropped() async throws {
+        let cached = [
+            SonioxFetchedModel(id: "stt-rt-v5", aliasedModelId: nil, name: nil, transcriptionMode: "real_time", languages: []),
+        ]
+        let host = try PluginTestHostServices(
+            defaults: ["fetchedModels": try JSONEncoder().encode(cached)],
+            secrets: ["api-key": "soniox-key"]
+        )
+        let listing = #"{"models":[{"id":"stt-rt-v6","transcription_mode":"real_time","languages":[]}]}"#
+        PluginHTTPClientTestHarness.configure { _ in
+            PluginHTTPClientSessionStore().makeSession(outcomes: [
+                .success(Data(listing.utf8), Self.httpResponse(url: "https://api.soniox.com/v1/models", statusCode: 200)),
+            ])
+        }
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+        let refresh = try XCTUnwrap(plugin.modelCatalogRefreshTask)
+        plugin.deactivate()
+        await refresh.value
+
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
+        let saved = try XCTUnwrap(host.userDefault(forKey: "fetchedModels") as? Data)
+        XCTAssertEqual(try JSONDecoder().decode([SonioxFetchedModel].self, from: saved).map(\.id), ["stt-rt-v5"])
     }
 
     func testDefaultRegionUsesUSAndPersistsSelection() throws {
