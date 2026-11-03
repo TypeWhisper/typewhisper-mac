@@ -4508,11 +4508,13 @@ final class DictationViewModel: ObservableObject {
 
     /// Lets the dictation engine's live session shorten the silence stop once the speaker
     /// finished a turn (`setLiveTranscriptionTurnEndHandler:`). Only while the silence stop
-    /// watches the session, only for the engine that transcribes the dictation, and not for
-    /// push-to-talk, which never stops on silence.
+    /// watches the session and only for the engine that transcribes the dictation. A hybrid
+    /// press starts as push-to-talk and becomes a toggle when released quickly, after the
+    /// session opened, so only a push-to-talk shortcut, which never stops on silence, goes
+    /// without.
     private func liveTurnEndHandler(previewFollowsDictationEngine: Bool) -> (@Sendable () -> Void)? {
         guard previewFollowsDictationEngine,
-              hotkeyService.currentMode != .pushToTalk,
+              hotkeyService.activeDictationCanBecomeToggle,
               let sessionID = silenceEndpointMonitor.monitoredSessionID else {
             return nil
         }

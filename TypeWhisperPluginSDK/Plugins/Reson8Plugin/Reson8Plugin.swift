@@ -349,11 +349,16 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     /// How long a turns session waits for speech it heard since the last turn to become a
     /// turn; Reson8 ended an open turn 0.1 s after a flush.
     static let pendingSpeechTimeout: Duration = .seconds(2)
+    /// Speech that ends this close to the end of a turn belongs to it: Reson8's turn ends at
+    /// the last word, the speech frames of 100 ms a little later.
+    static let turnEndSpeechMarginMs = 300
 
     private struct Utterance {
         let text: String
         let language: String?
         let words: [PluginWordTiming]
+        /// Where the utterance ends in the stream, in milliseconds, when Reson8 says.
+        var endMs: Int? = nil
     }
 
     private static let logger = Logger(subsystem: "com.typewhisper.reson8", category: "RealtimeSession")
@@ -368,8 +373,10 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     private var turnCandidate: Utterance?
     private var isTurnOpen = false
     private var endedTurnCount = 0
-    /// Whether the audio since the last turn end holds speech, which can still become a turn.
-    private var hasSpeechSinceTurnEnd = false
+    /// Where the last speech sent ends in the stream, in milliseconds.
+    private var lastSpeechEndMs: Int?
+    /// Where the last ended turn ends in the stream, in milliseconds.
+    private var endedTurnsEndMs = 0
 
     private var utterances: [Utterance] = []
     private var interimText = ""
@@ -434,20 +441,28 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             try await send { try await $0.sendAudio(frame) }
             start = end
         }
-        sentSampleCount += samples.count
-        if case .turns = mode, !hasSpeechSinceTurnEnd {
-            hasSpeechSinceTurnEnd = Self.containsSpeech(samples)
+        if case .turns = mode, let speechEnd = Self.lastSpeechEnd(in: samples) {
+            lastSpeechEndMs = (sentSampleCount + speechEnd) / 16
         }
+        sentSampleCount += samples.count
     }
 
-    /// Speech by the rule of TypeWhisper's silence stop: a 100 ms frame with an RMS of at
-    /// least 0.004.
-    static func containsSpeech(_ samples: [Float]) -> Bool {
-        stride(from: 0, to: samples.count, by: 1_600).contains { start in
-            let frame = samples[start..<min(start + 1_600, samples.count)]
+    /// Where the last speech in `samples` ends, by the rule of TypeWhisper's silence stop: a
+    /// 100 ms frame with an RMS of at least 0.004.
+    static func lastSpeechEnd(in samples: [Float]) -> Int? {
+        stride(from: 0, to: samples.count, by: 1_600).reversed().lazy.compactMap { start -> Int? in
+            let end = min(start + 1_600, samples.count)
+            let frame = samples[start..<end]
             let power = frame.reduce(Float(0)) { $0 + $1 * $1 } / Float(frame.count)
-            return power.squareRoot() >= 0.004
-        }
+            return power.squareRoot() >= 0.004 ? end : nil
+        }.first
+    }
+
+    /// Speech after the end of the last turn, which can still become a turn. Audio can reach
+    /// Reson8 before the end of the previous turn comes back, so the turn's end time decides.
+    private var hasSpeechAfterEndedTurns: Bool {
+        guard let lastSpeechEndMs else { return false }
+        return lastSpeechEndMs > endedTurnsEndMs + Self.turnEndSpeechMarginMs
     }
 
     func finish() async throws -> PluginTranscriptionResult {
@@ -474,7 +489,7 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     /// Ends an open turn with a flush, or waits briefly for speech that has not become a
     /// turn yet. Otherwise all turns ended, and the result is complete at once.
     private func finishTurns() async throws -> PluginTranscriptionResult {
-        guard isTurnOpen || hasSpeechSinceTurnEnd else {
+        guard isTurnOpen || hasSpeechAfterEndedTurns else {
             close()
             return finalResult()
         }
@@ -566,10 +581,15 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
         case "turn_end_candidate":
             // Each candidate replaces the previous one of the same turn.
             isTurnOpen = true
+            let words = Reson8Transcript.words(from: json["words"])
+            let startMs = json["start_ms"] as? Double
+            let durationMs = json["duration_ms"] as? Double
             turnCandidate = Utterance(
                 text: ((json["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                 language: json["language"] as? String,
-                words: Reson8Transcript.words(from: json["words"])
+                words: words,
+                endMs: startMs.flatMap { start in durationMs.map { Int(start + $0) } }
+                    ?? words.last.map { Int($0.end * 1000) }
             )
             interimText = turnCandidate?.text ?? ""
             reportProgress()
@@ -577,10 +597,11 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             if let turnCandidate, !turnCandidate.text.isEmpty {
                 utterances.append(turnCandidate)
             }
+            // Without times from Reson8, the turn covers all audio sent so far.
+            endedTurnsEndMs = max(endedTurnsEndMs, turnCandidate?.endMs ?? sentSampleCount / 16)
             turnCandidate = nil
             interimText = ""
             isTurnOpen = false
-            hasSpeechSinceTurnEnd = false
             endedTurnCount += 1
             if case .turns(let onTurnEnd) = mode, !isFlushRequested {
                 onTurnEnd()

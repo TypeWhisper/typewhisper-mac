@@ -208,6 +208,13 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     @Published private(set) var currentMode: HotkeyMode?
+
+    /// Whether the active dictation is or can still become a toggle dictation: a toggle
+    /// shortcut, or a hybrid shortcut (profile and workflow shortcuts behave like one) that a
+    /// short press turns into a toggle after it started as push-to-talk.
+    var activeDictationCanBecomeToggle: Bool {
+        isActive && activeSlotType != .pushToTalk
+    }
     @Published var dictationHotkeysPaused: Bool = UserDefaults.standard.bool(forKey: UserDefaultsKeys.dictationHotkeysPaused) {
         didSet {
             UserDefaults.standard.set(dictationHotkeysPaused, forKey: UserDefaultsKeys.dictationHotkeysPaused)
