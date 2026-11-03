@@ -1275,7 +1275,7 @@ final class DictationViewModel: ObservableObject {
 
     func testingUpdateRecordingInputSilence(recordingDuration: TimeInterval) {
         self.recordingDuration = recordingDuration
-        updateRecordingInputSilence()
+        updateRecordingInputSilence(recordingDuration: recordingDuration)
     }
 
     /// Tests pass a long interval and step the silence watch with `testingPollSilenceEndpoint`.
@@ -5855,10 +5855,23 @@ final class DictationViewModel: ObservableObject {
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let start = self.recordingStartTime else { return }
-                self.recordingDuration = Date().timeIntervalSince(start)
-                self.updateRecordingInputSilence()
+                let elapsed = Date().timeIntervalSince(start)
+                if Self.recordingDurationChangesIndicator(from: self.recordingDuration, to: elapsed) {
+                    self.recordingDuration = elapsed
+                }
+                self.updateRecordingInputSilence(recordingDuration: elapsed)
             }
         }
+    }
+
+    /// The indicator shows whole seconds and only checks whether half a second has
+    /// passed. Publishing the other ticks of the 10 Hz timer re-rendered every view
+    /// that observes this view model without a visible change.
+    nonisolated static func recordingDurationChangesIndicator(
+        from published: TimeInterval,
+        to elapsed: TimeInterval
+    ) -> Bool {
+        Int(published) != Int(elapsed) || (published < 0.5) != (elapsed < 0.5)
     }
 
     private func stopRecordingTimer() {
@@ -5921,7 +5934,7 @@ final class DictationViewModel: ObservableObject {
         stopDictation(stoppedAfterSilence: true)
     }
 
-    private func updateRecordingInputSilence() {
+    private func updateRecordingInputSilence(recordingDuration: TimeInterval) {
         let isSilent = state == .recording
             && isRecordingInputReady
             && isRecordingInputSilentSoFar(

@@ -33,6 +33,24 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         super.tearDown()
     }
 
+    func testRecordingDurationPublishesOnlyChangesTheIndicatorShows() {
+        let changes: [(TimeInterval, TimeInterval, Bool)] = [
+            (0, 0.1, false),
+            (0, 0.5, true),
+            (0.5, 0.9, false),
+            (0.5, 1.0, true),
+            (1.0, 1.9, false),
+            (59.0, 60.0, true),
+        ]
+        for (published, elapsed, expected) in changes {
+            XCTAssertEqual(
+                DictationViewModel.recordingDurationChangesIndicator(from: published, to: elapsed),
+                expected,
+                "\(published) -> \(elapsed)"
+            )
+        }
+    }
+
     func testIndicatorTranscriptPreviewDefaultsToEnabled() {
         XCTAssertTrue(DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults))
     }
