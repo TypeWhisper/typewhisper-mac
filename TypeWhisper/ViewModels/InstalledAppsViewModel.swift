@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 
-struct InstalledApp: Identifiable, Hashable {
+struct InstalledApp: Identifiable, Hashable, Sendable {
     let id: String // bundleIdentifier
     let name: String
     let icon: NSImage?
@@ -16,15 +16,33 @@ struct InstalledApp: Identifiable, Hashable {
 }
 
 /// The apps in the Applications folders, for the workflow editor's app picker.
+///
+/// Creating it does no work, because the service container creates it at launch. The folders
+/// are scanned once, off the main thread, when the Workflows settings first appear.
 @MainActor
 final class InstalledAppsViewModel: ObservableObject {
     @Published private(set) var installedApps: [InstalledApp] = []
 
-    init() {
-        scanInstalledApps()
+    private let scan: @Sendable () -> [InstalledApp]
+    private var loadTask: Task<Void, Never>?
+
+    init(scan: @escaping @Sendable () -> [InstalledApp] = InstalledAppsViewModel.scanInstalledApps) {
+        self.scan = scan
     }
 
-    private func scanInstalledApps() {
+    /// Starts the scan unless an earlier call did, and returns once the list is published.
+    /// The scan keeps running when the caller's task is cancelled, so it runs only once.
+    func loadIfNeeded() async {
+        if loadTask == nil {
+            let scan = scan
+            loadTask = Task {
+                installedApps = await Task.detached(priority: .userInitiated) { scan() }.value
+            }
+        }
+        await loadTask?.value
+    }
+
+    nonisolated static func scanInstalledApps() -> [InstalledApp] {
         var apps: [String: InstalledApp] = [:]
 
         let directories = [
@@ -56,6 +74,6 @@ final class InstalledAppsViewModel: ObservableObject {
             }
         }
 
-        installedApps = apps.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return apps.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 }

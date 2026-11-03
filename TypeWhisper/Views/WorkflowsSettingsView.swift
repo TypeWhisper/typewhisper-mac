@@ -55,6 +55,10 @@ struct WorkflowsSettingsView: View {
         detailView
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .frame(minWidth: 560, minHeight: 480)
+            .task {
+                // Scanned here instead of at launch; usually done before an editor opens.
+                await ServiceContainer.shared.installedAppsViewModel.loadIfNeeded()
+            }
     }
 
     @ViewBuilder
