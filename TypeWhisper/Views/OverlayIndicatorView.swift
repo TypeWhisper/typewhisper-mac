@@ -53,6 +53,24 @@ struct OverlayIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var preview = IndicatorPreviewSession.shared
+    private let countdownModel: CalendarMeetingCountdownModel
+
+    init(countdownModel: CalendarMeetingCountdownModel) {
+        self.countdownModel = countdownModel
+    }
+
+    // The layout reads the presentation dozens of times per update, and building
+    // it reads about twenty published properties. It is built once per update here.
+    var body: some View {
+        OverlayIndicatorPresentationView(
+            presentation: IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview),
+            countdownModel: countdownModel
+        )
+    }
+}
+
+private struct OverlayIndicatorPresentationView: View {
+    @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @Environment(\.colorScheme) private var systemColorScheme
     @State private var textExpanded = false
@@ -63,12 +81,11 @@ struct OverlayIndicatorView: View {
     private let sizing: IndicatorSizing = .overlay
     private var closedWidth: CGFloat { 280 }
 
-    init(countdownModel: CalendarMeetingCountdownModel) {
-        _countdownModel = ObservedObject(wrappedValue: countdownModel)
-    }
+    let presentation: IndicatorPresentationData
 
-    private var presentation: IndicatorPresentationData {
-        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview)
+    init(presentation: IndicatorPresentationData, countdownModel: CalendarMeetingCountdownModel) {
+        self.presentation = presentation
+        _countdownModel = ObservedObject(wrappedValue: countdownModel)
     }
 
     private var countdownPresentation: CalendarMeetingCountdownPresentation? {

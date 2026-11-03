@@ -9,6 +9,30 @@ struct NotchIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var preview = IndicatorPreviewSession.shared
+    private let geometry: NotchGeometry
+    private let countdownModel: CalendarMeetingCountdownModel
+
+    init(
+        geometry: NotchGeometry,
+        countdownModel: CalendarMeetingCountdownModel
+    ) {
+        self.geometry = geometry
+        self.countdownModel = countdownModel
+    }
+
+    // The layout reads the presentation dozens of times per update, and building
+    // it reads about twenty published properties. It is built once per update here.
+    var body: some View {
+        NotchIndicatorPresentationView(
+            presentation: IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview),
+            geometry: geometry,
+            countdownModel: countdownModel
+        )
+    }
+}
+
+private struct NotchIndicatorPresentationView: View {
+    @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var modelMenu = IndicatorModelMenuController.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @ObservedObject var geometry: NotchGeometry
@@ -22,16 +46,16 @@ struct NotchIndicatorView: View {
     private let processingBodyHeight: CGFloat = 28
     private let feedbackBodyHeight = IndicatorFeedbackPanelLayout.feedbackBodyHeight
 
+    let presentation: IndicatorPresentationData
+
     init(
+        presentation: IndicatorPresentationData,
         geometry: NotchGeometry,
         countdownModel: CalendarMeetingCountdownModel
     ) {
+        self.presentation = presentation
         self.geometry = geometry
         _countdownModel = ObservedObject(wrappedValue: countdownModel)
-    }
-
-    private var presentation: IndicatorPresentationData {
-        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview)
     }
 
     private var countdownPresentation: CalendarMeetingCountdownPresentation? {
