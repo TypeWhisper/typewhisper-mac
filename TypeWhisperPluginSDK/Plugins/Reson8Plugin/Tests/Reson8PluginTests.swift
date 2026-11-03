@@ -693,9 +693,37 @@ final class Reson8PluginTests: XCTestCase {
         let start = ContinuousClock.now
         let result = try await session.finish()
 
-        XCTAssertEqual(socket.sentTexts, [])
+        // Reson8 does not answer the flush for a click, which ends after the short wait.
         XCTAssertEqual(result.text, "Send the report.")
-        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1))
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1.5))
+    }
+
+    func testTurnsSessionKeepsAShortWordAfterTheLastTurn() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [
+            #"{"type":"turn_start"}"#,
+            #"{"type":"turn_end_candidate","text":"No.","language":"en","start_ms":1500,"duration_ms":200}"#,
+            #"{"type":"turn_end"}"#,
+        ])
+        let turnEnds = OSAllocatedUnfairLock(initialState: 0)
+        let session = try await Reson8RealtimeSession.connect(
+            socket: socket,
+            mode: .turns(onTurnEnd: { turnEnds.withLock { $0 += 1 } }),
+            language: "en"
+        ) { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        socket.deliver(#"{"type":"turn_start"}"#)
+        socket.deliver(#"{"type":"turn_end_candidate","text":"Send the report.","language":"en","start_ms":0,"duration_ms":1000}"#)
+        socket.deliver(#"{"type":"turn_end"}"#)
+        try await Self.waitUntil { turnEnds.withLock { $0 } == 1 }
+        // "No" after a pause, 200 ms, shorter than the run that arms the silence stop.
+        try await session.appendAudio(
+            samples: [Float](repeating: 0, count: 8_000) + [Float](repeating: 0.1, count: 3_200)
+        )
+        let result = try await session.finish()
+
+        XCTAssertFalse(socket.sentTexts.isEmpty)
+        XCTAssertEqual(result.text, "Send the report. No.")
     }
 
     // TypeWhisper then transcribes the whole recording instead of dropping the speech.

@@ -349,6 +349,9 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     /// How long a turns session waits for speech it heard since the last turn to become a
     /// turn; Reson8 ended an open turn 0.1 s after a flush.
     static let pendingSpeechTimeout: Duration = .seconds(2)
+    /// The wait for speech shorter than `minimumSpeechRunFrames`, which may be a short word
+    /// or a click, such as the key that stops the dictation.
+    static let shortPendingSpeechTimeout: Duration = .milliseconds(750)
     /// Speech that ends this close to the end of a turn belongs to it: Reson8's turn ends at
     /// the last word, the speech frames of 100 ms a little later.
     static let turnEndSpeechMarginMs = 300
@@ -375,6 +378,8 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     private var endedTurnCount = 0
     /// Where the last speech sent ends in the stream, in milliseconds.
     private var lastSpeechEndMs: Int?
+    /// Where the last speech of at least `minimumSpeechRunFrames` ends, in milliseconds.
+    private var lastSustainedSpeechEndMs: Int?
     /// Samples of a 100 ms frame that the next audio completes.
     private var partialFrameSamples: [Float] = []
     /// Speech frames in a row; a silent frame starts the count again.
@@ -451,12 +456,12 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
         sentSampleCount += samples.count
     }
 
-    /// Speech frames in a row that count as speech, as TypeWhisper's silence stop needs before
-    /// it arms: 0.3 s. A click, such as the key that stops the dictation, does not.
+    /// Speech frames in a row that are certainly speech, as TypeWhisper's silence stop needs
+    /// before it arms: 0.3 s. Shorter runs may be a short word or a click.
     static let minimumSpeechRunFrames = 3
 
     /// Follows the speech in the audio sent, by the rule of TypeWhisper's silence stop: 100 ms
-    /// frames with an RMS of at least 0.004, in runs of at least `minimumSpeechRunFrames`.
+    /// frames with an RMS of at least 0.004.
     private func trackSpeech(_ samples: [Float]) {
         var frameStart = sentSampleCount - partialFrameSamples.count
         var buffer = partialFrameSamples + samples
@@ -468,8 +473,9 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
             frameStart += 1_600
             if power.squareRoot() >= 0.004 {
                 speechRunFrames += 1
+                lastSpeechEndMs = frameStart / 16
                 if speechRunFrames >= Self.minimumSpeechRunFrames {
-                    lastSpeechEndMs = frameStart / 16
+                    lastSustainedSpeechEndMs = frameStart / 16
                 }
             } else {
                 speechRunFrames = 0
@@ -484,6 +490,11 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
     private var hasSpeechAfterEndedTurns: Bool {
         guard let lastSpeechEndMs else { return false }
         return lastSpeechEndMs > endedTurnsEndMs + Self.turnEndSpeechMarginMs
+    }
+
+    private var hasSustainedSpeechAfterEndedTurns: Bool {
+        guard let lastSustainedSpeechEndMs else { return false }
+        return lastSustainedSpeechEndMs > endedTurnsEndMs + Self.turnEndSpeechMarginMs
     }
 
     func finish() async throws -> PluginTranscriptionResult {
@@ -524,10 +535,10 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
                 try await send { try await $0.sendText(#"{"type":"flush_request"}"#) }
             }
             // An open turn gets the time Reson8 needs to end it; speech that has not become a
-            // turn yet gets a short wait.
+            // turn yet gets a short wait, and a short sound a shorter one.
             let timeout = wasTurnOpen
                 ? Self.finishTimeout + .milliseconds(sentSampleCount / 160)
-                : Self.pendingSpeechTimeout
+                : hasSustainedSpeechAfterEndedTurns ? Self.pendingSpeechTimeout : Self.shortPendingSpeechTimeout
             let hasProgressed = await wait(timeout: timeout) {
                 $0.endedTurnCount != turnsBefore || $0.isTurnOpen != wasTurnOpen
                     || !($0.isTurnOpen || $0.hasSpeechAfterEndedTurns)
@@ -541,13 +552,17 @@ actor Reson8RealtimeSession: LiveTranscriptionSession {
                 let connectionFailure = failure
                 close()
                 // A turn that never ended may miss its last words, and speech that never became
-                // a turn may be lost, so TypeWhisper transcribes the whole recording instead.
+                // a turn may be lost, so TypeWhisper transcribes the whole recording instead. A
+                // short sound that Reson8 did not take for words, such as a click, changes nothing.
                 if let connectionFailure { throw connectionFailure }
-                throw PluginTranscriptionError.networkError(
-                    isTurnOpen
-                        ? "Reson8 did not end the last turn in time"
-                        : "Reson8 did not transcribe the last speech in time"
-                )
+                if isTurnOpen || hasSustainedSpeechAfterEndedTurns {
+                    throw PluginTranscriptionError.networkError(
+                        isTurnOpen
+                            ? "Reson8 did not end the last turn in time"
+                            : "Reson8 did not transcribe the last speech in time"
+                    )
+                }
+                return finalResult()
             }
         }
         close()
