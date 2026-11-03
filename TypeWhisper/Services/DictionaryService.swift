@@ -76,6 +76,10 @@ final class DictionaryService: ObservableObject {
     /// correction ("clawed code" → "Claude Code") wins over a shorter prefix correction
     /// ("clawed" → "Claude") that would otherwise consume part of the longer match.
     private(set) var correctionsForApplication: [DictionaryEntry] = []
+    /// `correctionsForApplication` with the rule data read once per load. Reading the
+    /// SwiftData properties for every rule on every pass, and again for every segment of a
+    /// transcribed file, cost about a third of applying the corrections.
+    private var preparedCorrections: [PreparedCorrection] = []
     @Published private(set) var termsCount: Int = 0
     @Published private(set) var correctionsCount: Int = 0
     @Published private(set) var enabledTermsCount: Int = 0
@@ -146,6 +150,7 @@ final class DictionaryService: ObservableObject {
             terms = newTerms
             corrections = newCorrections
             correctionsForApplication = Self.orderedForApplication(newCorrections)
+            preparedCorrections = correctionsForApplication.map(PreparedCorrection.init)
             regexCorrections = Dictionary(uniqueKeysWithValues: newCorrections.compactMap { correction in
                 guard correction.isRegex,
                       let regex = try? NSRegularExpression(
@@ -833,7 +838,7 @@ final class DictionaryService: ObservableObject {
         var needsSave = false
         var regexBudget = RegexCorrectionBudget()
 
-        for correction in correctionsForApplication {
+        for correction in preparedCorrections {
             guard let replacement = correction.replacement else { continue }
 
             var correctionWasApplied = false
@@ -861,7 +866,7 @@ final class DictionaryService: ObservableObject {
             results = correctionResults
 
             if correctionWasApplied, countedCorrectionIDs.insert(correction.id).inserted {
-                correction.usageCount += 1
+                correction.entry.usageCount += 1
                 needsSave = true
             }
         }
@@ -890,7 +895,7 @@ final class DictionaryService: ObservableObject {
     func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>, includeRegex: Bool = true) -> String {
         var result = CorrectionTarget(text)
         var regexBudget = RegexCorrectionBudget()
-        for correction in correctionsForApplication {
+        for correction in preparedCorrections {
             guard includeRegex || !correction.isRegex else { continue }
             guard let replacement = correction.replacement else { continue }
             guard let corrected = applyCorrection(
@@ -962,8 +967,28 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    private struct PreparedCorrection {
+        let entry: DictionaryEntry
+        let id: UUID
+        let original: String
+        let replacement: String?
+        let isRegex: Bool
+        let caseSensitive: Bool
+        let matchPolicy: DictionaryCorrectionMatchPolicy
+
+        init(_ entry: DictionaryEntry) {
+            self.entry = entry
+            id = entry.id
+            original = entry.original
+            replacement = entry.replacement
+            isRegex = entry.isRegex
+            caseSensitive = entry.caseSensitive
+            matchPolicy = DictionaryService.matchPolicy(forOriginal: entry.original)
+        }
+    }
+
     private func applyCorrection(
-        _ correction: DictionaryEntry,
+        _ correction: PreparedCorrection,
         to target: CorrectionTarget,
         replacement: String,
         regexBudget: inout RegexCorrectionBudget
@@ -976,7 +1001,7 @@ final class DictionaryService: ObservableObject {
             }
         }
 
-        switch matchPolicy(for: correction) {
+        switch correction.matchPolicy {
         case .exact:
             return textMatches(text, correction.original, caseSensitive: correction.caseSensitive) ? replacement : text
         case .boundary:
@@ -1159,8 +1184,8 @@ final class DictionaryService: ObservableObject {
         return false
     }
 
-    private func matchPolicy(for correction: DictionaryEntry) -> DictionaryCorrectionMatchPolicy {
-        let original = correction.original.trimmingCharacters(in: .whitespacesAndNewlines)
+    nonisolated private static func matchPolicy(forOriginal original: String) -> DictionaryCorrectionMatchPolicy {
+        let original = original.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !original.isEmpty else { return .exact }
         return original.containsWordLikeCharacter ? .boundary : .substring
     }
