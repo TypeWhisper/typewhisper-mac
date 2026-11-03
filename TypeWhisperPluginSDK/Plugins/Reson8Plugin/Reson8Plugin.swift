@@ -15,11 +15,18 @@ private final class RawWebSocket: @unchecked Sendable {
     enum WSError: Error, LocalizedError {
         case upgradeFailed(String)
         case closed
+        /// The server closed the connection with this status code and reason.
+        case closedByServer(code: UInt16?, reason: String)
 
         var errorDescription: String? {
             switch self {
             case .upgradeFailed(let msg): return "WebSocket upgrade failed: \(msg)"
             case .closed: return "WebSocket closed"
+            case .closedByServer(let code, let reason):
+                let detail = [code.map(String.init), reason.isEmpty ? nil : reason]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                return detail.isEmpty ? "WebSocket closed by server" : "WebSocket closed by server (\(detail))"
             }
         }
     }
@@ -93,9 +100,21 @@ private final class RawWebSocket: @unchecked Sendable {
             throw WSError.upgradeFailed("Invalid response encoding")
         }
         logger.debug("Upgrade response: \(responseStr.prefix(200))")
-        guard responseStr.contains("101") else {
-            throw WSError.upgradeFailed(String(responseStr.prefix(200)))
+        let lines = responseStr.components(separatedBy: "\r\n")
+        let statusLine = lines.first ?? ""
+        guard statusLine.split(separator: " ").dropFirst().first == "101" else {
+            throw WSError.upgradeFailed(Self.upgradeFailureSummary(statusLine: statusLine, headerLines: lines.dropFirst()))
         }
+    }
+
+    /// Reson8 rejects a connection, for example at the concurrent connection limit,
+    /// without a body and names the reason in `X-Error-Message`.
+    static func upgradeFailureSummary(statusLine: String, headerLines: some Sequence<String>) -> String {
+        let prefix = "x-error-message:"
+        let reason = headerLines
+            .first { $0.lowercased().hasPrefix(prefix) }
+            .map { $0.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces) }
+        return [statusLine, reason ?? ""].filter { !$0.isEmpty }.joined(separator: ": ")
     }
 
     // MARK: - Raw I/O via URLSessionStreamTask
@@ -262,56 +281,300 @@ private final class RawWebSocket: @unchecked Sendable {
     }
 }
 
-// MARK: - Transcript Collector
+// MARK: - Realtime Session
 
-private actor TranscriptCollector {
-    private var finals: [String] = []
-    private var interim: String = ""
-    private var languages: [String] = []
-    private var finalWords: [[PluginWordTiming]] = []
+/// The realtime endpoint as `Reson8RealtimeSession` uses it.
+protocol Reson8RealtimeSocket: Sendable {
+    /// Opens the connection; throws when Reson8 rejects it, for example at the
+    /// concurrent connection limit.
+    func connect() async throws
+    func sendAudio(_ data: Data) async throws
+    func sendText(_ text: String) async throws
+    /// The next text message; throws once the connection is closed.
+    func receive() async throws -> String
+    func close()
+}
 
-    func addFinal(_ text: String, language: String?, words: [PluginWordTiming]) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            finals.append(trimmed)
+extension RawWebSocket: Reson8RealtimeSocket {
+    func sendAudio(_ data: Data) async throws {
+        try await sendBinary(data)
+    }
+
+    func receive() async throws -> String {
+        while true {
+            let frame = try await receiveFrame()
+            switch frame.opcode {
+            case .text:
+                return String(decoding: frame.payload, as: UTF8.self)
+            case .close:
+                // A close frame starts with a two-byte status code, followed by the reason.
+                let bytes = [UInt8](frame.payload)
+                let code = bytes.count >= 2 ? UInt16(bytes[0]) << 8 | UInt16(bytes[1]) : nil
+                let reason = bytes.count > 2 ? String(decoding: bytes[2...], as: UTF8.self) : ""
+                throw WSError.closedByServer(code: code, reason: reason)
+            default:
+                continue
+            }
         }
-        if let language, !language.isEmpty {
-            languages.append(language)
+    }
+
+    func close() {
+        cancel()
+    }
+}
+
+/// One connection to Reson8's realtime endpoint. A dictation feeds it while the user
+/// speaks, a finished recording all at once. Reson8 sends a final transcript per
+/// utterance, which ends at a pause, and interim transcripts of the current utterance
+/// in between. A flush request finalizes the rest, and its confirmation follows the
+/// last final transcript.
+actor Reson8RealtimeSession: LiveTranscriptionSession {
+    /// 256 ms of audio; Reson8 closes the connection on frames above 64 KiB.
+    static let maximumFrameByteCount = 8_192
+    /// Reson8 confirmed a flush 0.3 s after live audio and 2 s after 72 seconds sent at
+    /// once. A recording sent at once gets a tenth of its length on top.
+    static let finishTimeout: Duration = .seconds(10)
+
+    private struct Utterance {
+        let text: String
+        let language: String?
+        let words: [PluginWordTiming]
+    }
+
+    private static let logger = Logger(subsystem: "com.typewhisper.reson8", category: "RealtimeSession")
+
+    private let socket: any Reson8RealtimeSocket
+    private let requestedLanguage: String?
+    private let onProgress: @Sendable (String) -> Bool
+    private var receiveTask: Task<Void, Never>?
+
+    private var utterances: [Utterance] = []
+    private var interimText = ""
+    private var reportsProgress = true
+    private var sentSampleCount = 0
+    private var isFlushRequested = false
+    private var isFlushConfirmed = false
+    private var isClosed = false
+    private var isCancelled = false
+    private var failure: Error?
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    private init(
+        socket: any Reson8RealtimeSocket,
+        requestedLanguage: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) {
+        self.socket = socket
+        self.requestedLanguage = requestedLanguage
+        self.onProgress = onProgress
+    }
+
+    /// Opens the connection before it returns, so a wrong key or an exhausted credit
+    /// limit fails here instead of during the recording.
+    static func connect(
+        socket: any Reson8RealtimeSocket,
+        language: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> Reson8RealtimeSession {
+        do {
+            try await withTaskCancellationHandler {
+                try await socket.connect()
+            } onCancel: {
+                socket.close()
+            }
+        } catch {
+            // A connection that is not upgraded would otherwise stay open.
+            socket.close()
+            throw error
         }
-        if !words.isEmpty {
-            finalWords.append(words)
+        let session = Reson8RealtimeSession(socket: socket, requestedLanguage: language, onProgress: onProgress)
+        await session.startReceiving()
+        return session
+    }
+
+    /// The final transcripts and the current interim one, which together cover all audio so far.
+    var currentText: String {
+        (utterances.map(\.text) + [interimText]).filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        try throwIfEnded()
+        let data = Reson8Plugin.floatToPCM16(samples)
+        var start = data.startIndex
+        while start < data.endIndex {
+            try Task.checkCancellation()
+            let end = min(start + Self.maximumFrameByteCount, data.endIndex)
+            let frame = data.subdata(in: start..<end)
+            try await send { try await $0.sendAudio(frame) }
+            start = end
         }
-        interim = ""
+        sentSampleCount += samples.count
     }
 
-    func words() -> [PluginWordTiming] {
-        finalWords.flatMap { $0 }
-    }
+    func finish() async throws -> PluginTranscriptionResult {
+        try throwIfEnded()
+        isFlushRequested = true
+        try await send { try await $0.sendText(#"{"type":"flush_request","id":"typewhisper"}"#) }
 
-    /// Sentence segments of each final transcript, which is one utterance.
-    func segments() -> [PluginTranscriptionSegment] {
-        finalWords.flatMap { Reson8Transcript.sentenceSegments(from: $0) }
-            .map { PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
-    }
-
-    func detectedLanguage() -> String? {
-        Reson8Transcript.mostFrequentLanguage(languages)
-    }
-
-    func setInterim(_ text: String) {
-        interim = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    func currentText() -> String {
-        var parts = finals
-        if !interim.isEmpty {
-            parts.append(interim)
+        let timeout = Self.finishTimeout + .milliseconds(sentSampleCount / 160)
+        let isConfirmed = await wait(timeout: timeout) { $0.isFlushConfirmed }
+        close()
+        guard isConfirmed else {
+            if isCancelled || Task.isCancelled { throw CancellationError() }
+            // Without the confirmation the last utterance may be missing, so TypeWhisper
+            // transcribes the whole recording instead.
+            throw failure ?? PluginTranscriptionError.networkError("Reson8 did not finish the realtime transcript in time")
         }
-        return parts.joined(separator: " ")
+
+        PluginWordTimings.report(utterances.flatMap(\.words))
+        Self.logger.info("Realtime session finished with \(self.utterances.count, privacy: .public) utterances")
+        return PluginTranscriptionResult(
+            text: utterances.map(\.text).joined(separator: " "),
+            detectedLanguage: Reson8Plugin.detectedLanguage(
+                Reson8Transcript.mostFrequentLanguage(utterances.compactMap(\.language)),
+                requested: requestedLanguage
+            ),
+            // Sentence segments of each utterance.
+            segments: utterances
+                .flatMap { Reson8Transcript.sentenceSegments(from: $0.words) }
+                .map { PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+        )
     }
 
-    func finalResult() -> String {
-        finals.joined(separator: " ")
+    func cancel() async {
+        guard !isCancelled else { return }
+        isCancelled = true
+        close()
+    }
+
+    // MARK: Sending
+
+    private func send(_ operation: (any Reson8RealtimeSocket) async throws -> Void) async throws {
+        do {
+            try await operation(socket)
+        } catch {
+            let failure = self.failure ?? error
+            fail(failure)
+            throw failure
+        }
+    }
+
+    // MARK: Receiving
+
+    private func startReceiving() {
+        let socket = self.socket
+        receiveTask = Task {
+            do {
+                while true {
+                    let message = try await socket.receive()
+                    self.handle(message)
+                }
+            } catch {
+                self.receiveEnded(error)
+            }
+        }
+    }
+
+    func handle(_ message: String) {
+        guard let json = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any],
+              let type = json["type"] as? String else {
+            return
+        }
+
+        switch type {
+        case "transcript":
+            let text = ((json["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if json["is_final"] as? Bool == true {
+                if !text.isEmpty {
+                    utterances.append(Utterance(
+                        text: text,
+                        language: json["language"] as? String,
+                        words: Reson8Transcript.words(from: json["words"])
+                    ))
+                }
+                interimText = ""
+            } else {
+                interimText = text
+            }
+            reportProgress()
+        case "flush_confirmation":
+            guard isFlushRequested else { return }
+            isFlushConfirmed = true
+            resumeWaiters()
+        default:
+            break
+        }
+    }
+
+    private func reportProgress() {
+        let text = currentText
+        guard reportsProgress, !isCancelled, !text.isEmpty else { return }
+        // A caller that returns false wants no further progress.
+        reportsProgress = onProgress(text)
+    }
+
+    /// Reson8 reports errors after the connection opened only by closing it.
+    private func receiveEnded(_ error: Error) {
+        isClosed = true
+        if failure == nil, !isCancelled, !isFlushConfirmed {
+            Self.logger.warning("Realtime connection ended: \(error.localizedDescription, privacy: .public)")
+            failure = PluginTranscriptionError.networkError("Reson8 realtime connection ended: \(error.localizedDescription)")
+        }
+        resumeWaiters()
+    }
+
+    // MARK: State
+
+    private func throwIfEnded() throws {
+        if isCancelled { throw CancellationError() }
+        if let failure { throw failure }
+        if isClosed { throw PluginTranscriptionError.networkError("Reson8 realtime connection is closed") }
+    }
+
+    private func fail(_ error: Error) {
+        if failure == nil {
+            failure = error
+        }
+        resumeWaiters()
+    }
+
+    private func close() {
+        isClosed = true
+        socket.close()
+        receiveTask?.cancel()
+        resumeWaiters()
+    }
+
+    /// Waits until `condition` holds, the session fails or closes, or `timeout` passes.
+    private func wait(
+        timeout: Duration,
+        until condition: (isolated Reson8RealtimeSession) -> Bool
+    ) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let timer = Task {
+            try? await Task.sleep(until: deadline, clock: .continuous)
+            self.resumeWaiters()
+        }
+        defer { timer.cancel() }
+
+        return await withTaskCancellationHandler {
+            while !condition(self) {
+                guard failure == nil, !isClosed, !isCancelled, !Task.isCancelled,
+                      ContinuousClock.now < deadline else {
+                    return false
+                }
+                await withCheckedContinuation { waiters.append($0) }
+            }
+            return true
+        } onCancel: {
+            Task { await self.resumeWaiters() }
+        }
+    }
+
+    private func resumeWaiters() {
+        let waiting = waiters
+        waiters.removeAll()
+        waiting.forEach { $0.resume() }
     }
 }
 
@@ -477,6 +740,10 @@ struct Reson8Transcript {
 final class Reson8Plugin: NSObject,
     StructuredLanguageHintTranscriptionEnginePlugin,
     LanguageHintTranscriptionEnginePlugin,
+    LiveLanguageHintTranscriptionCapablePlugin,
+    LiveTranscriptionModelSupportProviding,
+    LiveTranscriptionProgressModeProviding,
+    TranscriptPreviewFallbackPolicyProviding,
     DictionaryTermsCapabilityProviding,
     DictionaryTermsBudgetProviding,
     @unchecked Sendable
@@ -596,17 +863,15 @@ final class Reson8Plugin: NSObject,
 
     var supportsTranslation: Bool { false }
 
-    /// Streams through the realtime endpoint when the selected model offers it.
-    /// Before the model list was fetched, the default model is assumed to. Speaker
-    /// labels need the prerecorded endpoint's segments, so diarizing does not stream.
+    /// Transcribes through the realtime endpoint, live while the user speaks, when the
+    /// selected model streams.
     var supportsStreaming: Bool {
-        guard !diarizes else { return false }
-        return model(forModelId: _selectedModelId)?.endpoints?.contains("realtime") ?? true
+        supportsLiveTranscriptionSession(forModelId: nil)
     }
 
-    /// Labels speakers when the user turned it on and the selected model can.
-    private var diarizes: Bool {
-        _diarizationEnabled && supportsParameter("diarize", forModelId: _selectedModelId)
+    /// Labels speakers when the user turned it on and the model can.
+    private func diarizes(forModelId modelId: String?) -> Bool {
+        _diarizationEnabled && supportsParameter("diarize", forModelId: modelId)
     }
 
     /// Word timings feed the host's subtitles, speaker alignment and playback.
@@ -806,7 +1071,7 @@ final class Reson8Plugin: NSObject,
         }
 
         do {
-            return try await transcribeWebSocket(
+            return try await transcribeRealtime(
                 audio: audio,
                 language: resolved,
                 prompt: prompt,
@@ -814,6 +1079,9 @@ final class Reson8Plugin: NSObject,
                 onProgress: onProgress
             )
         } catch {
+            // A cancelled transcription does not start over at the other endpoint.
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
             Self.logger.warning("Realtime transcription failed, falling back to REST: \(error.localizedDescription)")
             return Self.legacyResult(from: try await transcribeREST(
                 audio: audio,
@@ -924,7 +1192,7 @@ final class Reson8Plugin: NSObject,
     }
 
     private func diarizationQueryItems() -> [URLQueryItem] {
-        guard diarizes else { return [] }
+        guard diarizes(forModelId: _selectedModelId) else { return [] }
         var items = [URLQueryItem(name: "diarize", value: "true")]
         if let maxSpeakers = _maxSpeakers {
             items.append(URLQueryItem(name: "max_speakers", value: String(maxSpeakers)))
@@ -1043,113 +1311,123 @@ final class Reson8Plugin: NSObject,
         return transcript.result
     }
 
-    // MARK: - WebSocket Implementation (Raw RFC 6455)
+    // MARK: - Live Sessions
 
-    private func transcribeWebSocket(
+    /// Resonant-1 streams while the user speaks; Rumble-2-Flash transcribes prerecorded
+    /// audio only. Before the model list was fetched, the default model is assumed to
+    /// stream. Speaker labels need the prerecorded endpoint's segments, so a diarizing
+    /// selection does not stream either.
+    func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
+        let modelId = modelId ?? _selectedModelId
+        guard !diarizes(forModelId: modelId) else { return false }
+        return model(forModelId: modelId)?.endpoints?.contains("realtime") ?? true
+    }
+
+    /// The final transcripts plus the current interim one cover the whole recording.
+    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
+
+    /// A live session that cannot start, for example at the concurrent connection limit,
+    /// leaves the recording without preview instead of uploading its last seconds again
+    /// every few seconds.
+    var allowsTranscriptPreviewFallback: Bool {
+        !supportsLiveTranscriptionSession(forModelId: nil)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language, languageHints: []),
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard supportsLiveTranscriptionSession(forModelId: nil) else {
+            throw PluginTranscriptionError.apiError("The selected Reson8 model does not stream")
+        }
+        return try await openRealtimeSession(
+            language: Self.resolveLanguage(selection: languageSelection),
+            prompt: prompt,
+            apiKey: apiKey,
+            onProgress: onProgress
+        )
+    }
+
+    // MARK: - Realtime Implementation (Raw RFC 6455)
+
+    /// The realtime endpoint with the parameters both endpoints take, plus interim transcripts.
+    func realtimePath(language: String?, prompt: String?) -> String? {
+        var components = URLComponents()
+        components.path = "/v1/speech-to-text/realtime"
+        components.percentEncodedQuery = Self.percentEncodedQuery(
+            queryItems(language: language, prompt: prompt) + [URLQueryItem(name: "include_interim", value: "true")]
+        )
+        return components.string
+    }
+
+    private func openRealtimeSession(
+        language: String?,
+        prompt: String?,
+        apiKey: String,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> Reson8RealtimeSession {
+        let baseURL = effectiveBaseURL
+        guard let urlComponents = URLComponents(string: baseURL),
+              let host = urlComponents.host else {
+            throw PluginTranscriptionError.apiError("Invalid base URL")
+        }
+        guard let path = realtimePath(language: language, prompt: prompt) else {
+            throw PluginTranscriptionError.apiError("Invalid query parameters")
+        }
+        let usesTLS = baseURL.hasPrefix("https://")
+        let socket = RawWebSocket(
+            host: host,
+            port: urlComponents.port ?? (usesTLS ? 443 : 80),
+            usesTLS: usesTLS,
+            path: path,
+            headers: [(effectiveAuthHeader, authHeaderValue(apiKey: apiKey))]
+        )
+        return try await Reson8RealtimeSession.connect(socket: socket, language: language, onProgress: onProgress)
+    }
+
+    /// Sends a finished recording through a realtime session, which reports the
+    /// transcript while it arrives.
+    private func transcribeRealtime(
         audio: AudioData,
         language: String?,
         prompt: String?,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        let queryItems = queryItems(language: language, prompt: prompt)
-            + [URLQueryItem(name: "include_interim", value: "true")]
-
-        let baseURL = effectiveBaseURL
-        guard let urlComponents = URLComponents(string: baseURL),
-              let host = urlComponents.host else {
-            throw PluginTranscriptionError.apiError("Invalid base URL")
-        }
-        let usesTLS = baseURL.hasPrefix("https://")
-        let port = urlComponents.port ?? (usesTLS ? 443 : 80)
-
-        var pathComponents = URLComponents()
-        pathComponents.path = "/v1/speech-to-text/realtime"
-        pathComponents.percentEncodedQuery = Self.percentEncodedQuery(queryItems)
-        guard let pathWithQuery = pathComponents.string else {
-            throw PluginTranscriptionError.apiError("Invalid query parameters")
-        }
-
-        let ws = RawWebSocket(
-            host: host,
-            port: port,
-            usesTLS: usesTLS,
-            path: pathWithQuery,
-            headers: [(effectiveAuthHeader, authHeaderValue(apiKey: apiKey))]
+        let session = try await openRealtimeSession(
+            language: language,
+            prompt: prompt,
+            apiKey: apiKey,
+            onProgress: onProgress
         )
-
-        try await ws.connect()
-
-        let collector = TranscriptCollector()
-        let chunkSize = 8192
-        let pcmData = Self.floatToPCM16(audio.samples)
-
-        let receiveTask = Task {
-            do {
-                while !Task.isCancelled {
-                    let frame = try await ws.receiveFrame()
-
-                    if frame.opcode == .close { break }
-                    guard frame.opcode == .text else { continue }
-
-                    guard let json = try? JSONSerialization.jsonObject(with: frame.payload) as? [String: Any],
-                          let type = json["type"] as? String else {
-                        continue
-                    }
-
-                    if type == "flush_confirmation" { break }
-                    if type.localizedCaseInsensitiveContains("error") {
-                        Self.logger.warning("Reson8 realtime error: \(Self.errorMessage(from: frame.payload))")
-                        break
-                    }
-                    guard type == "transcript" else { continue }
-
-                    let transcript = (json["text"] as? String) ?? ""
-                    let isFinal = (json["is_final"] as? Bool) ?? false
-
-                    if isFinal {
-                        await collector.addFinal(
-                            transcript,
-                            language: json["language"] as? String,
-                            words: Reson8Transcript.words(from: json["words"])
-                        )
-                    } else {
-                        await collector.setInterim(transcript)
-                    }
-
-                    let currentText = await collector.currentText()
-                    if !currentText.isEmpty {
-                        if !onProgress(currentText) { break }
-                    }
-                }
-            } catch {
-                // Connection closed or error - stop receiving
-            }
+        do {
+            try await session.appendAudio(samples: audio.samples)
+            return try await session.finish()
+        } catch {
+            // Closes the connection before a fallback request, which counts against
+            // the same concurrent connection limit.
+            await session.cancel()
+            throw error
         }
-
-        var offset = 0
-        while offset < pcmData.count {
-            let end = min(offset + chunkSize, pcmData.count)
-            let chunk = pcmData.subdata(in: offset..<end)
-            try await ws.sendBinary(chunk)
-            offset = end
-        }
-
-        let flushId = UUID().uuidString
-        try await ws.sendText("{\"type\":\"flush_request\",\"id\":\"\(flushId)\"}")
-
-        _ = await receiveTask.result
-
-        try await ws.sendClose()
-        ws.cancel()
-
-        let finalText = await collector.finalResult()
-        PluginWordTimings.report(await collector.words())
-        return PluginTranscriptionResult(
-            text: finalText,
-            detectedLanguage: Self.detectedLanguage(await collector.detectedLanguage(), requested: language),
-            segments: await collector.segments()
-        )
     }
 
     // MARK: - JSON Error Body Helper
@@ -1672,8 +1950,9 @@ private struct Reson8SettingsView: View {
             customAuthHeader = plugin._customAuthHeader ?? ""
             showAdvanced = !customBaseURL.isEmpty || !customAuthHeader.isEmpty || plugin._biasStrength != nil
             fetchedCustomModels = plugin._fetchedCustomModels
-            // Fetches the models once for keys saved before the plugin listed them.
-            if plugin.isConfigured, plugin._fetchedModels.isEmpty, !plugin._didRefreshModelsOnAppear {
+            // Fetches the models once per activation, so models Reson8 added since and
+            // keys saved before the plugin listed models get the current list.
+            if plugin.isConfigured, !plugin._didRefreshModelsOnAppear {
                 plugin._didRefreshModelsOnAppear = true
                 refreshModels()
             }

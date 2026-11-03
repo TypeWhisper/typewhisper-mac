@@ -1,3 +1,4 @@
+import os
 import TypeWhisperPluginSDK
 import XCTest
 @_spi(Testing) import TypeWhisperPluginSDKTesting
@@ -122,10 +123,16 @@ final class Reson8PluginTests: XCTestCase {
         let plugin = try Self.pluginWithFetchedModels()
 
         XCTAssertTrue(plugin.supportsStreaming)
+        XCTAssertTrue(plugin.supportsLiveTranscriptionSession(forModelId: nil))
+        XCTAssertFalse(plugin.supportsLiveTranscriptionSession(forModelId: "rumble-2-flash"))
+        XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
         XCTAssertEqual(plugin.supportedLanguages, ["nl", "en", "fy"])
 
         plugin.selectModel("rumble-2-flash")
         XCTAssertFalse(plugin.supportsStreaming)
+        XCTAssertFalse(plugin.supportsLiveTranscriptionSession(forModelId: nil))
+        // Without live sessions, the host may preview the recording in batches.
+        XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
         XCTAssertEqual(plugin.supportedLanguages, ["nl", "en", "ja"])
 
         // Custom models run on the default model.
@@ -342,6 +349,7 @@ final class Reson8PluginTests: XCTestCase {
             """
 
         XCTAssertFalse(plugin.supportsStreaming)
+        XCTAssertFalse(plugin.supportsLiveTranscriptionSession(forModelId: nil))
         let result = try await Self.structuredTranscription(with: plugin, response: response) { query in
             XCTAssertEqual(query["diarize"], "true")
             XCTAssertEqual(query["max_speakers"], "2")
@@ -394,6 +402,79 @@ final class Reson8PluginTests: XCTestCase {
         // PluginAudioChunking writes the labels into a chunked text; the plugin takes them out again.
         XCTAssertEqual(result.text, "Eerste zin hier. Tweede zin hier. Derde zin hier.")
         XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2"])
+    }
+
+    // MARK: - Realtime
+
+    func testRealtimeSessionsSendTheSettingsAndAskForInterimTranscripts() throws {
+        let plugin = try Self.pluginWithFetchedModels(fillerMode: "clean")
+
+        let path = try XCTUnwrap(plugin.realtimePath(language: "de,en", prompt: "Reson8"))
+        let query = Self.queryItems(of: URLRequest(url: try XCTUnwrap(URL(string: "wss://api.reson8.dev\(path)"))))
+
+        XCTAssertTrue(path.hasPrefix("/v1/speech-to-text/realtime?"))
+        XCTAssertEqual(query["include_interim"], "true")
+        XCTAssertEqual(query["language"], "de,en")
+        XCTAssertEqual(query["phrases"], "Reson8")
+        XCTAssertEqual(query["filler_mode"], "clean")
+        XCTAssertEqual(query["include_words"], "true")
+    }
+
+    func testLiveSessionReportsTranscriptsAndFinishesAfterTheFlush() async throws {
+        let firstWords = Self.wordsJSON("Das ist der erste Satz.", startMs: 0)
+        let secondWords = Self.wordsJSON("And this is the second sentence.", startMs: 4_000)
+        let socket = FakeRealtimeSocket(flushAnswers: [
+            #"{"type":"transcript","text":"And this is the second sentence.","language":"en","is_final":true,"words":[\#(secondWords)]}"#,
+            #"{"type":"flush_confirmation","id":"typewhisper"}"#,
+        ])
+        let progress = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let session = try await Reson8RealtimeSession.connect(socket: socket, language: "de,en") { text in
+            progress.withLock { $0.append(text) }
+            return true
+        }
+
+        // One second of audio, sent in frames below Reson8's 64 KiB limit.
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 16_000))
+        socket.deliver(#"{"type":"transcript","text":"Das ist","language":"","is_final":false}"#)
+        socket.deliver(#"{"type":"transcript","text":"Das ist der erste Satz.","language":"de","is_final":true,"words":[\#(firstWords)]}"#)
+        socket.deliver(#"{"type":"transcript","text":"And this","language":"","is_final":false}"#)
+        let collector = PluginWordTimingCollector()
+        let result = try await PluginWordTimings.$collector.withValue(collector) {
+            try await session.finish()
+        }
+
+        XCTAssertEqual(socket.audioFrameSizes, [8_192, 8_192, 8_192, 7_424])
+        XCTAssertEqual(socket.sentTexts, [#"{"type":"flush_request","id":"typewhisper"}"#])
+        XCTAssertTrue(socket.isClosed)
+        // Each update covers the whole recording so far.
+        XCTAssertEqual(progress.withLock { $0 }, [
+            "Das ist",
+            "Das ist der erste Satz.",
+            "Das ist der erste Satz. And this",
+            "Das ist der erste Satz. And this is the second sentence.",
+        ])
+        XCTAssertEqual(result.text, "Das ist der erste Satz. And this is the second sentence.")
+        XCTAssertEqual(result.detectedLanguage, "de")
+        XCTAssertEqual(result.segments.map(\.text), ["Das ist der erste Satz.", "And this is the second sentence."])
+        XCTAssertEqual(result.segments.last?.start, 4)
+        XCTAssertEqual(collector.words.count, 11)
+    }
+
+    // TypeWhisper then transcribes the whole recording instead of keeping a transcript
+    // whose end may be missing.
+    func testLiveSessionThatClosesBeforeTheFlushIsConfirmedFails() async throws {
+        let socket = FakeRealtimeSocket(flushAnswers: [], closesOnFlush: true)
+        let session = try await Reson8RealtimeSession.connect(socket: socket, language: "nl") { _ in true }
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 1_600))
+        socket.deliver(#"{"type":"transcript","text":"Hallo.","language":"nl","is_final":true}"#)
+
+        do {
+            _ = try await session.finish()
+            XCTFail("Expected the session to fail")
+        } catch PluginTranscriptionError.networkError {
+            XCTAssertTrue(socket.isClosed)
+        }
     }
 
     // MARK: - Model catalog
@@ -570,5 +651,61 @@ final class Reson8PluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+}
+
+/// Records what a realtime session sends and answers its flush request.
+private final class FakeRealtimeSocket: Reson8RealtimeSocket, @unchecked Sendable {
+    private struct State {
+        var audioFrameSizes: [Int] = []
+        var sentTexts: [String] = []
+        var isClosed = false
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let messages: AsyncThrowingStream<String, Error>
+    private let continuation: AsyncThrowingStream<String, Error>.Continuation
+    private let flushAnswers: [String]
+    private let closesOnFlush: Bool
+
+    init(flushAnswers: [String], closesOnFlush: Bool = false) {
+        (messages, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+        self.flushAnswers = flushAnswers
+        self.closesOnFlush = closesOnFlush
+    }
+
+    var audioFrameSizes: [Int] { state.withLock { $0.audioFrameSizes } }
+    var sentTexts: [String] { state.withLock { $0.sentTexts } }
+    var isClosed: Bool { state.withLock { $0.isClosed } }
+
+    /// A message as Reson8 would send it.
+    func deliver(_ message: String) {
+        continuation.yield(message)
+    }
+
+    func connect() async throws {}
+
+    func sendAudio(_ data: Data) async throws {
+        state.withLock { $0.audioFrameSizes.append(data.count) }
+    }
+
+    func sendText(_ text: String) async throws {
+        state.withLock { $0.sentTexts.append(text) }
+        if closesOnFlush {
+            continuation.finish(throwing: URLError(.networkConnectionLost))
+        } else {
+            flushAnswers.forEach { continuation.yield($0) }
+        }
+    }
+
+    func receive() async throws -> String {
+        var iterator = messages.makeAsyncIterator()
+        guard let message = try await iterator.next() else { throw URLError(.cancelled) }
+        return message
+    }
+
+    func close() {
+        state.withLock { $0.isClosed = true }
+        continuation.finish()
     }
 }
