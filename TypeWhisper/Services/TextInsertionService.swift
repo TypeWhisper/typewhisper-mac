@@ -30,35 +30,48 @@ final class ChromiumAccessibilityObservationController {
         let bundleURL: URL
     }
 
+    /// The app-level attributes that make Chromium build the accessibility tree of its web content.
+    enum AccessibilitySwitch: String, CaseIterable {
+        /// Builds the tree without screen reader side effects. Electron apps support it,
+        /// Google Chrome 156 rejects it as unsupported.
+        case manualAccessibility = "AXManualAccessibility"
+        /// The switch screen readers set. Chrome honours it, reports the write as not
+        /// implemented, and exposes its web content about two seconds later.
+        case enhancedUserInterface = "AXEnhancedUserInterface"
+    }
+
     typealias ResolveApplication = (String, pid_t?) -> RunningApplicationTarget?
     typealias IsElectronApplication = (URL) -> Bool
-    typealias ReadManualAccessibility = (pid_t) -> (error: AXError, enabled: Bool?)
-    typealias SetManualAccessibility = (pid_t, Bool) -> AXError
+    typealias ReadAccessibilitySwitch = (pid_t, AccessibilitySwitch) -> (error: AXError, enabled: Bool?)
+    typealias SetAccessibilitySwitch = (pid_t, AccessibilitySwitch, Bool) -> AXError
     typealias ValidateApplication = (RunningApplicationTarget) -> Bool
+    typealias IsScreenReaderRunning = () -> Bool
 
-    private static let manualAccessibilityAttribute = "AXManualAccessibility" as CFString
     private static let chromiumBrowserBundleIdentifiers = SupportedMeetingBrowser
         .automaticURLBundleIdentifiers
         .subtracting([SupportedMeetingBrowser.safari])
 
     private let resolveApplication: ResolveApplication
     private let isElectronApplicationAtURL: IsElectronApplication
-    private let readManualAccessibility: ReadManualAccessibility
-    private let setManualAccessibility: SetManualAccessibility
+    private let readAccessibilitySwitch: ReadAccessibilitySwitch
+    private let setAccessibilitySwitch: SetAccessibilitySwitch
     private let validateApplication: ValidateApplication
+    private let isScreenReaderRunning: IsScreenReaderRunning
 
     init(
         resolveApplication: ResolveApplication? = nil,
         isElectronApplication: IsElectronApplication? = nil,
-        readManualAccessibility: ReadManualAccessibility? = nil,
-        setManualAccessibility: SetManualAccessibility? = nil,
-        validateApplication: ValidateApplication? = nil
+        readAccessibilitySwitch: ReadAccessibilitySwitch? = nil,
+        setAccessibilitySwitch: SetAccessibilitySwitch? = nil,
+        validateApplication: ValidateApplication? = nil,
+        isScreenReaderRunning: IsScreenReaderRunning? = nil
     ) {
         self.resolveApplication = resolveApplication ?? Self.resolveRunningApplication
         self.isElectronApplicationAtURL = isElectronApplication ?? Self.containsElectronFramework
-        self.readManualAccessibility = readManualAccessibility ?? Self.readManualAccessibilityValue
-        self.setManualAccessibility = setManualAccessibility ?? Self.setManualAccessibilityValue
+        self.readAccessibilitySwitch = readAccessibilitySwitch ?? Self.readAccessibilitySwitchValue
+        self.setAccessibilitySwitch = setAccessibilitySwitch ?? Self.setAccessibilitySwitchValue
         self.validateApplication = validateApplication ?? Self.isSameRunningApplication
+        self.isScreenReaderRunning = isScreenReaderRunning ?? { NSWorkspace.shared.isVoiceOverEnabled }
     }
 
     func beginObservation(
@@ -72,17 +85,36 @@ final class ChromiumAccessibilityObservationController {
             return nil
         }
 
-        let currentState = readManualAccessibility(target.processIdentifier)
-        guard currentState.error == .success,
-              currentState.enabled == false,
-              setManualAccessibility(target.processIdentifier, true) == .success else {
-            return nil
+        // Use the first switch the app supports, and only own it when it was off.
+        for accessibilitySwitch in AccessibilitySwitch.allCases {
+            let currentState = readAccessibilitySwitch(target.processIdentifier, accessibilitySwitch)
+            if currentState.error == .attributeUnsupported { continue }
+            guard currentState.error == .success,
+                  currentState.enabled == false,
+                  enable(accessibilitySwitch, in: target) else {
+                return nil
+            }
+            return TargetAppAccessibilityObservationLease {
+                guard self.validateApplication(target) else { return }
+                // A screen reader started meanwhile relies on the same switch.
+                if accessibilitySwitch == .enhancedUserInterface, self.isScreenReaderRunning() {
+                    return
+                }
+                _ = self.setAccessibilitySwitch(target.processIdentifier, accessibilitySwitch, false)
+            }
         }
+        return nil
+    }
 
-        return TargetAppAccessibilityObservationLease {
-            guard self.validateApplication(target) else { return }
-            _ = self.setManualAccessibility(target.processIdentifier, false)
+    private func enable(
+        _ accessibilitySwitch: AccessibilitySwitch,
+        in target: RunningApplicationTarget
+    ) -> Bool {
+        if setAccessibilitySwitch(target.processIdentifier, accessibilitySwitch, true) == .success {
+            return true
         }
+        // Chrome applies the switch but answers the write with kAXErrorNotImplemented.
+        return readAccessibilitySwitch(target.processIdentifier, accessibilitySwitch).enabled == true
     }
 
     func isElectronApplication(bundleIdentifier: String) -> Bool {
@@ -132,26 +164,28 @@ final class ChromiumAccessibilityObservationController {
         return FileManager.default.fileExists(atPath: electronFrameworkURL.path)
     }
 
-    private static func readManualAccessibilityValue(
-        processIdentifier: pid_t
+    private static func readAccessibilitySwitchValue(
+        processIdentifier: pid_t,
+        accessibilitySwitch: AccessibilitySwitch
     ) -> (error: AXError, enabled: Bool?) {
         let application = AXUIElementCreateApplication(processIdentifier)
         var value: AnyObject?
         let error = AXUIElementCopyAttributeValue(
             application,
-            manualAccessibilityAttribute,
+            accessibilitySwitch.rawValue as CFString,
             &value
         )
         return (error, (value as? NSNumber)?.boolValue)
     }
 
-    private static func setManualAccessibilityValue(
+    private static func setAccessibilitySwitchValue(
         processIdentifier: pid_t,
+        accessibilitySwitch: AccessibilitySwitch,
         enabled: Bool
     ) -> AXError {
         AXUIElementSetAttributeValue(
             AXUIElementCreateApplication(processIdentifier),
-            manualAccessibilityAttribute,
+            accessibilitySwitch.rawValue as CFString,
             NSNumber(value: enabled)
         )
     }

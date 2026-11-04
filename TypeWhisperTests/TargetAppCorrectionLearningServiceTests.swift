@@ -10,8 +10,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let controller = ChromiumAccessibilityObservationController(
             resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
-            readManualAccessibility: { _ in (.success, false) },
-            setManualAccessibility: { _, enabled in
+            readAccessibilitySwitch: { _, _ in (.success, false) },
+            setAccessibilitySwitch: { _, _, enabled in
                 setValues.append(enabled)
                 return .success
             },
@@ -35,8 +35,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let controller = ChromiumAccessibilityObservationController(
             resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
-            readManualAccessibility: { _ in (.success, true) },
-            setManualAccessibility: { _, enabled in
+            readAccessibilitySwitch: { _, _ in (.success, true) },
+            setAccessibilitySwitch: { _, _, enabled in
                 setValues.append(enabled)
                 return .success
             }
@@ -57,8 +57,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
                 return processIdentifier == target.processIdentifier ? target : nil
             },
             isElectronApplication: { _ in true },
-            readManualAccessibility: { _ in (.success, false) },
-            setManualAccessibility: { _, _ in .success },
+            readAccessibilitySwitch: { _, _ in (.success, false) },
+            setAccessibilitySwitch: { _, _, _ in .success },
             validateApplication: { _ in true }
         )
 
@@ -74,14 +74,14 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertEqual(resolvedProcessIdentifiers, [target.processIdentifier])
     }
 
-    func testElectronAccessibilityObservationFallsBackWhenAttributeIsUnsupported() {
+    func testAccessibilityObservationSkipsAppWithoutSupportedSwitch() {
         let target = electronTarget()
         var setValues: [Bool] = []
         let controller = ChromiumAccessibilityObservationController(
             resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
-            readManualAccessibility: { _ in (.attributeUnsupported, nil) },
-            setManualAccessibility: { _, enabled in
+            readAccessibilitySwitch: { _, _ in (.attributeUnsupported, nil) },
+            setAccessibilitySwitch: { _, _, enabled in
                 setValues.append(enabled)
                 return .success
             }
@@ -101,8 +101,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let controller = ChromiumAccessibilityObservationController(
             resolveApplication: { _, _ in target },
             isElectronApplication: { _ in false },
-            readManualAccessibility: { _ in (.success, false) },
-            setManualAccessibility: { _, enabled in
+            readAccessibilitySwitch: { _, _ in (.success, false) },
+            setAccessibilitySwitch: { _, _, enabled in
                 setValues.append(enabled)
                 return .success
             },
@@ -117,6 +117,50 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertEqual(setValues, [true, false])
     }
 
+    func testChromiumBrowserFallsBackToEnhancedUserInterfaceWhenManualAccessibilityIsUnsupported() throws {
+        typealias Switch = ChromiumAccessibilityObservationController.AccessibilitySwitch
+        let target = ChromiumAccessibilityObservationController.RunningApplicationTarget(
+            processIdentifier: 45,
+            bundleIdentifier: SupportedMeetingBrowser.chrome,
+            bundleURL: URL(fileURLWithPath: "/Applications/Google Chrome.app")
+        )
+
+        for screenReaderStartsDuringLease in [false, true] {
+            var enhancedUserInterface = false
+            var screenReaderRunning = false
+            var writes: [String] = []
+            // Chrome 156: the manual switch is unsupported, and the enhanced switch takes
+            // effect although the write reports kAXErrorNotImplemented.
+            let controller = ChromiumAccessibilityObservationController(
+                resolveApplication: { _, _ in target },
+                isElectronApplication: { _ in false },
+                readAccessibilitySwitch: { _, accessibilitySwitch in
+                    accessibilitySwitch == .manualAccessibility
+                        ? (.attributeUnsupported, nil)
+                        : (.success, enhancedUserInterface)
+                },
+                setAccessibilitySwitch: { _, accessibilitySwitch, enabled in
+                    writes.append("\(accessibilitySwitch.rawValue)=\(enabled)")
+                    if accessibilitySwitch == .enhancedUserInterface { enhancedUserInterface = enabled }
+                    return .notImplemented
+                },
+                validateApplication: { _ in true },
+                isScreenReaderRunning: { screenReaderRunning }
+            )
+
+            let lease = try XCTUnwrap(
+                controller.beginObservation(bundleIdentifier: target.bundleIdentifier)
+            )
+            XCTAssertEqual(writes, ["\(Switch.enhancedUserInterface.rawValue)=true"])
+
+            screenReaderRunning = screenReaderStartsDuringLease
+            lease.end()
+
+            // A screen reader that started meanwhile keeps the switch it relies on.
+            XCTAssertEqual(enhancedUserInterface, screenReaderStartsDuringLease)
+        }
+    }
+
     func testNativeApplicationDoesNotRequestManualAccessibility() {
         let target = ChromiumAccessibilityObservationController.RunningApplicationTarget(
             processIdentifier: 44,
@@ -127,11 +171,11 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let controller = ChromiumAccessibilityObservationController(
             resolveApplication: { _, _ in target },
             isElectronApplication: { _ in false },
-            readManualAccessibility: { _ in
+            readAccessibilitySwitch: { _, _ in
                 readCount += 1
                 return (.success, false)
             },
-            setManualAccessibility: { _, _ in .success }
+            setAccessibilitySwitch: { _, _, _ in .success }
         )
 
         XCTAssertNil(controller.beginObservation(bundleIdentifier: target.bundleIdentifier))
@@ -145,8 +189,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let controller = ChromiumAccessibilityObservationController(
             resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
-            readManualAccessibility: { _ in (.success, false) },
-            setManualAccessibility: { _, enabled in
+            readAccessibilitySwitch: { _, _ in (.success, false) },
+            setAccessibilitySwitch: { _, _, enabled in
                 setValues.append(enabled)
                 return .success
             },
