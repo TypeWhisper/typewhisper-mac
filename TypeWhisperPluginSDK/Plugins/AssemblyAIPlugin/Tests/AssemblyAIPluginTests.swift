@@ -421,7 +421,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         )
     }
 
-    func testRESTTranscriptionUploadsCompressedM4A() async throws {
+    func testFallsBackToAsyncUploadOfCompressedM4AWhenSyncFails() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "assembly-key"])
         let plugin = AssemblyAIPlugin()
         plugin.activate(host: host)
@@ -429,6 +429,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
+                Self.syncUnavailableOutcome,
                 .success(
                     Data(#"{"upload_url":"https://cdn.example.test/audio.m4a"}"#.utf8),
                     Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 200)
@@ -449,7 +450,9 @@ final class AssemblyAIPluginTests: XCTestCase {
         let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: "TypeWhisper")
 
         XCTAssertEqual(result.text, "hello")
-        let uploadRequest = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.first?.url?.host, "sync.assemblyai.com")
+        let uploadRequest = requests[1]
         XCTAssertEqual(uploadRequest.url?.path, "/v2/upload")
         XCTAssertEqual(uploadRequest.value(forHTTPHeaderField: "Content-Type"), "application/octet-stream")
         let uploadBody = try XCTUnwrap(uploadRequest.httpBody)
@@ -465,6 +468,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
+                Self.syncUnavailableOutcome,
                 .success(
                     Data(#"{"error":{"message":"could not process file - is it a valid media file?"}}"#.utf8),
                     Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 400)
@@ -491,19 +495,20 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "hello wav")
         let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
         XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v1/transcribe",
             "/v2/upload",
             "/v2/upload",
             "/v2/transcript",
             "/v2/transcript/transcript_123",
         ])
 
-        let firstUploadBody = try XCTUnwrap(requests[0].httpBody)
+        let firstUploadBody = try XCTUnwrap(requests[1].httpBody)
         XCTAssertTrue(String(decoding: firstUploadBody.prefix(64), as: UTF8.self).contains("ftyp"))
-        let retryUploadBody = try XCTUnwrap(requests[1].httpBody)
+        let retryUploadBody = try XCTUnwrap(requests[2].httpBody)
         XCTAssertEqual(retryUploadBody, audio.wavData)
 
         let submitBody = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: try XCTUnwrap(requests[2].httpBody)) as? [String: Any]
+            JSONSerialization.jsonObject(with: try XCTUnwrap(requests[3].httpBody)) as? [String: Any]
         )
         XCTAssertEqual(submitBody["audio_url"] as? String, "https://cdn.example.test/audio.wav")
         XCTAssertEqual(submitBody["language_code"] as? String, "de")
@@ -512,6 +517,73 @@ final class AssemblyAIPluginTests: XCTestCase {
             submitBody["speech_models"] as? [String],
             [AssemblyAIPlugin.universal35ProModelId]
         )
+    }
+
+    func testFinishedRecordingUsesSyncAPIWithExplicitLanguageAndKeyterms() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "assembly-key"])
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"Hallo TypeWhisper","words":[],"confidence":0.9,"audio_duration_ms":1000,"session_id":"s"}"#.utf8),
+                    Self.httpResponse(url: "https://sync.assemblyai.com/v1/transcribe", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribeStructured(
+            audio: audio,
+            language: "de",
+            translate: false,
+            prompt: "TypeWhisper"
+        )
+
+        XCTAssertEqual(result.text, "Hallo TypeWhisper")
+        XCTAssertEqual(result.detectedLanguage, "de")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
+        let request = requests[0]
+        XCTAssertEqual(request.url?.absoluteString, "https://sync.assemblyai.com/v1/transcribe")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "assembly-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-AAI-Model"), "universal-3-5-pro")
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains(#"name="audio"; filename="audio.m4a""#))
+        XCTAssertTrue(body.contains("Content-Type: audio/mp4"))
+        XCTAssertTrue(body.contains(#"{"keyterms_prompt":["TypeWhisper"],"language_codes":["de"]}"#))
+    }
+
+    func testSyncAPIIsSkippedWhenTheAsyncAPIKeepsMoreOfTheRequest() {
+        let model = AssemblyAIPlugin.universal35ProModelId
+        func request(
+            modelId: String = model,
+            language: String? = "de",
+            prompt: String? = nil,
+            speakerLabels: Bool = false,
+            duration: TimeInterval = 10
+        ) -> AssemblyAIPlugin.SyncRequest? {
+            AssemblyAIPlugin.makeSyncRequest(
+                modelId: modelId,
+                language: language,
+                prompt: prompt,
+                speakerDiarizationEnabled: speakerLabels,
+                audioDuration: duration
+            )
+        }
+
+        XCTAssertEqual(request()?.language, "de")
+        XCTAssertEqual(request(language: nil)?.language, .some(nil))
+        XCTAssertNotNil(request(duration: 20 * 60))
+        XCTAssertNil(request(modelId: AssemblyAIPlugin.universal2ModelId))
+        XCTAssertNil(request(speakerLabels: true))
+        XCTAssertNil(request(duration: 20 * 60 + 1))
+        XCTAssertNil(request(language: "pl"))
+        let manyTerms = (1...101).map { "Term\($0)" }.joined(separator: ", ")
+        XCTAssertNil(request(prompt: manyTerms))
     }
 
     func testPollingBudgetGrowsWithTheRecordingUpToAnHour() {
@@ -533,6 +605,7 @@ final class AssemblyAIPluginTests: XCTestCase {
             resourceTimeouts.append(configuration.timeoutIntervalForResource)
             guard configuration.timeoutIntervalForResource > 600 else {
                 return store.makeSession(outcomes: [
+                    Self.syncUnavailableOutcome,
                     .success(
                         Data(#"{"error":{"message":"could not process file - is it a valid media file?"}}"#.utf8),
                         Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 400)
@@ -564,7 +637,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "hello")
         let sessions = store.sessions
         XCTAssertEqual(sessions.count, 2)
-        XCTAssertEqual(sessions.first?.requestedPaths, ["/v2/upload", "/v2/transcript", "/v2/transcript/transcript_123"])
+        XCTAssertEqual(sessions.first?.requestedPaths, ["/v1/transcribe", "/v2/upload", "/v2/transcript", "/v2/transcript/transcript_123"])
         let uploadSession = try XCTUnwrap(sessions.last)
         XCTAssertEqual(uploadSession.requestedPaths, ["/v2/upload"])
         XCTAssertTrue(uploadSession.didInvalidate)
@@ -578,6 +651,15 @@ final class AssemblyAIPluginTests: XCTestCase {
         )?.queryItems ?? []).compactMap { item in
             item.value.map { (item.name, $0) }
         })
+    }
+
+    /// A sync failure that is neither an auth error nor an audio format
+    /// problem, so the plugin moves straight on to the async API.
+    private static var syncUnavailableOutcome: PluginHTTPClientTestOutcome {
+        .success(
+            Data(#"{"status":503,"title":"Service Unavailable","detail":"cold start"}"#.utf8),
+            httpResponse(url: "https://sync.assemblyai.com/v1/transcribe", statusCode: 503)
+        )
     }
 
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {

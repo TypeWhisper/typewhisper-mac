@@ -128,7 +128,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcribeREST(
+        return try await transcribeRecording(
             audio: audio,
             language: language,
             modelId: modelId,
@@ -162,7 +162,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
-            return try await Self.legacyResult(from: transcribeREST(
+            return try await Self.legacyResult(from: transcribeRecording(
                 audio: audio,
                 language: language,
                 modelId: modelId,
@@ -171,6 +171,197 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
                 speakerDiarizationEnabled: _speakerDiarizationEnabled
             ))
         }
+    }
+
+    // MARK: - Finished Recordings
+
+    /// Tries the Sync API first and falls back to the async API, which handles
+    /// every model, speaker labels and recordings of any length.
+    private func transcribeRecording(
+        audio: AudioData,
+        language: String?,
+        modelId: String,
+        apiKey: String,
+        prompt: String?,
+        speakerDiarizationEnabled: Bool
+    ) async throws -> PluginStructuredTranscriptionResult {
+        if let syncRequest = Self.makeSyncRequest(
+            modelId: modelId,
+            language: language,
+            prompt: prompt,
+            speakerDiarizationEnabled: speakerDiarizationEnabled,
+            audioDuration: audio.duration
+        ) {
+            do {
+                return try await transcribeSync(audio: audio, request: syncRequest, apiKey: apiKey)
+            } catch {
+                if error is CancellationError || Task.isCancelled {
+                    throw error
+                }
+                if case PluginTranscriptionError.invalidApiKey = error {
+                    throw error
+                }
+                logger.warning(
+                    "AssemblyAI sync transcription failed, falling back to the async API: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+
+        return try await transcribeREST(
+            audio: audio,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt,
+            speakerDiarizationEnabled: speakerDiarizationEnabled
+        )
+    }
+
+    // MARK: - Sync Implementation
+
+    struct SyncRequest: Equatable {
+        let modelId: String
+        let language: String?
+        let keyterms: [String]
+
+        var config: [String: Any] {
+            var config: [String: Any] = [:]
+            if let language {
+                config["language_codes"] = [language]
+            }
+            if !keyterms.isEmpty {
+                config["keyterms_prompt"] = keyterms
+            }
+            return config
+        }
+    }
+
+    /// Returns nil when the recording needs the async API: a model without a
+    /// sync endpoint, speaker labels, a language or dictionary the sync
+    /// endpoint would reject or cut, or audio over its length limit.
+    static func makeSyncRequest(
+        modelId: String,
+        language: String?,
+        prompt: String?,
+        speakerDiarizationEnabled: Bool,
+        audioDuration: TimeInterval
+    ) -> SyncRequest? {
+        let model = AssemblyAIModelCatalog.resolve(modelId)
+        guard let sync = model.syncConfiguration,
+              !speakerDiarizationEnabled,
+              audioDuration <= sync.maximumAudioDuration else {
+            return nil
+        }
+
+        let normalizedLanguage = language?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let syncLanguage: String?
+        if let normalizedLanguage, !normalizedLanguage.isEmpty {
+            guard sync.supportedLanguageCodes.contains(normalizedLanguage) else { return nil }
+            syncLanguage = normalizedLanguage
+        } else {
+            syncLanguage = nil
+        }
+
+        let keyterms = PluginDictionaryTerms.clippedTerms(
+            from: PluginDictionaryTerms.terms(fromPrompt: prompt),
+            budget: model.dictionaryTermsBudget
+        )
+        guard keyterms.count <= sync.maximumKeyterms,
+              keyterms.reduce(0, { $0 + $1.count }) <= sync.maximumKeytermCharacters else {
+            return nil
+        }
+
+        return SyncRequest(modelId: sync.modelId, language: syncLanguage, keyterms: keyterms)
+    }
+
+    private func transcribeSync(
+        audio: AudioData,
+        request syncRequest: SyncRequest,
+        apiKey: String
+    ) async throws -> PluginStructuredTranscriptionResult {
+        let text = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            try await sendSyncRequest(syncRequest, uploadFile: uploadFile, apiKey: apiKey)
+        }
+        // The sync response carries no detected language.
+        return PluginStructuredTranscriptionResult(text: text, detectedLanguage: syncRequest.language)
+    }
+
+    private func sendSyncRequest(
+        _ syncRequest: SyncRequest,
+        uploadFile: PluginAudioUploadFile,
+        apiKey: String
+    ) async throws -> String {
+        guard let url = URL(string: "https://sync.assemblyai.com/v1/transcribe") else {
+            throw PluginTranscriptionError.apiError("Invalid sync URL")
+        }
+
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "Authorization")
+        request.setValue(syncRequest.modelId, forHTTPHeaderField: "X-AAI-Model")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try Self.makeSyncRequestBody(
+            config: syncRequest.config,
+            uploadFile: uploadFile,
+            boundary: boundary
+        )
+        // The server gives up after 30 s; the rest covers the upload.
+        request.timeoutInterval = 45
+
+        let (data, response) = try await PluginHTTPClient.data(
+            for: request,
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
+        )
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginTranscriptionError.apiError("No HTTP response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200: break
+        case 401: throw PluginTranscriptionError.invalidApiKey
+        case 429: throw PluginTranscriptionError.rateLimited
+        default:
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: data,
+                underlyingError: PluginTranscriptionError.apiError(
+                    "Sync transcription failed HTTP \(httpResponse.statusCode): \(body)"
+                )
+            )
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let text = json["text"] as? String else {
+            throw PluginTranscriptionError.apiError("Invalid sync transcription response")
+        }
+        return text
+    }
+
+    static func makeSyncRequestBody(
+        config: [String: Any],
+        uploadFile: PluginAudioUploadFile,
+        boundary: String
+    ) throws -> Data {
+        var body = Data()
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"audio\"; filename=\"\(uploadFile.filename)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(uploadFile.contentType)\r\n\r\n".utf8))
+        body.append(uploadFile.data)
+        body.append(Data("\r\n".utf8))
+        if !config.isEmpty {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"config\"\r\n".utf8))
+            body.append(Data("Content-Type: application/json\r\n\r\n".utf8))
+            body.append(try JSONSerialization.data(withJSONObject: config, options: [.sortedKeys]))
+            body.append(Data("\r\n".utf8))
+        }
+        body.append(Data("--\(boundary)--\r\n".utf8))
+        return body
     }
 
     // MARK: - REST Implementation (3-Step Async)

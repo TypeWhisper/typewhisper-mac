@@ -1,3 +1,4 @@
+import Foundation
 import TypeWhisperPluginSDK
 
 enum AssemblyAIDictionaryPayload: Sendable, Equatable {
@@ -16,6 +17,20 @@ enum AssemblyAIStreamingModelConfiguration: Sendable, Equatable {
     )
 }
 
+/// AssemblyAI's Sync API (`POST https://sync.assemblyai.com/v1/transcribe`)
+/// returns a finished transcript in the same request, without the async
+/// API's upload, job and polling round trips.
+struct AssemblyAISyncConfiguration: Sendable, Equatable {
+    /// Value of the `X-AAI-Model` header.
+    let modelId: String
+    /// Codes `language_codes` accepts; any other code is rejected with a 400.
+    let supportedLanguageCodes: Set<String>
+    /// Audio longer than this is rejected with a 413.
+    let maximumAudioDuration: TimeInterval
+    let maximumKeyterms: Int
+    let maximumKeytermCharacters: Int
+}
+
 struct AssemblyAIModelDefinition: Sendable, Equatable {
     let id: String
     let displayName: String
@@ -25,6 +40,7 @@ struct AssemblyAIModelDefinition: Sendable, Equatable {
     let dictionaryTermsBudget: DictionaryTermsBudget
     let dictionaryPayload: AssemblyAIDictionaryPayload
     let streamingConfiguration: AssemblyAIStreamingModelConfiguration
+    let syncConfiguration: AssemblyAISyncConfiguration?
 
     var modelInfo: PluginModelInfo {
         PluginModelInfo(id: id, displayName: displayName)
@@ -44,6 +60,11 @@ enum AssemblyAIModelCatalog {
         "ms", "nl", "no", "pl", "pt", "ro", "ru", "sk", "sl", "sq",
         "sr", "sv", "th", "tr", "uk", "vi", "zh",
     ]
+    private static let syncLanguages: Set<String> = [
+        "en", "es", "de", "fr", "it", "pt", "tr", "nl", "sv", "no", "da",
+        "fi", "hi", "vi", "ar", "he", "ja", "ur", "zh", "ko", "ca", "gl",
+        "ru", "ro", "et", "fa", "yue", "af", "mr", "zu", "xh", "nn",
+    ]
 
     static let legacyUniversal3ProModelId = "universal-3-pro"
 
@@ -58,6 +79,13 @@ enum AssemblyAIModelCatalog {
         streamingConfiguration: .universal35Pro(
             speechModelId: universal35ProModelId,
             supportedLanguageCodes: Set(universal35ProLanguages)
+        ),
+        syncConfiguration: AssemblyAISyncConfiguration(
+            modelId: universal35ProModelId,
+            supportedLanguageCodes: syncLanguages,
+            maximumAudioDuration: 20 * 60,
+            maximumKeyterms: 100,
+            maximumKeytermCharacters: 8_000
         )
     )
 
@@ -72,7 +100,8 @@ enum AssemblyAIModelCatalog {
         streamingConfiguration: .universal2(
             englishSpeechModelId: "universal-streaming-english",
             multilingualSpeechModelId: "universal-streaming-multilingual"
-        )
+        ),
+        syncConfiguration: nil
     )
 
     static let all = [universal35Pro, universal2]
