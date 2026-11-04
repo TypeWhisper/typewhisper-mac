@@ -236,6 +236,15 @@ final class DictionaryService: ObservableObject {
     /// entry in place, since a failed save keeps that change without reloading.
     private var entriesByIdentity: [String: [DictionaryEntry]]?
 
+    /// The entries are about to change in place. A failed save keeps that
+    /// change without loading the entries again, so drop everything derived
+    /// from them: the identity index and the generation-keyed term and
+    /// vocabulary caches.
+    private func invalidateEntryDerivedCaches() {
+        entriesByIdentity = nil
+        entriesGeneration &+= 1
+    }
+
     func duplicateEntry(type: DictionaryEntryType, original: String, isRegex: Bool, excluding id: UUID? = nil) -> DictionaryEntry? {
         let key = Self.entryIdentity(type: type, original: original, isRegex: isRegex)
         let index = entriesByIdentity ?? Dictionary(grouping: entries) {
@@ -300,7 +309,7 @@ final class DictionaryService: ObservableObject {
         guard duplicateEntry(type: entry.type, original: original, isRegex: isRegex ?? entry.isRegex, excluding: entry.id) == nil else {
             return false
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         let previous = (
             original: entry.original,
@@ -590,7 +599,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         let normalized = PluginDictionaryTerms.normalizedTerms(from: rawTerms)
         let normalizedByKey = Dictionary(uniqueKeysWithValues: normalized.map {
@@ -634,7 +643,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         let normalized = PluginDictionaryTerms.normalizedTermHints(from: rawTerms.map {
             PluginDictionaryTermHint(
@@ -1672,7 +1681,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         if let entry = apiCorrection(original: original, isRegex: isRegex) {
             entry.original = original
@@ -1772,7 +1781,7 @@ final class DictionaryService: ObservableObject {
             throw DictionaryServiceMutationError.unavailable
         }
         guard !mutations.isEmpty else { return }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         for mutation in mutations {
             switch mutation {
