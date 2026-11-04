@@ -28,7 +28,7 @@ final class ScriptPluginTests: XCTestCase {
         let export = ScriptConfig(
             name: "Export", command: """
             cat > "$TYPEWHISPER_AUDIO_FILE.export"
-            printf '%s\\n' "$TYPEWHISPER_SOURCE" "$TYPEWHISPER_RECORDING_ID" "$TYPEWHISPER_COMPLETION_ID" "$TYPEWHISPER_TRANSCRIPT_FILE" "$TYPEWHISPER_COMPLETED_AT" "${TYPEWHISPER_MARKDOWN_FILE-unset}" > "$TYPEWHISPER_AUDIO_FILE.context"
+            printf '%s\\n' "$TYPEWHISPER_SOURCE" "$TYPEWHISPER_RECORDING_ID" "$TYPEWHISPER_COMPLETION_ID" "$TYPEWHISPER_TRANSCRIPT_FILE" "$TYPEWHISPER_COMPLETED_AT" "${TYPEWHISPER_MARKDOWN_FILE-unset}" "${TYPEWHISPER_MEETING_TITLE-unset}" > "$TYPEWHISPER_AUDIO_FILE.context"
             """, profileFilter: ["Unrelated dictation rule"], includesRecordings: true
         )
         let disabled = ScriptConfig(
@@ -47,12 +47,40 @@ final class ScriptPluginTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: audioURL.appendingPathExtension("export"), encoding: .utf8), payload.text)
         let context = try String(contentsOf: audioURL.appendingPathExtension("context"), encoding: .utf8)
         XCTAssertEqual(context, ["recorder", payload.recordingID.uuidString, payload.completionID.uuidString,
-                                  payload.transcriptFilePath, String(payload.completedAt.timeIntervalSince1970), "unset", ""].joined(separator: "\n"))
+                                  payload.transcriptFilePath, String(payload.completedAt.timeIntervalSince1970), "unset", "unset", ""].joined(separator: "\n"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.appendingPathExtension("disabled").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.appendingPathExtension("unwanted").path))
         XCTAssertEqual(try String(contentsOfFile: payload.transcriptFilePath, encoding: .utf8), payload.text)
         plugin.deactivate()
         XCTAssertEqual(eventBus.subscriberCount, 0)
+    }
+
+    func testCalendarRecordingPassesMeetingTitleTimesAndAttendees() async throws {
+        let host = try PluginTestHostServices()
+        let service = ScriptService(dataDirectory: host.pluginDataDirectory, host: host)
+        let audioURL = host.pluginDataDirectory.appendingPathComponent("20261104 - Recording 2.m4a")
+        let payload = RecorderTranscriptReadyPayload(
+            recordingID: UUID(), text: "notes", audioFilePath: audioURL.path,
+            transcriptFilePath: audioURL.deletingPathExtension().appendingPathExtension("txt").path,
+            calendarEvent: RecorderCalendarEvent(
+                title: "Weekly sync", start: Date(timeIntervalSince1970: 1_791_098_100),
+                end: Date(timeIntervalSince1970: 1_791_099_900.75),
+                attendees: [
+                    RecorderCalendarParticipant(name: "Alex", email: "alex@example.com", isCurrentUser: true),
+                    RecorderCalendarParticipant(email: "kim@example.com"),
+                    RecorderCalendarParticipant(name: "Jo\nDoe"),
+                    RecorderCalendarParticipant()
+                ]
+            )
+        )
+        let script = ScriptConfig(name: "Meeting", command: """
+            printf '%s\\n' "$TYPEWHISPER_MEETING_TITLE" "$TYPEWHISPER_MEETING_START" "$TYPEWHISPER_MEETING_END" "$TYPEWHISPER_MEETING_ATTENDEES" > "$TYPEWHISPER_AUDIO_FILE.meeting"
+            """)
+
+        _ = await service.executeScript(script, input: payload.text, context: PostProcessingContext(), recorder: payload)
+
+        XCTAssertEqual(try String(contentsOf: audioURL.appendingPathExtension("meeting"), encoding: .utf8),
+                       "Weekly sync\n1791098100\n1791099900\nAlex\nkim@example.com\nJo Doe\n")
     }
 
     func testRecorderExportAcceptsNoStdoutAndLogsFailure() async throws {

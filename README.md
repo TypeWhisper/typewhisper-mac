@@ -881,6 +881,12 @@ In **Script Runner**, enable **Also run for completed Recorder transcripts** for
 | `TYPEWHISPER_AUDIO_FILE` | Audio file path |
 | `TYPEWHISPER_TRANSCRIPT_FILE` | Plain-text transcript path |
 | `TYPEWHISPER_MARKDOWN_FILE` | Markdown path, when available; otherwise unset |
+| `TYPEWHISPER_MEETING_TITLE` | Calendar event title |
+| `TYPEWHISPER_MEETING_START` | Event start in whole Unix seconds |
+| `TYPEWHISPER_MEETING_END` | Event end in whole Unix seconds |
+| `TYPEWHISPER_MEETING_ATTENDEES` | Attendees, one per line: the name, or the email address when the calendar has none |
+
+The `TYPEWHISPER_MEETING_*` variables come from `calendar_event` above and are set only for recordings started from the calendar. For all other recordings they stay unset, so a script can tell the two apart. Start and end have no decimal places, so `date -r "$TYPEWHISPER_MEETING_START" +%H:%M` works.
 
 Recorder scripts export the original transcript independently; stdout is ignored and may be empty. A nonzero exit status is logged as a failure. The existing five-second script timeout applies, so enqueue longer processing in a separate worker. Ordinary dictation scripts continue to transform text through stdout.
 

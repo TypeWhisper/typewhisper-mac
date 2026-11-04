@@ -228,7 +228,8 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                 if let selectedText = context.selectedText { env["TYPEWHISPER_SELECTED_TEXT"] = selectedText }
                 for key in ["TYPEWHISPER_SOURCE", "TYPEWHISPER_RECORDING_ID", "TYPEWHISPER_COMPLETION_ID",
                             "TYPEWHISPER_COMPLETED_AT", "TYPEWHISPER_AUDIO_FILE", "TYPEWHISPER_TRANSCRIPT_FILE",
-                            "TYPEWHISPER_MARKDOWN_FILE"] {
+                            "TYPEWHISPER_MARKDOWN_FILE", "TYPEWHISPER_MEETING_TITLE", "TYPEWHISPER_MEETING_START",
+                            "TYPEWHISPER_MEETING_END", "TYPEWHISPER_MEETING_ATTENDEES"] {
                     env.removeValue(forKey: key)
                 }
                 if let recorder {
@@ -239,6 +240,17 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                     env["TYPEWHISPER_AUDIO_FILE"] = recorder.audioFilePath
                     env["TYPEWHISPER_TRANSCRIPT_FILE"] = recorder.transcriptFilePath
                     env["TYPEWHISPER_MARKDOWN_FILE"] = recorder.markdownFilePath
+                    // Unset for recordings not started from the calendar, so scripts can tell them apart.
+                    if let meeting = recorder.calendarEvent {
+                        env["TYPEWHISPER_MEETING_TITLE"] = meeting.title
+                        env["TYPEWHISPER_MEETING_START"] = Self.wholeUnixSeconds(meeting.start)
+                        env["TYPEWHISPER_MEETING_END"] = Self.wholeUnixSeconds(meeting.end)
+                        // One attendee per line: the name, or the email address when the calendar has no name.
+                        env["TYPEWHISPER_MEETING_ATTENDEES"] = meeting.attendees
+                            .compactMap { $0.name ?? $0.email }
+                            .map { $0.components(separatedBy: .newlines).joined(separator: " ") }
+                            .joined(separator: "\n")
+                    }
                 }
                 process.environment = env
 
@@ -363,6 +375,11 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// Whole Unix seconds, which `date -r` requires; `String(Double)` would write `1791098100.0`.
+    private static func wholeUnixSeconds(_ date: Date) -> String {
+        String(Int64(date.timeIntervalSince1970.rounded(.down)))
     }
 
     private func addLog(_ entry: ExecutionLogEntry) {
