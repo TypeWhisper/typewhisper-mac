@@ -2856,18 +2856,20 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         // Set non-Bluetooth explicit inputs before reading the format so each retry sees fresh hardware state.
         // Bluetooth inputs are first activated as the system default input and then left to AVAudioEngine's
         // default aggregate route; setting the raw AirPods/Jabra input here can break mixed input/output routing.
+        // The device whose hardware format the input node must settle on.
+        var formatDeviceID = inputRoute.engineDeviceID
         if let deviceID = inputRoute.engineDeviceID {
             try configureExplicitInputDevice(deviceID, on: engine, label: label)
         } else if inputRoute.selectedDeviceID != nil {
             logger.info("\(label, privacy: .public) using default aggregate input route for selected Bluetooth input")
         } else if bindsCurrentDefaultInput {
-            bindCurrentDefaultInput(on: engine, label: label)
+            formatDeviceID = bindCurrentDefaultInput(on: engine, label: label)
         }
 
         let inputNode = engine.inputNode
         var inputFormat = try settledInputFormat(
             for: inputNode,
-            preferredDeviceID: inputRoute.engineDeviceID,
+            preferredDeviceID: formatDeviceID,
             label: label,
             shouldCancel: shouldCancel
         )
@@ -2884,9 +2886,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             currentFormat: inputFormat,
             label: label
         ) {
+            // Voice processing changes the node's format away from the hardware format.
+            formatDeviceID = inputRoute.engineDeviceID
             inputFormat = try settledInputFormat(
                 for: inputNode,
-                preferredDeviceID: inputRoute.engineDeviceID,
+                preferredDeviceID: formatDeviceID,
                 label: "\(label)-voice-processing",
                 shouldCancel: shouldCancel
             )
@@ -2906,7 +2910,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         let currentInputFormat = try settledInputFormat(
             for: inputNode,
-            preferredDeviceID: inputRoute.engineDeviceID,
+            preferredDeviceID: formatDeviceID,
             label: "\(label)-tap",
             shouldCancel: shouldCancel
         )
@@ -3019,21 +3023,22 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// Automatic selection leaves the engine on the system default route. After that route
     /// reported a missing device ('!dev'), bind the engine to the default input read fresh
     /// from CoreAudio instead. Bluetooth defaults stay on the default route, where setting the
-    /// raw input can break mixed input/output routing. When nothing can be bound, the retry
-    /// still runs on the fresh engine.
-    private func bindCurrentDefaultInput(on engine: AVAudioEngine, label: String) {
+    /// raw input can break mixed input/output routing, and so do inputs whose transport is
+    /// unknown. Returns the bound device; when nothing is bound, the retry still runs on the
+    /// fresh engine.
+    private func bindCurrentDefaultInput(on engine: AVAudioEngine, label: String) -> AudioDeviceID? {
         guard let defaultInputDeviceID = defaultInputController.defaultInputDeviceID(),
               AudioDeviceService.isInputDeviceAvailable(defaultInputDeviceID) else {
             logger.warning("\(label, privacy: .public) no available default input to bind after a missing-device error")
-            return
+            return nil
         }
-        if let transport = inputTransportResolver.transportType(for: defaultInputDeviceID),
-           AudioDeviceService.isBluetoothTransportType(transport) {
-            return
+        guard let transport = inputTransportResolver.transportType(for: defaultInputDeviceID),
+              !AudioDeviceService.isBluetoothTransportType(transport) else {
+            return nil
         }
-        if setInputDevice(defaultInputDeviceID, on: engine, label: label) {
-            logger.info("\(label, privacy: .public) bound current default input \(defaultInputDeviceID, privacy: .public) after a missing-device error")
-        }
+        guard setInputDevice(defaultInputDeviceID, on: engine, label: label) else { return nil }
+        logger.info("\(label, privacy: .public) bound current default input \(defaultInputDeviceID, privacy: .public) after a missing-device error")
+        return defaultInputDeviceID
     }
 
     private var requiresInitialInputReadiness: Bool {
