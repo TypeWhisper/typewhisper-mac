@@ -1,4 +1,5 @@
 import XCTest
+import os
 import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import AssemblyAIPlugin
@@ -586,6 +587,131 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertNil(request(prompt: manyTerms))
     }
 
+    func testLiveSessionsStreamUniversal35ProWithoutSpeakerLabelsOnly() throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "assembly-key"])
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertNotNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: AssemblyAIPlugin.universal2ModelId))
+        XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
+        XCTAssertEqual(plugin.liveTranscriptionProgressMode, .completeSnapshot)
+
+        plugin.setSpeakerDiarizationEnabled(true)
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+
+        plugin.setSpeakerDiarizationEnabled(false)
+        plugin.selectModel(AssemblyAIPlugin.universal2ModelId)
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+    }
+
+    func testLiveSessionStreamsFramesAndFinishesWithTheTurnsBeforeTermination() async throws {
+        let socket = FakeAssemblyAIRealtimeSocket(terminateAnswers: [
+            Self.turn(1, "Danke euch!", final: true, words: [("Danke", 2_100, 2_400), ("euch!", 2_450, 2_800)]),
+            #"{"type":"Termination","audio_duration_seconds":3,"session_duration_seconds":4}"#,
+        ])
+        let progress = LiveProgressRecorder()
+        let session = try await AssemblyAILiveTranscriptionSession.connect(
+            socket: socket,
+            language: "de",
+            finalTranscriber: nil,
+            onProgress: { progress.append($0); return true }
+        )
+
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 20_000))
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 500))
+        XCTAssertEqual(socket.audioFrameSampleCounts, [16_000, 4_000])
+
+        await session.handle(Self.turn(0, "Hallo Team", final: false))
+        await session.handle(Self.turn(0, "Hallo Team.", final: true, words: [("Hallo", 100, 400), ("Team.", 450, 900)]))
+        await session.handle(Self.turn(1, "Danke", final: false))
+        let result = try await session.finish()
+
+        XCTAssertEqual(result.text, "Hallo Team. Danke euch!")
+        XCTAssertEqual(result.detectedLanguage, "de")
+        XCTAssertEqual(result.segments.map(\.text), ["Hallo Team.", "Danke euch!"])
+        XCTAssertEqual(result.segments.map(\.start), [0.1, 2.1])
+        XCTAssertEqual(progress.values, ["Hallo Team", "Hallo Team.", "Hallo Team. Danke", "Hallo Team. Danke euch!"])
+        // The rest of the audio goes out padded to the shortest frame, then Terminate.
+        XCTAssertEqual(socket.audioFrameSampleCounts, [16_000, 4_000, 800])
+        XCTAssertEqual(socket.textMessages, [#"{"type":"Terminate"}"#])
+        XCTAssertTrue(socket.isClosed)
+    }
+
+    func testLiveSessionFailsWhenAssemblyAIReportsAnErrorOrNeverEndsTheSession() async throws {
+        let failing = FakeAssemblyAIRealtimeSocket(terminateAnswers: [])
+        let failingSession = try await AssemblyAILiveTranscriptionSession.connect(
+            socket: failing,
+            language: nil,
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+        await failingSession.handle(#"{"type":"Error","error_code":3005,"error":"Input duration violation"}"#)
+        do {
+            try await failingSession.appendAudio(samples: [Float](repeating: 0.2, count: 1_600))
+            XCTFail("Expected the session to fail")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("Input duration violation (3005)"))
+        }
+        XCTAssertTrue(failing.isClosed)
+
+        // The server closes without Termination: the end of the speech may be missing.
+        let closing = FakeAssemblyAIRealtimeSocket(terminateAnswers: [], closesOnTerminate: true)
+        let closingSession = try await AssemblyAILiveTranscriptionSession.connect(
+            socket: closing,
+            language: nil,
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+        await closingSession.handle(Self.turn(0, "Partial words", final: false))
+        do {
+            _ = try await closingSession.finish()
+            XCTFail("Expected the session to fail")
+        } catch {
+            XCTAssertTrue(closing.isClosed)
+        }
+    }
+
+    func testLiveSessionWithMoreDictionaryTermsThanTheRealtimeAPITakesUsesTheRecording() async throws {
+        let terms = (1...101).map { "Term\($0)" }
+        let keyterms = AssemblyAIPlugin.streamingKeyterms(
+            fromPrompt: (terms + [String(repeating: "x", count: 51)]).joined(separator: ", "),
+            modelId: AssemblyAIPlugin.universal35ProModelId
+        )
+        XCTAssertEqual(keyterms.terms, Array(terms.prefix(100)))
+        XCTAssertEqual(keyterms.droppedCount, 2)
+
+        let socket = FakeAssemblyAIRealtimeSocket(terminateAnswers: [
+            Self.turn(0, "realtime text", final: true),
+            #"{"type":"Termination"}"#,
+        ])
+        let recordedSampleCount = SampleCountRecorder()
+        let session = try await AssemblyAILiveTranscriptionSession.connect(
+            socket: socket,
+            language: "en",
+            finalTranscriber: { audio in
+                recordedSampleCount.set(audio.samples.count)
+                return PluginTranscriptionResult(text: "Term101 from the recording", detectedLanguage: "en")
+            },
+            onProgress: { _ in true }
+        )
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 1_000))
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 1_000))
+        let result = try await session.finish()
+
+        XCTAssertEqual(result.text, "Term101 from the recording")
+        XCTAssertEqual(recordedSampleCount.value, 2_000)
+        XCTAssertEqual(socket.textMessages, [#"{"type":"Terminate"}"#])
+        XCTAssertTrue(socket.isClosed)
+    }
+
+    func testLiveSessionJoinsChineseAndJapaneseTurnsWithoutSpaces() {
+        XCTAssertEqual(AssemblyAILiveTranscriptionSession.joinedText(["你好。", "谢谢。"]), "你好。谢谢。")
+        XCTAssertEqual(AssemblyAILiveTranscriptionSession.joinedText(["Hello.", "", "  Thanks. "]), "Hello. Thanks.")
+    }
+
     func testPollingBudgetGrowsWithTheRecordingUpToAnHour() {
         XCTAssertEqual(AssemblyAIPlugin.pollAttempts(forAudioDuration: 1), 300)
         XCTAssertEqual(AssemblyAIPlugin.pollAttempts(forAudioDuration: 20 * 60), 300)
@@ -662,6 +788,25 @@ final class AssemblyAIPluginTests: XCTestCase {
         )
     }
 
+    private static func turn(
+        _ order: Int,
+        _ transcript: String,
+        final: Bool,
+        words: [(String, Int, Int)] = []
+    ) -> String {
+        let wordObjects: [[String: Any]] = words.map { ["text": $0.0, "start": $0.1, "end": $0.2, "confidence": 0.9, "word_is_final": final] }
+        let json: [String: Any] = [
+            "type": "Turn",
+            "turn_order": order,
+            "transcript": transcript,
+            "end_of_turn": final,
+            "turn_is_formatted": final,
+            "words": wordObjects,
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,
@@ -684,6 +829,84 @@ private final class TimeIntervalRecorder: @unchecked Sendable {
         lock.withLock {
             storage.append(value)
         }
+    }
+}
+
+/// Plays AssemblyAI's realtime API: begins the session, records the audio frames and
+/// text messages, and answers `Terminate` with the scripted messages.
+private final class FakeAssemblyAIRealtimeSocket: AssemblyAIRealtimeSocket, @unchecked Sendable {
+    private struct State {
+        var frameSampleCounts: [Int] = []
+        var textMessages: [String] = []
+        var terminateAnswers: [String]
+        var closesOnTerminate: Bool
+        var isClosed = false
+    }
+
+    private let state: OSAllocatedUnfairLock<State>
+    private let stream: AsyncThrowingStream<String, Error>
+    private let continuation: AsyncThrowingStream<String, Error>.Continuation
+
+    init(terminateAnswers: [String], closesOnTerminate: Bool = false) {
+        state = OSAllocatedUnfairLock(initialState: State(
+            terminateAnswers: terminateAnswers,
+            closesOnTerminate: closesOnTerminate
+        ))
+        (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+        continuation.yield(#"{"type":"Begin","id":"test","expires_at":0}"#)
+    }
+
+    var audioFrameSampleCounts: [Int] { state.withLock { $0.frameSampleCounts } }
+    var textMessages: [String] { state.withLock { $0.textMessages } }
+    var isClosed: Bool { state.withLock { $0.isClosed } }
+
+    func send(text: String) async throws {
+        let (answers, closes) = state.withLock { state -> ([String], Bool) in
+            state.textMessages.append(text)
+            guard text.contains("Terminate") else { return ([], false) }
+            return (state.terminateAnswers, state.closesOnTerminate)
+        }
+        answers.forEach { continuation.yield($0) }
+        if closes {
+            continuation.finish(throwing: URLError(.networkConnectionLost))
+        }
+    }
+
+    func send(audio: Data) async throws {
+        state.withLock { $0.frameSampleCounts.append(audio.count / 2) }
+    }
+
+    func receive() async throws -> String {
+        var iterator = stream.makeAsyncIterator()
+        guard let message = try await iterator.next() else { throw URLError(.cancelled) }
+        return message
+    }
+
+    func close() {
+        state.withLock { $0.isClosed = true }
+        continuation.finish()
+    }
+}
+
+private final class LiveProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var values: [String] { lock.withLock { storage } }
+
+    func append(_ value: String) {
+        lock.withLock { storage.append(value) }
+    }
+}
+
+private final class SampleCountRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Int?
+
+    var value: Int? { lock.withLock { storage } }
+
+    func set(_ value: Int) {
+        lock.withLock { storage = value }
     }
 }
 

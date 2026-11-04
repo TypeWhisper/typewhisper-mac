@@ -37,7 +37,15 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(AssemblyAIPlugin)
-final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
+final class AssemblyAIPlugin: NSObject,
+    StructuredTranscriptionEnginePlugin,
+    DictionaryTermsCapabilityProviding,
+    DictionaryTermsBudgetProviding,
+    LiveTranscriptionModelSupportProviding,
+    LiveTranscriptionProgressModeProviding,
+    TranscriptPreviewFallbackPolicyProviding,
+    @unchecked Sendable
+{
     static let pluginId = "com.typewhisper.assemblyai"
     static let pluginName = "AssemblyAI"
     static let speakerDiarizationEnabledKey = "speakerDiarizationEnabled"
@@ -102,6 +110,106 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
 
     var supportedLanguages: [String] {
         AssemblyAIModelCatalog.resolve(_selectedModelId).supportedLanguages
+    }
+
+    // MARK: - Live Sessions
+
+    /// Universal-3.5 Pro streams while the dictation is recorded. Universal-2 and
+    /// recordings with speaker labels transcribe after the recording.
+    func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
+        guard !_speakerDiarizationEnabled else { return false }
+        if case .universal35Pro = AssemblyAIModelCatalog.resolve(modelId ?? _selectedModelId).streamingConfiguration {
+            return true
+        }
+        return false
+    }
+
+    /// Finished turns plus the current partial turn cover the whole recording.
+    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
+
+    /// A live session that cannot start leaves the recording without preview instead of
+    /// sending the last seconds again every few seconds.
+    var allowsTranscriptPreviewFallback: Bool {
+        !supportsLiveTranscriptionSession(forModelId: nil)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard let modelId = _selectedModelId else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+        guard supportsLiveTranscriptionSession(forModelId: modelId) else {
+            throw PluginTranscriptionError.apiError("\(modelId) does not stream with these settings")
+        }
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+
+        let keyterms = Self.streamingKeyterms(fromPrompt: prompt, modelId: modelId)
+        if keyterms.droppedCount > 0 {
+            logger.info(
+                "AssemblyAI live session streams \(keyterms.terms.count, privacy: .public) dictionary terms; the final text comes from the recording, which keeps all of them"
+            )
+        }
+        guard let url = Self.makeStreamingURL(
+            modelId: modelId,
+            language: language,
+            keytermsPromptJSON: Self.jsonString(from: keyterms.terms)
+        ) else {
+            throw PluginTranscriptionError.apiError("Invalid streaming URL")
+        }
+
+        // The realtime API takes at most 100 terms of up to 50 characters. With more, the
+        // session streams the ones that fit for the preview, and the recording is
+        // transcribed with all of them for the final text.
+        var finalTranscriber: AssemblyAILiveTranscriptionSession.FinalTranscriber?
+        if keyterms.droppedCount > 0 {
+            let speakerDiarizationEnabled = _speakerDiarizationEnabled
+            finalTranscriber = { @Sendable [self] audio in
+                Self.legacyResult(from: try await self.transcribeRecording(
+                    audio: audio,
+                    language: language,
+                    modelId: modelId,
+                    apiKey: apiKey,
+                    prompt: prompt,
+                    speakerDiarizationEnabled: speakerDiarizationEnabled
+                ))
+            }
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue(apiKey, forHTTPHeaderField: "Authorization")
+        return try await AssemblyAILiveTranscriptionSession.connect(
+            socket: URLSessionAssemblyAIRealtimeSocket(request: request),
+            language: Self.streamingLanguage(language, modelId: modelId),
+            finalTranscriber: finalTranscriber,
+            onProgress: onProgress
+        )
+    }
+
+    /// The dictionary terms the realtime API takes: at most 100, each up to 50 characters.
+    static func streamingKeyterms(fromPrompt prompt: String?, modelId: String) -> (terms: [String], droppedCount: Int) {
+        let rawTerms = PluginDictionaryTerms.clippedTerms(
+            from: PluginDictionaryTerms.terms(fromPrompt: prompt),
+            budget: AssemblyAIModelCatalog.resolve(modelId).dictionaryTermsBudget
+        )
+        let terms = Array(rawTerms.filter { $0.count <= 50 }.prefix(100))
+        return (terms, rawTerms.count - terms.count)
+    }
+
+    /// The language the realtime session is steered to, as the transcript reports it.
+    static func streamingLanguage(_ language: String?, modelId: String) -> String? {
+        guard case .universal35Pro(_, let supportedLanguageCodes) = AssemblyAIModelCatalog.resolve(modelId).streamingConfiguration,
+              let normalized = language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              supportedLanguageCodes.contains(normalized) else {
+            return nil
+        }
+        return normalized
     }
 
     // MARK: - Transcription (REST Fallback)
@@ -633,7 +741,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         )
     }
 
-    private static func legacyResult(
+    static func legacyResult(
         from structuredResult: PluginStructuredTranscriptionResult
     ) -> PluginTranscriptionResult {
         PluginTranscriptionResult(
@@ -814,46 +922,24 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
     }
 
     private static func jsonString(from values: [String]) -> String? {
-        guard let data = try? JSONSerialization.data(withJSONObject: values) else { return nil }
+        guard !values.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: values) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     private func streamingKeytermsPromptJSON(from prompt: String?, modelId: String) -> String? {
-        let rawTerms = PluginDictionaryTerms.clippedTerms(
-            from: PluginDictionaryTerms.terms(fromPrompt: prompt),
-            budget: AssemblyAIModelCatalog.resolve(modelId).dictionaryTermsBudget
-        )
-        guard !rawTerms.isEmpty else { return nil }
-
-        let maxTerms = 100
-        let maxCharactersPerTerm = 50
-        let filteredTerms = rawTerms.filter { $0.count <= maxCharactersPerTerm }
-        let limitedTerms = Array(filteredTerms.prefix(maxTerms))
-
-        if filteredTerms.count < rawTerms.count {
+        let keyterms = Self.streamingKeyterms(fromPrompt: prompt, modelId: modelId)
+        if keyterms.droppedCount > 0 {
             logger.warning(
-                "AssemblyAI streaming dropped \(rawTerms.count - filteredTerms.count) dictionary term(s) longer than \(maxCharactersPerTerm) characters"
+                "AssemblyAI streaming dropped \(keyterms.droppedCount, privacy: .public) dictionary term(s) beyond 100 terms or 50 characters"
             )
         }
-
-        if limitedTerms.count < filteredTerms.count {
-            logger.warning(
-                "AssemblyAI streaming limited dictionary terms to \(maxTerms) entries for model \(modelId, privacy: .public)"
-            )
-        }
-
-        guard !limitedTerms.isEmpty,
-              let data = try? JSONSerialization.data(withJSONObject: limitedTerms),
-              let json = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-
-        return json
+        return Self.jsonString(from: keyterms.terms)
     }
 
     // MARK: - Audio Conversion
 
-    private static func floatToPCM16(_ samples: [Float]) -> Data {
+    static func floatToPCM16(_ samples: [Float]) -> Data {
         var data = Data(capacity: samples.count * 2)
         for sample in samples {
             let clamped = max(-1.0, min(1.0, sample))
@@ -917,6 +1003,441 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         _speakerDiarizationEnabled = enabled
         host?.setUserDefault(enabled, forKey: Self.speakerDiarizationEnabledKey)
         host?.notifyCapabilitiesChanged()
+    }
+}
+
+// MARK: - Live Session
+
+/// The WebSocket a live session talks to, so tests can play the server.
+protocol AssemblyAIRealtimeSocket: Sendable {
+    func send(text: String) async throws
+    func send(audio: Data) async throws
+    /// The next text message; throws once the socket is closed.
+    func receive() async throws -> String
+    func close()
+}
+
+final class URLSessionAssemblyAIRealtimeSocket: AssemblyAIRealtimeSocket, @unchecked Sendable {
+    private let task: URLSessionWebSocketTask
+
+    init(request: URLRequest) {
+        task = URLSession.shared.webSocketTask(with: request)
+        task.resume()
+    }
+
+    func send(text: String) async throws {
+        try await task.send(.string(text))
+    }
+
+    func send(audio: Data) async throws {
+        try await task.send(.data(audio))
+    }
+
+    func receive() async throws -> String {
+        while true {
+            switch try await task.receive() {
+            case .string(let text):
+                return text
+            case .data(let data):
+                if let text = String(data: data, encoding: .utf8) { return text }
+            @unknown default:
+                continue
+            }
+        }
+    }
+
+    func close() {
+        // `receive()` ignores task cancellation; only closing the socket ends it.
+        task.cancel(with: .normalClosure, reason: nil)
+    }
+}
+
+/// Streams a dictation to AssemblyAI's realtime API (v3) while it is recorded, for the
+/// live preview and the final text.
+///
+/// Audio goes out as binary PCM frames of 50 ms to 1 s, the lengths the API accepts.
+/// AssemblyAI ends each turn with a formatted `Turn` message. When the recording stops,
+/// the session sends `Terminate`; the server answers with the turns for the remaining
+/// audio and then `Termination`, so the transcript is complete once that arrives. With
+/// dictionary terms beyond what the realtime API takes, the final text comes from
+/// `finalTranscriber`, which transcribes the recording with all of them, and the
+/// realtime transcript is only the preview and the fallback.
+/// https://www.assemblyai.com/docs/streaming/message-sequence
+actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
+    typealias FinalTranscriber = @Sendable (AudioData) async throws -> PluginTranscriptionResult
+
+    static let sampleRate = 16_000
+    /// The realtime API rejects frames shorter than 50 ms or longer than 1 s.
+    static let minimumFrameSampleCount = sampleRate / 20
+    static let maximumFrameSampleCount = sampleRate
+    static let startTimeout: Duration = .seconds(10)
+    /// The last turn arrived 0.65 to 1.1 s after `Terminate` in our tests; this also
+    /// covers audio the server has not transcribed yet after a slow connection.
+    static let finishTimeout: Duration = .seconds(8)
+
+    private static let logger = Logger(subsystem: "com.typewhisper.assemblyai", category: "LiveSession")
+
+    private struct FinishedTurn {
+        let text: String
+        let words: [PluginWordTiming]
+    }
+
+    private let socket: any AssemblyAIRealtimeSocket
+    private let language: String?
+    private let finalTranscriber: FinalTranscriber?
+    private let onProgress: @Sendable (String) -> Bool
+    private var receiveTask: Task<Void, Never>?
+
+    private var hasStarted = false
+    private var isTerminated = false
+    private var isClosed = false
+    private var isCancelled = false
+    private var failure: Error?
+    private var pendingSamples: [Float] = []
+    private var recordedSamples: [Float] = []
+    private var finishedTurns: [Int: FinishedTurn] = [:]
+    private var partialTurnOrder: Int?
+    private var partialText = ""
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    private init(
+        socket: any AssemblyAIRealtimeSocket,
+        language: String?,
+        finalTranscriber: FinalTranscriber?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) {
+        self.socket = socket
+        self.language = language
+        self.finalTranscriber = finalTranscriber
+        self.onProgress = onProgress
+    }
+
+    /// Opens the session and waits until AssemblyAI began it, so a wrong key or an
+    /// exhausted balance fails here instead of during the recording.
+    static func connect(
+        socket: any AssemblyAIRealtimeSocket,
+        language: String?,
+        finalTranscriber: FinalTranscriber?,
+        startTimeout: Duration = startTimeout,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> AssemblyAILiveTranscriptionSession {
+        let session = AssemblyAILiveTranscriptionSession(
+            socket: socket,
+            language: language,
+            finalTranscriber: finalTranscriber,
+            onProgress: onProgress
+        )
+        await session.startReceiving()
+        try await withTaskCancellationHandler {
+            try await session.waitUntilStarted(timeout: startTimeout)
+        } onCancel: {
+            socket.close()
+        }
+        return session
+    }
+
+    /// Finished turns plus the turn in progress.
+    var currentText: String {
+        var parts = orderedTurns.map(\.text)
+        if let partialTurnOrder, finishedTurns[partialTurnOrder] == nil {
+            parts.append(partialText)
+        }
+        return Self.joinedText(parts)
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        try throwIfEnded()
+        guard !samples.isEmpty else { return }
+        if finalTranscriber != nil {
+            recordedSamples.append(contentsOf: samples)
+        }
+        pendingSamples.append(contentsOf: samples)
+        try await sendPendingAudio(flush: false)
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        try throwIfEnded()
+
+        var terminateError: Error?
+        do {
+            try await sendPendingAudio(flush: true)
+            try await send { try await $0.send(text: #"{"type":"Terminate"}"#) }
+        } catch {
+            terminateError = error
+        }
+
+        if let finalTranscriber {
+            let samples = recordedSamples
+            recordedSamples = []
+            do {
+                let result = try await finalTranscriber(AudioData(
+                    samples: samples,
+                    wavData: PluginWavEncoder.encode(samples),
+                    duration: Double(samples.count) / Double(Self.sampleRate)
+                ))
+                close()
+                Self.logger.info("Live session finished with the recording's transcript for dictionary terms")
+                return result
+            } catch {
+                if Task.isCancelled {
+                    close()
+                    throw CancellationError()
+                }
+                Self.logger.warning("Transcribing the recording with dictionary terms failed, using the realtime transcript: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        if let terminateError {
+            close()
+            throw terminateError
+        }
+
+        let isComplete = await wait(timeout: Self.finishTimeout) { $0.isTerminated }
+        close()
+        guard isComplete else {
+            // Without `Termination` the end of the speech may be missing; TypeWhisper then
+            // transcribes the whole recording instead.
+            throw failure ?? PluginTranscriptionError.apiError("Realtime API did not end the session")
+        }
+
+        let text = currentText
+        guard !text.isEmpty else {
+            throw PluginTranscriptionError.apiError("Realtime API returned no transcript")
+        }
+        if let partialTurnOrder, finishedTurns[partialTurnOrder] == nil {
+            Self.logger.warning("Realtime session ended without the final text of turn \(partialTurnOrder, privacy: .public); using its partial text")
+        }
+
+        let turns = orderedTurns
+        let segments = turns.compactMap { turn -> PluginTranscriptionSegment? in
+            guard let start = turn.words.first?.start, let end = turn.words.last?.end else { return nil }
+            return PluginTranscriptionSegment(text: turn.text, start: start, end: end)
+        }
+        PluginWordTimings.report(turns.flatMap(\.words))
+        Self.logger.info("Live session finished with \(turns.count, privacy: .public) turns")
+        return PluginTranscriptionResult(text: text, detectedLanguage: language, segments: segments)
+    }
+
+    func cancel() async {
+        guard !isCancelled else { return }
+        isCancelled = true
+        pendingSamples = []
+        recordedSamples = []
+        close()
+        Self.logger.info("Live session cancelled")
+    }
+
+    // MARK: Sending
+
+    /// Sends whole frames of buffered audio; `flush` also sends the rest, padded with
+    /// silence to the shortest frame the API accepts.
+    private func sendPendingAudio(flush: Bool) async throws {
+        while pendingSamples.count >= Self.minimumFrameSampleCount || (flush && !pendingSamples.isEmpty) {
+            let frameCount = min(pendingSamples.count, Self.maximumFrameSampleCount)
+            var frame = Array(pendingSamples.prefix(frameCount))
+            pendingSamples.removeFirst(frameCount)
+            if frame.count < Self.minimumFrameSampleCount {
+                frame += [Float](repeating: 0, count: Self.minimumFrameSampleCount - frame.count)
+            }
+            let audio = AssemblyAIPlugin.floatToPCM16(frame)
+            try await send { try await $0.send(audio: audio) }
+        }
+    }
+
+    private func send(_ operation: (any AssemblyAIRealtimeSocket) async throws -> Void) async throws {
+        do {
+            try await operation(socket)
+        } catch {
+            let failure = self.failure ?? PluginTranscriptionError.networkError(error.localizedDescription)
+            fail(failure)
+            throw failure
+        }
+    }
+
+    // MARK: Receiving
+
+    private func startReceiving() {
+        let socket = self.socket
+        receiveTask = Task {
+            do {
+                while true {
+                    let message = try await socket.receive()
+                    self.handle(message)
+                }
+            } catch {
+                self.receiveEnded(error)
+            }
+        }
+    }
+
+    func handle(_ message: String) {
+        guard let data = message.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messageType = json["type"] as? String else {
+            return
+        }
+
+        switch messageType {
+        case "Begin":
+            hasStarted = true
+            resumeWaiters()
+        case "Turn":
+            handleTurn(json)
+            reportProgress()
+        case "Termination":
+            isTerminated = true
+            resumeWaiters()
+        case "Error":
+            let detail = json["error"] as? String ?? "Unknown realtime error"
+            let code = (json["error_code"] as? Int).map { " (\($0))" } ?? ""
+            Self.logger.warning("Realtime session failed\(code, privacy: .public): \(detail, privacy: .public)")
+            fail(PluginTranscriptionError.apiError(detail + code))
+            close()
+        default:
+            break
+        }
+    }
+
+    private func handleTurn(_ json: [String: Any]) {
+        let order = json["turn_order"] as? Int ?? ((finishedTurns.keys.max() ?? -1) + 1)
+        let text = (json["transcript"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard json["end_of_turn"] as? Bool == true else {
+            if finishedTurns[order] == nil {
+                partialTurnOrder = order
+                partialText = text
+            }
+            return
+        }
+
+        // Universal Streaming can send an unformatted final before the formatted one.
+        let isFormatted = json["turn_is_formatted"] as? Bool ?? true
+        if isFormatted || finishedTurns[order] == nil {
+            let words = (json["words"] as? [[String: Any]] ?? []).compactMap(Self.wordTiming)
+            finishedTurns[order] = FinishedTurn(text: text, words: words)
+        }
+        if partialTurnOrder == order {
+            partialTurnOrder = nil
+            partialText = ""
+        }
+    }
+
+    private static func wordTiming(_ word: [String: Any]) -> PluginWordTiming? {
+        guard let text = word["text"] as? String,
+              let start = (word["start"] as? NSNumber)?.doubleValue,
+              let end = (word["end"] as? NSNumber)?.doubleValue else {
+            return nil
+        }
+        return PluginWordTiming(text: text, start: start / 1000, end: end / 1000)
+    }
+
+    private var orderedTurns: [FinishedTurn] {
+        finishedTurns.sorted { $0.key < $1.key }.map(\.value).filter { !$0.text.isEmpty }
+    }
+
+    private func reportProgress() {
+        let text = currentText
+        guard !text.isEmpty, !isCancelled else { return }
+        _ = onProgress(text)
+    }
+
+    private func receiveEnded(_ error: Error) {
+        isClosed = true
+        if failure == nil, !isCancelled, !isTerminated {
+            fail(PluginTranscriptionError.networkError("Realtime session closed: \(error.localizedDescription)"))
+        }
+        resumeWaiters()
+    }
+
+    /// Joins turns with a space, except between Chinese or Japanese characters,
+    /// which are written without spaces.
+    static func joinedText(_ parts: [String]) -> String {
+        var result = ""
+        for part in parts {
+            let part = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !part.isEmpty else { continue }
+            if let last = result.unicodeScalars.last, let first = part.unicodeScalars.first,
+               !(writesWithoutSpaces(last) && writesWithoutSpaces(first)) {
+                result += " "
+            }
+            result += part
+        }
+        return result
+    }
+
+    private static func writesWithoutSpaces(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3000...0x30FF, // CJK punctuation, Hiragana, Katakana
+             0x31F0...0x31FF, // Katakana extensions
+             0x3400...0x4DBF, // CJK Extension A
+             0x4E00...0x9FFF, // CJK Unified Ideographs
+             0xF900...0xFAFF, // CJK Compatibility Ideographs
+             0xFF00...0xFFEF, // Halfwidth and fullwidth forms
+             0x20000...0x3FFFF: // CJK Extensions B and later
+            return true
+        default:
+            return false
+        }
+    }
+
+    // MARK: State
+
+    private func throwIfEnded() throws {
+        if isCancelled { throw CancellationError() }
+        if let failure { throw failure }
+    }
+
+    private func fail(_ error: Error) {
+        if failure == nil {
+            failure = error
+        }
+        resumeWaiters()
+    }
+
+    private func close() {
+        isClosed = true
+        socket.close()
+        receiveTask?.cancel()
+        resumeWaiters()
+    }
+
+    private func waitUntilStarted(timeout: Duration) async throws {
+        guard await wait(timeout: timeout, until: { $0.hasStarted }) else {
+            let error = failure ?? PluginTranscriptionError.networkError("Realtime session did not start")
+            close()
+            throw error
+        }
+    }
+
+    /// Waits until `condition` holds, the session fails or closes, or `timeout` passes.
+    private func wait(
+        timeout: Duration,
+        until condition: (isolated AssemblyAILiveTranscriptionSession) -> Bool
+    ) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let timer = Task {
+            try? await Task.sleep(until: deadline, clock: .continuous)
+            self.resumeWaiters()
+        }
+        defer { timer.cancel() }
+
+        return await withTaskCancellationHandler {
+            while !condition(self) {
+                guard failure == nil, !isClosed, !isCancelled, !Task.isCancelled,
+                      ContinuousClock.now < deadline else {
+                    return false
+                }
+                await withCheckedContinuation { waiters.append($0) }
+            }
+            return true
+        } onCancel: {
+            Task { await self.resumeWaiters() }
+        }
+    }
+
+    private func resumeWaiters() {
+        let waiting = waiters
+        waiters.removeAll()
+        waiting.forEach { $0.resume() }
     }
 }
 
