@@ -7166,8 +7166,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(fieldReadsBeforePaste, 1)
         focusedField = field
 
-        // An earlier paste was still pending, so the insertion waited for it.
-        service.pendingPasteSettleWindow = .milliseconds(20)
+        // An earlier paste was still pending, so the insertion waited for it. The window is
+        // long enough that the next insertion still finds the paste pending on a slow run.
+        service.pendingPasteSettleWindow = .seconds(1)
         _ = try await service.insertText("Hello")
         baseline = try captureBaseline()
         result = try await service.insertText("Hello", detectMissedTextField: true, insertionBaseline: baseline)
