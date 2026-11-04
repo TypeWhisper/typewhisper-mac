@@ -237,6 +237,9 @@ jobs:
         id: base-build
         if: github.event_name == 'pull_request' && needs.changes.outputs.launch_benchmark == 'true'
         run: |
+          # Spotlight would index the new build products and the benchmark's profile copies
+          # while the apps launch, and compete with them for the runner's few processors.
+          sudo mdutil -a -i off > /dev/null || echo "::warning::Could not turn off Spotlight indexing"
           bench="$RUNNER_TEMP/launch-benchmark"
           mkdir -p "$bench/head" "$bench/base"
           ditto build/Build/Products/Release/TypeWhisper.app "$bench/head/TypeWhisper.app"

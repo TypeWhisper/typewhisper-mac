@@ -28,7 +28,9 @@ def report(verdict="pass", regressions=(), base=None, head=None, passes=1):
     count = len(base["first_idle_ms"])
     measured = {"base": base, "head": head,
                 "phases": {"base": [{"pre_main_ms": 200.0, "Plugin.scan": 120.0}] * count,
-                           "head": [{"pre_main_ms": 210.0, "Plugin.scan": 130.0}] * count}}
+                           "head": [{"pre_main_ms": 210.0, "Plugin.scan": 130.0}] * count},
+                "counters": {"base": [{"instructions_g": 0.0, "runnable_ms": 300.0, "idle_before_pct": 92.0}] * count,
+                             "head": [{"instructions_g": 0.0, "runnable_ms": 320.0, "idle_before_pct": 90.0}] * count}}
     return {
         "schema": lb.SCHEMA,
         "schema_version": lb.SCHEMA_VERSION,
@@ -169,6 +171,8 @@ class ValidationTests(unittest.TestCase):
         self.assertInvalid(lambda r: r["passes"][0]["head"].update(cpu_ms=[True] * 8))
         self.assertInvalid(lambda r: r["passes"][0]["head"].update(cpu_ms=[1.0] * 7))
         self.assertInvalid(lambda r: r["passes"][0]["phases"].update(head=[{"<img>": 1.0}]))
+        self.assertInvalid(lambda r: r["passes"][0]["counters"].update(head=[{"runnable_ms": "slow"}]))
+        self.assertInvalid(lambda r: r["passes"][0]["counters"].update(head=[{"<b>": 1.0}]))
         self.assertInvalid(lambda r: r["passes"].extend([r["passes"][0]] * 2))
         self.assertInvalid(lambda r: r["limits"]["cpu_ms"].update(pct="10"))
         self.assertInvalid(lambda r: r.update(passes=[]))
@@ -185,10 +189,26 @@ class RenderTests(unittest.TestCase):
         text = lb.render(report())
         self.assertIn("main `6013a38` and this pull request `abc1234`", text)
         self.assertIn("8 alternating launches each", text)
+        self.assertIn("<summary>Launch phases and runner conditions (medians)</summary>", text)
         self.assertIn("| Time until ready | 800 ms | 810 ms | +10 ms (+1.2%) | +10% and +50 ms |", text)
         self.assertIn("| App size | 101.5 MB | 101.6 MB | +0.1 MB (+0.1%) | |", text)
         self.assertIn("| Plugin scan | 120 ms | 130 ms | +10 ms |", text)
+        self.assertIn("| Time waiting for a processor | 300 ms | 320 ms | +20 ms |", text)
+        self.assertIn("| Idle processors before the launch | 92% | 90% | -2% |", text)
+        # A virtual machine without performance counters reports no instructions.
+        self.assertNotIn("Instructions", text)
         self.assertIn("**Result:** no launch regression.", text)
+
+    def test_instruction_counts_when_the_runner_has_them(self):
+        counted = report()
+        for side, value in (("base", 1.25), ("head", 1.5)):
+            counted["passes"][0]["counters"][side] = [{"instructions_g": value}] * 8
+        self.assertIn("| Instructions | 1.25 billion | 1.50 billion | +0.25 billion |", lb.render(counted))
+
+    def test_reports_without_counters_still_render(self):
+        older = report()
+        del older["passes"][0]["counters"]
+        self.assertIn("| Plugin scan |", lb.render(older))
 
     def test_regression_names_the_metric_and_the_way_out(self):
         slow = launches([1000.0] * 8, footprint=60.0)

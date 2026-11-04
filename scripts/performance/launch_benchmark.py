@@ -62,7 +62,7 @@ VERDICTS = ("pass", "regression", "accepted", "error")
 # Test profile imported before the measured launches.
 FIXTURE = {"history": 3000, "dictionary": 300, "snippets": 30}
 
-ROUNDS = 8
+ROUNDS = 10
 SETTLE_SECONDS = 6.0
 FIRST_IDLE_TIMEOUT = 120.0
 API_TIMEOUT = 180.0
@@ -101,6 +101,15 @@ PHASES = (
     ("Launch.modelRestore", "Model restore"),
 )
 PHASE_KEYS = tuple(key for key, _ in PHASES)
+
+# Per-launch diagnostics of the runner, shown with the phases. Virtual machines may count no
+# instructions; the row is left out then.
+COUNTERS = (
+    ("instructions_g", "Instructions", " billion", 2),
+    ("runnable_ms", "Time waiting for a processor", " ms", 0),
+    ("idle_before_pct", "Idle processors before the launch", "%", 0),
+)
+COUNTER_KEYS = tuple(key for key, _, _, _ in COUNTERS)
 
 # Launch arguments for every launch: no restored windows, English interface.
 LAUNCH_ARGUMENTS = (
@@ -292,10 +301,13 @@ def _macos():
         class Timebase(ctypes.Structure):
             _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
 
+        system = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
         timebase = Timebase()
-        ctypes.CDLL("/usr/lib/libSystem.B.dylib").mach_timebase_info(ctypes.byref(timebase))
-        _MACOS.update(ctypes=ctypes, libproc=ctypes.CDLL("/usr/lib/libproc.dylib"), fields=fields,
-                      RUsageV4=RUsageV4, tick_ns=timebase.numer / timebase.denom)
+        system.mach_timebase_info(ctypes.byref(timebase))
+        system.mach_host_self.restype = ctypes.c_uint32
+        _MACOS.update(ctypes=ctypes, libproc=ctypes.CDLL("/usr/lib/libproc.dylib"), system=system,
+                      host=system.mach_host_self(), fields=fields, RUsageV4=RUsageV4,
+                      tick_ns=timebase.numer / timebase.denom)
     return _MACOS
 
 
@@ -309,7 +321,37 @@ def rusage(pid):
         "cpu_ms": (values["user_time"] + values["system_time"]) * mac["tick_ns"] / 1e6,
         "footprint_mb": values["phys_footprint"] / 2**20,
         "peak_footprint_mb": values["lifetime_max_phys_footprint"] / 2**20,
+        # Diagnostics: virtual machines may report no instruction counts.
+        "instructions_g": values["instructions"] / 1e9,
+        "runnable_ms": values["runnable_time"] * mac["tick_ns"] / 1e6,
     }
+
+
+def cpu_ticks():
+    """User, system, idle and nice ticks of all processors (host_statistics HOST_CPU_LOAD_INFO)."""
+    mac = _macos()
+    ctypes = mac["ctypes"]
+    ticks = (ctypes.c_uint32 * 4)()
+    count = ctypes.c_uint32(4)
+    if mac["system"].host_statistics(mac["host"], 3, ticks, ctypes.byref(count)) != 0:
+        raise BenchmarkError("host_statistics failed")
+    return list(ticks)
+
+
+def wait_for_quiet_system(threshold=0.85, timeout=20.0, interval=0.5):
+    """Waits until the processors are idle enough, so background work such as indexing or a
+    previous launch's helpers do not compete with the next launch. Returns the idle share."""
+    deadline = time.monotonic() + timeout
+    idle = 1.0
+    while time.monotonic() < deadline:
+        before = cpu_ticks()
+        time.sleep(interval)
+        after = cpu_ticks()
+        total = sum(after) - sum(before)
+        idle = (after[2] - before[2]) / total if total > 0 else 1.0
+        if idle >= threshold:
+            break
+    return idle
 
 
 def tick_ms():
@@ -533,19 +575,23 @@ def copy_tree(source, destination):
     run(["ditto", str(source), str(destination)])
 
 
-def prepare_profile(build, stream, fixture, settle):
-    """Give `build` its own profile with the test data, then save it for the measured launches."""
+API_PREFERENCES = {"apiServerEnabled": True, "apiServerPort": API_PORT, "apiServerRequiresAuthentication": False}
+
+
+def reset_build(build):
     shutil.rmtree(build.root, ignore_errors=True)
     build.home.mkdir(parents=True)
     build.logs.mkdir()
     build.delete_api_token()
-    api = LocalAPI(build.app_support)
-    build.write_preferences({**build.defaults, "apiServerEnabled": True, "apiServerPort": API_PORT,
-                             "apiServerRequiresAuthentication": False})
 
+
+def import_fixture(build, fixture):
+    """Imports the test data through the local API of a fresh profile."""
+    build.write_preferences({**build.defaults, **API_PREFERENCES})
     # The first launch of a new binary also pays for its first code-signing and malware scans.
     launch = build.start("profile-import")
     try:
+        api = LocalAPI(build.app_support)
         api.wait_until_ready(launch)
         result = api.request("POST", "/v1/settings/import?mode=merge", json.dumps(fixture).encode(), timeout=900)
         expected = {"historyImported": len(fixture["history"]), "dictionaryImported": len(fixture["dictionaryEntries"]),
@@ -557,13 +603,17 @@ def prepare_profile(build, stream, fixture, settle):
     finally:
         launch.stop()
 
-    # The first launch with the data runs one-time work, such as statistics backfills.
+
+def check_profile(build, stream, history, settle):
+    """A launch on the profile that checks the history persisted. The first launch with data, or the
+    first of a newer build, also runs one-time work such as migrations and statistics backfills."""
     launch = build.start("profile-check")
     try:
+        api = LocalAPI(build.app_support)
         api.wait_until_ready(launch)
         total = api.request("GET", "/v1/history?limit=1").get("total")
-        if total != len(fixture["history"]):
-            raise launch.failure(f"the profile has {total} history entries after a relaunch")
+        if total != history:
+            raise launch.failure(f"the profile has {total} history entries instead of {history}")
         if stream.wait_for(launch.pid, "Launch.firstIdle", FIRST_IDLE_TIMEOUT, launch.process) is None:
             raise launch.failure("no Launch.firstIdle signpost")
         time.sleep(settle)
@@ -571,13 +621,42 @@ def prepare_profile(build, stream, fixture, settle):
         launch.stop()
         build.delete_api_token()
 
-    # Measured launches run without the local API, as for most people.
+
+def checkpoint_sqlite(folder):
+    """Moves the write-ahead logs of the profile's stores into the stores. After the app was
+    terminated they hold recent writes, and their size would differ between the two profiles."""
+    for wal in Path(folder).rglob("*-wal"):
+        store = wal.with_name(wal.name[:-len("-wal")])
+        if store.is_file():
+            subprocess.run(["/usr/bin/sqlite3", str(store), "PRAGMA wal_checkpoint(TRUNCATE);"],
+                           capture_output=True, timeout=60)
+
+
+def save_profile(build):
+    """Keeps the profile for the measured launches, which run without the local API, as for most people."""
     preferences = export_preferences(build.bundle_id)
     preferences["apiServerEnabled"] = False
     build.profile_prefs.write_bytes(plistlib.dumps(preferences))
     for name in ("api-discovery.json", "api-port"):
         (build.app_support / name).unlink(missing_ok=True)
+    checkpoint_sqlite(build.home)
     copy_tree(build.home, build.profile_home)
+
+
+def prepare_profiles(base, head, stream, fixture, settle):
+    """The base imports the test data; the pull request starts from a copy of the base profile, so
+    both profiles hold the same records and differ only by what the newer build changes on launch."""
+    reset_build(base)
+    import_fixture(base, fixture)
+    check_profile(base, stream, len(fixture["history"]), settle)
+    save_profile(base)
+
+    reset_build(head)
+    copy_tree(base.profile_home, head.home)
+    preferences = plistlib.loads(base.profile_prefs.read_bytes())
+    head.write_preferences({**preferences, **head.defaults, **API_PREFERENCES})
+    check_profile(head, stream, len(fixture["history"]), settle)
+    save_profile(head)
 
 
 def restore_profile(build):
@@ -587,6 +666,7 @@ def restore_profile(build):
 
 def measure_launch(build, stream, settle, log_name):
     restore_profile(build)
+    idle = wait_for_quiet_system()
     launch = build.start(log_name)
     try:
         event = stream.wait_for(launch.pid, "Launch.firstIdle", FIRST_IDLE_TIMEOUT, launch.process)
@@ -602,6 +682,8 @@ def measure_launch(build, stream, settle, log_name):
             "footprint_mb": round(usage["footprint_mb"], 2),
             "peak_footprint_mb": round(usage["peak_footprint_mb"], 2),
             "phases": stream.phases(launch.pid, launch.started),
+            "counters": {"instructions_g": round(usage["instructions_g"], 4), "runnable_ms": round(usage["runnable_ms"], 1),
+                         "idle_before_pct": round(100 * idle, 1)},
         }
     finally:
         launch.stop()
@@ -649,9 +731,8 @@ def benchmark(args):
     fixture = build_fixture(dt.datetime.now(dt.timezone.utc).replace(microsecond=0))
     stream = SignpostStream(base.bundle_id)
     try:
-        for build in (base, head):
-            print(f"Preparing the test profile of {build.label}", flush=True)
-            prepare_profile(build, stream, fixture, args.settle)
+        print("Preparing the test profiles", flush=True)
+        prepare_profiles(base, head, stream, fixture, args.settle)
         passes = []
         for index in (1, 2):
             if index == 2 and not (exceeded_metrics(passes) and args.confirm):
@@ -659,8 +740,8 @@ def benchmark(args):
             print(f"Pass {index}: {args.rounds} rounds", flush=True)
             launches = run_pass((base, head), stream, args.rounds, args.settle, index)
             passes.append({"base": metric_samples(launches["base"]), "head": metric_samples(launches["head"]),
-                           "phases": {label: [launch["phases"] for launch in launches[label]]
-                                      for label in ("base", "head")}})
+                           **{key: {label: [launch[key] for launch in launches[label]] for label in ("base", "head")}
+                              for key in ("phases", "counters")}})
     finally:
         stream.close()
         subprocess.run(["defaults", "delete", base.bundle_id], capture_output=True)
@@ -778,6 +859,14 @@ def validate(report):
             for launch in launches:
                 require(isinstance(launch, dict) and all(key in PHASE_KEYS and _is_number(value)
                                                          for key, value in launch.items()), "invalid phase values")
+        counters = measured.get("counters", {"base": [], "head": []})
+        require(isinstance(counters, dict), "invalid counters")
+        for side in ("base", "head"):
+            launches = counters.get(side)
+            require(isinstance(launches, list) and len(launches) <= MAX_SAMPLES, "invalid counters")
+            for launch in launches:
+                require(isinstance(launch, dict) and all(key in COUNTER_KEYS and _is_number(value)
+                                                         for key, value in launch.items()), "invalid counter values")
     sizes = report.get("app_size_mb")
     require(sizes is None or (isinstance(sizes, dict) and all(_is_number(sizes.get(side), 1e6)
                                                               for side in ("base", "head"))), "invalid app sizes")
@@ -837,17 +926,20 @@ def render(report):
         lines.append(f"| {SIZE_METRIC.label} | {_format_value(sizes['base'], SIZE_METRIC)} | "
                      f"{_format_value(sizes['head'], SIZE_METRIC)} | {_format_change(delta, pct, SIZE_METRIC)} | |")
 
-    phase_rows = []
-    for key, label in PHASES:
-        base = [launch[key] for measured in passes for launch in measured["phases"]["base"] if key in launch]
-        head = [launch[key] for measured in passes for launch in measured["phases"]["head"] if key in launch]
-        if base and head:
+    detail_rows = []
+    for group, rows in (("phases", [(key, label, " ms", 0) for key, label in PHASES]), ("counters", COUNTERS)):
+        for key, label, unit, decimals in rows:
+            base = [launch[key] for measured in passes for launch in measured.get(group, {}).get("base", ()) if key in launch]
+            head = [launch[key] for measured in passes for launch in measured.get(group, {}).get("head", ()) if key in launch]
+            if not base or not head or (key == "instructions_g" and not (all(base) and all(head))):
+                continue
             base_median, head_median = statistics.median(base), statistics.median(head)
-            phase_rows.append(f"| {label} | {base_median:,.0f} ms | {head_median:,.0f} ms | "
-                              f"{'+' if head_median >= base_median else '-'}{abs(head_median - base_median):,.0f} ms |")
-    if phase_rows:
-        lines += ["", "<details><summary>Launch phases (medians)</summary>", "",
-                  "| Phase | main | This PR | Change |", "| --- | ---: | ---: | ---: |", *phase_rows, "", "</details>"]
+            sign = "+" if head_median >= base_median else "-"
+            detail_rows.append(f"| {label} | {base_median:,.{decimals}f}{unit} | {head_median:,.{decimals}f}{unit} | "
+                               f"{sign}{abs(head_median - base_median):,.{decimals}f}{unit} |")
+    if detail_rows:
+        lines += ["", "<details><summary>Launch phases and runner conditions (medians)</summary>", "",
+                  "| | main | This PR | Change |", "| --- | ---: | ---: | ---: |", *detail_rows, "", "</details>"]
 
     lines.append("")
     names = [METRIC_BY_KEY[key].label.lower() for key in report["regressions"]]
