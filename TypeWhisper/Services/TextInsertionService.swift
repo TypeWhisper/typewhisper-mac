@@ -817,7 +817,11 @@ final class TextInsertionService {
         logger.info(
             "AX insertion left the focused field unchanged after \(elapsedMilliseconds(), privacy: .public)ms; pasting instead: writeSucceeded=\(writeSucceeded, privacy: .public)"
         )
-        if writeSucceeded, let processIdentifier = liveFieldProcessIdentifier(for: element) {
+        // Only a full check of a readable field shows that the app ignored the write. A
+        // cancelled check may have stopped before a late write showed up.
+        if writeSucceeded, !Task.isCancelled,
+           initialState.value != nil, currentValue == initialState.value,
+           let processIdentifier = liveFieldProcessIdentifier(for: element) {
             // updateValue keeps an entry for an app without a bundle identifier.
             processesIgnoringAccessibilityInsertion.updateValue(bundleIdentifier, forKey: processIdentifier)
         }
