@@ -400,10 +400,14 @@ final class AssemblyAIPlugin: NSObject,
         // The server gives up after 30 s; the rest covers the upload.
         request.timeoutInterval = 45
 
-        let (data, response) = try await PluginHTTPClient.data(
-            for: request,
-            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
-        )
+        // A failed Sync request falls back to the async API instead of being sent again:
+        // even a Cloudflare 522 can follow a request AssemblyAI received, and a second one
+        // would be billed. Only uploads too large for the shared session's resource
+        // timeout take the resource-timeout path, which keeps the default policy.
+        let resourceTimeout = PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
+        let (data, response) = resourceTimeout > Self.sharedSessionResourceTimeout
+            ? try await PluginHTTPClient.data(for: request, resourceTimeout: resourceTimeout)
+            : try await PluginHTTPClient.data(for: request, retry: .disabled)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -430,6 +434,9 @@ final class AssemblyAIPlugin: NSObject,
         }
         return text
     }
+
+    /// `PluginHTTPClient`'s shared session allows 600 s; longer uploads need their own session.
+    private static let sharedSessionResourceTimeout: TimeInterval = 600
 
     static func makeSyncRequestBody(
         config: [String: Any],

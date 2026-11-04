@@ -882,12 +882,13 @@ final class AssemblyAIPluginTests: XCTestCase {
         })
     }
 
-    /// A sync failure that is neither an auth error nor an audio format
-    /// problem, so the plugin moves straight on to the async API.
+    /// A sync failure that is neither an auth error nor an audio format problem, so the
+    /// plugin moves straight on to the async API. A 522 is one the HTTP client would
+    /// otherwise send again; the tests' request paths show the Sync POST goes out once.
     private static var syncUnavailableOutcome: PluginHTTPClientTestOutcome {
         .success(
-            Data(#"{"status":503,"title":"Service Unavailable","detail":"cold start"}"#.utf8),
-            httpResponse(url: "https://sync.assemblyai.com/v1/transcribe", statusCode: 503)
+            Data(#"{"status":522,"title":"Connection timed out"}"#.utf8),
+            httpResponse(url: "https://sync.assemblyai.com/v1/transcribe", statusCode: 522)
         )
     }
 
