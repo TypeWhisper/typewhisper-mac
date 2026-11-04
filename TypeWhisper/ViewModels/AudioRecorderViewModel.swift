@@ -352,12 +352,28 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published private(set) var isIndicatorHidden = false
     /// The Recorder state the indicator shows: idle while the recording is hidden.
     var indicatorState: RecorderState { isIndicatorHidden ? .idle : state }
+    /// The duration the Recorder and the indicator show. It is published only when its
+    /// whole seconds change or half a second has passed; `exactDuration` follows every
+    /// 10 Hz tick of the recorder for events and the stopped recording.
     @Published var duration: TimeInterval = 0
-    @Published var micLevel: Float = 0 {
-        didSet { indicatorLevelMeter.update(max(micLevel, systemLevel)) }
+    private var exactDuration: TimeInterval = 0
+    /// Microphone and system level. The view model does not publish them: the Recorder's
+    /// level meters observe `inputLevels` and the indicator `indicatorLevelMeter`, so about
+    /// 60 level updates per second do not re-render every view of the Recorder.
+    let inputLevels = RecorderInputLevels()
+    var micLevel: Float {
+        get { inputLevels.mic }
+        set {
+            inputLevels.update(mic: newValue, system: inputLevels.system)
+            indicatorLevelMeter.update(max(inputLevels.mic, inputLevels.system))
+        }
     }
-    @Published var systemLevel: Float = 0 {
-        didSet { indicatorLevelMeter.update(max(micLevel, systemLevel)) }
+    var systemLevel: Float {
+        get { inputLevels.system }
+        set {
+            inputLevels.update(mic: inputLevels.mic, system: newValue)
+            indicatorLevelMeter.update(max(inputLevels.mic, inputLevels.system))
+        }
     }
     /// The larger of both levels, for the indicator.
     let indicatorLevelMeter = IndicatorLevelMeter()
@@ -695,7 +711,7 @@ final class AudioRecorderViewModel: ObservableObject {
             self.partialText = text
             EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                 text: text,
-                elapsedSeconds: self.duration
+                elapsedSeconds: self.exactDuration
             )))
         }
         streamingHandler.onStreamingStateChange = { [weak self] streaming in
@@ -704,6 +720,12 @@ final class AudioRecorderViewModel: ObservableObject {
 
         isInitialized = true
         reconcileSelectionWithAvailablePlugins()
+    }
+
+    /// The Recorder shows whole seconds and the indicator's waveform checks whether half
+    /// a second has passed, so other duration ticks change nothing on screen.
+    nonisolated static func durationChangesDisplay(from shown: TimeInterval, to exact: TimeInterval) -> Bool {
+        Int(shown) != Int(exact) || (shown < 0.5) != (exact < 0.5)
     }
 
     private func setupBindings() {
@@ -715,7 +737,13 @@ final class AudioRecorderViewModel: ObservableObject {
 
         recorderService.$duration
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.duration = value }
+            .sink { [weak self] value in
+                guard let self else { return }
+                self.exactDuration = value
+                if Self.durationChangesDisplay(from: self.duration, to: value) {
+                    self.duration = value
+                }
+            }
             .store(in: &cancellables)
 
         recorderService.$micLevel
@@ -973,7 +1001,7 @@ final class AudioRecorderViewModel: ObservableObject {
         deferredLivePreviewGeneration = nil
         let calendarEvent = activeCalendarMeetingTranscriptMetadata
         activeCalendarMeetingTranscriptMetadata = nil
-        let recordingDuration = duration
+        let recordingDuration = exactDuration
         let shouldTranscribe = transcriptionEnabled
         let livePreviewEnabled = livePreviewEnabled
         let startedEngine = recordingEngine
@@ -2645,5 +2673,16 @@ private extension CalendarMeetingTranscriptMetadata {
             organizer: organizer.map(participant),
             attendees: attendees.map(participant)
         )
+    }
+}
+
+/// The Recorder's input levels, observed by its level meters.
+final class RecorderInputLevels: ObservableObject {
+    @Published private(set) var mic: Float = 0
+    @Published private(set) var system: Float = 0
+
+    func update(mic: Float, system: Float) {
+        if self.mic != mic { self.mic = mic }
+        if self.system != system { self.system = system }
     }
 }

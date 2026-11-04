@@ -138,6 +138,34 @@ private final class BlockingRecorderCompletionsLoader: @unchecked Sendable {
 
 @MainActor
 final class AudioRecorderViewModelTests: XCTestCase {
+    func testInputLevelsUpdateWithoutRepublishingTheViewModel() throws {
+        let viewModel = makeViewModel(defaults: try makeDefaults())
+        var viewModelChanges = 0
+        var levelChanges = 0
+        let viewModelObserver = viewModel.objectWillChange.sink { viewModelChanges += 1 }
+        let levelsObserver = viewModel.inputLevels.objectWillChange.sink { levelChanges += 1 }
+        defer {
+            viewModelObserver.cancel()
+            levelsObserver.cancel()
+        }
+
+        viewModel.micLevel = 0.3
+        viewModel.systemLevel = 0.5
+        viewModel.micLevel = 0.3
+
+        XCTAssertEqual(viewModelChanges, 0)
+        XCTAssertEqual(levelChanges, 2)
+        XCTAssertEqual(viewModel.indicatorLevelMeter.level, 0.5)
+    }
+
+    func testDurationPublishesOnlyChangesTheRecorderShows() {
+        XCTAssertFalse(AudioRecorderViewModel.durationChangesDisplay(from: 0, to: 0.4))
+        XCTAssertTrue(AudioRecorderViewModel.durationChangesDisplay(from: 0, to: 0.5))
+        XCTAssertFalse(AudioRecorderViewModel.durationChangesDisplay(from: 0.5, to: 0.9))
+        XCTAssertTrue(AudioRecorderViewModel.durationChangesDisplay(from: 0.9, to: 1.0))
+        XCTAssertTrue(AudioRecorderViewModel.durationChangesDisplay(from: 754.3, to: 0))
+    }
+
     func testRecordingRequestSuppressesWhatsNewBeforeAsyncStartup() async throws {
         let defaults = try makeDefaults()
         defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)

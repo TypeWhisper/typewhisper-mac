@@ -100,22 +100,11 @@ struct AudioRecorderView: View {
 
                     // Level meters
                     if viewModel.state == .recording {
-                        VStack(spacing: 8) {
-                            if viewModel.micEnabled {
-                                LevelMeterRow(
-                                    label: String(localized: "recorder.mic"),
-                                    icon: "mic.fill",
-                                    level: viewModel.micLevel
-                                )
-                            }
-                            if viewModel.systemAudioEnabled {
-                                LevelMeterRow(
-                                    label: String(localized: "recorder.systemAudio"),
-                                    icon: "speaker.wave.2.fill",
-                                    level: viewModel.systemLevel
-                                )
-                            }
-                        }
+                        RecorderLevelMeters(
+                            levels: viewModel.inputLevels,
+                            micEnabled: viewModel.micEnabled,
+                            systemAudioEnabled: viewModel.systemAudioEnabled
+                        )
                         .padding(.top, 4)
                     }
                 }
@@ -447,6 +436,33 @@ struct AudioRecorderView: View {
 }
 
 // MARK: - Level Meter Row
+
+/// The level meters observe only the input levels, so level updates re-render them
+/// instead of the whole Recorder page.
+private struct RecorderLevelMeters: View {
+    @ObservedObject var levels: RecorderInputLevels
+    let micEnabled: Bool
+    let systemAudioEnabled: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if micEnabled {
+                LevelMeterRow(
+                    label: String(localized: "recorder.mic"),
+                    icon: "mic.fill",
+                    level: levels.mic
+                )
+            }
+            if systemAudioEnabled {
+                LevelMeterRow(
+                    label: String(localized: "recorder.systemAudio"),
+                    icon: "speaker.wave.2.fill",
+                    level: levels.system
+                )
+            }
+        }
+    }
+}
 
 private struct LevelMeterRow: View {
     let label: String
