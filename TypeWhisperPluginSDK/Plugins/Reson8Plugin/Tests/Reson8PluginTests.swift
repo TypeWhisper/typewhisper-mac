@@ -699,11 +699,13 @@ final class Reson8PluginTests: XCTestCase {
     }
 
     func testTurnsSessionKeepsAShortWordAfterTheLastTurn() async throws {
-        let socket = FakeRealtimeSocket(flushAnswers: [
+        // Only the first flush gets the turn. When the session sees the turn open before its
+        // end arrives, it flushes again, and answering that flush with the turn too repeated "No.".
+        let socket = FakeRealtimeSocket(flushAnswers: [], answersPerFlush: [[
             #"{"type":"turn_start"}"#,
             #"{"type":"turn_end_candidate","text":"No.","language":"en","start_ms":1500,"duration_ms":200}"#,
             #"{"type":"turn_end"}"#,
-        ])
+        ]])
         let turnEnds = OSAllocatedUnfairLock(initialState: 0)
         let session = try await Reson8RealtimeSession.connect(
             socket: socket,
