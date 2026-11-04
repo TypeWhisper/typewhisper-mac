@@ -1493,6 +1493,7 @@ private struct AssemblyAISettingsView: View {
                 Text("Async – $0.21/h", bundle: bundle)
                     .tag(AssemblyAITranscriptionMode.async)
             }
+            .pickerStyle(.radioGroup)
             .labelsHidden()
             .disabled(!selectedModelHasModes)
             .onChange(of: transcriptionMode) {
