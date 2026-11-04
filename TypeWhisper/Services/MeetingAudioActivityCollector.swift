@@ -111,9 +111,52 @@ private final class CoreAudioListenerRegistration: @unchecked Sendable {
     }
 }
 
+/// What a CoreAudio process object stands for. CoreAudio creates one object
+/// per client process, so its PID, bundle identifier and executable stay the
+/// same for as long as the object is listed.
+struct MeetingAudioProcessIdentity: Equatable, Sendable {
+    let processID: pid_t
+    /// The canonical meeting app or browser, or nil when the process can never
+    /// be a meeting source (including TypeWhisper itself).
+    let bundleIdentifier: String?
+}
+
+/// Remembers process identities between snapshots, so a pass reads only the
+/// running state of relevant processes instead of every static property.
+struct MeetingAudioProcessIdentityCache: Sendable {
+    private var identities: [AudioObjectID: MeetingAudioProcessIdentity] = [:]
+
+    var cachedObjectIDs: Set<AudioObjectID> { Set(identities.keys) }
+
+    /// Returns the identity of every listed object that could be resolved, in
+    /// list order. Objects that left the list are forgotten. An object whose
+    /// identity could not be read, or was resolved without everything it
+    /// depends on (`cacheable == false`), is read again on the next pass.
+    mutating func identities(
+        for objectIDs: [AudioObjectID],
+        resolve: (AudioObjectID) -> (identity: MeetingAudioProcessIdentity, cacheable: Bool)?
+    ) -> [(objectID: AudioObjectID, identity: MeetingAudioProcessIdentity)] {
+        let listed = Set(objectIDs)
+        identities = identities.filter { listed.contains($0.key) }
+        return objectIDs.compactMap { objectID in
+            if let cached = identities[objectID] {
+                return (objectID, cached)
+            }
+            guard let resolved = resolve(objectID) else { return nil }
+            if resolved.cacheable {
+                identities[objectID] = resolved.identity
+            }
+            return (objectID, resolved.identity)
+        }
+    }
+}
+
 private struct CoreAudioProcessClientState {
     var systemRegistrations: [CoreAudioListenerRegistration] = []
     var processRegistrations: [AudioObjectID: [CoreAudioListenerRegistration]] = [:]
+    // Reset with the rest of the state on stop, start and HAL restart, because
+    // a restarted coreaudiod can hand out the same object IDs again.
+    var processIdentities = MeetingAudioProcessIdentityCache()
     var started = false
 }
 
@@ -180,27 +223,31 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
             return .failed(at: date)
         }
 
+        var identityCache = state.withLock { $0.processIdentities }
+        let identities = identityCache.identities(for: objectIDs, resolve: readProcessIdentity)
+        state.withLock { [identityCache] in $0.processIdentities = identityCache }
+
         var processes: [MeetingAudioProcess] = []
         var relevantObjectIDs = Set<AudioObjectID>()
-        for objectID in objectIDs {
-            guard let rawProcess = readProcess(objectID: objectID) else { continue }
-            guard rawProcess.processID != ownProcessID,
-                  rawProcess.bundleIdentifier != ownBundleIdentifier else {
-                continue
-            }
-            guard let bundleIdentifier = Self.canonicalBundleIdentifier(
-                for: rawProcess.bundleIdentifier,
-                executablePath: Self.executablePath(processID: rawProcess.processID)
-            ) else {
+        for (objectID, identity) in identities {
+            guard let bundleIdentifier = identity.bundleIdentifier,
+                  let isRunningInput = readFlag(
+                      objectID: objectID,
+                      selector: kAudioProcessPropertyIsRunningInput
+                  ),
+                  let isRunningOutput = readFlag(
+                      objectID: objectID,
+                      selector: kAudioProcessPropertyIsRunningOutput
+                  ) else {
                 continue
             }
             relevantObjectIDs.insert(objectID)
             processes.append(MeetingAudioProcess(
-                audioObjectID: rawProcess.audioObjectID,
-                processID: rawProcess.processID,
+                audioObjectID: objectID,
+                processID: identity.processID,
                 bundleIdentifier: bundleIdentifier,
-                isRunningInput: rawProcess.isRunningInput,
-                isRunningOutput: rawProcess.isRunningOutput
+                isRunningInput: isRunningInput,
+                isRunningOutput: isRunningOutput
             ))
         }
 
@@ -229,6 +276,10 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
         registrations.forEach(removeListener)
     }
 
+    var cachedProcessObjectIDs: Set<AudioObjectID> {
+        state.withLock { $0.processIdentities.cachedObjectIDs }
+    }
+
     private func readProcessObjectIDs() -> [AudioObjectID]? {
         var address = propertyAddress(kAudioHardwarePropertyProcessObjectList)
         guard AudioObjectHasProperty(systemObjectID, &address) else { return nil }
@@ -254,47 +305,47 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
         return Array(values.prefix(returnedCount))
     }
 
-    private func readProcess(objectID: AudioObjectID) -> MeetingAudioProcess? {
-        let requiredSelectors: [AudioObjectPropertySelector] = [
-            kAudioProcessPropertyPID,
-            kAudioProcessPropertyBundleID,
-            kAudioProcessPropertyIsRunningInput,
-            kAudioProcessPropertyIsRunningOutput
-        ]
-        guard requiredSelectors.allSatisfy({
-            hasProperty(objectID: objectID, address: propertyAddress($0))
-        }) else {
-            return nil
-        }
-
+    private func readProcessIdentity(
+        objectID: AudioObjectID
+    ) -> (identity: MeetingAudioProcessIdentity, cacheable: Bool)? {
+        // Reads go straight to GetPropertyData: it fails for a missing property
+        // or a vanished object just like a separate HasProperty check would.
         guard let processID: pid_t = readScalar(
             objectID: objectID,
             address: propertyAddress(kAudioProcessPropertyPID)
         ),
-        let bundleIdentifier = readBundleIdentifier(objectID: objectID),
-        let input: UInt32 = readScalar(
-            objectID: objectID,
-            address: propertyAddress(kAudioProcessPropertyIsRunningInput)
-        ),
-        let output: UInt32 = readScalar(
-            objectID: objectID,
-            address: propertyAddress(kAudioProcessPropertyIsRunningOutput)
-        ) else {
+        let bundleIdentifier = readBundleIdentifier(objectID: objectID) else {
             return nil
         }
-
-        return MeetingAudioProcess(
-            audioObjectID: objectID,
-            processID: processID,
-            bundleIdentifier: bundleIdentifier,
-            isRunningInput: input != 0,
-            isRunningOutput: output != 0
+        guard processID != ownProcessID, bundleIdentifier != ownBundleIdentifier else {
+            return (MeetingAudioProcessIdentity(processID: processID, bundleIdentifier: nil), true)
+        }
+        // Browser helpers are attributed through their executable path. If
+        // proc_pidpath fails, use this result for the current pass only and
+        // read the process again next time, as every pass did before caching.
+        let executablePath = Self.executablePath(processID: processID)
+        return (
+            MeetingAudioProcessIdentity(
+                processID: processID,
+                bundleIdentifier: Self.canonicalBundleIdentifier(
+                    for: bundleIdentifier,
+                    executablePath: executablePath
+                )
+            ),
+            executablePath != nil
         )
+    }
+
+    private func readFlag(
+        objectID: AudioObjectID,
+        selector: AudioObjectPropertySelector
+    ) -> Bool? {
+        let value: UInt32? = readScalar(objectID: objectID, address: propertyAddress(selector))
+        return value.map { $0 != 0 }
     }
 
     private func readBundleIdentifier(objectID: AudioObjectID) -> String? {
         var address = propertyAddress(kAudioProcessPropertyBundleID)
-        guard AudioObjectHasProperty(objectID, &address) else { return nil }
         var value: Unmanaged<CFString>?
         var byteCount = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         guard AudioObjectGetPropertyData(
@@ -316,7 +367,6 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
         address initialAddress: AudioObjectPropertyAddress
     ) -> T? {
         var address = initialAddress
-        guard AudioObjectHasProperty(objectID, &address) else { return nil }
         let pointer = UnsafeMutableRawPointer.allocate(
             byteCount: MemoryLayout<T>.size,
             alignment: MemoryLayout<T>.alignment
