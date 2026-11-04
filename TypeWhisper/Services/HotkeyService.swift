@@ -643,6 +643,21 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             }
         }
 
+        /// Tap thread, before the main thread gets `decision`. Releases an event that already
+        /// waited past `timeout` in the queue, so the main thread never starts a handler for an
+        /// event the tap lets through. Handing the decision over afterwards ends the stall.
+        func releaseIfLate(
+            _ decision: Decision,
+            requestedAt: UInt64,
+            timeout: TimeInterval,
+            now: UInt64 = DispatchTime.now().uptimeNanoseconds
+        ) -> Bool {
+            guard DispatchTime(uptimeNanoseconds: now) >= DispatchTime(uptimeNanoseconds: requestedAt) + timeout else {
+                return false
+            }
+            return releaseIfStillIn(.pending, decision, requestedAt: requestedAt)
+        }
+
         /// Main thread.
         func claim(_ decision: Decision, now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Claim {
             lock.withLock {
@@ -1918,6 +1933,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         guard let decision = eventTapMainThreadGate.makeDecision() else { return false }
         let now = DispatchTime.now().uptimeNanoseconds
         let requestedAt = Self.eventTapDecisionStart(eventTimestamp: event.timestamp, now: now)
+        let late = eventTapMainThreadGate.releaseIfLate(
+            decision,
+            requestedAt: requestedAt,
+            timeout: Self.eventTapDecisionTimeout,
+            now: now
+        )
         DispatchQueue.main.async { [self] in
             switch eventTapMainThreadGate.claim(decision) {
             case .handle:
@@ -1929,12 +1950,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 if let stall { finishEventTapMainThreadStall(stall) }
             }
         }
-        switch eventTapMainThreadGate.wait(
-            for: decision,
-            requestedAt: requestedAt,
-            timeout: Self.eventTapDecisionTimeout,
-            claimedTimeout: Self.eventTapClaimedDecisionTimeout
-        ) {
+        let answer: EventTapMainThreadGate.Answer = late
+            ? .released(stallStarted: true)
+            : eventTapMainThreadGate.wait(
+                for: decision,
+                requestedAt: requestedAt,
+                timeout: Self.eventTapDecisionTimeout,
+                claimedTimeout: Self.eventTapClaimedDecisionTimeout
+            )
+        switch answer {
         case .decided(let suppress):
             return suppress
         case .released(let stallStarted):

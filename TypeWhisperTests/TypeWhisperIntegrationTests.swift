@@ -22430,6 +22430,22 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertNotNil(gate.makeDecision(), "The late handler ends the stall")
     }
 
+    func testEventTapGateReleasesALateEventBeforeTheMainThreadCanClaimIt() throws {
+        let gate = HotkeyService.EventTapMainThreadGate()
+        let now = DispatchTime.now().uptimeNanoseconds
+        let fresh = try XCTUnwrap(gate.makeDecision())
+        XCTAssertFalse(gate.releaseIfLate(fresh, requestedAt: now - 50_000_000, timeout: 0.1, now: now))
+        XCTAssertEqual(gate.claim(fresh), .handle)
+        gate.resolve(fresh, suppress: false)
+
+        // A handler acts on its own decision, so it must never start for an event the tap let through.
+        let late = try XCTUnwrap(gate.makeDecision())
+        XCTAssertTrue(gate.releaseIfLate(late, requestedAt: now - 700_000_000, timeout: 0.1, now: now))
+        guard case .skip(let stall) = gate.claim(late) else { return XCTFail("A late event must not reach its handler") }
+        XCTAssertNotNil(stall, "Handing the late event to the main thread ends the stall")
+        XCTAssertNotNil(gate.makeDecision())
+    }
+
     func testEventTapReenableBackoffAfterRepeatedTimeouts() {
         let second: UInt64 = 1_000_000_000
         var backoff = HotkeyService.EventTapReenableBackoff()
