@@ -1058,7 +1058,9 @@ final class URLSessionAssemblyAIRealtimeSocket: AssemblyAIRealtimeSocket, @unche
 /// Audio goes out as binary PCM frames of 50 ms to 1 s, the lengths the API accepts.
 /// AssemblyAI ends each turn with a formatted `Turn` message. When the recording stops,
 /// the session sends `Terminate`; the server answers with the turns for the remaining
-/// audio and then `Termination`, so the transcript is complete once that arrives. With
+/// audio and then `Termination`. The transcript is complete once that arrives, or earlier
+/// once no turn is open and the last word ends where the audio ends (see
+/// `transcriptCoversSentAudio`). With
 /// dictionary terms beyond what the realtime API takes, the final text comes from
 /// `finalTranscriber`, which transcribes the recording with all of them, and the
 /// realtime transcript is only the preview and the fallback.
@@ -1071,9 +1073,11 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
     static let minimumFrameSampleCount = sampleRate / 20
     static let maximumFrameSampleCount = sampleRate
     static let startTimeout: Duration = .seconds(10)
-    /// The last turn arrived 0.65 to 1.1 s after `Terminate` in our tests; this also
+    /// `Termination` arrived 0.7 to 1.1 s after `Terminate` in our tests; this also
     /// covers audio the server has not transcribed yet after a slow connection.
     static let finishTimeout: Duration = .seconds(8)
+    /// Audio after the last word that is too short to hold another one.
+    static let trailingAudioWithoutWords: TimeInterval = 0.35
 
     private static let logger = Logger(subsystem: "com.typewhisper.assemblyai", category: "LiveSession")
 
@@ -1089,11 +1093,13 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
     private var receiveTask: Task<Void, Never>?
 
     private var hasStarted = false
+    private var hasSentTerminate = false
     private var isTerminated = false
     private var isClosed = false
     private var isCancelled = false
     private var failure: Error?
     private var pendingSamples: [Float] = []
+    private var sentSampleCount = 0
     private var recordedSamples: [Float] = []
     private var finishedTurns: [Int: FinishedTurn] = [:]
     private var partialTurnOrder: Int?
@@ -1162,6 +1168,7 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
         do {
             try await sendPendingAudio(flush: true)
             try await send { try await $0.send(text: #"{"type":"Terminate"}"#) }
+            hasSentTerminate = true
         } catch {
             terminateError = error
         }
@@ -1192,7 +1199,10 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
             throw terminateError
         }
 
-        let isComplete = await wait(timeout: Self.finishTimeout) { $0.isTerminated }
+        let isComplete = await wait(timeout: Self.finishTimeout) {
+            $0.isTerminated || $0.transcriptCoversSentAudio
+        }
+        let endedBeforeTermination = !isTerminated
         close()
         guard isComplete else {
             // Without `Termination` the end of the speech may be missing; TypeWhisper then
@@ -1214,7 +1224,9 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
             return PluginTranscriptionSegment(text: turn.text, start: start, end: end)
         }
         PluginWordTimings.report(turns.flatMap(\.words))
-        Self.logger.info("Live session finished with \(turns.count, privacy: .public) turns")
+        Self.logger.info(
+            "Live session finished with \(turns.count, privacy: .public) turns \(endedBeforeTermination ? "once they covered the audio" : "at Termination", privacy: .public)"
+        )
         return PluginTranscriptionResult(text: text, detectedLanguage: language, segments: segments)
     }
 
@@ -1241,6 +1253,7 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
             }
             let audio = AssemblyAIPlugin.floatToPCM16(frame)
             try await send { try await $0.send(audio: audio) }
+            sentSampleCount += frame.count
         }
     }
 
@@ -1284,6 +1297,7 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
         case "Turn":
             handleTurn(json)
             reportProgress()
+            resumeWaiters()
         case "Termination":
             isTerminated = true
             resumeWaiters()
@@ -1328,6 +1342,19 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
             return nil
         }
         return PluginWordTiming(text: text, start: start / 1000, end: end / 1000)
+    }
+
+    /// After `Terminate`: no turn is open and the last word ends within
+    /// `trailingAudioWithoutWords` of the audio sent, so no further turn can follow.
+    /// `Termination` itself arrives about half a second after the last turn.
+    var transcriptCoversSentAudio: Bool {
+        guard hasSentTerminate,
+              partialTurnOrder == nil,
+              let lastWordEnd = orderedTurns.last?.words.last?.end else {
+            return false
+        }
+        let sentAudioDuration = Double(sentSampleCount) / Double(Self.sampleRate)
+        return lastWordEnd >= sentAudioDuration - Self.trailingAudioWithoutWords
     }
 
     private var orderedTurns: [FinishedTurn] {
