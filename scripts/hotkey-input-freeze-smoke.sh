@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check that the real HotkeyService event tap keeps system input flowing while
-# its main thread stalls. Needs a locally trusted terminal. For about eight
-# seconds it posts F18 presses and repeatedly blocks the main thread for 1.5 s;
+# its main thread stalls or lags. Needs a locally trusted terminal. For about
+# fifteen seconds it posts F18 presses while it blocks the main thread, first for
+# 1.5 s at a time, then for 60 ms on each wake-up with events arriving every 20 ms;
 # typing during that time may lag by up to the tap's decision timeout.
 #   scripts/hotkey-input-freeze-smoke.sh [path/to/HotkeyService.swift]
 set -euo pipefail
@@ -33,8 +34,7 @@ source += workflow[start:end]
 source += Path(sys.argv[2]).read_text()
 source += '''
 setvbuf(stdout, nil, _IONBF, 0)
-alarm(30) // never leave a stalled filter tap behind
-nonisolated(unsafe) let duration: TimeInterval = 8
+alarm(45) // never leave a stalled filter tap behind
 nonisolated(unsafe) let probeTag: Int64 = 0x5A << 56
 
 guard CGPreflightPostEventAccess(), AXIsProcessTrusted() else {
@@ -87,40 +87,62 @@ service.setHotkeyForTesting(UnifiedHotkey(keyCode: 61, modifierFlags: 0, isFn: f
 service.resumeMonitoring()
 precondition(service.isEventTapEnabledForTesting, "The service did not install its event tap")
 
-// Stall the main thread for 1.5 s with short responsive gaps in between.
-Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in usleep(1_500_000) }
-
-nonisolated(unsafe) let posted = DispatchSemaphore(value: 0)
 final class Counter: @unchecked Sendable { var value = 0 }
 nonisolated(unsafe) let sentCount = Counter()
-DispatchQueue.global(qos: .userInitiated).async {
-    let deadline = Date().addingTimeInterval(duration)
-    while Date() < deadline {
-        for down in [true, false] {
-            let event = CGEvent(keyboardEventSource: nil, virtualKey: 79 /* F18 */, keyDown: down)!
-            event.setIntegerValueField(.eventSourceUserData, value: probeTag | uptimeMicros())
-            event.post(tap: .cghidEventTap)
-            sentCount.value += 1
+
+// Posts F18 presses `spacing` apart while `load` slows down the main thread.
+func runScenario(_ name: String, spacing: useconds_t, duration: TimeInterval, load: () -> () -> Void) -> Bool {
+    latencies.lock.withLock { latencies.values.removeAll() }
+    sentCount.value = 0
+    let stopLoad = load()
+    let posted = DispatchSemaphore(value: 0)
+    DispatchQueue.global(qos: .userInitiated).async {
+        let deadline = Date().addingTimeInterval(duration)
+        while Date() < deadline {
+            for down in [true, false] {
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: 79 /* F18 */, keyDown: down)!
+                event.setIntegerValueField(.eventSourceUserData, value: probeTag | uptimeMicros())
+                event.post(tap: .cghidEventTap)
+                sentCount.value += 1
+                usleep(spacing)
+            }
         }
-        usleep(100_000)
+        Thread.sleep(forTimeInterval: 2)
+        posted.signal()
     }
-    Thread.sleep(forTimeInterval: 2)
-    posted.signal()
+    while posted.wait(timeout: .now()) == .timedOut {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    }
+    stopLoad()
+    let values = latencies.lock.withLock { latencies.values.sorted() }
+    let maxLatency = values.last ?? .infinity
+    print(String(format: "%@: received %d/%d probe events, p50 %.1f ms, max %.1f ms", name,
+                 values.count, sentCount.value, values.isEmpty ? -1 : values[values.count / 2], maxLatency))
+    return values.count == sentCount.value && maxLatency < 500
 }
-while posted.wait(timeout: .now()) == .timedOut {
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+let stalled = runScenario("1.5 s main-thread stalls", spacing: 50_000, duration: 8) {
+    // Long stalls with short responsive gaps in between.
+    let timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in usleep(1_500_000) }
+    return { timer.invalidate() }
+}
+let lagging = runScenario("60 ms per main-thread wake-up, an event every 20 ms", spacing: 20_000, duration: 3) {
+    // Each tap decision wakes the main thread, which then takes 60 ms: every event is answered
+    // within the decision timeout, but they arrive faster. Counted per event, their waits added
+    // up to seconds until macOS switched the tap off (#1513 on 1.8.2).
+    let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.afterWaiting.rawValue, true, 0) { _, _ in
+        usleep(60_000)
+    }
+    CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+    return { CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes) }
 }
 service.suspendMonitoring()
 
-let values = latencies.lock.withLock { latencies.values.sorted() }
-let maxLatency = values.last ?? .infinity
-print(String(format: "received %d/%d probe events, p50 %.1f ms, max %.1f ms",
-             values.count, sentCount.value, values.isEmpty ? -1 : values[values.count / 2], maxLatency))
-guard values.count == sentCount.value, maxLatency < 500 else {
-    print("FAIL: a stalled main thread held back system input")
+guard stalled, lagging else {
+    print("FAIL: a stalled or lagging main thread held back system input")
     exit(1)
 }
-print("PASS: input kept flowing while the HotkeyService main thread stalled")
+print("PASS: input kept flowing while the HotkeyService main thread stalled or lagged")
 '''
 Path(sys.argv[3]).write_text(source)
 PY

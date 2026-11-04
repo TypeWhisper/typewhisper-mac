@@ -22363,6 +22363,33 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         XCTAssertEqual(cancelCount, 1)
     }
+
+    func testEventTapReleasesAnEventThatAlreadyWaitedInTheQueue() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        // In #1513 the main thread answered each event in time, but the events behind it queued up
+        // until input lagged for seconds and macOS switched the tap off.
+        nonisolated(unsafe) let keyDown = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x00, keyDown: true))
+        keyDown.timestamp = DispatchTime.now().uptimeNanoseconds - 150_000_000
+        final class Answer: @unchecked Sendable {
+            var suppressed: Bool?
+            var duration: TimeInterval = 0
+        }
+        let answer = Answer()
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            let start = Date()
+            answer.suppressed = service.decideEventTapEventForTesting(keyDown)
+            answer.duration = Date().timeIntervalSince(start)
+            finished.signal()
+        }
+        // Deliberately block the main thread: only a release without waiting finishes in time.
+        XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
+        XCTAssertEqual(answer.suppressed, false)
+        XCTAssertLessThan(answer.duration, 0.05, "An event that already waited past the decision timeout must pass at once")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    }
     #endif
 
     func testEventTapGateWaitsForClaimedHandlerWithinItsOwnBound() throws {
@@ -22434,6 +22461,21 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(lone.recordTimeout(at: 4_001 * second), .reenable)
         XCTAssertEqual(lone.recordTimeout(at: 4_002 * second), .backingOff(seconds: 30))
     }
+
+    #if !APPSTORE
+    func testEventTapBackoffIgnoresTheReportOfItsOwnDisable() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: false), .reenable)
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: true), .reenable)
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: true), .reenable)
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: true), .backingOff(seconds: 30))
+        // Switching the tap off for the backoff makes macOS report a user-input disable at once.
+        // In #1513 that report re-armed the tap 7 ms after the backoff started.
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: false), .backingOff(seconds: nil))
+    }
+    #endif
 
     @MainActor
     func testRecoveryStopsWorkflowAfterLostRelease() async throws {
