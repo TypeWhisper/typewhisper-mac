@@ -72,6 +72,7 @@ final class DictionaryService: ObservableObject {
     /// to rebuild.
     private var entriesGeneration = 0
     private var promptVocabularyCache: (generation: Int, localeIdentifier: String, limit: Int, vocabulary: [String])?
+    private var termsCache = TermsCache(generation: -1, localeIdentifier: "")
 
     @Published private(set) var entries: [DictionaryEntry] = [] {
         didSet { entriesByIdentity = nil }
@@ -235,6 +236,15 @@ final class DictionaryService: ObservableObject {
     /// entry in place, since a failed save keeps that change without reloading.
     private var entriesByIdentity: [String: [DictionaryEntry]]?
 
+    /// The entries are about to change in place. A failed save keeps that
+    /// change without loading the entries again, so drop everything derived
+    /// from them: the identity index and the generation-keyed term and
+    /// vocabulary caches.
+    private func invalidateEntryDerivedCaches() {
+        entriesByIdentity = nil
+        entriesGeneration &+= 1
+    }
+
     func duplicateEntry(type: DictionaryEntryType, original: String, isRegex: Bool, excluding id: UUID? = nil) -> DictionaryEntry? {
         let key = Self.entryIdentity(type: type, original: original, isRegex: isRegex)
         let index = entriesByIdentity ?? Dictionary(grouping: entries) {
@@ -299,7 +309,7 @@ final class DictionaryService: ObservableObject {
         guard duplicateEntry(type: entry.type, original: original, isRegex: isRegex ?? entry.isRegex, excluding: entry.id) == nil else {
             return false
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         let previous = (
             original: entry.original,
@@ -560,13 +570,21 @@ final class DictionaryService: ObservableObject {
     /// Get all enabled terms as a comma-separated string for Whisper prompt.
     /// Truncates at 600 characters to stay within the API's 224-token limit.
     func enabledTerms() -> [String] {
-        PluginDictionaryTerms.normalizedTerms(from: terms.map(\.original))
+        refreshTermsCacheIfStale()
+        if let terms = termsCache.terms { return terms }
+        let terms = enabledTermHints().map(\.text)
+        termsCache.terms = terms
+        return terms
     }
 
     func enabledTermHints() -> [PluginDictionaryTermHint] {
-        PluginDictionaryTerms.normalizedTermHints(from: terms.map {
+        refreshTermsCacheIfStale()
+        if let hints = termsCache.hints { return hints }
+        let hints = PluginDictionaryTerms.normalizedTermHints(from: terms.map {
             PluginDictionaryTermHint(text: $0.original, ctcMinSimilarity: $0.ctcMinSimilarity)
         })
+        termsCache.hints = hints
+        return hints
     }
 
     func setTerms(_ rawTerms: [String], replaceExisting: Bool) {
@@ -581,7 +599,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         let normalized = PluginDictionaryTerms.normalizedTerms(from: rawTerms)
         let normalizedByKey = Dictionary(uniqueKeysWithValues: normalized.map {
@@ -625,7 +643,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         let normalized = PluginDictionaryTerms.normalizedTermHints(from: rawTerms.map {
             PluginDictionaryTermHint(
@@ -727,12 +745,11 @@ final class DictionaryService: ObservableObject {
     /// `modelId` is a per-request model override, for engines whose models differ in
     /// dictionary terms support.
     func getTermsForPrompt(providerId: String?, modelId: String? = nil) -> String? {
-        let terms = enabledTerms()
-        guard !terms.isEmpty else { return nil }
+        guard !enabledTerms().isEmpty else { return nil }
 
         guard let providerId,
               let plugin = PluginManager.shared?.transcriptionEngine(for: providerId) else {
-            return PluginDictionaryTerms.prompt(from: terms)
+            return termsPrompt(budget: nil)
         }
 
         // An enforced engine and model replace any override, and the enforced model is
@@ -752,26 +769,81 @@ final class DictionaryService: ObservableObject {
         }
 
         guard let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {
-            return PluginDictionaryTerms.prompt(from: terms)
+            return termsPrompt(budget: nil)
         }
 
-        return PluginDictionaryTerms.prompt(from: terms, budget: budget)
+        return termsPrompt(budget: budget)
     }
 
     func getTermHints(providerId: String?) -> [PluginDictionaryTermHint] {
-        let hints = enabledTermHints()
-        guard !hints.isEmpty else { return [] }
+        guard !enabledTermHints().isEmpty else { return [] }
 
         guard let providerId,
               let plugin = PluginManager.shared?.transcriptionEngine(for: providerId),
               let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {
-            return PluginDictionaryTerms.clippedTermHints(
-                from: hints,
-                budget: DictionaryTermsBudget(maxTotalChars: 600)
-            )
+            return clippedTermHints(budget: DictionaryTermsBudget(maxTotalChars: 600))
         }
 
-        return PluginDictionaryTerms.clippedTermHints(from: hints, budget: budget)
+        return clippedTermHints(budget: budget)
+    }
+
+    /// The normalized terms and hints, and the prompts and hints clipped from them per
+    /// budget. Recording starts and transcriptions ask for them, and each answer trims
+    /// and folds every term twice, so they are kept until the entries are loaded again
+    /// or the locale changes. The plugin's capability and budget are still read on
+    /// every request.
+    private struct TermsCache {
+        let generation: Int
+        let localeIdentifier: String
+        var terms: [String]?
+        var hints: [PluginDictionaryTermHint]?
+        /// nil: the 600-character prompt for engines without a budget.
+        var prompts: [TermsBudgetKey?: String?] = [:]
+        var clippedHints: [TermsBudgetKey: [PluginDictionaryTermHint]] = [:]
+    }
+
+    private struct TermsBudgetKey: Hashable {
+        let maxTerms: Int?
+        let maxCharsPerTerm: Int?
+        let maxWordsPerTerm: Int?
+        let maxTotalChars: Int?
+
+        init(_ budget: DictionaryTermsBudget) {
+            maxTerms = budget.maxTerms
+            maxCharsPerTerm = budget.maxCharsPerTerm
+            maxWordsPerTerm = budget.maxWordsPerTerm
+            maxTotalChars = budget.maxTotalChars
+        }
+    }
+
+    private func refreshTermsCacheIfStale() {
+        let localeIdentifier = Locale.current.identifier
+        guard termsCache.generation != entriesGeneration
+            || termsCache.localeIdentifier != localeIdentifier else { return }
+        termsCache = TermsCache(generation: entriesGeneration, localeIdentifier: localeIdentifier)
+    }
+
+    private func termsPrompt(budget: DictionaryTermsBudget?) -> String? {
+        refreshTermsCacheIfStale()
+        let key = budget.map(TermsBudgetKey.init)
+        if let prompt = termsCache.prompts[key] { return prompt }
+        let terms = enabledTerms()
+        let prompt = if let budget {
+            PluginDictionaryTerms.prompt(from: terms, budget: budget)
+        } else {
+            PluginDictionaryTerms.prompt(from: terms)
+        }
+        termsCache.prompts.updateValue(prompt, forKey: key)
+        return prompt
+    }
+
+    private func clippedTermHints(budget: DictionaryTermsBudget) -> [PluginDictionaryTermHint] {
+        refreshTermsCacheIfStale()
+        let key = TermsBudgetKey(budget)
+        if let clipped = termsCache.clippedHints[key] { return clipped }
+        let clipped = PluginDictionaryTerms.clippedTermHints(from: enabledTermHints(), budget: budget)
+        termsCache.clippedHints[key] = clipped
+        return clipped
     }
 
     /// Apply all enabled corrections to the given text.
@@ -1609,7 +1681,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         if let entry = apiCorrection(original: original, isRegex: isRegex) {
             entry.original = original
@@ -1709,7 +1781,7 @@ final class DictionaryService: ObservableObject {
             throw DictionaryServiceMutationError.unavailable
         }
         guard !mutations.isEmpty else { return }
-        entriesByIdentity = nil
+        invalidateEntryDerivedCaches()
 
         for mutation in mutations {
             switch mutation {

@@ -3237,14 +3237,13 @@ final class DictationViewModel: ObservableObject {
                 let translationTarget = effectiveTranslationTarget
                 let primaryEngineId = engineOverride ?? modelManager.selectedProviderId
                 let dictionaryProviderId = primaryEngineId
-                let termsPrompt = dictionaryService.getTermsForPrompt(
-                    providerId: dictionaryProviderId,
-                    modelId: cloudModelOverride
-                )
-                let termHints = dictionaryService.getTermHints(providerId: dictionaryProviderId)
 
-                let transcription = if let liveSessionResult {
-                    FinalTranscriptionOutput(
+                let transcription: FinalTranscriptionOutput
+                // nil for a live result: its session got the terms when it started.
+                let primaryPromptChars: Int?
+                if let liveSessionResult {
+                    primaryPromptChars = nil
+                    transcription = FinalTranscriptionOutput(
                         result: liveSessionResult,
                         modelId: modelManager.resolvedModelId(
                             engineOverrideId: engineOverride,
@@ -3257,14 +3256,19 @@ final class DictationViewModel: ObservableObject {
                         usedRecoveryFallback: false
                     )
                 } else {
-                    try await transcribeFinalAudio(
+                    let termsPrompt = dictionaryService.getTermsForPrompt(
+                        providerId: dictionaryProviderId,
+                        modelId: cloudModelOverride
+                    )
+                    primaryPromptChars = termsPrompt?.count ?? 0
+                    transcription = try await transcribeFinalAudio(
                         audioSamples: samples,
                         languageSelection: languageSelection,
                         task: task,
                         primaryEngineId: primaryEngineId,
                         primaryCloudModelOverride: cloudModelOverride,
                         prompt: termsPrompt,
-                        dictionaryTermHints: termHints,
+                        dictionaryTermHints: dictionaryService.getTermHints(providerId: dictionaryProviderId),
                         normalizeNumbers: effectiveNumberNormalizationOverride
                     )
                 }
@@ -3276,7 +3280,7 @@ final class DictationViewModel: ObservableObject {
                     trace.model = transcription.modelId
                     trace.usedLiveResult = usedLiveSessionResult
                 }
-                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public), engine=\(result.engineUsed, privacy: .public), model=\(transcription.modelId ?? "unknown", privacy: .public), usedRecoveryFallback=\(transcription.usedRecoveryFallback, privacy: .public), primaryPromptChars=\(termsPrompt?.count ?? 0, privacy: .public), \(diagnostics, privacy: .public)")
+                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public), engine=\(result.engineUsed, privacy: .public), model=\(transcription.modelId ?? "unknown", privacy: .public), usedRecoveryFallback=\(transcription.usedRecoveryFallback, privacy: .public), primaryPromptChars=\(primaryPromptChars.map(String.init) ?? "n/a", privacy: .public), \(diagnostics, privacy: .public)")
 
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }

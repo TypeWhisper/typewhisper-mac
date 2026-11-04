@@ -1340,6 +1340,48 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testTermPromptAndHintsFollowDictionaryAndBudgetChanges() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.setTerms(["Alpha", "BetaBeta", "Gamma"], replaceExisting: true)
+
+        let plugin = BudgetedDictionaryEnginePlugin()
+        plugin.providerIdValue = "budgeted"
+        plugin.budgetValue = DictionaryTermsBudget(maxTerms: 2)
+        installPlugins([plugin], appSupportDirectory: appSupportDirectory)
+
+        XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), "Alpha, BetaBeta")
+        XCTAssertEqual(service.getTermHints(providerId: plugin.providerId).map(\.text), ["Alpha", "BetaBeta"])
+
+        plugin.budgetValue = DictionaryTermsBudget(maxCharsPerTerm: 5)
+        XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), "Alpha, Gamma")
+        XCTAssertEqual(service.getTermHints(providerId: plugin.providerId).map(\.text), ["Alpha", "Gamma"])
+
+        service.addEntry(type: .term, original: "Delta", ctcMinSimilarity: 0.7)
+        XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), "Alpha, Delta, Gamma")
+        XCTAssertEqual(service.getTermsForPrompt(providerId: nil), "Alpha, BetaBeta, Delta, Gamma")
+        XCTAssertEqual(service.getTermHints(providerId: plugin.providerId), [
+            PluginDictionaryTermHint(text: "Alpha", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "Delta", ctcMinSimilarity: 0.7),
+            PluginDictionaryTermHint(text: "Gamma", ctcMinSimilarity: nil),
+        ])
+
+        let delta = try XCTUnwrap(service.terms.first { $0.original == "Delta" })
+        XCTAssertTrue(service.setCtcMinSimilarity(0.9, forTermEntryIDs: [delta.id]))
+        XCTAssertEqual(
+            service.getTermHints(providerId: nil).first { $0.text == "Delta" },
+            PluginDictionaryTermHint(text: "Delta", ctcMinSimilarity: 0.9)
+        )
+
+        service.setEntryEnabled(delta, enabled: false)
+        XCTAssertEqual(service.enabledTerms(), ["Alpha", "BetaBeta", "Gamma"])
+        XCTAssertEqual(service.getTermsForPrompt(providerId: nil), "Alpha, BetaBeta, Gamma")
+        XCTAssertEqual(service.getTermHints(providerId: plugin.providerId).map(\.text), ["Alpha", "Gamma"])
+    }
+
+    @MainActor
     func testGetTermsForPromptFallsBackToLegacyBudgetForUnknownOrUnbudgetedEngines() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
