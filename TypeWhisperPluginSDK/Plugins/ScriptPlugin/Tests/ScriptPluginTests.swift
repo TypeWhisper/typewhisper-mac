@@ -68,6 +68,7 @@ final class ScriptPluginTests: XCTestCase {
                 attendees: [
                     RecorderCalendarParticipant(name: "Alex", email: "alex@example.com", isCurrentUser: true),
                     RecorderCalendarParticipant(email: "kim@example.com"),
+                    RecorderCalendarParticipant(name: " ", email: "sam@example.com"),
                     RecorderCalendarParticipant(name: "Jo\nDoe"),
                     RecorderCalendarParticipant()
                 ]
@@ -80,7 +81,7 @@ final class ScriptPluginTests: XCTestCase {
         _ = await service.executeScript(script, input: payload.text, context: PostProcessingContext(), recorder: payload)
 
         XCTAssertEqual(try String(contentsOf: audioURL.appendingPathExtension("meeting"), encoding: .utf8),
-                       "Weekly sync\n1791098100\n1791099900\nAlex\nkim@example.com\nJo Doe\n")
+                       "Weekly sync\n1791098100\n1791099900\nAlex\nkim@example.com\nsam@example.com\nJo Doe\n")
     }
 
     func testRecorderExportAcceptsNoStdoutAndLogsFailure() async throws {

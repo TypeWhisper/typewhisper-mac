@@ -247,8 +247,14 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                         env["TYPEWHISPER_MEETING_END"] = Self.wholeUnixSeconds(meeting.end)
                         // One attendee per line: the name, or the email address when the calendar has no name.
                         env["TYPEWHISPER_MEETING_ATTENDEES"] = meeting.attendees
-                            .compactMap { $0.name ?? $0.email }
-                            .map { $0.components(separatedBy: .newlines).joined(separator: " ") }
+                            .compactMap { attendee in
+                                [attendee.name, attendee.email]
+                                    .compactMap {
+                                        $0?.components(separatedBy: .newlines).joined(separator: " ")
+                                            .trimmingCharacters(in: .whitespaces)
+                                    }
+                                    .first { !$0.isEmpty }
+                            }
                             .joined(separator: "\n")
                     }
                 }
