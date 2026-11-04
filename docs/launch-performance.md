@@ -10,12 +10,13 @@ The job builds the base branch into the same derived data after the pull request
 only the targets the pull request changed compile again. Then
 `scripts/performance/launch_benchmark.py` runs on the same runner:
 
-1. Each build gets its own test profile: setup completed, update checks and optional launch
-   prompts off, and 3,000 history entries, 300 dictionary entries and 30 snippets that the app
-   imports through its local API. A second launch checks that the data persisted and runs
-   one-time work such as statistics backfills.
-2. The builds launch alternately, 8 rounds each. Every launch starts from a copy of the
-   profile, without the local API, and records:
+1. The base build imports a test profile through its local API: setup completed, update checks
+   and optional launch prompts off, and 3,000 history entries, 300 dictionary entries and 30
+   snippets. Each build then launches once on its own copy of that profile, which checks that
+   the data persisted and runs one-time work such as migrations and statistics backfills.
+2. The builds launch alternately from the same path, 10 rounds each, after the runner's
+   processors have gone idle and with Spotlight indexing off. Every launch starts from a copy of
+   the build's profile, without the local API, and records:
    - **Time until ready:** from starting the process to the `Launch.firstIdle` signpost, the
      first time the main thread waits after the service setup, the plugin scan and the model
      restore.
@@ -42,7 +43,7 @@ A metric fails when its change exceeds both limits:
 | Memory after launch | +5% and +2 MB |
 | Peak memory | +10% and +4 MB |
 
-When the first 8 rounds show a regression, 8 more rounds confirm it; only a regression in
+When the first 10 rounds show a regression, 10 more rounds confirm it; only a regression in
 both passes fails the job. App size never fails it.
 
 If the cost is intended, for example for a feature that has to load something at launch,

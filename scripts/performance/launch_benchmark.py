@@ -16,9 +16,10 @@ out of the comparison.
 `run` deletes the preferences of the builds' bundle identifier and launches the apps with
 their real identifier, so it refuses to run without `--disposable-mac` (a CI runner).
 
-Each build first gets its own profile: setup completed, update checks and optional launch
-prompts off, and a test history, dictionary and snippets imported through the local API.
-Every measured launch starts from a copy of that profile and records
+The base build imports the test profile through the local API: setup completed, update checks
+and optional launch prompts off, and a test history, dictionary and snippets. Each build then
+launches once on its own copy of it. Both builds launch from the same path, and every measured
+launch starts from a copy of the build's profile and records
 
 - the time from starting the process to the `Launch.firstIdle` signpost, when the main
   thread first waits after the service setup, the plugin scan and the model restore,
@@ -460,7 +461,11 @@ class AppBuild:
         self.app = Path(app).resolve()
         info = plistlib.loads((self.app / "Contents/Info.plist").read_bytes())
         self.bundle_id = info["CFBundleIdentifier"]
-        self.executable = self.app / "Contents/MacOS" / info["CFBundleExecutable"]
+        # Both builds launch from the same path. With two copies of one bundle identifier in two
+        # places, services such as LaunchServices answered the second copy more slowly, and the
+        # identical app measured 100 to 250 ms slower in the service setup there.
+        self.launch_app = Path(work) / "app" / self.app.name
+        self.executable = self.launch_app / "Contents/MacOS" / info["CFBundleExecutable"]
         self.root = Path(work) / label
         self.home = self.root / "home"
         self.profile_home = self.root / "profile-home"
@@ -485,7 +490,15 @@ class AppBuild:
                               capture_output=True).returncode != 0:
                 return
 
+    def install(self):
+        """Clones this build to the shared launch path; every launch gets a fresh clone, whichever
+        build ran before."""
+        shutil.rmtree(self.launch_app, ignore_errors=True)
+        self.launch_app.parent.mkdir(parents=True, exist_ok=True)
+        run(["cp", "-cR", str(self.app), str(self.launch_app)])
+
     def start(self, log_name):
+        self.install()
         log = open(self.logs / f"{log_name}.log", "w", encoding="utf-8")
         environment = dict(os.environ, CFFIXED_USER_HOME=str(self.home))
         started = time.time()
@@ -604,10 +617,10 @@ def import_fixture(build, fixture):
         launch.stop()
 
 
-def check_profile(build, stream, history, settle):
+def check_profile(build, stream, history, settle, log_name):
     """A launch on the profile that checks the history persisted. The first launch with data, or the
     first of a newer build, also runs one-time work such as migrations and statistics backfills."""
-    launch = build.start("profile-check")
+    launch = build.start(log_name)
     try:
         api = LocalAPI(build.app_support)
         api.wait_until_ready(launch)
@@ -632,31 +645,35 @@ def checkpoint_sqlite(folder):
                            capture_output=True, timeout=60)
 
 
-def save_profile(build):
-    """Keeps the profile for the measured launches, which run without the local API, as for most people."""
+def save_profile(build, home, prefs):
+    """Keeps the profile at `home` and `prefs`. Measured launches run without the local API, as for
+    most people."""
     preferences = export_preferences(build.bundle_id)
     preferences["apiServerEnabled"] = False
-    build.profile_prefs.write_bytes(plistlib.dumps(preferences))
+    prefs.write_bytes(plistlib.dumps(preferences))
     for name in ("api-discovery.json", "api-port"):
         (build.app_support / name).unlink(missing_ok=True)
     checkpoint_sqlite(build.home)
-    copy_tree(build.home, build.profile_home)
+    copy_tree(build.home, home)
 
 
-def prepare_profiles(base, head, stream, fixture, settle):
-    """The base imports the test data; the pull request starts from a copy of the base profile, so
-    both profiles hold the same records and differ only by what the newer build changes on launch."""
+def prepare_profiles(base, head, stream, fixture, settle, work):
+    """The base imports the test data. Then each build launches once on its own copy of that
+    profile, so both profiles hold the same records, have seen the same number of launches and
+    differ only by what the build changes on launch, such as a migration."""
+    history = len(fixture["history"])
+    shared_home, shared_prefs = Path(work) / "shared-profile", Path(work) / "shared-profile.plist"
     reset_build(base)
-    import_fixture(base, fixture)
-    check_profile(base, stream, len(fixture["history"]), settle)
-    save_profile(base)
-
     reset_build(head)
-    copy_tree(base.profile_home, head.home)
-    preferences = plistlib.loads(base.profile_prefs.read_bytes())
-    head.write_preferences({**preferences, **head.defaults, **API_PREFERENCES})
-    check_profile(head, stream, len(fixture["history"]), settle)
-    save_profile(head)
+    import_fixture(base, fixture)
+    check_profile(base, stream, history, settle, "profile-first-launch")
+    save_profile(base, shared_home, shared_prefs)
+    preferences = plistlib.loads(shared_prefs.read_bytes())
+    for build in (head, base):
+        copy_tree(shared_home, build.home)
+        build.write_preferences({**preferences, **build.defaults, **API_PREFERENCES})
+        check_profile(build, stream, history, settle, "profile-check")
+        save_profile(build, build.profile_home, build.profile_prefs)
 
 
 def restore_profile(build):
@@ -732,7 +749,7 @@ def benchmark(args):
     stream = SignpostStream(base.bundle_id)
     try:
         print("Preparing the test profiles", flush=True)
-        prepare_profiles(base, head, stream, fixture, args.settle)
+        prepare_profiles(base, head, stream, fixture, args.settle, args.work)
         passes = []
         for index in (1, 2):
             if index == 2 and not (exceeded_metrics(passes) and args.confirm):
