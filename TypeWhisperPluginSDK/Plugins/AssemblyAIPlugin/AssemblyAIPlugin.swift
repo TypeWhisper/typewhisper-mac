@@ -3,35 +3,18 @@ import SwiftUI
 import os
 import TypeWhisperPluginSDK
 
-// MARK: - Transcript Collector
+// MARK: - Transcription Mode
 
-private actor TranscriptCollector {
-    private var finals: [String] = []
-    private var interim: String = ""
-
-    func addFinal(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            finals.append(trimmed)
-        }
-        interim = ""
-    }
-
-    func setInterim(_ text: String) {
-        interim = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    func currentText() -> String {
-        var parts = finals
-        if !interim.isEmpty {
-            parts.append(interim)
-        }
-        return parts.joined(separator: " ")
-    }
-
-    func finalResult() -> String {
-        finals.joined(separator: " ")
-    }
+/// How finished recordings are transcribed and whether dictations stream, with
+/// AssemblyAI's list price for Universal-3.5 Pro.
+enum AssemblyAITranscriptionMode: String, CaseIterable, Sendable {
+    /// Dictations stream to the realtime API ($0.45/h of connection time);
+    /// recordings and files go to the Sync API.
+    case live
+    /// Recordings go to the Sync API ($0.30/h); no live preview from AssemblyAI.
+    case sync
+    /// Recordings go to the async API ($0.21/h); no live preview from AssemblyAI.
+    case async
 }
 
 // MARK: - Plugin Entry Point
@@ -49,11 +32,13 @@ final class AssemblyAIPlugin: NSObject,
     static let pluginId = "com.typewhisper.assemblyai"
     static let pluginName = "AssemblyAI"
     static let speakerDiarizationEnabledKey = "speakerDiarizationEnabled"
+    static let transcriptionModeKey = "transcriptionMode"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedModelId: String?
     fileprivate var _speakerDiarizationEnabled = false
+    fileprivate var _transcriptionMode = AssemblyAITranscriptionMode.live
 
     private let logger = Logger(subsystem: "com.typewhisper.assemblyai", category: "Plugin")
 
@@ -71,6 +56,8 @@ final class AssemblyAIPlugin: NSObject,
             host.setUserDefault(resolvedModel.id, forKey: "selectedModel")
         }
         _speakerDiarizationEnabled = host.userDefault(forKey: Self.speakerDiarizationEnabledKey) as? Bool ?? false
+        _transcriptionMode = (host.userDefault(forKey: Self.transcriptionModeKey) as? String)
+            .flatMap(AssemblyAITranscriptionMode.init(rawValue:)) ?? .live
     }
 
     func deactivate() {
@@ -100,13 +87,15 @@ final class AssemblyAIPlugin: NSObject,
     }
 
     var supportsTranslation: Bool { false }
-    // AssemblyAI's streaming API does not return the speaker metadata preserved by the structured REST path.
-    var supportsStreaming: Bool { !_speakerDiarizationEnabled }
+    /// Dictations stream through live sessions; finished audio always goes to the Sync or
+    /// async API, which are faster than replaying it at the realtime API's 1.25x limit.
+    var supportsStreaming: Bool { supportsLiveTranscriptionSession(forModelId: nil) }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget {
         AssemblyAIModelCatalog.resolve(_selectedModelId).dictionaryTermsBudget
     }
     var isSpeakerDiarizationEnabled: Bool { _speakerDiarizationEnabled }
+    var transcriptionMode: AssemblyAITranscriptionMode { _transcriptionMode }
 
     var supportedLanguages: [String] {
         AssemblyAIModelCatalog.resolve(_selectedModelId).supportedLanguages
@@ -114,10 +103,10 @@ final class AssemblyAIPlugin: NSObject,
 
     // MARK: - Live Sessions
 
-    /// Universal-3.5 Pro streams while the dictation is recorded. Universal-2 and
-    /// recordings with speaker labels transcribe after the recording.
+    /// Universal-3.5 Pro streams while the dictation is recorded in the Live mode.
+    /// Universal-2 and recordings with speaker labels transcribe after the recording.
     func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
-        guard !_speakerDiarizationEnabled else { return false }
+        guard _transcriptionMode == .live, !_speakerDiarizationEnabled else { return false }
         if case .universal35Pro = AssemblyAIModelCatalog.resolve(modelId ?? _selectedModelId).streamingConfiguration {
             return true
         }
@@ -128,9 +117,12 @@ final class AssemblyAIPlugin: NSObject,
     var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
 
     /// A live session that cannot start leaves the recording without preview instead of
-    /// sending the last seconds again every few seconds.
+    /// sending the last seconds again every few seconds. The Sync and async modes show no
+    /// preview, so they cost what their price says; Universal-2 has no modes.
     var allowsTranscriptPreviewFallback: Bool {
-        !supportsLiveTranscriptionSession(forModelId: nil)
+        guard !supportsLiveTranscriptionSession(forModelId: nil) else { return false }
+        return _transcriptionMode == .live
+            || AssemblyAIModelCatalog.resolve(_selectedModelId).syncConfiguration == nil
     }
 
     func createLiveTranscriptionSession(
@@ -246,8 +238,10 @@ final class AssemblyAIPlugin: NSObject,
         )
     }
 
-    // MARK: - Transcription (WebSocket Streaming)
+    // MARK: - Transcription With Progress
 
+    /// Finished audio, such as a file or a preview window: the Sync or async API, then the
+    /// text as progress. Dictations stream through live sessions instead.
     func transcribe(
         audio: AudioData,
         language: String?,
@@ -255,30 +249,9 @@ final class AssemblyAIPlugin: NSObject,
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
-            throw PluginTranscriptionError.notConfigured
-        }
-        guard let modelId = _selectedModelId else {
-            throw PluginTranscriptionError.noModelSelected
-        }
-
-        do {
-            return try await transcribeWebSocket(
-                audio: audio, language: language, modelId: modelId,
-                prompt: prompt,
-                apiKey: apiKey, onProgress: onProgress
-            )
-        } catch {
-            logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
-            return try await Self.legacyResult(from: transcribeRecording(
-                audio: audio,
-                language: language,
-                modelId: modelId,
-                apiKey: apiKey,
-                prompt: prompt,
-                speakerDiarizationEnabled: _speakerDiarizationEnabled
-            ))
-        }
+        let result = try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
+        _ = onProgress(result.text)
+        return result
     }
 
     // MARK: - Finished Recordings
@@ -293,7 +266,7 @@ final class AssemblyAIPlugin: NSObject,
         prompt: String?,
         speakerDiarizationEnabled: Bool
     ) async throws -> PluginStructuredTranscriptionResult {
-        if let syncRequest = Self.makeSyncRequest(
+        if _transcriptionMode != .async, let syncRequest = Self.makeSyncRequest(
             modelId: modelId,
             language: language,
             prompt: prompt,
@@ -792,96 +765,7 @@ final class AssemblyAIPlugin: NSObject,
         return nil
     }
 
-    // MARK: - WebSocket Implementation (v3 Streaming)
-    // Uses URLSessionWebSocketTask (AssemblyAI's server doesn't have Deepgram's ALPN/h2 issue)
-
-    private func transcribeWebSocket(
-        audio: AudioData,
-        language: String?,
-        modelId: String,
-        prompt: String?,
-        apiKey: String,
-        onProgress: @Sendable @escaping (String) -> Bool
-    ) async throws -> PluginTranscriptionResult {
-        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
-        let keytermsPrompt = streamingKeytermsPromptJSON(from: prompt, modelId: modelId)
-        guard let url = Self.makeStreamingURL(
-            modelId: modelId,
-            language: language,
-            keytermsPromptJSON: keytermsPrompt
-        ) else {
-            throw PluginTranscriptionError.apiError("Invalid streaming URL")
-        }
-
-        var request = URLRequest(url: url)
-        request.setValue(apiKey, forHTTPHeaderField: "Authorization")
-
-        let wsTask = URLSession.shared.webSocketTask(with: request)
-        wsTask.resume()
-
-        let collector = TranscriptCollector()
-        let chunkSize = 8192
-        let pcmData = Self.floatToPCM16(audio.samples)
-
-        // Receive loop in background
-        let loggerRef = self.logger
-        let receiveTask = Task {
-            do {
-                while !Task.isCancelled {
-                    let message = try await wsTask.receive()
-
-                    guard case .string(let text) = message else { continue }
-
-                    guard let data = text.data(using: .utf8),
-                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                          let type = json["type"] as? String else {
-                        continue
-                    }
-
-                    if type == "Termination" { break }
-                    guard type == "Turn" else { continue }
-
-                    let transcript = json["transcript"] as? String ?? ""
-                    let endOfTurn = json["end_of_turn"] as? Bool ?? false
-
-                    if endOfTurn {
-                        await collector.addFinal(transcript)
-                    } else {
-                        await collector.setInterim(transcript)
-                    }
-
-                    let currentText = await collector.currentText()
-                    if !currentText.isEmpty {
-                        _ = onProgress(currentText)
-                    }
-                }
-            } catch {
-                loggerRef.error("WebSocket receive error: \(error.localizedDescription)")
-            }
-        }
-
-        // Send audio as binary frames
-        var offset = 0
-        while offset < pcmData.count {
-            let end = min(offset + chunkSize, pcmData.count)
-            let chunk = pcmData.subdata(in: offset..<end)
-            if chunk.count >= 1600 || end == pcmData.count {
-                try await wsTask.send(.data(chunk))
-            }
-            offset = end
-        }
-
-        // Signal end of audio (v3 protocol)
-        try await wsTask.send(.string("{\"type\":\"Terminate\"}"))
-
-        // Wait for server to finish sending results
-        _ = await receiveTask.result
-
-        wsTask.cancel(with: .normalClosure, reason: nil)
-
-        let finalText = await collector.finalResult()
-        return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
-    }
+    // MARK: - Realtime URL
 
     static func makeStreamingURL(
         modelId: String,
@@ -925,16 +809,6 @@ final class AssemblyAIPlugin: NSObject,
         guard !values.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: values) else { return nil }
         return String(data: data, encoding: .utf8)
-    }
-
-    private func streamingKeytermsPromptJSON(from prompt: String?, modelId: String) -> String? {
-        let keyterms = Self.streamingKeyterms(fromPrompt: prompt, modelId: modelId)
-        if keyterms.droppedCount > 0 {
-            logger.warning(
-                "AssemblyAI streaming dropped \(keyterms.droppedCount, privacy: .public) dictionary term(s) beyond 100 terms or 50 characters"
-            )
-        }
-        return Self.jsonString(from: keyterms.terms)
     }
 
     // MARK: - Audio Conversion
@@ -996,6 +870,13 @@ final class AssemblyAIPlugin: NSObject,
             }
             host.notifyCapabilitiesChanged()
         }
+    }
+
+    func setTranscriptionMode(_ mode: AssemblyAITranscriptionMode) {
+        guard _transcriptionMode != mode else { return }
+        _transcriptionMode = mode
+        host?.setUserDefault(mode.rawValue, forKey: Self.transcriptionModeKey)
+        host?.notifyCapabilitiesChanged()
     }
 
     func setSpeakerDiarizationEnabled(_ enabled: Bool) {
@@ -1235,6 +1116,10 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
         isCancelled = true
         pendingSamples = []
         recordedSamples = []
+        // AssemblyAI bills the session until it is terminated.
+        if !hasSentTerminate, !isClosed {
+            try? await socket.send(text: #"{"type":"Terminate"}"#)
+        }
         close()
         Self.logger.info("Live session cancelled")
     }
@@ -1478,6 +1363,7 @@ private struct AssemblyAISettingsView: View {
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
     @State private var speakerDiarizationEnabled = false
+    @State private var transcriptionMode = AssemblyAITranscriptionMode.live
     private let bundle = Bundle(for: AssemblyAIPlugin.self)
 
     var body: some View {
@@ -1566,6 +1452,8 @@ private struct AssemblyAISettingsView: View {
                     }
                 }
 
+                transcriptionModeSection
+
                 Toggle(String(localized: "Speaker diarization", bundle: bundle), isOn: $speakerDiarizationEnabled)
                     .onChange(of: speakerDiarizationEnabled) {
                         plugin.setSpeakerDiarizationEnabled(speakerDiarizationEnabled)
@@ -1583,6 +1471,55 @@ private struct AssemblyAISettingsView: View {
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
             speakerDiarizationEnabled = plugin.isSpeakerDiarizationEnabled
+            transcriptionMode = plugin.transcriptionMode
+        }
+    }
+
+    /// Universal-2 has only the async API, so the modes apply to Universal-3.5 Pro.
+    private var selectedModelHasModes: Bool {
+        AssemblyAIModelCatalog.resolve(selectedModel).syncConfiguration != nil
+    }
+
+    private var transcriptionModeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Transcription", bundle: bundle)
+                .font(.headline)
+
+            Picker(String(localized: "Transcription", bundle: bundle), selection: $transcriptionMode) {
+                Text("Live – $0.45/h", bundle: bundle)
+                    .tag(AssemblyAITranscriptionMode.live)
+                Text("Sync – $0.30/h", bundle: bundle)
+                    .tag(AssemblyAITranscriptionMode.sync)
+                Text("Async – $0.21/h", bundle: bundle)
+                    .tag(AssemblyAITranscriptionMode.async)
+            }
+            .labelsHidden()
+            .disabled(!selectedModelHasModes)
+            .onChange(of: transcriptionMode) {
+                plugin.setTranscriptionMode(transcriptionMode)
+            }
+
+            Group {
+                if !selectedModelHasModes {
+                    Text("Universal-2 always uses the async API, at $0.15/h.", bundle: bundle)
+                } else {
+                    switch transcriptionMode {
+                    case .live:
+                        Text("Streams while you dictate: the live preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings and files use the Sync API.", bundle: bundle)
+                    case .sync:
+                        Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
+                    case .async:
+                        Text("Lowest price; the text takes a few seconds after you stop. No live preview from AssemblyAI.", bundle: bundle)
+                    }
+                    if speakerDiarizationEnabled {
+                        Text("Speaker diarization always uses the async API.", bundle: bundle)
+                    }
+                }
+                Text("AssemblyAI list prices in November 2026; add-ons such as dictionary terms can cost extra.", bundle: bundle)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

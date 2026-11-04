@@ -597,14 +597,72 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
         XCTAssertEqual(plugin.liveTranscriptionProgressMode, .completeSnapshot)
 
+        XCTAssertTrue(plugin.supportsStreaming)
+
         plugin.setSpeakerDiarizationEnabled(true)
         XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
         XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
-
         plugin.setSpeakerDiarizationEnabled(false)
+
+        // Sync and async cost what their price says: no live session and no preview.
+        for mode in [AssemblyAITranscriptionMode.sync, .async] {
+            plugin.setTranscriptionMode(mode)
+            XCTAssertEqual(host.userDefault(forKey: AssemblyAIPlugin.transcriptionModeKey) as? String, mode.rawValue)
+            XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+            XCTAssertFalse(plugin.supportsStreaming)
+            XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
+        }
+
+        // Universal-2 has only the async API and keeps its preview in every mode.
         plugin.selectModel(AssemblyAIPlugin.universal2ModelId)
         XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
         XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+        plugin.setTranscriptionMode(.live)
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+    }
+
+    func testAsyncModeTranscribesRecordingsWithoutTheSyncAPI() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [AssemblyAIPlugin.transcriptionModeKey: "async"],
+            secrets: ["api-key": "assembly-key"]
+        )
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+        XCTAssertEqual(plugin.transcriptionMode, .async)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"upload_url":"https://cdn.example.test/audio.m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"id":"transcript_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"status":"completed","text":"hello","language_code":"en"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript/transcript_123", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let progress = LiveProgressRecorder()
+        let result = try await plugin.transcribe(
+            audio: audio,
+            language: "en",
+            translate: false,
+            prompt: nil,
+            onProgress: { progress.append($0); return true }
+        )
+
+        XCTAssertEqual(result.text, "hello")
+        XCTAssertEqual(progress.values, ["hello"])
+        XCTAssertEqual(store.sessions.first?.requestedPaths, ["/v2/upload", "/v2/transcript", "/v2/transcript/transcript_123"])
     }
 
     func testLiveSessionStreamsFramesAndFinishesWithTheTurnsBeforeTermination() async throws {

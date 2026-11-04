@@ -364,6 +364,286 @@
           }
         }
       }
+    },
+    "Transcription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripción"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录"
+          }
+        }
+      }
+    },
+    "Live – $0.45/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,45 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,45 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.45/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.45/小时"
+          }
+        }
+      }
+    },
+    "Sync – $0.30/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync – 0,30 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync – 0,30 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync – $0.30/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync – $0.30/小时"
+          }
+        }
+      }
+    },
+    "Async – $0.21/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Async – 0,21 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Async – 0,21 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Async – $0.21/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Async – $0.21/小时"
+          }
+        }
+      }
+    },
+    "Universal-2 always uses the async API, at $0.15/h.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Universal-2 nutzt immer die Async-API, für 0,15 $/h."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Universal-2 siempre usa la API asíncrona, a 0,15 US$/h."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Universal-2 は常に非同期 API を使用します（$0.15/時間）。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Universal-2 始终使用异步 API，价格为 $0.15/小时。"
+          }
+        }
+      }
+    },
+    "Streams while you dictate: the live preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings and files use the Sync API.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streamt beim Diktieren: Die Live-Vorschau zeigt den Text von AssemblyAI, und der fertige Text steht direkt nach dem Stopp bereit. Abgerechnet wird die Zeit, in der die Verbindung offen ist. Aufnahmen und Dateien nutzen die Sync-API."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transmite mientras dictas: la vista previa en vivo muestra el texto de AssemblyAI y el texto final está listo justo al detenerte. Se factura el tiempo que la conexión está abierta. Las grabaciones y los archivos usan la API Sync."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディクテーション中にストリーミングします。ライブプレビューに AssemblyAI のテキストが表示され、停止直後に最終テキストが用意されます。接続が開いている時間に対して課金されます。録音とファイルには Sync API を使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在你听写时进行流式传输：实时预览显示 AssemblyAI 的文本，停止后即可得到最终文本。按连接保持打开的时长计费。录音和文件使用 Sync API。"
+          }
+        }
+      }
+    },
+    "Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lädt die Aufnahme beim Stopp hoch; der Text ist meist in unter einer halben Sekunde da. Keine Live-Vorschau von AssemblyAI."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sube la grabación al detenerte; el texto suele estar listo en menos de medio segundo. Sin vista previa en vivo de AssemblyAI."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止時に録音をアップロードします。テキストは通常 0.5 秒以内に用意されます。AssemblyAI のライブプレビューはありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止时上传录音；文本通常在半秒内就绪。没有来自 AssemblyAI 的实时预览。"
+          }
+        }
+      }
+    },
+    "Lowest price; the text takes a few seconds after you stop. No live preview from AssemblyAI.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Günstigster Preis; der Text braucht nach dem Stopp einige Sekunden. Keine Live-Vorschau von AssemblyAI."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El precio más bajo; el texto tarda unos segundos después de detenerte. Sin vista previa en vivo de AssemblyAI."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最も低価格です。停止後、テキストの用意に数秒かかります。AssemblyAI のライブプレビューはありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "价格最低；停止后需要几秒钟才能得到文本。没有来自 AssemblyAI 的实时预览。"
+          }
+        }
+      }
+    },
+    "Speaker diarization always uses the async API.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Sprechererkennung nutzt immer die Async-API."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La detección de hablantes siempre usa la API asíncrona."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者分離は常に非同期 API を使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话人分离始终使用异步 API。"
+          }
+        }
+      }
+    },
+    "AssemblyAI list prices in November 2026; add-ons such as dictionary terms can cost extra.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AssemblyAI-Listenpreise im November 2026; Zusatzfunktionen wie Wörterbuchbegriffe können extra kosten."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Precios de lista de AssemblyAI en noviembre de 2026; los complementos, como los términos del diccionario, pueden costar más."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2026年11月時点の AssemblyAI の定価です。辞書の用語などの追加機能には別途費用がかかる場合があります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AssemblyAI 2026 年 11 月的标价；词典术语等附加功能可能另行收费。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
