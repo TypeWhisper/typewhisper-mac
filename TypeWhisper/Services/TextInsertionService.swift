@@ -1773,9 +1773,15 @@ final class TextInsertionService {
         case .unknown:
             return .unverified(.focusedTextAncestryUnavailable)
         case .native:
-            return isTextInputProxy(initialState.element)
-                ? .unverified(.inputProxyUnchanged)
-                : .unverified(.focusedTextUnchanged)
+            if isTextInputProxy(initialState.element) {
+                return .unverified(.inputProxyUnchanged)
+            }
+            // The paste missed a native field, so the next insertion into this app tries
+            // Accessibility again instead of relying on the paste.
+            if let processIdentifier = liveFieldProcessIdentifier(for: initialState.element) {
+                processesIgnoringAccessibilityInsertion[processIdentifier] = nil
+            }
+            return .unverified(.focusedTextUnchanged)
         }
     }
 
