@@ -29,7 +29,7 @@ When a change shows in motion (a flow, an animation, live updates, text inserted
 ## Checks on Pull Requests
 
 - The `PR description` check enforces the title prefix, screenshots or a clip for visible changes (or the template's `- [x] No visible UI change`) and a measurement table in `(perf)` descriptions. Editing the description runs it again.
-- The `release-build` job compares the launch time, CPU time and memory of the pull request's Release build with its base and writes the table into the description, between the `launch-benchmark` markers. Do not edit that block; CI replaces it after every push.
+- The `release-build` job compares the launch time, CPU time and memory of the pull request's Release build with its base and writes the table into the description, between the `launch-benchmark` markers. Keep that block when you rewrite the description; CI replaces it after every push.
 - A launch regression fails CI. Find and fix the cause first; the folded launch phases show where the time goes. If the cost is intended, explain why in the description, add the `perf-regression-accepted` label and re-run the `release-build` job. Details: `docs/launch-performance.md`.
 
 ## Mac App Store Edition

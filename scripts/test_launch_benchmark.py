@@ -190,7 +190,7 @@ class RenderTests(unittest.TestCase):
         self.assertIn("main `6013a38` and this pull request `abc1234`", text)
         self.assertIn("8 alternating launches each", text)
         self.assertIn("<summary>Launch phases and runner conditions (medians)</summary>", text)
-        self.assertIn("| Time until ready | 800 ms | 810 ms | +10 ms (+1.2%) | +10% and +50 ms |", text)
+        self.assertIn("| Time until ready | 800 ms | 810 ms | +10 ms (+1.2%) | +10% and +100 ms |", text)
         self.assertIn("| App size | 101.5 MB | 101.6 MB | +0.1 MB (+0.1%) | |", text)
         self.assertIn("| Plugin scan | 120 ms | 130 ms | +10 ms |", text)
         self.assertIn("| Time waiting for a processor | 300 ms | 320 ms | +20 ms |", text)

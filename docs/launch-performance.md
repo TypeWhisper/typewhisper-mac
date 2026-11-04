@@ -38,13 +38,19 @@ A metric fails when its change exceeds both limits:
 
 | Metric | Fails above |
 | --- | --- |
-| Time until ready | +10% and +50 ms |
-| CPU time | +10% and +50 ms |
+| Time until ready | +10% and +100 ms |
+| CPU time | +15% and +100 ms |
 | Memory after launch | +5% and +2 MB |
 | Peak memory | +10% and +4 MB |
 
 When the first 10 rounds show a regression, 10 more rounds confirm it; only a regression in
 both passes fails the job. App size never fails it.
+
+The limits come from comparing identical builds on the runner. The shared virtual Mac makes
+times noisy: the paired differences of one round spread by about 120 ms for the time until
+ready and 100 ms for CPU time, against 0.2 MB for memory. So the job reliably stops memory
+growth of 2 MB, but only time and CPU regressions of roughly 15% or more; smaller ones still
+show in the table.
 
 If the cost is intended, for example for a feature that has to load something at launch,
 explain why in the description, add the `perf-regression-accepted` label and re-run the

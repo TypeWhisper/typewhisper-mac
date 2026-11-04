@@ -84,9 +84,12 @@ class Metric:
         return self.limit_pct is not None
 
 
+# Limits from comparing identical builds on the xcode-27 runner: paired differences of one
+# round spread by about 120 ms for the time until ready, 100 ms for CPU time and 0.2 MB for the
+# footprint, so the median of 10 rounds stays well inside these limits in both passes.
 METRICS = (
-    Metric("first_idle_ms", "Time until ready", "ms", 0, 10.0, 50.0),
-    Metric("cpu_ms", "CPU time", "ms", 0, 10.0, 50.0),
+    Metric("first_idle_ms", "Time until ready", "ms", 0, 10.0, 100.0),
+    Metric("cpu_ms", "CPU time", "ms", 0, 15.0, 100.0),
     Metric("footprint_mb", "Memory after launch", "MB", 1, 5.0, 2.0),
     Metric("peak_footprint_mb", "Peak memory", "MB", 1, 10.0, 4.0),
 )
