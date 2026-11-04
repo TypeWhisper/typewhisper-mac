@@ -1,0 +1,58 @@
+name: Launch Benchmark Report
+
+# Writes the launch benchmark table from a pull request's "Build DMG" run into the pull
+# request description. This workflow runs from the default branch with write access, so it
+# also works for pull requests from forks. The report is untrusted data from the pull request:
+# scripts/performance/launch_benchmark.py validates it and renders the table from its numbers.
+on:
+  workflow_run:
+    workflows: [Build DMG]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  description:
+    name: Update the pull request description
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Write the launch benchmark into the description
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/launch-benchmark"
+          # Runs that skipped the benchmark (documentation, tests, CI only) have no report.
+          if ! gh run download "$RUN_ID" --repo "$REPOSITORY" --name launch-benchmark --dir "$dir"; then
+            echo "Run $RUN_ID has no launch benchmark report."
+            exit 0
+          fi
+          number="$(python3 scripts/performance/launch_benchmark.py pr-number "$dir/report.json")"
+          if [ "$(gh api "repos/$REPOSITORY/pulls/$number" --jq .head.sha)" != "$HEAD_SHA" ]; then
+            echo "Pull request #$number has commits newer than run $RUN_ID; its own run updates the description."
+            exit 0
+          fi
+          gh api "repos/$REPOSITORY/pulls/$number" --jq '.body // ""' > "$dir/body.md"
+          result="$(python3 scripts/performance/launch_benchmark.py update-description "$dir/report.json" \
+            --body "$dir/body.md" --output "$dir/payload.json")"
+          if [ "$result" = "changed" ]; then
+            gh api --method PATCH "repos/$REPOSITORY/pulls/$number" --input "$dir/payload.json" > /dev/null
+            echo "Updated the launch benchmark in the description of #$number."
+          else
+            echo "The description of #$number already shows this report."
+          fi

@@ -1,0 +1,35 @@
+name: PR Description
+
+# Checks the title and description against AGENTS.md: the category prefix, screenshots for
+# visible changes and a measurement table for (perf) pull requests. Editing the description
+# runs the check again without the macOS jobs.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+    branches: [main, 'release/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  description:
+    name: PR description
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The pull request merge commit's first parent is the base branch.
+          fetch-depth: 2
+
+      - name: Check the title and description
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 scripts/check_pr_description.py --base HEAD^1 --summary "$GITHUB_STEP_SUMMARY"
