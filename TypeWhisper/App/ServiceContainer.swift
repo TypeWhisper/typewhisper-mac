@@ -620,7 +620,7 @@ final class ServiceContainer: ObservableObject {
         // TEMPORARY for PR #1872: a deliberate launch regression that the CI launch benchmark
         // must catch. Remove before merging.
         Self.launchBenchmarkCheckBallast = Data(repeating: 1, count: 40 << 20)
-        Thread.sleep(forTimeInterval: 0.3)
+        usleep(300_000)
 
         managedPolicyService.startMonitoring()
         applyManagedPolicy(managedPolicyService.current, previous: nil)
