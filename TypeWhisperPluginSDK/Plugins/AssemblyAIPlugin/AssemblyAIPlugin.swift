@@ -905,10 +905,11 @@ final class AssemblyAIPlugin: NSObject,
 struct AssemblyAISentAudioLevels: Sendable {
     static let windowSampleCount = AssemblyAILiveTranscriptionSession.sampleRate / 20
     static let windowDuration: TimeInterval = 0.05
-    /// A window is quiet below this share of the loudest window, and always below the
-    /// absolute level.
-    static let relativeQuietLevel: Float = 0.15
-    static let absoluteQuietLevel: Float = 0.003
+    /// A window is quiet below this share of the loudest window (26 dB down), and always
+    /// below the absolute level. Speech that soft is unlikely to be transcribed at all,
+    /// while room noise in a pause stays below it; anything louder waits for Termination.
+    static let relativeQuietLevel: Float = 0.05
+    static let absoluteQuietLevel: Float = 0.001
     /// Word end times can come a little early; the audio this soon after does not count.
     static let wordEndTolerance: TimeInterval = 0.1
 

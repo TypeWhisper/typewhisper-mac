@@ -780,6 +780,20 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertNil(text)
     }
 
+    func testSentAudioCountsSoftSpeechAfterTheLastWordAsSound() {
+        var levels = AssemblyAISentAudioLevels()
+        levels.append([Float](repeating: 0.2, count: 8_000))
+        // Soft speech after the last word, a tenth of the loudest level (20 dB down).
+        levels.append([Float](repeating: 0.02, count: 8_000))
+        XCTAssertFalse(levels.isQuiet(after: 0.5))
+
+        var withRoomNoise = AssemblyAISentAudioLevels()
+        withRoomNoise.append([Float](repeating: 0.2, count: 8_000))
+        // Room noise in the pause before the stop, 40 dB down.
+        withRoomNoise.append([Float](repeating: 0.002, count: 8_000))
+        XCTAssertTrue(withRoomNoise.isQuiet(after: 0.5))
+    }
+
     func testLiveSessionWithMoreDictionaryTermsThanTheRealtimeAPITakesUsesTheRecording() async throws {
         let terms = (1...101).map { "Term\($0)" }
         let keyterms = AssemblyAIPlugin.streamingKeyterms(
