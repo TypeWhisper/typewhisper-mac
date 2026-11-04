@@ -524,9 +524,16 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 // A listen-only tap never holds input back, so re-arming it is always safe.
                 let outcome = EventTapReenableBackoff.Outcome.reenable
 #else
-                let outcome = byTimeout
-                    ? reenableBackoff.recordTimeout(at: DispatchTime.now().uptimeNanoseconds)
-                    : .reenable
+                let now = DispatchTime.now().uptimeNanoseconds
+                guard byTimeout else {
+                    // Switching the tap off for a backoff makes macOS report a user-input disable
+                    // right away. Re-arming on that report ended every backoff within milliseconds.
+                    // The tap is already off, and switching it off again would trigger another report.
+                    guard reenableBackoff.allowsReenable(at: now) else { return .backingOff(seconds: nil) }
+                    if let tap = port { CGEvent.tapEnable(tap: tap, enable: true) }
+                    return .reenable
+                }
+                let outcome = reenableBackoff.recordTimeout(at: now)
 #endif
                 if let tap = port {
                     // Also switch the tap off when backing off: a watchdog tick may already have
@@ -634,6 +641,21 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 }
                 return Decision()
             }
+        }
+
+        /// Tap thread, before the main thread gets `decision`. Releases an event that already
+        /// waited past `timeout` in the queue, so the main thread never starts a handler for an
+        /// event the tap lets through. Handing the decision over afterwards ends the stall.
+        func releaseIfLate(
+            _ decision: Decision,
+            requestedAt: UInt64,
+            timeout: TimeInterval,
+            now: UInt64 = DispatchTime.now().uptimeNanoseconds
+        ) -> Bool {
+            guard DispatchTime(uptimeNanoseconds: now) >= DispatchTime(uptimeNanoseconds: requestedAt) + timeout else {
+                return false
+            }
+            return releaseIfStillIn(.pending, decision, requestedAt: requestedAt)
         }
 
         /// Main thread.
@@ -1711,6 +1733,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private nonisolated func eventTapWatchdogTick(generation: UUID) {
         let action = eventTapHandle.watchdogTick(generation: generation)
         guard action != .none else { return }
+        if action == .recovered {
+            // macOS reports a timeout with the next input event, and not at all once the tap is
+            // back on, so this line is the only trace of an outage the watchdog ends first.
+            logger.warning("CGEventTap was found disabled, re-enabling")
+        }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.eventTapHandle.isCurrentWatchdog(generation) else { return }
             switch action {
@@ -1890,7 +1917,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     /// Tap thread. Asks the main thread whether to consume `event`, but lets it through if the
-    /// main thread does not pick it up within `eventTapDecisionTimeout`.
+    /// main thread does not pick it up within `eventTapDecisionTimeout` of the event.
     private nonisolated func decideEventTapEvent(_ event: CGEvent) -> Bool {
         nonisolated(unsafe) let event = event
 #if APPSTORE
@@ -1904,7 +1931,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         return false
 #else
         guard let decision = eventTapMainThreadGate.makeDecision() else { return false }
-        let requestedAt = DispatchTime.now().uptimeNanoseconds
+        let now = DispatchTime.now().uptimeNanoseconds
+        let requestedAt = Self.eventTapDecisionStart(eventTimestamp: event.timestamp, now: now)
+        let late = eventTapMainThreadGate.releaseIfLate(
+            decision,
+            requestedAt: requestedAt,
+            timeout: Self.eventTapDecisionTimeout,
+            now: now
+        )
         DispatchQueue.main.async { [self] in
             switch eventTapMainThreadGate.claim(decision) {
             case .handle:
@@ -1916,18 +1950,21 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 if let stall { finishEventTapMainThreadStall(stall) }
             }
         }
-        switch eventTapMainThreadGate.wait(
-            for: decision,
-            requestedAt: requestedAt,
-            timeout: Self.eventTapDecisionTimeout,
-            claimedTimeout: Self.eventTapClaimedDecisionTimeout
-        ) {
+        let answer: EventTapMainThreadGate.Answer = late
+            ? .released(stallStarted: true)
+            : eventTapMainThreadGate.wait(
+                for: decision,
+                requestedAt: requestedAt,
+                timeout: Self.eventTapDecisionTimeout,
+                claimedTimeout: Self.eventTapClaimedDecisionTimeout
+            )
+        switch answer {
         case .decided(let suppress):
             return suppress
         case .released(let stallStarted):
             if stallStarted {
                 logger.warning(
-                    "Main thread did not answer the hotkey event tap within \(Int(Self.eventTapDecisionTimeout * 1000))ms; letting input through until it responds"
+                    "Main thread did not answer the hotkey event tap within \(Int(Self.eventTapDecisionTimeout * 1000))ms of the input event (it waited \((now - requestedAt) / 1_000_000)ms before reaching the tap); letting input through until it responds"
                 )
             }
             return false
@@ -1935,12 +1972,28 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 #endif
     }
 
+    /// When the decision timeout for an event starts. While the tap waits for one event, the
+    /// next ones queue up in front of it with their original timestamps, and macOS switches a
+    /// tap off once events wait about a second. Counting from the event's own timestamp keeps
+    /// that queue short, even when each event alone is answered in time. An event without a
+    /// timestamp (one that was never posted), or with one from another clock, counts from now.
+    nonisolated static func eventTapDecisionStart(eventTimestamp: CGEventTimestamp, now: UInt64) -> UInt64 {
+        guard eventTimestamp > 0, eventTimestamp <= now, now - eventTimestamp <= eventTapMaximumQueueAge else {
+            return now
+        }
+        return eventTimestamp
+    }
+
+    private nonisolated static let eventTapMaximumQueueAge: UInt64 = 10_000_000_000
+
     private func finishEventTapMainThreadStall(_ stall: EventTapMainThreadGate.Stall) {
         logger.warning(
             "Main thread was unresponsive for \(Int(stall.duration * 1000))ms; \(stall.releasedEvents) input event(s) passed the hotkey event tap undecided"
         )
-        resyncHotkeyStateAfterEventTapRecovery()
-        recoverReleasedActiveHotkeyAfterEventTapDisable()
+        // The NSEvent monitors handle the events that passed, and usually only after this runs.
+        // Clearing a press whose key is already up would hide its release from them, so only
+        // the suppression latches go here.
+        releaseStaleSuppressionLatches()
     }
 
     /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
@@ -2521,11 +2574,16 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         logger.info("Matched hotkey via NSEvent compatibility fallback: \(Self.displayName(for: hotkey), privacy: .public)")
     }
 
-    private func recoverReleasedActiveHotkeyAfterEventTapDisable() {
+    /// Return and Escape presses that TypeWhisper consumed stay latched until their release.
+    private func releaseStaleSuppressionLatches() {
         suppressedSubmitKeyCodes = suppressedSubmitKeyCodes.filter { keyStateProvider($0) }
         if isEscapeKeySuppressed, !keyStateProvider(Self.escapeKeyCode) {
             isEscapeKeySuppressed = false
         }
+    }
+
+    private func recoverReleasedActiveHotkeyAfterEventTapDisable() {
+        releaseStaleSuppressionLatches()
         guard isActive, currentMode == .pushToTalk else { return }
         if let workflowId = activeWorkflowId {
             guard let hotkey = activeWorkflowHotkey, !isHotkeyPhysicallyHeld(hotkey) else { return }
@@ -2643,6 +2701,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     /// Runs the tap thread's decision path; call it off the main thread.
     nonisolated func decideEventTapEventForTesting(_ event: CGEvent) -> Bool {
         decideEventTapEvent(event)
+    }
+
+    /// Hands a disable report from macOS to the tap's backoff, as the tap callback does.
+    nonisolated func reportEventTapDisableForTesting(byTimeout: Bool) -> EventTapReenableBackoff.Outcome {
+        eventTapHandle.reenableAfterSystemDisable(byTimeout: byTimeout)
     }
 
     func installWatchdogTapForTesting(_ tap: CFMachPort) {

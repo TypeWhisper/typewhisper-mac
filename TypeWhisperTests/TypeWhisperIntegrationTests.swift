@@ -22363,6 +22363,60 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         XCTAssertEqual(cancelCount, 1)
     }
+
+    func testEventTapReleasesAnEventThatAlreadyWaitedInTheQueue() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        // In #1513 the main thread answered each event in time, but the events behind it queued up
+        // until input lagged for seconds and macOS switched the tap off.
+        nonisolated(unsafe) let keyDown = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x00, keyDown: true))
+        keyDown.timestamp = DispatchTime.now().uptimeNanoseconds - 150_000_000
+        final class Answer: @unchecked Sendable {
+            var suppressed: Bool?
+            var duration: TimeInterval = 0
+        }
+        let answer = Answer()
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            let start = Date()
+            answer.suppressed = service.decideEventTapEventForTesting(keyDown)
+            answer.duration = Date().timeIntervalSince(start)
+            finished.signal()
+        }
+        // Deliberately block the main thread: only a release without waiting finishes in time.
+        XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
+        XCTAssertEqual(answer.suppressed, false)
+        XCTAssertLessThan(answer.duration, 0.05, "An event that already waited past the decision timeout must pass at once")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    }
+
+    @MainActor
+    func testReleasePassedByTheTapStillFindsItsPressInTheMonitor() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        // A toggle Fn hotkey acts on the release, which the NSEvent monitor handles once the tap lets it through.
+        service.setHotkeyForTesting(fnHotkey(), for: .toggle)
+        service.modifierFlagsStateProvider = { [] }
+        var startCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        _ = service.processEventForTesting(try makeFnEvent(isDown: true), source: .eventTap)
+
+        let keyUp = try makeFnEvent(isDown: false)
+        nonisolated(unsafe) let lateKeyUp = try XCTUnwrap(keyUp.cgEvent)
+        lateKeyUp.timestamp = DispatchTime.now().uptimeNanoseconds - 150_000_000
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            _ = service.decideEventTapEventForTesting(lateKeyUp)
+            finished.signal()
+        }
+        XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
+        // The main thread ends the tap's stall before the global monitor delivers the release.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        service.processGlobalEventForTesting(keyUp)
+        XCTAssertEqual(startCount, 1)
+    }
     #endif
 
     func testEventTapGateWaitsForClaimedHandlerWithinItsOwnBound() throws {
@@ -22403,6 +22457,22 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertNotNil(gate.makeDecision(), "The late handler ends the stall")
     }
 
+    func testEventTapGateReleasesALateEventBeforeTheMainThreadCanClaimIt() throws {
+        let gate = HotkeyService.EventTapMainThreadGate()
+        let now = DispatchTime.now().uptimeNanoseconds
+        let fresh = try XCTUnwrap(gate.makeDecision())
+        XCTAssertFalse(gate.releaseIfLate(fresh, requestedAt: now - 50_000_000, timeout: 0.1, now: now))
+        XCTAssertEqual(gate.claim(fresh), .handle)
+        gate.resolve(fresh, suppress: false)
+
+        // A handler acts on its own decision, so it must never start for an event the tap let through.
+        let late = try XCTUnwrap(gate.makeDecision())
+        XCTAssertTrue(gate.releaseIfLate(late, requestedAt: now - 700_000_000, timeout: 0.1, now: now))
+        guard case .skip(let stall) = gate.claim(late) else { return XCTFail("A late event must not reach its handler") }
+        XCTAssertNotNil(stall, "Handing the late event to the main thread ends the stall")
+        XCTAssertNotNil(gate.makeDecision())
+    }
+
     func testEventTapReenableBackoffAfterRepeatedTimeouts() {
         let second: UInt64 = 1_000_000_000
         var backoff = HotkeyService.EventTapReenableBackoff()
@@ -22434,6 +22504,21 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(lone.recordTimeout(at: 4_001 * second), .reenable)
         XCTAssertEqual(lone.recordTimeout(at: 4_002 * second), .backingOff(seconds: 30))
     }
+
+    #if !APPSTORE
+    func testEventTapBackoffIgnoresTheReportOfItsOwnDisable() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: false), .reenable)
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: true), .reenable)
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: true), .reenable)
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: true), .backingOff(seconds: 30))
+        // Switching the tap off for the backoff makes macOS report a user-input disable at once.
+        // In #1513 that report re-armed the tap 7 ms after the backoff started.
+        XCTAssertEqual(service.reportEventTapDisableForTesting(byTimeout: false), .backingOff(seconds: nil))
+    }
+    #endif
 
     @MainActor
     func testRecoveryStopsWorkflowAfterLostRelease() async throws {
