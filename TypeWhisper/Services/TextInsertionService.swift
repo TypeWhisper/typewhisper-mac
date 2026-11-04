@@ -2625,6 +2625,15 @@ final class TextInsertionService {
         }
     }
 
+    /// Whether the live field may write partial text into this app.
+    ///
+    /// Chromium browsers stay eligible, but Chrome's web text fields never show live text.
+    /// Chrome 156 exposes them about two seconds after the observation lease starts, later
+    /// than the target is pinned. Even with the field exposed, Chrome accepts `AXSelectedText`
+    /// writes and ignores them; only `AXValue` writes land, and they replace the whole field.
+    /// A dictation there ends with the normal paste. Measured for #1856 and #1858 and decided
+    /// against: a live field built on `AXValue` would rewrite the whole field for every partial
+    /// and lose undo and the caret.
     private func applicationSupportsVerifiedLiveFieldUpdates(
         _ bundleIdentifier: String
     ) -> Bool {
