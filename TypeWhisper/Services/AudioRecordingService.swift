@@ -2591,6 +2591,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 : nil
         )
         var silentStreamHandling = BluetoothSilentStreamHandling.rebuild
+        var bindsCurrentDefaultInput = false
         var currentEngine = engine
         // Main-thread callers (e.g. startRecording from hotkey) get a bounded
         // backoff to keep UI responsive; the observer-based recovery queue
@@ -2606,6 +2607,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     label: label,
                     readinessDeadline: effectiveReadinessDeadline,
                     silentStreamHandling: silentStreamHandling,
+                    bindsCurrentDefaultInput: bindsCurrentDefaultInput,
                     shouldCancel: shouldCancel
                 )
                 return
@@ -2638,6 +2640,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     throw AudioRecordingError.engineStartFailed(error.localizedDescription)
                 }
 
+                if AudioEngineRecoveryPolicy.isMissingDevice(error: error) {
+                    bindsCurrentDefaultInput = true
+                }
                 try throwIfRecordingStartExpired(effectiveReadinessDeadline)
                 let delay = backoff.isEmpty
                     ? 0.05
@@ -2843,6 +2848,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         label: String,
         readinessDeadline: TimeInterval?,
         allowsVoiceProcessing: Bool = true,
+        bindsCurrentDefaultInput: Bool = false,
         shouldCancel: @escaping () -> Bool
     ) throws -> ConfiguredEngineCapture {
         try throwIfRecordingStartCancelled(shouldCancel)
@@ -2854,6 +2860,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             try configureExplicitInputDevice(deviceID, on: engine, label: label)
         } else if inputRoute.selectedDeviceID != nil {
             logger.info("\(label, privacy: .public) using default aggregate input route for selected Bluetooth input")
+        } else if bindsCurrentDefaultInput {
+            bindCurrentDefaultInput(on: engine, label: label)
         }
 
         let inputNode = engine.inputNode
@@ -2968,12 +2976,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         label: String,
         readinessDeadline: TimeInterval?,
         silentStreamHandling: BluetoothSilentStreamHandling,
+        bindsCurrentDefaultInput: Bool = false,
         shouldCancel: @escaping () -> Bool
     ) throws {
         let configuredCapture = try configureEngineCapture(
             engine,
             label: label,
             readinessDeadline: readinessDeadline,
+            bindsCurrentDefaultInput: bindsCurrentDefaultInput,
             shouldCancel: shouldCancel
         )
 
@@ -3003,6 +3013,26 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             engine.stop()
             retireCaptureStream(engine)
             throw error
+        }
+    }
+
+    /// Automatic selection leaves the engine on the system default route. After that route
+    /// reported a missing device ('!dev'), bind the engine to the default input read fresh
+    /// from CoreAudio instead. Bluetooth defaults stay on the default route, where setting the
+    /// raw input can break mixed input/output routing. When nothing can be bound, the retry
+    /// still runs on the fresh engine.
+    private func bindCurrentDefaultInput(on engine: AVAudioEngine, label: String) {
+        guard let defaultInputDeviceID = defaultInputController.defaultInputDeviceID(),
+              AudioDeviceService.isInputDeviceAvailable(defaultInputDeviceID) else {
+            logger.warning("\(label, privacy: .public) no available default input to bind after a missing-device error")
+            return
+        }
+        if let transport = inputTransportResolver.transportType(for: defaultInputDeviceID),
+           AudioDeviceService.isBluetoothTransportType(transport) {
+            return
+        }
+        if setInputDevice(defaultInputDeviceID, on: engine, label: label) {
+            logger.info("\(label, privacy: .public) bound current default input \(defaultInputDeviceID, privacy: .public) after a missing-device error")
         }
     }
 
