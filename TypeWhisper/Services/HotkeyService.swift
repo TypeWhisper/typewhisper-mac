@@ -1990,8 +1990,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         logger.warning(
             "Main thread was unresponsive for \(Int(stall.duration * 1000))ms; \(stall.releasedEvents) input event(s) passed the hotkey event tap undecided"
         )
-        resyncHotkeyStateAfterEventTapRecovery()
-        recoverReleasedActiveHotkeyAfterEventTapDisable()
+        // The NSEvent monitors handle the events that passed, and usually only after this runs.
+        // Clearing a press whose key is already up would hide its release from them, so only
+        // the suppression latches go here.
+        releaseStaleSuppressionLatches()
     }
 
     /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
@@ -2572,11 +2574,16 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         logger.info("Matched hotkey via NSEvent compatibility fallback: \(Self.displayName(for: hotkey), privacy: .public)")
     }
 
-    private func recoverReleasedActiveHotkeyAfterEventTapDisable() {
+    /// Return and Escape presses that TypeWhisper consumed stay latched until their release.
+    private func releaseStaleSuppressionLatches() {
         suppressedSubmitKeyCodes = suppressedSubmitKeyCodes.filter { keyStateProvider($0) }
         if isEscapeKeySuppressed, !keyStateProvider(Self.escapeKeyCode) {
             isEscapeKeySuppressed = false
         }
+    }
+
+    private func recoverReleasedActiveHotkeyAfterEventTapDisable() {
+        releaseStaleSuppressionLatches()
         guard isActive, currentMode == .pushToTalk else { return }
         if let workflowId = activeWorkflowId {
             guard let hotkey = activeWorkflowHotkey, !isHotkeyPhysicallyHeld(hotkey) else { return }

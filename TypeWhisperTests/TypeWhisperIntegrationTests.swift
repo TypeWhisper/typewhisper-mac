@@ -22390,6 +22390,33 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertLessThan(answer.duration, 0.05, "An event that already waited past the decision timeout must pass at once")
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
     }
+
+    @MainActor
+    func testReleasePassedByTheTapStillFindsItsPressInTheMonitor() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        // A toggle Fn hotkey acts on the release, which the NSEvent monitor handles once the tap lets it through.
+        service.setHotkeyForTesting(fnHotkey(), for: .toggle)
+        service.modifierFlagsStateProvider = { [] }
+        var startCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        _ = service.processEventForTesting(try makeFnEvent(isDown: true), source: .eventTap)
+
+        let keyUp = try makeFnEvent(isDown: false)
+        nonisolated(unsafe) let lateKeyUp = try XCTUnwrap(keyUp.cgEvent)
+        lateKeyUp.timestamp = DispatchTime.now().uptimeNanoseconds - 150_000_000
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            _ = service.decideEventTapEventForTesting(lateKeyUp)
+            finished.signal()
+        }
+        XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
+        // The main thread ends the tap's stall before the global monitor delivers the release.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        service.processGlobalEventForTesting(keyUp)
+        XCTAssertEqual(startCount, 1)
+    }
     #endif
 
     func testEventTapGateWaitsForClaimedHandlerWithinItsOwnBound() throws {
