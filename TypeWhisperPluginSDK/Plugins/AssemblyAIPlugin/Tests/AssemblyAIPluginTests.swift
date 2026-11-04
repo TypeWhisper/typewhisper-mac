@@ -613,10 +613,13 @@ final class AssemblyAIPluginTests: XCTestCase {
             XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
         }
 
-        // Universal-2 has only the async API and keeps its preview in every mode.
+        // The preview rule follows the mode alone: TypeWhisper reads it for the saved model
+        // when a profile overrides it with a model without live session, so a saved
+        // Universal-2 must not let a Universal-3.5 Pro override preview in the Async mode.
         plugin.selectModel(AssemblyAIPlugin.universal2ModelId)
         XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
-        XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: AssemblyAIPlugin.universal35ProModelId))
+        XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
         plugin.setTranscriptionMode(.live)
         XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
         XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)

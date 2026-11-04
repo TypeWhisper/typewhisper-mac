@@ -123,11 +123,11 @@ final class AssemblyAIPlugin: NSObject,
 
     /// A live session that cannot start leaves the recording without preview instead of
     /// sending the last seconds again every few seconds. The Sync and async modes show no
-    /// preview, so they cost what their price says; Universal-2 has no modes.
+    /// preview for any model, so they cost what their price says. The rule depends on the
+    /// mode alone because TypeWhisper reads it for the saved model when a profile's model
+    /// override has no live session.
     var allowsTranscriptPreviewFallback: Bool {
-        guard !supportsLiveTranscriptionSession(forModelId: nil) else { return false }
-        return _transcriptionMode == .live
-            || AssemblyAIModelCatalog.resolve(_selectedModelId).syncConfiguration == nil
+        _transcriptionMode == .live && !supportsLiveTranscriptionSession(forModelId: nil)
     }
 
     func createLiveTranscriptionSession(
