@@ -1557,7 +1557,7 @@ private struct AssemblyAISettingsView: View {
                 } else {
                     switch transcriptionMode {
                     case .live:
-                        Text("Streams dictations that show a live preview: the preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings, files and dictations without a preview use the Sync API. With more than 100 dictionary terms, the recording is also transcribed with all of them, which is billed in addition.", bundle: bundle)
+                        Text("Streams dictations that show a live preview: the preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings, files and dictations without a preview use the Sync API. With more than 100 dictionary terms or a term longer than 50 characters, the recording is also transcribed with all of them, which is billed in addition.", bundle: bundle)
                     case .sync:
                         Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
                     case .async:

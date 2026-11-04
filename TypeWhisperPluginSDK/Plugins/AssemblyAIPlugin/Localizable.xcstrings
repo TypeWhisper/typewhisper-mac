@@ -617,30 +617,30 @@
         }
       }
     },
-    "Streams dictations that show a live preview: the preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings, files and dictations without a preview use the Sync API. With more than 100 dictionary terms, the recording is also transcribed with all of them, which is billed in addition.": {
+    "Streams dictations that show a live preview: the preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings, files and dictations without a preview use the Sync API. With more than 100 dictionary terms or a term longer than 50 characters, the recording is also transcribed with all of them, which is billed in addition.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Streamt Diktate mit Live-Vorschau: Die Vorschau zeigt den Text von AssemblyAI, und der fertige Text steht direkt nach dem Stopp bereit. Abgerechnet wird die Zeit, in der die Verbindung offen ist. Aufnahmen, Dateien und Diktate ohne Vorschau nutzen die Sync-API. Mit mehr als 100 Wörterbuchbegriffen wird die Aufnahme zusätzlich mit allen Begriffen transkribiert und extra abgerechnet."
+            "value": "Streamt Diktate mit Live-Vorschau: Die Vorschau zeigt den Text von AssemblyAI, und der fertige Text steht direkt nach dem Stopp bereit. Abgerechnet wird die Zeit, in der die Verbindung offen ist. Aufnahmen, Dateien und Diktate ohne Vorschau nutzen die Sync-API. Mit mehr als 100 Wörterbuchbegriffen oder einem Begriff über 50 Zeichen wird die Aufnahme zusätzlich mit allen Begriffen transkribiert und extra abgerechnet."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transmite los dictados con vista previa en vivo: la vista previa muestra el texto de AssemblyAI y el texto final está listo justo al detenerte. Se factura el tiempo que la conexión está abierta. Las grabaciones, los archivos y los dictados sin vista previa usan la API Sync. Con más de 100 términos del diccionario, la grabación también se transcribe con todos ellos, lo que se factura aparte."
+            "value": "Transmite los dictados con vista previa en vivo: la vista previa muestra el texto de AssemblyAI y el texto final está listo justo al detenerte. Se factura el tiempo que la conexión está abierta. Las grabaciones, los archivos y los dictados sin vista previa usan la API Sync. Con más de 100 términos del diccionario o un término de más de 50 caracteres, la grabación también se transcribe con todos ellos, lo que se factura aparte."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ライブプレビューを表示するディクテーションをストリーミングします。プレビューに AssemblyAI のテキストが表示され、停止直後に最終テキストが用意されます。接続が開いている時間に対して課金されます。録音、ファイル、プレビューなしのディクテーションには Sync API を使用します。辞書の用語が 100 を超える場合は、すべての用語を使って録音も文字起こしされ、別途課金されます。"
+            "value": "ライブプレビューを表示するディクテーションをストリーミングします。プレビューに AssemblyAI のテキストが表示され、停止直後に最終テキストが用意されます。接続が開いている時間に対して課金されます。録音、ファイル、プレビューなしのディクテーションには Sync API を使用します。辞書の用語が 100 を超える場合や 50 文字を超える用語がある場合は、すべての用語を使って録音も文字起こしされ、別途課金されます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "对显示实时预览的听写进行流式传输：预览显示 AssemblyAI 的文本，停止后即可得到最终文本。按连接保持打开的时长计费。录音、文件和没有预览的听写使用 Sync API。词典术语超过 100 个时，还会使用全部术语转录录音，并另行计费。"
+            "value": "对显示实时预览的听写进行流式传输：预览显示 AssemblyAI 的文本，停止后即可得到最终文本。按连接保持打开的时长计费。录音、文件和没有预览的听写使用 Sync API。词典术语超过 100 个或有术语超过 50 个字符时，还会使用全部术语转录录音，并另行计费。"
           }
         }
       }
