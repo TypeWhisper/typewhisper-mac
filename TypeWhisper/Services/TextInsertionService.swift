@@ -317,6 +317,10 @@ final class TextInsertionService {
     }
 
     private var pendingClipboardRestore: PendingClipboardRestore?
+    /// Processes that accepted an Accessibility insertion and left the field unchanged, keyed
+    /// by process with the bundle identifier it had. Chrome and Safari do this in web text
+    /// fields, and each dictation then waited for the full verification before pasting.
+    private var processesIgnoringAccessibilityInsertion: [pid_t: String?] = [:]
     private(set) var lastInsertionTiming: InsertionTiming?
 
     /// The latest synthetic paste. The target may not have consumed it until it is verified or
@@ -772,7 +776,11 @@ final class TextInsertionService {
     /// inserted the text twice (#1518, #1732). A write that reported success gets
     /// `accessibilityInsertionVerificationAttempts` to show up. A write that reported an error
     /// gets one check, so apps that reject it still get the paste without a delay.
-    func insertTextAtAndVerifyChange(element: AXUIElement, text: String) async -> InsertionTiming? {
+    func insertTextAtAndVerifyChange(
+        element: AXUIElement,
+        text: String,
+        bundleIdentifier: String? = nil
+    ) async -> InsertionTiming? {
         guard let initialState = captureFocusedTextState(for: element) else { return nil }
         let writeSucceeded = insertTextAt(element: element, text: text)
         let insertedUptime = DispatchTime.now().uptimeNanoseconds
@@ -809,7 +817,31 @@ final class TextInsertionService {
         logger.info(
             "AX insertion left the focused field unchanged after \(elapsedMilliseconds(), privacy: .public)ms; pasting instead: writeSucceeded=\(writeSucceeded, privacy: .public)"
         )
+        if writeSucceeded, let processIdentifier = liveFieldProcessIdentifier(for: element) {
+            // updateValue keeps an entry for an app without a bundle identifier.
+            processesIgnoringAccessibilityInsertion.updateValue(bundleIdentifier, forKey: processIdentifier)
+        }
         return nil
+    }
+
+    /// Whether this process already ignored an Accessibility insertion that reported success.
+    private func processIgnoresAccessibilityInsertion(
+        _ element: AXUIElement,
+        bundleIdentifier: String?
+    ) -> Bool {
+        guard let processIdentifier = liveFieldProcessIdentifier(for: element),
+              let recordedBundleIdentifier = processesIgnoringAccessibilityInsertion[processIdentifier] else {
+            return false
+        }
+        // A new app can reuse the process identifier.
+        guard recordedBundleIdentifier == bundleIdentifier else {
+            processesIgnoringAccessibilityInsertion[processIdentifier] = nil
+            return false
+        }
+        logger.info(
+            "insertText skips AX insertion: the app ignored an earlier write, bundle=\(bundleIdentifier ?? "nil", privacy: .public)"
+        )
+        return true
     }
 
     /// Saves all current clipboard contents for later restoration.
@@ -1556,12 +1588,14 @@ final class TextInsertionService {
         }
         if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
            let focusedElement = getFocusedTextElement(),
-           !isHiddenTextInputProxy(focusedElement) {
+           !isHiddenTextInputProxy(focusedElement),
+           !processIgnoresAccessibilityInsertion(focusedElement, bundleIdentifier: bundleId) {
             isVerifyingAccessibilityInsertion = true
             holdsAccessibilityVerification = true
             if let accessibilityInsertionTiming = await insertTextAtAndVerifyChange(
                 element: focusedElement,
-                text: text
+                text: text,
+                bundleIdentifier: bundleId
             ) {
                 if autoEnter {
                     try? await Task.sleep(for: autoEnterDelay)

@@ -7810,6 +7810,49 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testProcessThatIgnoredAnAXInsertionGetsThePasteDirectlyNextTime() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateApplication(4242)
+        var bundleIdentifier = SupportedMeetingBrowser.chrome
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.liveFieldElementProcessIdentifierOverride = { _ in 4242 }
+        service.captureActiveAppOverride = { ("Google Chrome", bundleIdentifier, nil) }
+        service.pasteVerificationAttempts = 0
+        service.accessibilityInsertionVerificationPollingDelay = .milliseconds(1)
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        // Chrome's web text fields accept the write and stay unchanged.
+        service.focusedTextStateOverride = { _ in
+            (value: "Start", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+        var accessibilityWrites = 0
+        service.insertTextAtOverride = { _, _ in
+            accessibilityWrites += 1
+            return true
+        }
+        var pasteCount = 0
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+
+        _ = try await service.insertText("One", preserveClipboard: true)
+        _ = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(accessibilityWrites, 1)
+        XCTAssertEqual(pasteCount, 1)
+
+        _ = try await service.insertText("Two", preserveClipboard: true)
+        _ = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(accessibilityWrites, 1, "the second insertion must not wait for an ignored write again")
+        XCTAssertEqual(pasteCount, 2)
+
+        // Another app that reuses the process identifier gets the Accessibility write again.
+        bundleIdentifier = "com.apple.Notes"
+        _ = try await service.insertText("Three", preserveClipboard: true)
+        _ = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(accessibilityWrites, 2)
+    }
+
+    @MainActor
     func testPreserveClipboardFallsBackToSyntheticPasteWhenDirectAXOnlyMovesSelection() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
