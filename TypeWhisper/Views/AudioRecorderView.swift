@@ -120,18 +120,11 @@ struct AudioRecorderView: View {
                 }
 
                 if let warning = viewModel.systemAudioWarningMessage {
-                    Label(warning, systemImage: "speaker.slash")
-                        .foregroundStyle(.orange)
-                        .font(.callout)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityAddTraits(.isStaticText)
-                        .accessibilityLabel(localizedAppText(
-                            "Warning: \(warning)",
-                            de: "Warnung: \(warning)",
-                            ja: "警告: \(warning)",
-                            zh: "警告：\(warning)",
-                            es: "Advertencia: \(warning)"
-                        ))
+                    warningLabel(warning, systemImage: "speaker.slash")
+                }
+
+                if let warning = viewModel.microphoneWarningMessage {
+                    warningLabel(warning, systemImage: "mic.slash")
                 }
             }
 
@@ -420,6 +413,21 @@ struct AudioRecorderView: View {
 
     private var isLiveTranscriptPluginActive: Bool {
         pluginManager.loadedPlugins.contains { $0.manifest.id == "com.typewhisper.livetranscript" && $0.isEnabled }
+    }
+
+    private func warningLabel(_ warning: String, systemImage: String) -> some View {
+        Label(warning, systemImage: systemImage)
+            .foregroundStyle(.orange)
+            .font(.callout)
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(localizedAppText(
+                "Warning: \(warning)",
+                de: "Warnung: \(warning)",
+                ja: "警告: \(warning)",
+                zh: "警告：\(warning)",
+                es: "Advertencia: \(warning)"
+            ))
     }
 
     private func recorderSummaryRow(title: String, value: String) -> some View {

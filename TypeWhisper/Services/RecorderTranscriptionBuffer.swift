@@ -25,6 +25,21 @@ struct RecorderTranscriptionBuffer {
         systemSamples.append(contentsOf: samples)
     }
 
+    /// Stands in for the time a restarted microphone delivered nothing.
+    mutating func appendMicSilence(count: Int) {
+        guard count > 0 else { return }
+        micSamples.append(contentsOf: repeatElement(0, count: count))
+    }
+
+    /// Silences the microphone samples from `index` on, which repeated audio of a frozen capture.
+    mutating func silenceMic(from index: Int) {
+        let start = max(0, index)
+        guard start < micSamples.count else { return }
+        micSamples.withUnsafeMutableBufferPointer { samples in
+            UnsafeMutableBufferPointer(rebasing: samples[start...]).update(repeating: 0)
+        }
+    }
+
     func currentBuffer(
         micEnabled: Bool,
         systemAudioEnabled: Bool,
