@@ -45,7 +45,19 @@ enum AudioEngineRecoveryPolicy {
     private static let retryableOSStatusCodes: Set<OSStatus> = [
         kAudioUnitErr_FormatNotSupported,
         kAudioUnitErr_InvalidElement,
+        kAudioHardwareBadDeviceError,
     ]
+
+    /// AVFoundation reports CoreAudio failures in this domain with the OSStatus as the code.
+    static let avfAudioErrorDomain = "com.apple.coreaudio.avfaudio"
+
+    /// '!dev': the engine was bound to an audio device that no longer exists. Without an
+    /// explicit device, `AVAudioEngine` follows the system default route, and after an undock
+    /// or sleep that route can keep pointing at the vanished device until the app relaunches
+    /// (#1859). A retry should therefore bind the engine to the current default input itself.
+    static func isMissingDevice(error: Error) -> Bool {
+        extractOSStatus(from: error) == kAudioHardwareBadDeviceError
+    }
 
     static func isRetryable(error: Error) -> Bool {
         let nsError = error as NSError
@@ -72,8 +84,8 @@ enum AudioEngineRecoveryPolicy {
 
     static func extractOSStatus(from error: Error) -> OSStatus? {
         let nsError = error as NSError
-        if nsError.domain == NSOSStatusErrorDomain {
-            return OSStatus(nsError.code)
+        if nsError.domain == NSOSStatusErrorDomain || nsError.domain == avfAudioErrorDomain {
+            return OSStatus(truncatingIfNeeded: nsError.code)
         }
 
         let detail = nsError.localizedDescription

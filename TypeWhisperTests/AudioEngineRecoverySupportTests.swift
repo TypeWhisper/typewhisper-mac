@@ -120,6 +120,21 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertFalse(AudioEngineRecoveryPolicy.isRetryable(error: permissionError))
     }
 
+    func testMissingDeviceErrorFromAVAudioEngineIsRetryable() {
+        // The error from #1859: "com.apple.coreaudio.avfaudio error 560227702" ('!dev').
+        let missingDevice = NSError(domain: AudioEngineRecoveryPolicy.avfAudioErrorDomain, code: 560227702)
+        let missingDeviceStatus = NSError(domain: NSOSStatusErrorDomain, code: Int(kAudioHardwareBadDeviceError))
+        let formatError = NSError(domain: AudioEngineRecoveryPolicy.avfAudioErrorDomain, code: Int(kAudioUnitErr_FormatNotSupported))
+        let unauthorized = NSError(domain: AudioEngineRecoveryPolicy.avfAudioErrorDomain, code: Int(kAudioUnitErr_Unauthorized))
+
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: missingDevice))
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isMissingDevice(error: missingDevice))
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isMissingDevice(error: missingDeviceStatus))
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: formatError))
+        XCTAssertFalse(AudioEngineRecoveryPolicy.isMissingDevice(error: formatError))
+        XCTAssertFalse(AudioEngineRecoveryPolicy.isRetryable(error: unauthorized))
+    }
+
     func testRetryableErrorClassification_matchesObjCExceptionAndFormatMismatchDomains() {
         let avfException = NSError(
             domain: AudioEngineRecoveryErrorDomains.avfException,
