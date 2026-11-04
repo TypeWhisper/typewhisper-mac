@@ -893,6 +893,50 @@ final class AssemblyAIPlugin: NSObject,
 
 // MARK: - Live Session
 
+/// The loudness of the audio a live session sent, in 50 ms windows, to tell whether the
+/// audio after the last transcribed word could hold another word.
+struct AssemblyAISentAudioLevels: Sendable {
+    static let windowSampleCount = AssemblyAILiveTranscriptionSession.sampleRate / 20
+    static let windowDuration: TimeInterval = 0.05
+    /// A window is quiet below this share of the loudest window, and always below the
+    /// absolute level.
+    static let relativeQuietLevel: Float = 0.15
+    static let absoluteQuietLevel: Float = 0.003
+    /// Word end times can come a little early; the audio this soon after does not count.
+    static let wordEndTolerance: TimeInterval = 0.1
+
+    private var levels: [Float] = []
+    private var partialWindow: [Float] = []
+
+    mutating func append(_ samples: [Float]) {
+        partialWindow.append(contentsOf: samples)
+        var start = 0
+        while partialWindow.count - start >= Self.windowSampleCount {
+            levels.append(Self.level(partialWindow[start..<(start + Self.windowSampleCount)]))
+            start += Self.windowSampleCount
+        }
+        partialWindow.removeFirst(start)
+    }
+
+    /// Whether every window that ends after `time` (seconds from the first sample) plus
+    /// the tolerance is quiet. Audio after the end of the sent audio counts as quiet.
+    func isQuiet(after time: TimeInterval) -> Bool {
+        var windows = levels
+        if !partialWindow.isEmpty {
+            windows.append(Self.level(partialWindow[...]))
+        }
+        let quietLevel = max(Self.absoluteQuietLevel, (windows.max() ?? 0) * Self.relativeQuietLevel)
+        let first = max(0, Int(((time + Self.wordEndTolerance) / Self.windowDuration).rounded(.down)))
+        guard first < windows.count else { return true }
+        return windows[first...].allSatisfy { $0 < quietLevel }
+    }
+
+    private static func level(_ samples: ArraySlice<Float>) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        return (samples.reduce(Float.zero) { $0 + $1 * $1 } / Float(samples.count)).squareRoot()
+    }
+}
+
 /// The WebSocket a live session talks to, so tests can play the server.
 protocol AssemblyAIRealtimeSocket: Sendable {
     func send(text: String) async throws
@@ -944,9 +988,9 @@ final class URLSessionAssemblyAIRealtimeSocket: AssemblyAIRealtimeSocket, @unche
 /// AssemblyAI ends each turn with a formatted `Turn` message. When the recording stops,
 /// the session sends `Terminate`; the server answers with the turns for the remaining
 /// audio and then `Termination`. The transcript is complete once that arrives, or earlier
-/// once no turn is open and the last word ends where the audio ends (see
-/// `transcriptCoversSentAudio`). With
-/// dictionary terms beyond what the realtime API takes, the final text comes from
+/// once no turn is open and the audio after the last word is quiet (see
+/// `transcriptCoversSentAudio`). With dictionary terms beyond what the realtime API
+/// takes, the final text comes from
 /// `finalTranscriber`, which transcribes the recording with all of them, and the
 /// realtime transcript is only the preview and the fallback.
 /// https://www.assemblyai.com/docs/streaming/message-sequence
@@ -961,8 +1005,6 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
     /// `Termination` arrived 0.7 to 1.1 s after `Terminate` in our tests; this also
     /// covers audio the server has not transcribed yet after a slow connection.
     static let finishTimeout: Duration = .seconds(8)
-    /// Audio after the last word that is too short to hold another one.
-    static let trailingAudioWithoutWords: TimeInterval = 0.35
 
     private static let logger = Logger(subsystem: "com.typewhisper.assemblyai", category: "LiveSession")
 
@@ -979,13 +1021,12 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
 
     private var hasStarted = false
     private var hasSentTerminate = false
-    private var hasFinishedTurnAfterTerminate = false
     private var isTerminated = false
     private var isClosed = false
     private var isCancelled = false
     private var failure: Error?
     private var pendingSamples: [Float] = []
-    private var sentSampleCount = 0
+    private var sentAudioLevels = AssemblyAISentAudioLevels()
     private var recordedSamples: [Float] = []
     private var finishedTurns: [Int: FinishedTurn] = [:]
     private var partialTurnOrder: Int?
@@ -1148,7 +1189,7 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
             }
             let audio = AssemblyAIPlugin.floatToPCM16(frame)
             try await send { try await $0.send(audio: audio) }
-            sentSampleCount += frame.count
+            sentAudioLevels.append(frame)
         }
     }
 
@@ -1224,9 +1265,6 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
             let words = (json["words"] as? [[String: Any]] ?? []).compactMap(Self.wordTiming)
             finishedTurns[order] = FinishedTurn(text: text, words: words)
         }
-        if hasSentTerminate {
-            hasFinishedTurnAfterTerminate = true
-        }
         if partialTurnOrder == order {
             partialTurnOrder = nil
             partialText = ""
@@ -1242,19 +1280,17 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
         return PluginWordTiming(text: text, start: start / 1000, end: end / 1000)
     }
 
-    /// After `Terminate`: the server answered with a finished turn, no turn is open, and
-    /// the last word ends within `trailingAudioWithoutWords` of the audio sent, so no
-    /// further turn can follow. Without an answering turn, a word spoken after the last
-    /// finished turn may still be on its way, so only `Termination` completes the
-    /// transcript; it arrives about half a second after the last turn.
+    /// After `Terminate`: no turn is open and the audio sent after the last finished word
+    /// is quiet, so it holds no word whose turn could still be on its way. Otherwise only
+    /// `Termination` completes the transcript; it arrives about half a second after the
+    /// last turn.
     var transcriptCoversSentAudio: Bool {
-        guard hasFinishedTurnAfterTerminate,
+        guard hasSentTerminate,
               partialTurnOrder == nil,
               let lastWordEnd = orderedTurns.last?.words.last?.end else {
             return false
         }
-        let sentAudioDuration = Double(sentSampleCount) / Double(Self.sampleRate)
-        return lastWordEnd >= sentAudioDuration - Self.trailingAudioWithoutWords
+        return sentAudioLevels.isQuiet(after: lastWordEnd)
     }
 
     private var orderedTurns: [FinishedTurn] {
@@ -1521,7 +1557,7 @@ private struct AssemblyAISettingsView: View {
                 } else {
                     switch transcriptionMode {
                     case .live:
-                        Text("Streams while you dictate: the live preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings and files use the Sync API.", bundle: bundle)
+                        Text("Streams dictations that show a live preview: the preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings, files and dictations without a preview use the Sync API. With more than 100 dictionary terms, the recording is also transcribed with all of them, which is billed in addition.", bundle: bundle)
                     case .sync:
                         Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
                     case .async:

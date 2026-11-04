@@ -732,58 +732,49 @@ final class AssemblyAIPluginTests: XCTestCase {
         }
     }
 
-    func testLiveSessionFinishesWithoutTerminationOnlyOnceTheLastWordReachesTheEndOfTheAudio() async throws {
-        // One second of audio; the last word ends at 0.9 s, so no further word fits.
-        let covering = FakeAssemblyAIRealtimeSocket(terminateAnswers: [
-            Self.turn(0, "Hello there.", final: true, words: [("Hello", 100, 400), ("there.", 450, 900)]),
-        ])
-        let coveringSession = try await AssemblyAILiveTranscriptionSession.connect(
-            socket: covering,
-            language: "en",
-            finalTranscriber: nil,
-            onProgress: { _ in true }
-        )
-        try await coveringSession.appendAudio(samples: [Float](repeating: 0.2, count: 16_000))
-        let result = try await coveringSession.finish()
-        XCTAssertEqual(result.text, "Hello there.")
-
-        // The last word ends at 0.4 s: the rest of the second may still hold speech, so
-        // only Termination completes the transcript, and a closed socket fails it.
-        let early = FakeAssemblyAIRealtimeSocket(
-            terminateAnswers: [Self.turn(0, "Hello.", final: true, words: [("Hello.", 100, 400)])],
-            closesOnTerminate: true
-        )
-        let earlySession = try await AssemblyAILiveTranscriptionSession.connect(
-            socket: early,
-            language: "en",
-            finalTranscriber: nil,
-            onProgress: { _ in true }
-        )
-        try await earlySession.appendAudio(samples: [Float](repeating: 0.2, count: 16_000))
-        do {
-            _ = try await earlySession.finish()
-            XCTFail("Expected the session to wait for Termination")
-        } catch {
-            XCTAssertTrue(early.isClosed)
+    func testLiveSessionFinishesWithoutTerminationOnlyWhenTheAudioAfterTheLastWordIsQuiet() async throws {
+        func finish(
+            loud: Int,
+            quiet: Int,
+            lastWordEndMs: Int,
+            turnBeforeTerminate: Bool = false
+        ) async throws -> (String?, FakeAssemblyAIRealtimeSocket) {
+            let turn = Self.turn(0, "Hello there.", final: true, words: [("Hello", 100, 400), ("there.", 450, lastWordEndMs)])
+            let socket = FakeAssemblyAIRealtimeSocket(
+                terminateAnswers: turnBeforeTerminate ? [] : [turn],
+                closesOnTerminate: true
+            )
+            let session = try await AssemblyAILiveTranscriptionSession.connect(
+                socket: socket,
+                language: "en",
+                finalTranscriber: nil,
+                onProgress: { _ in true }
+            )
+            try await session.appendAudio(samples: [Float](repeating: 0.2, count: loud) + [Float](repeating: 0, count: quiet))
+            if turnBeforeTerminate {
+                await session.handle(turn)
+            }
+            // The socket closes right after its answer and never sends Termination.
+            let text = try? await session.finish().text
+            return (text, socket)
         }
 
-        // A turn that finished before Terminate does not count: a short word spoken after
-        // it may still be on its way, so only an answer to Terminate ends the wait early.
-        let finishedBefore = FakeAssemblyAIRealtimeSocket(terminateAnswers: [], closesOnTerminate: true)
-        let finishedBeforeSession = try await AssemblyAILiveTranscriptionSession.connect(
-            socket: finishedBefore,
-            language: "en",
-            finalTranscriber: nil,
-            onProgress: { _ in true }
-        )
-        try await finishedBeforeSession.appendAudio(samples: [Float](repeating: 0.2, count: 16_000))
-        await finishedBeforeSession.handle(Self.turn(0, "Hello there.", final: true, words: [("Hello", 100, 400), ("there.", 450, 900)]))
-        do {
-            _ = try await finishedBeforeSession.finish()
-            XCTFail("Expected the session to wait for Termination")
-        } catch {
-            XCTAssertTrue(finishedBefore.isClosed)
-        }
+        // The last word ends where the speech ends: nothing else can follow.
+        var (text, socket) = try await finish(loud: 16_000, quiet: 0, lastWordEndMs: 900)
+        XCTAssertEqual(text, "Hello there.")
+        XCTAssertTrue(socket.isClosed)
+
+        // A long pause before the stop is quiet, whichever message ended the turn.
+        (text, _) = try await finish(loud: 8_000, quiet: 16_000, lastWordEndMs: 500, turnBeforeTerminate: true)
+        XCTAssertEqual(text, "Hello there.")
+
+        // Sound after the last word may be a short word whose turn is still on its way,
+        // so only Termination completes the transcript, and a closed socket fails it.
+        (text, socket) = try await finish(loud: 16_000, quiet: 0, lastWordEndMs: 700)
+        XCTAssertNil(text)
+        XCTAssertTrue(socket.isClosed)
+        (text, _) = try await finish(loud: 16_000, quiet: 0, lastWordEndMs: 400, turnBeforeTerminate: true)
+        XCTAssertNil(text)
     }
 
     func testLiveSessionWithMoreDictionaryTermsThanTheRealtimeAPITakesUsesTheRecording() async throws {
