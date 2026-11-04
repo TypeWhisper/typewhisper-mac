@@ -2537,7 +2537,7 @@ final class LanguageLocalizationTests: XCTestCase {
             ("de", ["en-US"], "en", "Plugins"),
             ("en", ["de-DE"], "de", "Erweiterungen"),
             ("de", ["xx", "en"], "en", "Plugins"),
-            ("de", ["xx"], "en", "Plugins"),
+            ("de", ["xx"], "de", "Erweiterungen"),
             ("en", ["zh-Hans"], "zh-Hans", "插件")
         ] {
             defaults.setPersistentDomain([

@@ -16,6 +16,11 @@ func reconcileAppLanguage(defaults: UserDefaults = .standard, preferencesDomain:
             forPreferences: languages
           ).first else { return }
 
+    // preferredLocalizations falls back to an available localization when nothing matches,
+    // so only act when one of the requested languages actually resolved.
+    let resolvedCode = Locale.Language(identifier: language).languageCode
+    guard languages.contains(where: { Locale.Language(identifier: $0).languageCode == resolvedCode }) else { return }
+
     if isLaunchOverride {
         // Merge into the argument domain so this launch never changes the saved choice.
         arguments[UserDefaultsKeys.preferredAppLanguage] = language
