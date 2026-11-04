@@ -2519,6 +2519,106 @@ final class LanguageLocalizationTests: XCTestCase {
         super.tearDown()
     }
 
+    func testLaunchReconcilesAppLanguageAndCustomLabels() {
+        let defaults = UserDefaults.standard
+        let domain = AppConstants.preferencesDomain
+        let originalDomain = defaults.persistentDomain(forName: domain) ?? [:]
+        let originalArguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer {
+            defaults.setPersistentDomain(originalDomain, forName: domain)
+            defaults.setVolatileDomain(originalArguments, forName: UserDefaults.argumentDomain)
+        }
+        defaults.setVolatileDomain([:], forName: UserDefaults.argumentDomain)
+
+        for (saved, languages, expected, label) in [
+            ("de", ["en"], "en", "Plugins"),
+            ("en", ["de"], "de", "Erweiterungen"),
+            ("de", ["de"], "de", "Erweiterungen"),
+            ("de", ["en-US"], "en", "Plugins"),
+            ("en", ["de-DE"], "de", "Erweiterungen"),
+            ("de", ["xx", "en"], "en", "Plugins"),
+            ("de", ["xx"], "en", "Plugins"),
+            ("en", ["zh-Hans"], "zh-Hans", "插件")
+        ] {
+            defaults.setPersistentDomain([
+                UserDefaultsKeys.preferredAppLanguage: saved,
+                "AppleLanguages": languages
+            ], forName: domain)
+            for _ in 0..<2 {
+                reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+                XCTAssertEqual(defaults.persistentDomain(forName: domain)?[UserDefaultsKeys.preferredAppLanguage] as? String, expected)
+                XCTAssertEqual(preferredAppLanguageCode(), expected)
+                XCTAssertEqual(localizedAppText("Plugins", de: "Erweiterungen", zh: "插件"), label)
+            }
+        }
+    }
+
+    func testLaunchLanguageOverrideDoesNotPersistOrReplaceUnrelatedArguments() {
+        let defaults = UserDefaults.standard
+        let domain = AppConstants.preferencesDomain
+        let originalDomain = defaults.persistentDomain(forName: domain) ?? [:]
+        let originalArguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer {
+            defaults.setPersistentDomain(originalDomain, forName: domain)
+            defaults.setVolatileDomain(originalArguments, forName: UserDefaults.argumentDomain)
+        }
+        defaults.setPersistentDomain([
+            UserDefaultsKeys.preferredAppLanguage: "de", "AppleLanguages": ["de"]
+        ], forName: domain)
+        defaults.setVolatileDomain([
+            "AppleLanguages": ["en"], "unrelatedArgument": "keep"
+        ], forName: UserDefaults.argumentDomain)
+
+        reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+        XCTAssertEqual(preferredAppLanguageCode(), "en")
+        XCTAssertEqual(localizedAppText("Plugins", de: "Erweiterungen"), "Plugins")
+        XCTAssertEqual(defaults.persistentDomain(forName: domain)?[UserDefaultsKeys.preferredAppLanguage] as? String, "de")
+        XCTAssertEqual(defaults.string(forKey: "unrelatedArgument"), "keep")
+
+        defaults.setVolatileDomain([:], forName: UserDefaults.argumentDomain)
+        reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+        XCTAssertEqual(preferredAppLanguageCode(), "de")
+
+        defaults.removeObject(forKey: UserDefaultsKeys.preferredAppLanguage)
+        defaults.setVolatileDomain(["AppleLanguages": ["en"]], forName: UserDefaults.argumentDomain)
+        reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.preferredAppLanguage))
+        XCTAssertEqual(preferredAppLanguageCode(), Bundle.main.preferredLocalizations.first)
+    }
+
+    func testLaunchIgnoresInheritedOrInvalidLanguagesAndMissingSelection() throws {
+        let domain = "LanguageLocalizationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        // Inherited languages come from an isolated suite searched after the app domain,
+        // so the test never writes to the real global defaults.
+        let inheritedDomain = "\(domain).inherited"
+        let originalArguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer {
+            defaults.removeSuite(named: inheritedDomain)
+            defaults.removePersistentDomain(forName: inheritedDomain)
+            defaults.removePersistentDomain(forName: domain)
+            defaults.setVolatileDomain(originalArguments, forName: UserDefaults.argumentDomain)
+        }
+        defaults.setVolatileDomain([:], forName: UserDefaults.argumentDomain)
+        defaults.setPersistentDomain(["AppleLanguages": ["en"]], forName: inheritedDomain)
+        defaults.addSuite(named: inheritedDomain)
+
+        for languages: Any? in [nil, [String](), "en", [1], ["en", 1]] {
+            var values: [String: Any] = [UserDefaultsKeys.preferredAppLanguage: "de"]
+            values["AppleLanguages"] = languages
+            defaults.setPersistentDomain(values, forName: domain)
+            if languages == nil {
+                XCTAssertNil(defaults.persistentDomain(forName: domain)?["AppleLanguages"])
+                XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
+            }
+            reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+            XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage), "de")
+        }
+        defaults.setPersistentDomain(["AppleLanguages": ["en"]], forName: domain)
+        reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.preferredAppLanguage))
+    }
+
     func testLocalizedAppLanguageOptionsFollowPreferredAppLanguage() {
         UserDefaults.standard.set("en", forKey: UserDefaultsKeys.preferredAppLanguage)
 

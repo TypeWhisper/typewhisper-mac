@@ -274,6 +274,30 @@ final class DictationSilenceEndpointDetectorTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadToggleSilenceStopDuration(defaults: defaults), 3)
     }
 
+    func testDefaultDurationFormatterFollowsReconciledAppLanguage() {
+        let defaults = UserDefaults.standard
+        let domain = AppConstants.preferencesDomain
+        let originalDomain = defaults.persistentDomain(forName: domain) ?? [:]
+        let originalArguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer {
+            defaults.setPersistentDomain(originalDomain, forName: domain)
+            defaults.setVolatileDomain(originalArguments, forName: UserDefaults.argumentDomain)
+        }
+        defaults.setVolatileDomain([:], forName: UserDefaults.argumentDomain)
+
+        for (saved, language, singular, fractional) in [
+            ("de", "en", "1 second", "2.5 seconds"),
+            ("en", "de", "1 Sekunde", "2,5 Sekunden")
+        ] {
+            defaults.setPersistentDomain([
+                UserDefaultsKeys.preferredAppLanguage: saved, "AppleLanguages": [language]
+            ], forName: domain)
+            reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+            XCTAssertEqual(DictationViewModel.formattedSilenceDuration(1), singular)
+            XCTAssertEqual(DictationViewModel.formattedSilenceDuration(2.5), fractional)
+        }
+    }
+
     func testDurationsAreSpelledOutWithTheirUnit() {
         let english = Locale(identifier: "en")
         XCTAssertEqual(DictationViewModel.formattedSilenceDuration(1, locale: english), "1 second")
