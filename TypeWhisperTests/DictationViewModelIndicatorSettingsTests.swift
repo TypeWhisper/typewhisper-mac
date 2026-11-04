@@ -2727,3 +2727,17 @@ final class IndicatorPointerTrackerTests: XCTestCase {
         XCTAssertTrue(overlay.ignoresMouseEvents)
     }
 }
+
+@MainActor
+final class IndicatorCoordinatorRefreshTests: XCTestCase {
+    func testHiddenIndicatorsSkipActiveScreenRefreshes() {
+        let coordinator = IndicatorCoordinator(
+            countdownModel: CalendarMeetingCountdownModel()
+        )
+
+        // A mouse click or app switch while no indicator is on screen.
+        coordinator.scheduleActiveScreenRefreshes()
+
+        XCTAssertFalse(coordinator.hasPendingActiveScreenRefresh)
+    }
+}

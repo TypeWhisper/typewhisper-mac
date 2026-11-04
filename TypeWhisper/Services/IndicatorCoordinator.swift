@@ -384,6 +384,7 @@ final class IndicatorCoordinator {
     private var cancellables = Set<AnyCancellable>()
     private var globalMouseMonitor: Any?
     private var deferredRefreshTask: Task<Void, Never>?
+    private var deferredRefreshGeneration = 0
     private var isObserving = false
 
     init(countdownModel: CalendarMeetingCountdownModel) {
@@ -486,10 +487,29 @@ final class IndicatorCoordinator {
         minimalPanel.refreshPlacementForActiveContextChange()
     }
 
-    private func scheduleActiveScreenRefreshes() {
+    /// Hidden panels ignore placement refreshes, and `show()` resolves the
+    /// screen again when a hidden panel appears.
+    private var hasVisibleIndicatorPanel: Bool {
+        notchPanel.isVisible || overlayPanel.isVisible || minimalPanel.isVisible
+    }
+
+    var hasPendingActiveScreenRefresh: Bool {
+        deferredRefreshTask != nil
+    }
+
+    func scheduleActiveScreenRefreshes() {
+        // Most of the time no indicator is on screen, yet every mouse click
+        // and app switch lands here. Skip the refresh and its delayed retry.
+        guard hasVisibleIndicatorPanel else {
+            deferredRefreshTask?.cancel()
+            deferredRefreshTask = nil
+            return
+        }
         refreshVisibleIndicatorPanels()
 
         deferredRefreshTask?.cancel()
+        deferredRefreshGeneration += 1
+        let generation = deferredRefreshGeneration
         deferredRefreshTask = Task { @MainActor [weak self] in
             await Task.yield()
             guard !Task.isCancelled else { return }
@@ -498,6 +518,10 @@ final class IndicatorCoordinator {
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
             self?.refreshVisibleIndicatorPanels()
+            // A newer request may have replaced this task in the meantime.
+            if self?.deferredRefreshGeneration == generation {
+                self?.deferredRefreshTask = nil
+            }
         }
     }
 }
