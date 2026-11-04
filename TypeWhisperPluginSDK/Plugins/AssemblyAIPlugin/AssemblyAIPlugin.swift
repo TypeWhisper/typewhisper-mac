@@ -82,8 +82,13 @@ final class AssemblyAIPlugin: NSObject,
 
     func selectModel(_ modelId: String) {
         let resolvedModel = AssemblyAIModelCatalog.resolve(modelId)
+        let changed = _selectedModelId != resolvedModel.id
         _selectedModelId = resolvedModel.id
         host?.setUserDefault(resolvedModel.id, forKey: "selectedModel")
+        if changed {
+            // Live sessions, streaming and the preview depend on the model.
+            host?.notifyCapabilitiesChanged()
+        }
     }
 
     var supportsTranslation: Bool { false }
@@ -197,11 +202,20 @@ final class AssemblyAIPlugin: NSObject,
     /// The language the realtime session is steered to, as the transcript reports it.
     static func streamingLanguage(_ language: String?, modelId: String) -> String? {
         guard case .universal35Pro(_, let supportedLanguageCodes) = AssemblyAIModelCatalog.resolve(modelId).streamingConfiguration,
-              let normalized = language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-              supportedLanguageCodes.contains(normalized) else {
+              let code = languageCode(language),
+              supportedLanguageCodes.contains(code) else {
             return nil
         }
-        return normalized
+        return code
+    }
+
+    /// A requested language as AssemblyAI's language codes write it, or nil for automatic.
+    static func languageCode(_ language: String?) -> String? {
+        guard let code = language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !code.isEmpty else {
+            return nil
+        }
+        return code
     }
 
     // MARK: - Transcription (REST Fallback)
@@ -334,15 +348,9 @@ final class AssemblyAIPlugin: NSObject,
             return nil
         }
 
-        let normalizedLanguage = language?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let syncLanguage: String?
-        if let normalizedLanguage, !normalizedLanguage.isEmpty {
-            guard sync.supportedLanguageCodes.contains(normalizedLanguage) else { return nil }
-            syncLanguage = normalizedLanguage
-        } else {
-            syncLanguage = nil
+        let syncLanguage = languageCode(language)
+        if let syncLanguage, !sync.supportedLanguageCodes.contains(syncLanguage) {
+            return nil
         }
 
         let keyterms = PluginDictionaryTerms.clippedTerms(
@@ -773,16 +781,12 @@ final class AssemblyAIPlugin: NSObject,
         keytermsPromptJSON: String?
     ) -> URL? {
         let model = AssemblyAIModelCatalog.resolve(modelId)
-        let normalizedLanguage = language?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+        let normalizedLanguage = languageCode(language)
         var queryItems = [URLQueryItem(name: "sample_rate", value: "16000")]
 
         switch model.streamingConfiguration {
         case .universal2(let englishSpeechModelId, let multilingualSpeechModelId):
-            let streamingModel = normalizedLanguage == nil
-                || normalizedLanguage?.isEmpty == true
-                || normalizedLanguage == "en"
+            let streamingModel = normalizedLanguage == nil || normalizedLanguage == "en"
                 ? englishSpeechModelId
                 : multilingualSpeechModelId
             queryItems.append(URLQueryItem(name: "speech_model", value: streamingModel))
@@ -975,6 +979,7 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
 
     private var hasStarted = false
     private var hasSentTerminate = false
+    private var hasFinishedTurnAfterTerminate = false
     private var isTerminated = false
     private var isClosed = false
     private var isCancelled = false
@@ -1043,7 +1048,12 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
     }
 
     func finish() async throws -> PluginTranscriptionResult {
-        try throwIfEnded()
+        do {
+            try throwIfEnded()
+        } catch {
+            close()
+            throw error
+        }
 
         var terminateError: Error?
         do {
@@ -1214,6 +1224,9 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
             let words = (json["words"] as? [[String: Any]] ?? []).compactMap(Self.wordTiming)
             finishedTurns[order] = FinishedTurn(text: text, words: words)
         }
+        if hasSentTerminate {
+            hasFinishedTurnAfterTerminate = true
+        }
         if partialTurnOrder == order {
             partialTurnOrder = nil
             partialText = ""
@@ -1229,11 +1242,13 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
         return PluginWordTiming(text: text, start: start / 1000, end: end / 1000)
     }
 
-    /// After `Terminate`: no turn is open and the last word ends within
-    /// `trailingAudioWithoutWords` of the audio sent, so no further turn can follow.
-    /// `Termination` itself arrives about half a second after the last turn.
+    /// After `Terminate`: the server answered with a finished turn, no turn is open, and
+    /// the last word ends within `trailingAudioWithoutWords` of the audio sent, so no
+    /// further turn can follow. Without an answering turn, a word spoken after the last
+    /// finished turn may still be on its way, so only `Termination` completes the
+    /// transcript; it arrives about half a second after the last turn.
     var transcriptCoversSentAudio: Bool {
-        guard hasSentTerminate,
+        guard hasFinishedTurnAfterTerminate,
               partialTurnOrder == nil,
               let lastWordEnd = orderedTurns.last?.words.last?.end else {
             return false
@@ -1314,9 +1329,9 @@ actor AssemblyAILiveTranscriptionSession: LiveTranscriptionSession {
 
     private func waitUntilStarted(timeout: Duration) async throws {
         guard await wait(timeout: timeout, until: { $0.hasStarted }) else {
-            let error = failure ?? PluginTranscriptionError.networkError("Realtime session did not start")
             close()
-            throw error
+            if Task.isCancelled { throw CancellationError() }
+            throw failure ?? PluginTranscriptionError.networkError("Realtime session did not start")
         }
     }
 

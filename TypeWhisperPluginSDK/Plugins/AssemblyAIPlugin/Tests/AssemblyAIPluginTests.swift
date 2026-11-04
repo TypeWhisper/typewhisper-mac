@@ -766,6 +766,24 @@ final class AssemblyAIPluginTests: XCTestCase {
         } catch {
             XCTAssertTrue(early.isClosed)
         }
+
+        // A turn that finished before Terminate does not count: a short word spoken after
+        // it may still be on its way, so only an answer to Terminate ends the wait early.
+        let finishedBefore = FakeAssemblyAIRealtimeSocket(terminateAnswers: [], closesOnTerminate: true)
+        let finishedBeforeSession = try await AssemblyAILiveTranscriptionSession.connect(
+            socket: finishedBefore,
+            language: "en",
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+        try await finishedBeforeSession.appendAudio(samples: [Float](repeating: 0.2, count: 16_000))
+        await finishedBeforeSession.handle(Self.turn(0, "Hello there.", final: true, words: [("Hello", 100, 400), ("there.", 450, 900)]))
+        do {
+            _ = try await finishedBeforeSession.finish()
+            XCTFail("Expected the session to wait for Termination")
+        } catch {
+            XCTAssertTrue(finishedBefore.isClosed)
+        }
     }
 
     func testLiveSessionWithMoreDictionaryTermsThanTheRealtimeAPITakesUsesTheRecording() async throws {
