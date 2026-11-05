@@ -2537,7 +2537,7 @@ final class LanguageLocalizationTests: XCTestCase {
             ("de", ["en-US"], "en", "Plugins"),
             ("en", ["de-DE"], "de", "Erweiterungen"),
             ("de", ["xx", "en"], "en", "Plugins"),
-            ("de", ["xx"], "de", "Erweiterungen"),
+            ("de", ["xx"], "en", "Plugins"),
             ("en", ["zh-Hans"], "zh-Hans", "插件")
         ] {
             defaults.setPersistentDomain([
@@ -2586,7 +2586,7 @@ final class LanguageLocalizationTests: XCTestCase {
         XCTAssertEqual(preferredAppLanguageCode(), Bundle.main.preferredLocalizations.first)
     }
 
-    func testLaunchIgnoresInheritedOrInvalidLanguagesAndMissingSelection() throws {
+    func testLaunchFollowsInheritedLanguagesAndIgnoresEmptyListAndMissingSelection() throws {
         let domain = "LanguageLocalizationTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
         // Inherited languages come from an isolated suite searched after the app domain,
@@ -2603,16 +2603,22 @@ final class LanguageLocalizationTests: XCTestCase {
         defaults.setPersistentDomain(["AppleLanguages": ["en"]], forName: inheritedDomain)
         defaults.addSuite(named: inheritedDomain)
 
-        for languages: Any? in [nil, [String](), "en", [1], ["en", 1]] {
-            var values: [String: Any] = [UserDefaultsKeys.preferredAppLanguage: "de"]
-            values["AppleLanguages"] = languages
-            defaults.setPersistentDomain(values, forName: domain)
-            if languages == nil {
-                XCTAssertNil(defaults.persistentDomain(forName: domain)?["AppleLanguages"])
-                XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
-            }
+        // An empty per-app list shadows the inherited one and leaves the selection alone.
+        defaults.setPersistentDomain([
+            UserDefaultsKeys.preferredAppLanguage: "de", "AppleLanguages": [String]()
+        ], forName: domain)
+        reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage), "de")
+
+        // "System Language" in System Settings removes the per-app AppleLanguages,
+        // so the saved selection follows the inherited list.
+        for (saved, inherited, expected) in [("de", ["en"], "en"), ("en", ["de-DE", "en"], "de"), ("de", ["de"], "de")] {
+            defaults.setPersistentDomain(["AppleLanguages": inherited], forName: inheritedDomain)
+            defaults.setPersistentDomain([UserDefaultsKeys.preferredAppLanguage: saved], forName: domain)
+            XCTAssertNil(defaults.persistentDomain(forName: domain)?["AppleLanguages"])
+            XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), inherited)
             reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)
-            XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage), "de")
+            XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage), expected)
         }
         defaults.setPersistentDomain(["AppleLanguages": ["en"]], forName: domain)
         reconcileAppLanguage(defaults: defaults, preferencesDomain: domain)

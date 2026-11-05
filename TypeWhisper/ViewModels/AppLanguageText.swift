@@ -1,35 +1,5 @@
 import Foundation
 
-/// Aligns a saved in-app selection with macOS's explicit per-app language before
-/// any localization is read. Inherited global languages must not replace a legacy selection.
-func reconcileAppLanguage(defaults: UserDefaults = .standard, preferencesDomain: String) {
-    let appPreferences = defaults.persistentDomain(forName: preferencesDomain) ?? [:]
-    guard let savedLanguage = appPreferences[UserDefaultsKeys.preferredAppLanguage] as? String,
-          !savedLanguage.isEmpty else { return }
-
-    var arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
-    let isLaunchOverride = arguments["AppleLanguages"] != nil
-    guard let languages = (isLaunchOverride ? arguments["AppleLanguages"] : appPreferences["AppleLanguages"]) as? [String],
-          !languages.isEmpty,
-          let language = Bundle.preferredLocalizations(
-            from: Bundle.main.localizations.filter { $0 != "Base" },
-            forPreferences: languages
-          ).first else { return }
-
-    // preferredLocalizations falls back to an available localization when nothing matches,
-    // so only act when one of the requested languages actually resolved.
-    let resolvedCode = Locale.Language(identifier: language).languageCode
-    guard languages.contains(where: { Locale.Language(identifier: $0).languageCode == resolvedCode }) else { return }
-
-    if isLaunchOverride {
-        // Merge into the argument domain so this launch never changes the saved choice.
-        arguments[UserDefaultsKeys.preferredAppLanguage] = language
-        defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
-    } else if savedLanguage != language {
-        defaults.set(language, forKey: UserDefaultsKeys.preferredAppLanguage)
-    }
-}
-
 func preferredAppLanguageCode() -> String {
     if let language = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage), !language.isEmpty {
         return language
