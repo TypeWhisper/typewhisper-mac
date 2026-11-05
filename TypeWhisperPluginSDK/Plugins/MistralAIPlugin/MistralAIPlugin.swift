@@ -149,24 +149,11 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     ]
 
     /// Empty input becomes "no selection" (`nil`). A known older chat ID becomes
-    /// its current replacement. Any other `mistral-large-*`, `mistral-small-*`,
-    /// or `pixtral-large-*` ID is treated the same way. Anything else is kept.
+    /// its current replacement. Any other ID is kept.
     static func resolvedLLMModelId(_ modelId: String) -> String? {
         let trimmed = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if let replacement = llmModelMigrations[trimmed] {
-            return replacement
-        }
-        if trimmed.hasPrefix("pixtral-large-") {
-            return ministral14bModelId
-        }
-        if trimmed.hasPrefix("mistral-large-"), trimmed != largeLLMModelId {
-            return largeLLMModelId
-        }
-        if trimmed.hasPrefix("mistral-small-"), trimmed != defaultLLMModelId {
-            return defaultLLMModelId
-        }
-        return trimmed
+        return llmModelMigrations[trimmed] ?? trimmed
     }
     
     public func process(systemPrompt: String, userText: String, model: String?) async throws -> String {

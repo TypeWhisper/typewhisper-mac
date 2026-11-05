@@ -153,14 +153,12 @@ final class MistralAIPluginTests: XCTestCase {
             ("mistral-large-latest", "mistral-large-4"),
             ("mistral-large-2512", "mistral-large-4"),
             ("mistral-large-2402", "mistral-large-4"),
-            ("mistral-large-custom", "mistral-large-4"),
             ("mistral-small-latest", "mistral-small-2603"),
             ("mistral-small-2506", "mistral-small-2603"),
             ("mistral-small-2402", "mistral-small-2603"),
             ("pixtral-12b-2409", "ministral-14b-2512"),
             ("pixtral-large-2411", "ministral-14b-2512"),
             ("pixtral-large-latest", "ministral-14b-2512"),
-            ("pixtral-large-9999", "ministral-14b-2512"),
             ("ministral-8b-latest", "ministral-8b-2512"),
             ("ministral-8b-2410", "ministral-8b-2512"),
             ("ministral-3b-latest", "ministral-3b-2512"),
@@ -193,6 +191,17 @@ final class MistralAIPluginTests: XCTestCase {
         plugin.selectLLMModel("custom-llm")
         XCTAssertEqual(plugin.selectedLLMModelId, "custom-llm")
         XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "custom-llm")
+
+        for unknown in ["mistral-large-custom", "pixtral-large-9999"] {
+            let unknownHost = try PluginTestHostServices(
+                defaults: ["selectedLLMModel": unknown],
+                secrets: ["api-key": "test-key"]
+            )
+            let reloaded = MistralAIPlugin()
+            reloaded.activate(host: unknownHost)
+            XCTAssertEqual(reloaded.selectedLLMModelId, unknown)
+            XCTAssertEqual(unknownHost.userDefault(forKey: "selectedLLMModel") as? String, unknown)
+        }
     }
 
     func testTranscriptionRetriesWithWavWhenM4AIsRejected() async throws {
