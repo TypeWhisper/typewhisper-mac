@@ -31,8 +31,13 @@ echo 'DEVELOPMENT_TEAM = YOUR_TEAM_ID' > CodeSigning.local.xcconfig
 1. Create a feature branch from `main`
 2. Keep changes focused - one feature or fix per PR
 3. Test your changes manually and run the automated checks
-4. Fill out the PR template (Summary + Test Plan)
+4. Start the title with `(feature)`, `(bug)`, `(perf)` or `(chore)` and fill out the PR template;
+   visible changes need screenshots, `(perf)` changes a measurement table
 5. PRs are squash-merged into `main`
+
+CI compares the launch time and memory of your build with `main` and adds the results to the
+description; a clear regression fails the build. See
+[docs/launch-performance.md](docs/launch-performance.md).
 
 Recommended checks:
 

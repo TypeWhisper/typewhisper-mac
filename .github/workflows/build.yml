@@ -53,6 +53,7 @@ jobs:
     outputs:
       plugin_sdk: ${{ steps.diff.outputs.plugin_sdk }}
       app: ${{ steps.diff.outputs.app }}
+      launch_benchmark: ${{ steps.diff.outputs.launch_benchmark }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,15 +93,40 @@ jobs:
           fi
           echo "app=$app" | tee -a "$GITHUB_OUTPUT"
 
+          # The launch benchmark compares the app's launch with the base branch. Pull requests
+          # run it when they change the app's sources, its project or the benchmark itself.
+          launch_benchmark=false
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            status=0
+            git diff --quiet HEAD^1 HEAD -- TypeWhisper/ TypeWhisper.xcodeproj/ TypeWhisperICloudBridge/ \
+              TypeWhisperPluginSDK/ TypeWhisperTranscribeAction/ TypeWhisperWidgetExtension/ \
+              TypeWhisperWidgetShared/ typewhisper-cli/ ':(glob)*.xcconfig' \
+              scripts/performance/ .github/workflows/build.yml || status=$?
+            case "$status" in
+              0) ;;
+              1) launch_benchmark=true ;;
+              *) echo "::error::git diff failed with exit code $status"; exit "$status" ;;
+            esac
+          fi
+          echo "launch_benchmark=$launch_benchmark" | tee -a "$GITHUB_OUTPUT"
+
   release-build:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: xcode-27
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      # The launch benchmark reads the pull request's labels.
+      issues: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The launch benchmark also builds the merge commit's first parent, the base branch.
+          fetch-depth: 2
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
@@ -203,6 +229,96 @@ jobs:
           name: TypeWhisper-DMG
           path: build/TypeWhisper-*.dmg
           retention-days: 14
+
+      # Launch benchmark (docs/launch-performance.md): build the base branch into the same
+      # derived data, so only the targets the pull request changed compile again, then launch
+      # both Release builds alternately on this runner and compare them.
+      - name: Build the base branch for the launch benchmark
+        id: base-build
+        if: github.event_name == 'pull_request' && needs.changes.outputs.launch_benchmark == 'true'
+        run: |
+          # Spotlight would index the new build products and the benchmark's profile copies
+          # while the apps launch, and compete with them for the runner's few processors.
+          sudo mdutil -a -i off > /dev/null || echo "::warning::Could not turn off Spotlight indexing"
+          bench="$RUNNER_TEMP/launch-benchmark"
+          mkdir -p "$bench/head" "$bench/base"
+          ditto build/Build/Products/Release/TypeWhisper.app "$bench/head/TypeWhisper.app"
+          merge_commit="$(git rev-parse HEAD)"
+          git checkout --quiet --detach HEAD^1
+          # The same settings as "Build App" for a pull request.
+          if ! xcodebuild -skipPackagePluginValidation -project $PROJECT \
+            -scheme $SCHEME \
+            -configuration Release \
+            -derivedDataPath build \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -destination 'generic/platform=macOS' \
+            ENABLE_CODE_COVERAGE=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 > "$bench/base-build.log" 2>&1; then
+            grep -E ' error: ' "$bench/base-build.log" | sort -u | head -50
+            tail -n 40 "$bench/base-build.log"
+            exit 1
+          fi
+          ditto build/Build/Products/Release/TypeWhisper.app "$bench/base/TypeWhisper.app"
+          git checkout --quiet --detach "$merge_commit"
+
+      - name: Run the launch benchmark
+        id: benchmark
+        if: steps.base-build.outcome == 'success'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          bench="$RUNNER_TEMP/launch-benchmark"
+          python3 scripts/performance/launch_benchmark.py run --disposable-mac \
+            --base "$bench/base/TypeWhisper.app" --head "$bench/head/TypeWhisper.app" \
+            --base-sha "$(git rev-parse HEAD^1)" --head-sha "$HEAD_SHA" \
+            --base-source-ref HEAD^1 --head-source-ref HEAD \
+            --pull-request "$PR_NUMBER" \
+            --work "$bench/work" --output build/launch-benchmark/report.json
+
+      # A regression fails the job unless the pull request has the perf-regression-accepted
+      # label. The label is read now, so re-running the job after adding it passes.
+      - name: Check the launch benchmark
+        if: ${{ !cancelled() && steps.benchmark.outcome != 'skipped' && hashFiles('build/launch-benchmark/report.json') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          accepted=false
+          if labels="$(gh api "repos/$REPOSITORY/issues/$PR_NUMBER/labels" --jq '.[].name')"; then
+            if grep -qx 'perf-regression-accepted' <<<"$labels"; then accepted=true; fi
+          else
+            echo "::warning::Could not read the pull request's labels"
+          fi
+          python3 scripts/performance/launch_benchmark.py check build/launch-benchmark/report.json \
+            --accepted "$accepted" --summary "$GITHUB_STEP_SUMMARY"
+
+      # The Launch Benchmark Report workflow writes this report into the pull request description.
+      - name: Upload the launch benchmark report
+        if: ${{ !cancelled() && hashFiles('build/launch-benchmark/report.json') != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: launch-benchmark
+          path: build/launch-benchmark/report.json
+          retention-days: 14
+          # A re-run, for example after adding the label, replaces the report of the earlier attempt.
+          overwrite: true
+
+      - name: Upload the launch benchmark logs
+        if: ${{ failure() && steps.base-build.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: launch-benchmark-logs
+          path: |
+            ${{ runner.temp }}/launch-benchmark/base-build.log
+            ${{ runner.temp }}/launch-benchmark/work/*/logs/
+          retention-days: 7
+          if-no-files-found: ignore
+          overwrite: true
 
   app-tests:
     needs: changes
