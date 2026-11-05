@@ -572,6 +572,7 @@ class LocalAPI:
 
     def wait_until_ready(self, launch, timeout=API_TIMEOUT):
         deadline = time.monotonic() + timeout
+        last_error = "no api-discovery.json"
         while time.monotonic() < deadline:
             if launch.process.poll() is not None:
                 break
@@ -579,10 +580,11 @@ class LocalAPI:
                 if self.discovery.exists():
                     self.request("GET", "/v1/status", timeout=5)
                     return
-            except (OSError, ValueError, urllib.error.URLError):
-                pass
+            except (OSError, ValueError, urllib.error.URLError) as error:
+                # Until the server listens, connections fail and the discovery file can be half written.
+                last_error = error
             time.sleep(0.5)
-        raise launch.failure("the local API did not answer")
+        raise launch.failure(f"the local API did not answer ({last_error})")
 
 
 def import_preferences(domain, path):
