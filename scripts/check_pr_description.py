@@ -70,8 +70,9 @@ def has_table(text):
             continue
         if len([cell for cell in delimiter.strip("|").split("|") if cell.strip()]) < 2:
             continue
+        # As in GitHub Markdown, a row needs no pipes; a blank line or a new block ends the table.
         for row in lines[index + 1:]:
-            if "|" not in row:
+            if not row.strip() or row.lstrip().startswith(("#", ">", "```", "~~~")):
                 break
             if re.search(r"\d", row):
                 return True

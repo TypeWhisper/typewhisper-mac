@@ -137,6 +137,9 @@ class DescriptionTests(unittest.TestCase):
     def test_table_detection(self):
         self.assertTrue(has_table("| Metric | main | PR |\n| --- | --- | --- |\n| CPU | 10 ms | 5 ms |"))
         self.assertTrue(has_table("Metric | main\n--- | ---\nCPU | 10 ms"))
+        # A row without pipes still belongs to the table; a blank line ends it.
+        self.assertTrue(has_table("| Metric | main | PR |\n| --- | --- | --- |\nWarmup\nCPU | 10 ms | 8 ms"))
+        self.assertFalse(has_table("| Metric | main | PR |\n| --- | --- | --- |\n\nWe saved 10 ms."))
         # A header without measurements, a single column, or a lone delimiter is no measurement table.
         self.assertFalse(has_table("| Metric | main | PR |\n| --- | --- | --- |"))
         self.assertFalse(has_table("| Metric | main | PR |\n| --- | --- | --- |\n| CPU | faster | slower |"))
