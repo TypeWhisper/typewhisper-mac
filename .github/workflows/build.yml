@@ -305,6 +305,8 @@ jobs:
           name: launch-benchmark
           path: build/launch-benchmark/report.json
           retention-days: 14
+          # A re-run, for example after adding the label, replaces the report of the earlier attempt.
+          overwrite: true
 
       - name: Upload the launch benchmark logs
         if: ${{ failure() && steps.base-build.outcome != 'skipped' }}
@@ -316,6 +318,7 @@ jobs:
             ${{ runner.temp }}/launch-benchmark/work/*/logs/
           retention-days: 7
           if-no-files-found: ignore
+          overwrite: true
 
   app-tests:
     needs: changes
