@@ -34,6 +34,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/launch-benchmark"
@@ -42,9 +44,13 @@ jobs:
             echo "Run $RUN_ID has no launch benchmark report."
             exit 0
           fi
+          # The number comes from the pull request's own report, so the pull request it names must
+          # also have the run's head commit, branch and repository; another pull request with the
+          # same commit gets nothing.
           number="$(python3 scripts/performance/launch_benchmark.py pr-number "$dir/report.json")"
-          if [ "$(gh api "repos/$REPOSITORY/pulls/$number" --jq .head.sha)" != "$HEAD_SHA" ]; then
-            echo "Pull request #$number has commits newer than run $RUN_ID; its own run updates the description."
+          head="$(gh api "repos/$REPOSITORY/pulls/$number" --jq '[.head.sha, .head.ref, (.head.repo.full_name // "")] | @tsv')"
+          if [ "$head" != "$(printf '%s\t%s\t%s' "$HEAD_SHA" "$HEAD_BRANCH" "$HEAD_REPOSITORY")" ]; then
+            echo "Pull request #$number does not match run $RUN_ID, or it has newer commits that its own run reports."
             exit 0
           fi
           gh api "repos/$REPOSITORY/pulls/$number" --jq '.body // ""' > "$dir/body.md"

@@ -144,6 +144,9 @@ class DescriptionTests(unittest.TestCase):
         self.assertFalse(has_table("| Metric | main | PR |\n| --- | --- | --- |"))
         self.assertFalse(has_table("| Metric | main | PR |\n| --- | --- | --- |\n| CPU | faster | slower |"))
         self.assertFalse(has_table("| CPU |\n| --- |\n| 10 ms |"))
+        # A list item starts a new block, so its numbers are outside the table.
+        self.assertFalse(has_table("| a | b |\n| --- | --- |\n- Measured on 10 ms"))
+        self.assertFalse(has_table("| a | b |\n| --- | --- |\n2. Ran 10 launches"))
         self.assertFalse(has_table("a | b\n\n| --- |"))
         self.assertFalse(has_table("Some text\n---\nMore text"))
 

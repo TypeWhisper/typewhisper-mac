@@ -36,6 +36,7 @@ MEDIA = (
     re.compile(r"https://(?:private-)?user-images\.githubusercontent\.com/\S+"),
 )
 NO_UI_CHANGE = re.compile(r"^\s*[-*]\s*\[[xX]\]\s*No visible UI change\b", re.M)
+LIST_ITEM = re.compile(r" {0,3}(?:[-*+]|\d{1,9}[.)])\s")
 
 UI_RESOURCES = re.compile(r"(?:\.xcassets/|\.icon/|\.xcstrings$|\.xib$|\.storyboard$)")
 UI_SWIFT_FOLDERS = ("TypeWhisper/Views/", "TypeWhisperWidgetExtension/")
@@ -70,9 +71,10 @@ def has_table(text):
             continue
         if len([cell for cell in delimiter.strip("|").split("|") if cell.strip()]) < 2:
             continue
-        # As in GitHub Markdown, a row needs no pipes; a blank line or a new block ends the table.
+        # As in GitHub Markdown, a row needs no pipes; a blank line or a new block such as a
+        # heading, quote, code fence or list item ends the table.
         for row in lines[index + 1:]:
-            if not row.strip() or row.lstrip().startswith(("#", ">", "```", "~~~")):
+            if not row.strip() or row.lstrip().startswith(("#", ">", "```", "~~~")) or LIST_ITEM.match(row):
                 break
             if re.search(r"\d", row):
                 return True
