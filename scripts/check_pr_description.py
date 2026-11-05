@@ -62,12 +62,19 @@ def has_media(text):
 
 
 def has_table(text):
+    """A Markdown table with at least two columns and a row that holds a number."""
     lines = text.splitlines()
-    for previous, line in zip(lines, lines[1:]):
-        delimiter = line.strip()
-        if ("|" in previous and "|" in delimiter and "---" in delimiter
-                and set(delimiter) <= set("|:- \t")):
-            return True
+    for index in range(1, len(lines)):
+        delimiter = lines[index].strip()
+        if not ("|" in lines[index - 1] and "---" in delimiter and set(delimiter) <= set("|:- \t")):
+            continue
+        if len([cell for cell in delimiter.strip("|").split("|") if cell.strip()]) < 2:
+            continue
+        for row in lines[index + 1:]:
+            if "|" not in row:
+                break
+            if re.search(r"\d", row):
+                return True
     return False
 
 

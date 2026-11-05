@@ -464,8 +464,12 @@ class SignpostStream:
                 self.process.kill()
 
 
-def run(command, **kwargs):
-    return subprocess.run(command, check=True, capture_output=True, text=True, **kwargs)
+# A blocked child process must not hold the job until its time limit; a timeout ends in an error report.
+COMMAND_TIMEOUT = 300
+
+
+def run(command, timeout=COMMAND_TIMEOUT, **kwargs):
+    return subprocess.run(command, check=True, capture_output=True, text=True, timeout=timeout, **kwargs)
 
 
 class AppBuild:
@@ -500,7 +504,7 @@ class AppBuild:
         makes macOS ask for permission when the other build reads it, which nobody answers in CI."""
         for _ in range(10):
             if subprocess.run(["security", "delete-generic-password", "-s", self.api_token_service],
-                              capture_output=True).returncode != 0:
+                              capture_output=True, timeout=60).returncode != 0:
                 return
 
     def install(self):
@@ -589,13 +593,13 @@ class LocalAPI:
 
 def import_preferences(domain, path):
     """Replace the preferences of `domain`; `defaults import` alone would merge them."""
-    subprocess.run(["defaults", "delete", domain], capture_output=True)
+    subprocess.run(["defaults", "delete", domain], capture_output=True, timeout=60)
     run(["defaults", "import", domain, str(path)])
 
 
 def export_preferences(domain):
     return plistlib.loads(subprocess.run(["defaults", "export", domain, "-"], check=True,
-                                         capture_output=True).stdout)
+                                         capture_output=True, timeout=COMMAND_TIMEOUT).stdout)
 
 
 def copy_tree(source, destination):
@@ -747,7 +751,7 @@ def run_pass(builds, stream, rounds, settle, index):
 def git_show(ref, path):
     if not ref:
         return None
-    result = subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True, text=True)
+    result = subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True, text=True, timeout=60)
     return result.stdout if result.returncode == 0 else None
 
 
@@ -756,7 +760,8 @@ def benchmark(args):
     head = AppBuild("head", args.head, args.work, git_show(args.head_source_ref, "TypeWhisper/App/AppConstants.swift"))
     if base.bundle_id != head.bundle_id:
         raise BenchmarkError(f"the builds have different bundle identifiers: {base.bundle_id}, {head.bundle_id}")
-    running = subprocess.run(["pgrep", "-x", base.executable.name], capture_output=True, text=True).stdout.split()
+    running = subprocess.run(["pgrep", "-x", base.executable.name], capture_output=True, text=True,
+                             timeout=30).stdout.split()
     if running:
         raise BenchmarkError(f"{base.executable.name} is already running (process {', '.join(running)})")
 
@@ -776,7 +781,7 @@ def benchmark(args):
                               for key in ("phases", "counters")}})
     finally:
         stream.close()
-        subprocess.run(["defaults", "delete", base.bundle_id], capture_output=True)
+        subprocess.run(["defaults", "delete", base.bundle_id], capture_output=True, timeout=60)
 
     return {
         "passes": passes,

@@ -117,7 +117,8 @@ class DescriptionTests(unittest.TestCase):
 
     def test_opt_out(self):
         body = TEMPLATE.replace("- [ ] No visible UI change", "- [x] No visible UI change")
-        self.assertEqual(self.problems("(perf) Faster rows", body + "\n| a | b |\n| --- | --- |\n", self.VIEW), [])
+        table = "\n| Metric | main | PR |\n| --- | --- | --- |\n| Rebuilt rows | 300 | 1 |\n"
+        self.assertEqual(self.problems("(perf) Faster rows", body + table, self.VIEW), [])
 
     def test_comments_and_the_ci_section_do_not_count(self):
         body = TEMPLATE + "\n" + CI_SECTION + "\n<!-- - [x] No visible UI change -->\n"
@@ -134,8 +135,12 @@ class DescriptionTests(unittest.TestCase):
         self.assertEqual(self.problems("(perf) Faster launch", body), [])
 
     def test_table_detection(self):
-        self.assertTrue(has_table("| a | b |\n| --- | --- |"))
-        self.assertTrue(has_table("a | b\n--- | ---"))
+        self.assertTrue(has_table("| Metric | main | PR |\n| --- | --- | --- |\n| CPU | 10 ms | 5 ms |"))
+        self.assertTrue(has_table("Metric | main\n--- | ---\nCPU | 10 ms"))
+        # A header without measurements, a single column, or a lone delimiter is no measurement table.
+        self.assertFalse(has_table("| Metric | main | PR |\n| --- | --- | --- |"))
+        self.assertFalse(has_table("| Metric | main | PR |\n| --- | --- | --- |\n| CPU | faster | slower |"))
+        self.assertFalse(has_table("| CPU |\n| --- |\n| 10 ms |"))
         self.assertFalse(has_table("a | b\n\n| --- |"))
         self.assertFalse(has_table("Some text\n---\nMore text"))
 
