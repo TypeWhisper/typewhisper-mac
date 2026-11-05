@@ -26,9 +26,10 @@ launch starts from a copy of the build's profile and records
 - after a settle period, the CPU time, the memory footprint and the peak footprint.
 
 A metric regresses when the median of the paired differences (pull request minus base, one
-pair per round) exceeds both its relative and its absolute limit, in the first pass and in
-a confirmation pass. The other commands turn a report, which can come from an untrusted
-pull request, into the Markdown table for the pull request description.
+pair per round) exceeds both its relative and its absolute limit and the pull request was worse
+in at least 80% of the rounds, in the first pass and in a confirmation pass. The other commands
+turn a report, which can come from an untrusted pull request, into the Markdown table for the
+pull request description.
 """
 from __future__ import annotations
 
@@ -64,6 +65,8 @@ VERDICTS = ("pass", "regression", "accepted", "error")
 FIXTURE = {"history": 3000, "dictionary": 300, "snippets": 30}
 
 ROUNDS = 10
+# A regression also needs the pull request to be worse in this share of the rounds.
+CONSISTENT_SHARE = 0.8
 SETTLE_SECONDS = 6.0
 FIRST_IDLE_TIMEOUT = 120.0
 API_TIMEOUT = 180.0
@@ -85,8 +88,8 @@ class Metric:
 
 
 # Limits from comparing identical builds on the xcode-27 runner: paired differences of one
-# round spread by about 120 ms for the time until ready, 100 ms for CPU time and 0.2 MB for the
-# footprint, so the median of 10 rounds stays well inside these limits in both passes.
+# round spread by 120 to 450 ms for the time until ready, 100 to 250 ms for CPU time and 0.2 MB
+# for the footprint, depending on how busy the shared host is.
 METRICS = (
     Metric("first_idle_ms", "Time until ready", "ms", 0, 10.0, 100.0),
     Metric("cpu_ms", "CPU time", "ms", 0, 15.0, 100.0),
@@ -131,15 +134,22 @@ class BenchmarkError(RuntimeError):
 
 
 def evaluate(metric, base, head):
-    """Medians, the median paired difference and whether that exceeds both limits."""
+    """Medians, the median paired difference, the rounds in which the pull request was worse, and
+    whether the change exceeds both limits in at least CONSISTENT_SHARE of the rounds. Noise on the
+    shared runner moves single rounds by hundreds of milliseconds in both directions; a real
+    regression makes nearly every round worse."""
     if not base or len(base) != len(head):
         raise ValueError(f"{metric.key}: base and head need the same, non-zero number of samples")
     base_median = statistics.median(base)
     head_median = statistics.median(head)
-    delta = statistics.median([h - b for b, h in zip(base, head)])
+    deltas = [h - b for b, h in zip(base, head)]
+    delta = statistics.median(deltas)
     pct = 100.0 * delta / base_median if base_median else 0.0
-    exceeded = bool(metric.gated and delta > metric.limit_abs and pct > metric.limit_pct)
-    return {"base": base_median, "head": head_median, "delta": delta, "pct": pct, "exceeded": exceeded}
+    worse = sum(1 for value in deltas if value > 0)
+    consistent = worse >= math.ceil(CONSISTENT_SHARE * len(deltas))
+    exceeded = bool(metric.gated and delta > metric.limit_abs and pct > metric.limit_pct and consistent)
+    return {"base": base_median, "head": head_median, "delta": delta, "pct": pct, "worse": worse,
+            "rounds": len(deltas), "exceeded": exceeded}
 
 
 def exceeded_metrics(passes):
@@ -929,22 +939,25 @@ def render(report):
         f"with a test profile of {fixture['history']:,} history entries, {fixture['dictionary']:,} dictionary "
         f"entries and {fixture['snippets']:,} snippets. Time until ready runs from the process start to the "
         f"app's first idle main thread; CPU time and memory are read {report['settle_seconds']:g} s later. "
-        "The change is the median of the differences within each round, so it can differ from the "
-        "difference of the two medians.")
-    lines += ["", "| Metric | main | This PR | Change | Fails above |", "| --- | ---: | ---: | ---: | ---: |"]
+        "The change is the median of the differences within each round. A metric fails when that change "
+        f"exceeds both limits and this pull request was worse in at least {CONSISTENT_SHARE:.0%} of the "
+        "rounds, in the first pass and in a confirmation pass.")
+    lines += ["", "| Metric | main | This PR | Change | Worse in | Fails above |",
+              "| --- | ---: | ---: | ---: | ---: | ---: |"]
     for metric in METRICS:
         result = evaluate(metric, _combined(passes, "base", metric.key), _combined(passes, "head", metric.key))
         limit = report["limits"][metric.key]
         marker = " **(regression)**" if metric.key in report["regressions"] else ""
         lines.append(f"| {metric.label} | {_format_value(result['base'], metric)} | "
                      f"{_format_value(result['head'], metric)} | {_format_change(result['delta'], result['pct'], metric)}"
-                     f"{marker} | +{limit['pct']:g}% and +{limit['abs']:g} {metric.unit} |")
+                     f"{marker} | {result['worse']} of {result['rounds']} rounds | "
+                     f"+{limit['pct']:g}% and +{limit['abs']:g} {metric.unit} |")
     sizes = report.get("app_size_mb")
     if sizes:
         delta = sizes["head"] - sizes["base"]
         pct = 100.0 * delta / sizes["base"] if sizes["base"] else 0.0
         lines.append(f"| {SIZE_METRIC.label} | {_format_value(sizes['base'], SIZE_METRIC)} | "
-                     f"{_format_value(sizes['head'], SIZE_METRIC)} | {_format_change(delta, pct, SIZE_METRIC)} | |")
+                     f"{_format_value(sizes['head'], SIZE_METRIC)} | {_format_change(delta, pct, SIZE_METRIC)} | | |")
 
     detail_rows = []
     for group, rows in (("phases", [(key, label, " ms", 0) for key, label in PHASES]), ("counters", COUNTERS)):

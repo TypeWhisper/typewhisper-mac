@@ -34,7 +34,8 @@ plugins installed and add those numbers to the description.
 
 ## When CI fails
 
-A metric fails when its change exceeds both limits:
+A metric fails when its change exceeds both limits and the pull request was worse in at least
+8 of the 10 rounds:
 
 | Metric | Fails above |
 | --- | --- |
@@ -47,10 +48,12 @@ When the first 10 rounds show a regression, 10 more rounds confirm it; only a re
 both passes fails the job. App size never fails it.
 
 The limits come from comparing identical builds on the runner. The shared virtual Mac makes
-times noisy: the paired differences of one round spread by about 120 ms for the time until
-ready and 100 ms for CPU time, against 0.2 MB for memory. So the job reliably stops memory
-growth of 2 MB, but only time and CPU regressions of roughly 15% or more; smaller ones still
-show in the table.
+times noisy: depending on how busy its host is, the paired differences of one round spread by
+120 to 450 ms for the time until ready and 100 to 250 ms for CPU time, against 0.2 MB for
+memory. Noise moves rounds in both directions, while a real regression makes nearly all of
+them worse, which is what the 8-of-10 rule checks. So the job reliably stops memory growth of
+2 MB, and time or CPU regressions of roughly 20% on a quiet runner; on a busy one only larger
+ones. Smaller changes still show in the table, with the number of rounds that got worse.
 
 If the cost is intended, for example for a feature that has to load something at launch,
 explain why in the description, add the `perf-regression-accepted` label and re-run the

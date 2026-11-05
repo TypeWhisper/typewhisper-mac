@@ -53,13 +53,26 @@ def report(verdict="pass", regressions=(), base=None, head=None, passes=1):
 class EvaluateTests(unittest.TestCase):
     def test_regression_needs_both_limits(self):
         metric = lb.METRIC_BY_KEY["first_idle_ms"]
-        # +15 ms is +15 %, but below the absolute limit of 50 ms.
+        # +15 ms is +15 %, but below the absolute limit of 100 ms.
         self.assertFalse(lb.evaluate(metric, [100.0] * 8, [115.0] * 8)["exceeded"])
-        # +60 ms is only +3 %.
-        self.assertFalse(lb.evaluate(metric, [2000.0] * 8, [2060.0] * 8)["exceeded"])
+        # +120 ms is only +6 %.
+        self.assertFalse(lb.evaluate(metric, [2000.0] * 8, [2120.0] * 8)["exceeded"])
         result = lb.evaluate(metric, [1000.0] * 8, [1120.0] * 8)
         self.assertTrue(result["exceeded"])
         self.assertAlmostEqual(result["pct"], 12.0)
+        self.assertEqual((result["worse"], result["rounds"]), (8, 8))
+
+    def test_regression_needs_most_rounds_to_be_worse(self):
+        metric = lb.METRIC_BY_KEY["first_idle_ms"]
+        base = [1000.0] * 10
+        # Noise: the median change is +180 ms, but only 7 of 10 rounds got worse.
+        noisy = [1150.0, 1400.0, 1300.0, 1200.0, 1600.0, 1160.0, 1500.0, 700.0, 600.0, 900.0]
+        result = lb.evaluate(metric, base, noisy)
+        self.assertEqual((result["delta"], result["worse"]), (180.0, 7))
+        self.assertFalse(result["exceeded"])
+        # Eight of ten rounds are enough.
+        noisy[8] = 1150.0
+        self.assertTrue(lb.evaluate(metric, base, noisy)["exceeded"])
 
     def test_paired_differences_cancel_runner_drift(self):
         metric = lb.METRIC_BY_KEY["first_idle_ms"]
@@ -190,8 +203,8 @@ class RenderTests(unittest.TestCase):
         self.assertIn("main `6013a38` and this pull request `abc1234`", text)
         self.assertIn("8 alternating launches each", text)
         self.assertIn("<summary>Launch phases and runner conditions (medians)</summary>", text)
-        self.assertIn("| Time until ready | 800 ms | 810 ms | +10 ms (+1.2%) | +10% and +100 ms |", text)
-        self.assertIn("| App size | 101.5 MB | 101.6 MB | +0.1 MB (+0.1%) | |", text)
+        self.assertIn("| Time until ready | 800 ms | 810 ms | +10 ms (+1.2%) | 8 of 8 rounds | +10% and +100 ms |", text)
+        self.assertIn("| App size | 101.5 MB | 101.6 MB | +0.1 MB (+0.1%) | | |", text)
         self.assertIn("| Plugin scan | 120 ms | 130 ms | +10 ms |", text)
         self.assertIn("| Time waiting for a processor | 300 ms | 320 ms | +20 ms |", text)
         self.assertIn("| Idle processors before the launch | 92% | 90% | -2% |", text)
