@@ -318,6 +318,54 @@
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "逐語" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "逐字" } }
       }
+    },
+    "Backup endpoint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ausweich-Endpunkt" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Endpoint de respaldo" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バックアップエンドポイント" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "备用端点" } }
+      }
+    },
+    "Optional. When the first endpoint refuses a request (HTTP 429 or 5xx) or does not answer in time, TypeWhisper sends it to this endpoint right away. Use a Speech resource in another region." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Optional. Lehnt der erste Endpunkt eine Anfrage ab (HTTP 429 oder 5xx) oder antwortet nicht rechtzeitig, schickt TypeWhisper sie sofort an diesen Endpunkt. Nimm dafür eine Speech-Ressource in einer anderen Region." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Opcional. Si el primer endpoint rechaza una solicitud (HTTP 429 o 5xx) o no responde a tiempo, TypeWhisper la envía de inmediato a este endpoint. Usa un recurso de Speech en otra región." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "任意。最初のエンドポイントがリクエストを拒否した場合（HTTP 429 または 5xx）、または時間内に応答しない場合、TypeWhisperはすぐにこのエンドポイントへ送信します。別のリージョンのSpeechリソースを使用してください。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可选。当第一个端点拒绝请求（HTTP 429 或 5xx）或未及时响应时，TypeWhisper 会立即将请求发送到此端点。请使用其他区域的 Speech 资源。" } }
+      }
+    },
+    "Backup endpoint or resource name" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ausweich-Endpunkt oder Ressourcenname" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Endpoint de respaldo o nombre del recurso" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バックアップエンドポイントまたはリソース名" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "备用端点或资源名称" } }
+      }
+    },
+    "Backup API key" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "API-Schlüssel für den Ausweich-Endpunkt" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Clave de API de respaldo" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バックアップ用APIキー" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "备用 API 密钥" } }
+      }
+    },
+    "Save backup endpoint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ausweich-Endpunkt speichern" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Guardar endpoint de respaldo" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バックアップエンドポイントを保存" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存备用端点" } }
+      }
+    },
+    "Remove backup endpoint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ausweich-Endpunkt entfernen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Quitar endpoint de respaldo" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バックアップエンドポイントを削除" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除备用端点" } }
+      }
     }
   },
   "version" : "1.0"

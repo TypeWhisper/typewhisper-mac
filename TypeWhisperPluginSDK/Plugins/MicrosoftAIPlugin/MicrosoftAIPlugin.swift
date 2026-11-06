@@ -5,6 +5,8 @@ import TypeWhisperPluginSDK
 private enum MicrosoftAIStorageKey {
     static let apiKey = "api-key"
     static let endpoint = "endpoint"
+    static let backupAPIKey = "backup-api-key"
+    static let backupEndpoint = "backupEndpoint"
     static let selectedModel = "selectedModel"
     static let cachedModels = "cachedModels"
     static let transcriptStyle = "transcriptStyle"
@@ -118,6 +120,14 @@ struct MicrosoftAIModelCatalogResponse: Decodable, Sendable {
     let data: [Model]
 }
 
+/// Azure turned the request away for capacity in the endpoint's region:
+/// HTTP 429, a 5xx status, or no answer in time. The plugin then sends the
+/// request to the backup endpoint, if one is set, and otherwise surfaces
+/// `error`.
+struct MicrosoftAIRegionRefusal: Error {
+    let error: any Error
+}
+
 struct MicrosoftAITranscriptionClient: Sendable {
     private struct ErrorResponseBody: Decodable {
         struct ErrorDetail: Decodable {
@@ -210,8 +220,31 @@ struct MicrosoftAITranscriptionClient: Sendable {
     /// 115 MB as WAV, and recordings up to an hour keep one speaker numbering.
     static let maximumChunkDuration: TimeInterval = 60 * 60
 
+    /// Connection failures that point at the region rather than the Mac.
+    static let regionRefusalNetworkErrors: Set<URLError.Code> = [.timedOut, .cannotConnectToHost]
+
     let endpoint: URL
     let apiKey: String
+    /// Set when a backup endpoint follows, so a refusal goes there instead of
+    /// waiting for a retry against the same region.
+    var hasBackupEndpoint = false
+
+    /// Sends the request to each endpoint in turn while they refuse it for
+    /// capacity, and surfaces the last refusal when none accepts it.
+    static func firstAccepting<Result>(
+        _ clients: [Self],
+        _ send: (Self) async throws -> Result
+    ) async throws -> Result {
+        var lastRefusal: MicrosoftAIRegionRefusal?
+        for client in clients {
+            do {
+                return try await send(client)
+            } catch let refusal as MicrosoftAIRegionRefusal {
+                lastRefusal = refusal
+            }
+        }
+        throw lastRefusal?.error ?? PluginTranscriptionError.notConfigured
+    }
 
     func transcribe(
         audio: AudioData,
@@ -261,10 +294,12 @@ struct MicrosoftAITranscriptionClient: Sendable {
             upload: upload
         )
 
-        let (data, response) = try await PluginHTTPClient.data(
-            for: request,
-            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: request.httpBody?.count ?? 0)
-        )
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await send(request)
+        } catch let error as URLError where Self.regionRefusalNetworkErrors.contains(error.code) {
+            throw MicrosoftAIRegionRefusal(error: error)
+        }
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.networkError("Azure Speech returned no HTTP response.")
         }
@@ -277,7 +312,7 @@ struct MicrosoftAITranscriptionClient: Sendable {
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         case 429:
-            throw PluginTranscriptionError.rateLimited
+            throw MicrosoftAIRegionRefusal(error: PluginTranscriptionError.rateLimited)
         default:
             let errorText = Self.errorText(from: data)
             if httpResponse.statusCode == 400,
@@ -296,10 +331,27 @@ struct MicrosoftAITranscriptionClient: Sendable {
                 )
             }
             let summary = Self.boundedErrorSummary(errorText)
-            throw PluginTranscriptionError.apiError(
+            let error = PluginTranscriptionError.apiError(
                 "Microsoft AI transcription failed (HTTP \(httpResponse.statusCode)): \(summary)"
             )
+            if (500...599).contains(httpResponse.statusCode) {
+                throw MicrosoftAIRegionRefusal(error: error)
+            }
+            throw error
         }
+    }
+
+    private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let resourceTimeout = PluginHTTPClient.resourceTimeout(forUploadOf: request.httpBody?.count ?? 0)
+        // With a backup endpoint, requests that fit the shared session skip
+        // its retries against the same region (once after a 429's
+        // Retry-After, a ladder for 52x), so a refusal reaches the backup at
+        // once. Longer uploads need the dedicated session, which keeps them.
+        if hasBackupEndpoint,
+           resourceTimeout <= PluginHTTPClient.resourceTimeout(forUploadOf: 0) {
+            return try await PluginHTTPClient.data(for: request, retry: .disabled)
+        }
+        return try await PluginHTTPClient.data(for: request, resourceTimeout: resourceTimeout)
     }
 
     static func errorSummary(from data: Data) -> String {
@@ -450,6 +502,8 @@ final class MicrosoftAIPlugin: NSObject,
     fileprivate var host: HostServices?
     fileprivate var apiKey: String?
     fileprivate var endpointValue = ""
+    fileprivate var backupAPIKey: String?
+    fileprivate var backupEndpointValue = ""
     fileprivate var selectedModel = defaultModelId
     fileprivate var fetchedModelIds: [String] = []
     fileprivate var transcriptStyle = MicrosoftAITranscriptStyle.clean
@@ -463,6 +517,8 @@ final class MicrosoftAIPlugin: NSObject,
         self.host = host
         apiKey = Self.normalizedSecret(host.loadSecret(key: MicrosoftAIStorageKey.apiKey))
         endpointValue = host.userDefault(forKey: MicrosoftAIStorageKey.endpoint) as? String ?? ""
+        backupAPIKey = Self.normalizedSecret(host.loadSecret(key: MicrosoftAIStorageKey.backupAPIKey))
+        backupEndpointValue = host.userDefault(forKey: MicrosoftAIStorageKey.backupEndpoint) as? String ?? ""
         fetchedModelIds = Self.normalizedModelIds(
             host.userDefault(forKey: MicrosoftAIStorageKey.cachedModels) as? [String] ?? []
         )
@@ -489,6 +545,8 @@ final class MicrosoftAIPlugin: NSObject,
     var providerDisplayName: String { "Microsoft AI (MAI Transcribe)" }
     var hasStoredAPIKey: Bool { normalizedAPIKey != nil }
     var isConfigured: Bool { hasStoredAPIKey && endpointURL != nil }
+    var hasStoredBackupAPIKey: Bool { Self.normalizedSecret(backupAPIKey) != nil }
+    var hasBackupEndpoint: Bool { backupConnection != nil }
     var selectedModelId: String? { selectedModel }
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { false }
@@ -642,7 +700,14 @@ final class MicrosoftAIPlugin: NSObject,
 
         // MAI numbers the speakers anew in every request; the chunks of a
         // longer recording keep their labels under numbers of their own.
-        let client = MicrosoftAITranscriptionClient(endpoint: endpoint, apiKey: apiKey)
+        var clients = [MicrosoftAITranscriptionClient(
+            endpoint: endpoint,
+            apiKey: apiKey,
+            hasBackupEndpoint: backupConnection != nil
+        )]
+        if let backup = backupConnection {
+            clients.append(MicrosoftAITranscriptionClient(endpoint: backup.endpoint, apiKey: backup.apiKey))
+        }
         let model = selectedModel
         let style = transcriptStyle
         let diarizationEnabled = speakerDiarizationEnabled
@@ -650,14 +715,16 @@ final class MicrosoftAIPlugin: NSObject,
             audio,
             maximumChunkDuration: MicrosoftAITranscriptionClient.maximumChunkDuration
         ) { chunk in
-            try await client.transcribe(
-                audio: chunk,
-                model: model,
-                languageSelection: languageSelection,
-                dictionaryTerms: terms,
-                transcriptStyle: style,
-                speakerDiarizationEnabled: diarizationEnabled
-            )
+            try await MicrosoftAITranscriptionClient.firstAccepting(clients) { client in
+                try await client.transcribe(
+                    audio: chunk,
+                    model: model,
+                    languageSelection: languageSelection,
+                    dictionaryTerms: terms,
+                    transcriptStyle: style,
+                    speakerDiarizationEnabled: diarizationEnabled
+                )
+            }
         }
     }
 
@@ -698,6 +765,25 @@ final class MicrosoftAIPlugin: NSObject,
             try? host.storeSecret(key: MicrosoftAIStorageKey.apiKey, value: normalized ?? "")
             host.notifyCapabilitiesChanged()
         }
+    }
+
+    func setBackupEndpoint(_ value: String) {
+        let normalized = MicrosoftAIEndpoint.normalize(value)?.absoluteString ?? value.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        backupEndpointValue = normalized
+        host?.setUserDefault(normalized, forKey: MicrosoftAIStorageKey.backupEndpoint)
+    }
+
+    func setBackupAPIKey(_ value: String) {
+        let normalized = Self.normalizedSecret(value)
+        backupAPIKey = normalized
+        try? host?.storeSecret(key: MicrosoftAIStorageKey.backupAPIKey, value: normalized ?? "")
+    }
+
+    func removeBackupEndpoint() {
+        setBackupEndpoint("")
+        setBackupAPIKey("")
     }
 
     func setTranscriptStyle(_ value: MicrosoftAITranscriptStyle) {
@@ -754,6 +840,14 @@ final class MicrosoftAIPlugin: NSObject,
 
     private var endpointURL: URL? {
         MicrosoftAIEndpoint.normalize(endpointValue)
+    }
+
+    private var backupConnection: (endpoint: URL, apiKey: String)? {
+        guard let endpoint = MicrosoftAIEndpoint.normalize(backupEndpointValue),
+              let apiKey = Self.normalizedSecret(backupAPIKey) else {
+            return nil
+        }
+        return (endpoint, apiKey)
     }
 
     private var allModelIds: [String] {
@@ -829,6 +923,10 @@ private struct MicrosoftAISettingsView: View {
     @State private var showAPIKey = false
     @State private var hasStoredAPIKey = false
     @State private var isConfigured = false
+    @State private var backupEndpointInput = ""
+    @State private var backupAPIKeyInput = ""
+    @State private var hasStoredBackupAPIKey = false
+    @State private var hasBackupEndpoint = false
     @State private var models: [PluginModelInfo] = []
     @State private var selectedModel = MicrosoftAIPlugin.defaultModelId
     @State private var transcriptStyle = MicrosoftAITranscriptStyle.clean
@@ -848,7 +946,7 @@ private struct MicrosoftAISettingsView: View {
                     Text("Endpoint or resource name", bundle: bundle)
                         .font(.subheadline)
 
-                    TextField("https://eastus.api.cognitive.microsoft.com", text: $endpointInput)
+                    TextField(String("https://eastus.api.cognitive.microsoft.com"), text: $endpointInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .accessibilityLabel(String(localized: "Endpoint or resource name", bundle: bundle))
@@ -904,18 +1002,18 @@ private struct MicrosoftAISettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let unsupportedRegion {
-                    Label {
-                        Text(regionAvailabilityWarning(for: unsupportedRegion))
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                if let unsupportedRegion = unsupportedRegion(for: endpointInput) {
+                    regionWarning(for: unsupportedRegion)
                 }
             }
 
             Divider()
+
+            if isConfigured {
+                backupEndpointSection
+
+                Divider()
+            }
 
             if isConfigured {
                 VStack(alignment: .leading, spacing: 8) {
@@ -1002,6 +1100,10 @@ private struct MicrosoftAISettingsView: View {
             apiKeyInput = plugin.apiKey ?? ""
             hasStoredAPIKey = plugin.hasStoredAPIKey
             isConfigured = plugin.isConfigured
+            backupEndpointInput = plugin.backupEndpointValue
+            backupAPIKeyInput = plugin.backupAPIKey ?? ""
+            hasStoredBackupAPIKey = plugin.hasStoredBackupAPIKey
+            hasBackupEndpoint = plugin.hasBackupEndpoint
             models = plugin.transcriptionModels
             selectedModel = plugin.selectedModelId ?? MicrosoftAIPlugin.defaultModelId
             transcriptStyle = plugin.transcriptStyle
@@ -1014,9 +1116,77 @@ private struct MicrosoftAISettingsView: View {
             && (!apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasStoredAPIKey)
     }
 
-    private var unsupportedRegion: String? {
-        guard let endpoint = MicrosoftAIEndpoint.normalize(endpointInput) else { return nil }
+    private var backupEndpointSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Backup endpoint", bundle: bundle)
+                .font(.headline)
+
+            Text("Optional. When the first endpoint refuses a request (HTTP 429 or 5xx) or does not answer in time, TypeWhisper sends it to this endpoint right away. Use a Speech resource in another region.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextField(String("https://westus.api.cognitive.microsoft.com"), text: $backupEndpointInput)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .accessibilityLabel(String(localized: "Backup endpoint or resource name", bundle: bundle))
+
+            SecureField(String(localized: "Backup API key", bundle: bundle), text: $backupAPIKeyInput)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(String(localized: "Backup API key", bundle: bundle))
+
+            HStack(spacing: 8) {
+                Button(String(localized: "Save backup endpoint", bundle: bundle)) {
+                    saveBackupEndpoint()
+                }
+                .disabled(!canSaveBackupEndpoint)
+
+                if hasBackupEndpoint || hasStoredBackupAPIKey {
+                    Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
+                        plugin.removeBackupEndpoint()
+                        backupEndpointInput = ""
+                        backupAPIKeyInput = ""
+                        hasStoredBackupAPIKey = false
+                        hasBackupEndpoint = false
+                    }
+                    .accessibilityLabel(Text("Remove backup endpoint", bundle: bundle))
+                }
+            }
+
+            if let unsupportedRegion = unsupportedRegion(for: backupEndpointInput) {
+                regionWarning(for: unsupportedRegion)
+            }
+        }
+    }
+
+    private var canSaveBackupEndpoint: Bool {
+        MicrosoftAIEndpoint.normalize(backupEndpointInput) != nil
+            && (!backupAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasStoredBackupAPIKey)
+    }
+
+    private func saveBackupEndpoint() {
+        plugin.setBackupEndpoint(backupEndpointInput)
+        if !backupAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            plugin.setBackupAPIKey(backupAPIKeyInput)
+        }
+        backupEndpointInput = plugin.backupEndpointValue
+        hasStoredBackupAPIKey = plugin.hasStoredBackupAPIKey
+        hasBackupEndpoint = plugin.hasBackupEndpoint
+    }
+
+    private func unsupportedRegion(for input: String) -> String? {
+        guard let endpoint = MicrosoftAIEndpoint.normalize(input) else { return nil }
         return MicrosoftAIEndpoint.unsupportedMAIRegion(from: endpoint)
+    }
+
+    private func regionWarning(for region: String) -> some View {
+        Label {
+            Text(regionAvailabilityWarning(for: region))
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+        .font(.caption)
+        .foregroundStyle(.orange)
     }
 
     private func regionAvailabilityWarning(for region: String) -> String {
