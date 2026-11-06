@@ -229,7 +229,13 @@ actor MistralLiveTranscriptionSession: LiveTranscriptionSession {
             if Task.isCancelled { throw CancellationError() }
             throw failure ?? PluginTranscriptionError.networkError("Realtime session did not start")
         }
-        try await send(["type": "session.update", "session": sessionSettings])
+        do {
+            try await send(["type": "session.update", "session": sessionSettings])
+        } catch {
+            // `connect` throws, so no caller is left to close the socket.
+            close()
+            throw error
+        }
         guard await wait(timeout: timeout, until: { $0.isConfigured }) else {
             close()
             if Task.isCancelled { throw CancellationError() }

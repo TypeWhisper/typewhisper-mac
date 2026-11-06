@@ -421,6 +421,23 @@ final class MistralAIPluginFeatureTests: XCTestCase {
         XCTAssertTrue(socket.isClosed)
     }
 
+    func testLiveSessionClosesTheSocketWhenTheSettingsCannotBeSent() async throws {
+        let socket = FakeMistralRealtimeSocket(answers: [:], failsSending: true)
+
+        do {
+            _ = try await MistralLiveTranscriptionSession.connect(
+                socket: socket,
+                language: nil,
+                contextBias: [],
+                onProgress: { _ in true }
+            )
+            XCTFail("Settings that cannot be sent fail the session")
+        } catch {
+            XCTAssertTrue(error is PluginTranscriptionError, "\(error)")
+        }
+        XCTAssertTrue(socket.isClosed)
+    }
+
     func testLiveSessionFailsWhenTheConnectionEndsBeforeTheTranscript() async throws {
         let socket = FakeMistralRealtimeSocket(
             answers: ["session.update": [#"{"type":"session.updated","session":{}}"#]],
@@ -557,6 +574,7 @@ private final class FakeMistralRealtimeSocket: MistralRealtimeSocket, @unchecked
         var sent: [String] = []
         var answers: [String: [String]]
         var closesOnEnd: Bool
+        var failsSending: Bool
         var isClosed = false
     }
 
@@ -564,8 +582,8 @@ private final class FakeMistralRealtimeSocket: MistralRealtimeSocket, @unchecked
     private let stream: AsyncThrowingStream<String, Error>
     private let continuation: AsyncThrowingStream<String, Error>.Continuation
 
-    init(answers: [String: [String]], closesOnEnd: Bool = false) {
-        state = OSAllocatedUnfairLock(initialState: State(answers: answers, closesOnEnd: closesOnEnd))
+    init(answers: [String: [String]], closesOnEnd: Bool = false, failsSending: Bool = false) {
+        state = OSAllocatedUnfairLock(initialState: State(answers: answers, closesOnEnd: closesOnEnd, failsSending: failsSending))
         (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
         continuation.yield(#"{"type":"session.created","session":{}}"#)
     }
@@ -579,6 +597,9 @@ private final class FakeMistralRealtimeSocket: MistralRealtimeSocket, @unchecked
     var isClosed: Bool { state.withLock { $0.isClosed } }
 
     func send(text: String) async throws {
+        if state.withLock({ $0.failsSending }) {
+            throw URLError(.networkConnectionLost)
+        }
         let type = (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])?["type"] as? String ?? ""
         let (answers, closes) = state.withLock { state -> ([String], Bool) in
             state.sent.append(text)
