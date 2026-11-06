@@ -103,6 +103,105 @@ final class MicrosoftAIPluginTests: XCTestCase {
         XCTAssertTrue(reloaded.isConfigured)
         XCTAssertEqual(reloaded.selectedModelId, MicrosoftAIPlugin.legacyModelId)
         XCTAssertFalse(reloaded.selectedModelSupportsDiarization)
+        XCTAssertFalse(reloaded.hasBackupEndpoint)
+
+        reloaded.setBackupEndpoint("speech-backup")
+        XCTAssertFalse(reloaded.hasBackupEndpoint)
+        reloaded.setBackupAPIKey(" backup-key ")
+        XCTAssertTrue(reloaded.hasBackupEndpoint)
+        XCTAssertEqual(host.loadSecret(key: "backup-api-key"), "backup-key")
+        XCTAssertEqual(host.userDefault(forKey: "backupEndpoint") as? String, "https://speech-backup.cognitiveservices.azure.com")
+
+        let withBackup = MicrosoftAIPlugin()
+        withBackup.activate(host: host)
+        XCTAssertTrue(withBackup.hasBackupEndpoint)
+        withBackup.removeBackupEndpoint()
+        XCTAssertFalse(withBackup.hasBackupEndpoint)
+        XCTAssertFalse(withBackup.hasStoredBackupAPIKey)
+        XCTAssertTrue(withBackup.isConfigured)
+    }
+
+    func testBackupEndpointTakesOverRightAwayWhenTheFirstRegionRefuses() async throws {
+        let refusals: [(String, PluginHTTPClientTestOutcome)] = [
+            ("429 with Retry-After", .success(Data(), HTTPURLResponse(
+                url: URL(string: "https://speech-demo.cognitiveservices.azure.com")!,
+                statusCode: 429,
+                httpVersion: nil,
+                headerFields: ["Retry-After": "1"]
+            )!)),
+            ("503", .success(Data(#"{"message":"Service unavailable"}"#.utf8), Self.httpResponse(statusCode: 503))),
+            ("408", .success(Data(), Self.httpResponse(statusCode: 408))),
+            ("timeout", .failure(URLError(.timedOut))),
+        ]
+
+        for (name, refusal) in refusals {
+            PluginHTTPClientTestHarness.reset()
+            let plugin = MicrosoftAIPlugin()
+            plugin.activate(host: try configuredHostWithBackup())
+            // A timeout gets the SDK's one immediate reconnect; a delivered
+            // refusal goes straight to the backup.
+            let firstRegionAttempts = name == "timeout" ? 2 : 1
+            // One session for every attempt keeps the outcomes in request order,
+            // also across the session reset after a transport failure.
+            let session = PluginHTTPClientMockSession(
+                outcomes: Array(repeating: refusal, count: firstRegionAttempts)
+                    + [.success(Self.successResponseData, Self.httpResponse(statusCode: 200))]
+            )
+            PluginHTTPClientTestHarness.configure { _ in session }
+
+            let result = try await plugin.transcribeStructured(
+                audio: Self.audio,
+                language: "de",
+                translate: false,
+                prompt: nil
+            )
+
+            XCTAssertEqual(result.text, "Speaker 1: Hallo Welt\nSpeaker 2: Willkommen", name)
+            let hosts = session.requestedRequests.map { $0.url?.host ?? "" }
+            XCTAssertEqual(
+                hosts,
+                Array(repeating: "speech-demo.cognitiveservices.azure.com", count: firstRegionAttempts)
+                    + ["speech-backup.cognitiveservices.azure.com"],
+                name
+            )
+            XCTAssertEqual(
+                session.requestedRequests.last?.value(forHTTPHeaderField: "Ocp-Apim-Subscription-Key"),
+                "backup-key",
+                name
+            )
+        }
+    }
+
+    func testBackupEndpointIsSkippedForOtherErrorsAndTheLastRefusalSurfaces() async throws {
+        let plugin = MicrosoftAIPlugin()
+        plugin.activate(host: try configuredHostWithBackup())
+
+        let rejected = PluginHTTPClientMockSession(outcomes: [
+            .success(Data(), Self.httpResponse(statusCode: 401)),
+        ])
+        PluginHTTPClientTestHarness.configure { _ in rejected }
+        do {
+            _ = try await plugin.transcribeStructured(audio: Self.audio, language: nil, translate: false, prompt: nil)
+            XCTFail("Expected HTTP 401 to fail")
+        } catch PluginTranscriptionError.invalidApiKey {
+        }
+        XCTAssertEqual(rejected.requestedRequests.count, 1)
+
+        PluginHTTPClientTestHarness.reset()
+        let bothBusy = PluginHTTPClientMockSession(outcomes: [
+            .success(Data(), Self.httpResponse(statusCode: 503)),
+            .success(Data(), Self.httpResponse(statusCode: 429)),
+        ])
+        PluginHTTPClientTestHarness.configure { _ in bothBusy }
+        do {
+            _ = try await plugin.transcribeStructured(audio: Self.audio, language: nil, translate: false, prompt: nil)
+            XCTFail("Expected both regions to refuse")
+        } catch PluginTranscriptionError.rateLimited {
+        }
+        XCTAssertEqual(bothBusy.requestedRequests.map { $0.url?.host ?? "" }, [
+            "speech-demo.cognitiveservices.azure.com",
+            "speech-backup.cognitiveservices.azure.com",
+        ])
     }
 
     func testLocalesUseOnlyAnExplicitOrSingleHintedLanguage() {
@@ -530,6 +629,9 @@ final class MicrosoftAIPluginTests: XCTestCase {
             "Transcript style",
             "Speaker diarization",
             "Refresh models",
+            "Backup endpoint",
+            "Backup API key",
+            "Save backup endpoint",
         ] {
             XCTAssertNotNil(strings[key], "Missing localization key: \(key)")
         }
@@ -551,6 +653,16 @@ final class MicrosoftAIPluginTests: XCTestCase {
         return try PluginTestHostServices(
             defaults: configuredDefaults,
             secrets: ["api-key": "azure-key"]
+        )
+    }
+
+    private func configuredHostWithBackup() throws -> PluginTestHostServices {
+        try PluginTestHostServices(
+            defaults: [
+                "endpoint": "https://speech-demo.cognitiveservices.azure.com",
+                "backupEndpoint": "https://speech-backup.cognitiveservices.azure.com",
+            ],
+            secrets: ["api-key": "azure-key", "backup-api-key": "backup-key"]
         )
     }
 

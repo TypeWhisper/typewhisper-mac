@@ -405,7 +405,7 @@ command or service the user configures.
 | Groq | `api.groq.com` |
 | Linear | `api.linear.app` |
 | Meta | `api.meta.ai` |
-| Microsoft AI | the configured Azure resource, `*.cognitiveservices.azure.com` or `<region>.api.cognitive.microsoft.com` |
+| Microsoft AI | the configured Azure resource and the optional backup endpoint, `*.cognitiveservices.azure.com` or `<region>.api.cognitive.microsoft.com` |
 | Mistral AI | `api.mistral.ai` |
 | OpenAI / ChatGPT, OpenAI Vector Memory | `api.openai.com`; `auth.openai.com` and `chatgpt.com` for ChatGPT sign-in |
 | OpenRouter | `openrouter.ai` |
