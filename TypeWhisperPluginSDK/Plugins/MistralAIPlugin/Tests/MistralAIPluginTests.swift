@@ -40,9 +40,14 @@ final class MistralAIPluginTests: XCTestCase {
         plugin.activate(host: host)
 
         let models = plugin.transcriptionModels
-        XCTAssertFalse(models.isEmpty)
-        XCTAssertTrue(models.contains { $0.id == "voxtral-mini-latest" })
-        XCTAssertTrue(models.contains { $0.id == "voxtral-small-latest" })
+        XCTAssertEqual(models.map(\.id), [
+            "voxtral-mini-transcribe-3-0",
+            "voxtral-small-transcribe-3-0",
+        ])
+        XCTAssertEqual(models.map(\.displayName), [
+            "Voxtral Mini Transcribe 3",
+            "Voxtral Small Transcribe 3",
+        ])
     }
 
     func testMistralAILLMModelsIncludeMistralSmall() throws {
@@ -51,9 +56,20 @@ final class MistralAIPluginTests: XCTestCase {
         plugin.activate(host: host)
         
         let models = plugin.supportedModels
-        XCTAssertFalse(models.isEmpty)
-        XCTAssertTrue(models.contains { $0.id == "mistral-small-latest" })
-        XCTAssertTrue(models.contains { $0.id == "mistral-large-latest" })
+        XCTAssertEqual(models.map(\.id), [
+            "mistral-large-4",
+            "mistral-small-2603",
+            "ministral-14b-2512",
+            "ministral-8b-2512",
+            "ministral-3b-2512",
+        ])
+        XCTAssertEqual(models.map(\.displayName), [
+            "Mistral Large 4",
+            "Mistral Small 4",
+            "Ministral 3 14B",
+            "Ministral 3 8B",
+            "Ministral 3 3B",
+        ])
     }
 
     func testMistralAISelectsModels() throws {
@@ -61,11 +77,60 @@ final class MistralAIPluginTests: XCTestCase {
         let plugin = MistralAIPlugin()
         plugin.activate(host: host)
         
-        plugin.selectLLMModel("mistral-large-latest")
-        plugin.selectModel("voxtral-mini-latest")
+        plugin.selectLLMModel("mistral-large-4")
+        plugin.selectModel("voxtral-mini-transcribe-3-0")
         
-        XCTAssertEqual(plugin.selectedLLMModelId, "mistral-large-latest")
-        XCTAssertEqual(plugin.selectedModelId, "voxtral-mini-latest")
+        XCTAssertEqual(plugin.selectedLLMModelId, "mistral-large-4")
+        XCTAssertEqual(plugin.selectedModelId, "voxtral-mini-transcribe-3-0")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "mistral-large-4")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "voxtral-mini-transcribe-3-0")
+    }
+
+    func testPersistedVoxtral2TranscriptionModelsMigrateToTranscribe3() throws {
+        let cases = [
+            ("voxtral-mini-latest", "voxtral-mini-transcribe-3-0"),
+            ("voxtral-mini-2602", "voxtral-mini-transcribe-3-0"),
+            ("voxtral-mini-transcribe-3", "voxtral-mini-transcribe-3-0"),
+            ("  voxtral-small-latest  ", "voxtral-small-transcribe-3-0"),
+            ("voxtral-small-2507", "voxtral-small-transcribe-3-0"),
+            ("voxtral-small-transcribe-3", "voxtral-small-transcribe-3-0"),
+            ("voxtral-small-transcribe-latest", "voxtral-small-transcribe-3-0"),
+        ]
+        for (stored, expected) in cases {
+            let host = try PluginTestHostServices(
+                defaults: ["selectedModel": stored],
+                secrets: ["api-key": "test-key"]
+            )
+            let plugin = MistralAIPlugin()
+            plugin.activate(host: host)
+
+            XCTAssertEqual(plugin.selectedModelId, expected, stored)
+            XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, expected, stored)
+        }
+    }
+
+    func testCurrentAndCustomTranscriptionModelIdsAreKept() throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "voxtral-small-transcribe-3-0"],
+            secrets: ["api-key": "test-key"]
+        )
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "voxtral-small-transcribe-3-0")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "voxtral-small-transcribe-3-0")
+
+        plugin.selectModel("voxtral-mini-latest")
+        XCTAssertEqual(plugin.selectedModelId, "voxtral-mini-transcribe-3-0")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "voxtral-mini-transcribe-3-0")
+
+        plugin.selectModel("custom-transcription-model")
+        XCTAssertEqual(plugin.selectedModelId, "custom-transcription-model")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "custom-transcription-model")
+
+        plugin.selectModel("")
+        XCTAssertNil(plugin.selectedModelId)
+        XCTAssertNil(host.userDefault(forKey: "selectedModel"))
     }
 
     func testMistralAIProviderContractAndIdentity() throws {
@@ -77,14 +142,74 @@ final class MistralAIPluginTests: XCTestCase {
         
         // LLMModelSelectable checks
         let selectable: any LLMModelSelectable = plugin
-        XCTAssertEqual(selectable.defaultModelId, "mistral-small-latest")
+        XCTAssertEqual(selectable.defaultModelId, "mistral-small-2603")
         XCTAssertNil(selectable.preferredModelId ?? nil)
         
         let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
         plugin.activate(host: host)
-        plugin.selectLLMModel("pixtral-12b-2409")
+        plugin.selectLLMModel("ministral-3b-2512")
         
-        XCTAssertEqual(selectable.preferredModelId ?? nil, "pixtral-12b-2409")
+        XCTAssertEqual(selectable.preferredModelId ?? nil, "ministral-3b-2512")
+    }
+
+    func testPersistedLLMModelsMigrateToTheCurrentLineup() throws {
+        let cases = [
+            ("mistral-large-latest", "mistral-large-4"),
+            ("mistral-large-2512", "mistral-large-4"),
+            ("mistral-large-2402", "mistral-large-4"),
+            ("mistral-small-latest", "mistral-small-2603"),
+            ("mistral-small-2506", "mistral-small-2603"),
+            ("mistral-small-2402", "mistral-small-2603"),
+            ("pixtral-12b-2409", "ministral-14b-2512"),
+            ("pixtral-large-2411", "ministral-14b-2512"),
+            ("pixtral-large-latest", "ministral-14b-2512"),
+            ("ministral-8b-latest", "ministral-8b-2512"),
+            ("ministral-8b-2410", "ministral-8b-2512"),
+            ("ministral-3b-latest", "ministral-3b-2512"),
+            ("ministral-3b-2410", "ministral-3b-2512"),
+        ]
+        for (stored, expected) in cases {
+            let host = try PluginTestHostServices(
+                defaults: ["selectedLLMModel": stored],
+                secrets: ["api-key": "test-key"]
+            )
+            let plugin = MistralAIPlugin()
+            plugin.activate(host: host)
+
+            XCTAssertEqual(plugin.selectedLLMModelId, expected, stored)
+            XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, expected, stored)
+        }
+    }
+
+    func testCurrentLLMModelIdsAreKept() throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedLLMModel": "mistral-small-2603"],
+            secrets: ["api-key": "test-key"]
+        )
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedLLMModelId, "mistral-small-2603")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "mistral-small-2603")
+
+        plugin.selectLLMModel("custom-llm")
+        XCTAssertEqual(plugin.selectedLLMModelId, "custom-llm")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "custom-llm")
+
+        plugin.selectLLMModel("   ")
+        XCTAssertNil(plugin.selectedLLMModelId)
+        XCTAssertNil(host.userDefault(forKey: "selectedLLMModel"))
+
+        for unknown in ["mistral-large-custom", "pixtral-large-9999"] {
+            let unknownHost = try PluginTestHostServices(
+                defaults: ["selectedLLMModel": unknown],
+                secrets: ["api-key": "test-key"]
+            )
+            let reloaded = MistralAIPlugin()
+            reloaded.activate(host: unknownHost)
+            XCTAssertEqual(reloaded.selectedLLMModelId, unknown)
+            XCTAssertEqual(unknownHost.userDefault(forKey: "selectedLLMModel") as? String, unknown)
+        }
     }
 
     func testTranscriptionRetriesWithWavWhenM4AIsRejected() async throws {
@@ -120,8 +245,49 @@ final class MistralAIPluginTests: XCTestCase {
         let retryBody = String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self)
         XCTAssertTrue(retryBody.contains(#"filename="audio.wav""#))
         XCTAssertTrue(retryBody.contains("Content-Type: audio/wav"))
-        XCTAssertTrue(retryBody.contains("name=\"model\"\r\n\r\nvoxtral-mini-latest"))
+        XCTAssertTrue(retryBody.contains("name=\"model\"\r\n\r\nvoxtral-mini-transcribe-3-0\r\n"))
         XCTAssertTrue(retryBody.contains("name=\"language\"\r\n\r\nfr"))
+        XCTAssertFalse(retryBody.contains("name=\"return_language\""))
+        XCTAssertFalse(retryBody.contains("voxtral-mini-latest"))
+    }
+
+    func testReturnLanguageIsSentOnlyWhenNoLanguageIsPinned() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+
+        let url = "https://api.mistral.ai/v1/audio/transcriptions"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"hallo","language":"de"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"text":"hallo"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let detected = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+        let pinned = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: nil)
+
+        XCTAssertEqual(detected.text, "hallo")
+        XCTAssertEqual(detected.detectedLanguage, "de")
+        XCTAssertEqual(pinned.detectedLanguage, "de")
+
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        let unpinnedBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(unpinnedBody.contains("name=\"return_language\"\r\n\r\ntrue"))
+        XCTAssertFalse(unpinnedBody.contains("name=\"language\""))
+        let pinnedBody = String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self)
+        XCTAssertTrue(pinnedBody.contains("name=\"language\"\r\n\r\nde"))
+        XCTAssertFalse(pinnedBody.contains("name=\"return_language\""))
     }
 
     func testTranscriptionUsesDetectedLanguageFromResponse() async throws {
@@ -181,8 +347,32 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertEqual(requests[0].url?.absoluteString, "https://api.mistral.ai/v1/chat/completions")
         let body = try XCTUnwrap(requests[0].httpBody)
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(json["model"] as? String, "mistral-small-latest")
+        XCTAssertEqual(json["model"] as? String, "mistral-small-2603")
         XCTAssertEqual(json["temperature"] as? Double, 0.7)
+        XCTAssertNil(json["reasoning_effort"])
+    }
+
+    func testExplicitRetiredLLMModelIsSentAsItsReplacement() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        _ = try await plugin.process(systemPrompt: "s", userText: "u", model: "pixtral-12b-2409")
+
+        let body = try XCTUnwrap(store.sessions[0].requestedRequests.first?.httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, "ministral-14b-2512")
+        XCTAssertNil(json["reasoning_effort"])
     }
 
     func testProviderDefaultTemperatureOmitsField() async throws {
@@ -210,6 +400,73 @@ final class MistralAIPluginTests: XCTestCase {
         let body = try XCTUnwrap(requests[0].httpBody)
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertNil(json["temperature"])
+        XCTAssertNil(json["reasoning_effort"])
+    }
+
+    func testLarge4JoinsTextChunksAndRequestsLowReasoning() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+        plugin.selectLLMModel("mistral-large-latest")
+
+        let chunked = #"""
+        {"choices":[{"message":{"content":[
+          {"type":"thinking","thinking":[{"type":"text","text":"draft"}]},
+          {"type":"text","text":"Ich habe "},
+          {"type":"text","text":"gestern"}
+        ]}}]}
+        """#
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(chunked.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"plain text"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let joined = try await plugin.process(systemPrompt: "s", userText: "u", model: nil)
+        XCTAssertEqual(joined, "Ich habe gestern")
+        let plain = try await plugin.process(systemPrompt: "s", userText: "u", model: "mistral-large-4")
+        XCTAssertEqual(plain, "plain text")
+
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        for request in requests {
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["model"] as? String, "mistral-large-4")
+            XCTAssertEqual(json["reasoning_effort"] as? String, "low")
+        }
+    }
+
+    func testLarge4ThinkingWithoutTextFailsToParse() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+        plugin.selectLLMModel("mistral-large-4")
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":[{"type":"thinking","thinking":"hidden"}]}}]}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        do {
+            _ = try await plugin.process(systemPrompt: "s", userText: "u", model: nil)
+            XCTFail("A thinking chunk is not the reply")
+        } catch let error as MistralAPIError {
+            XCTAssertEqual(error.errorDescription, "API Error: Failed to parse response text")
+        }
     }
 
     func testTranscriptionSplitsLongRecordingsIntoTenMinuteRequests() async throws {
@@ -235,31 +492,36 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertEqual(store.sessions[0].requestedRequests.count, 2)
     }
 
-    func testVoxtralSmallSplitsLongRecordingsIntoFiveMinuteRequests() async throws {
+    func testVoxtralSmallUsesTheTranscriptionEndpointAndTenMinuteChunks() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
         let plugin = MistralAIPlugin()
         plugin.activate(host: host)
-        plugin.selectModel("voxtral-small-latest")
+        plugin.selectModel("voxtral-small-transcribe-3-0")
 
-        let url = "https://api.mistral.ai/v1/chat/completions"
+        let url = "https://api.mistral.ai/v1/audio/transcriptions"
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
-                .success(Data(#"{"choices":[{"message":{"content":"first"}}]}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
-                .success(Data(#"{"choices":[{"message":{"content":"second"}}]}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":"first","language":"en"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":"second","language":"en"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
             ])
         }
 
-        // Six minutes: one request before, two now.
-        let samples = [Float](repeating: 0.3, count: 16_000 * 360)
-        let audio = AudioData(samples: samples, wavData: Data(), duration: 360)
-        let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
+        // Eleven minutes, the same two chunks Mini uses. Small no longer takes
+        // the five-minute chat path.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let audio = AudioData(samples: samples, wavData: Data(), duration: 660)
+        let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
 
         XCTAssertEqual(result.text, "first second")
-        XCTAssertEqual(store.sessions[0].requestedRequests.count, 2)
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.compactMap { $0.url?.absoluteString }, [url, url])
+        let firstBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(firstBody.contains("name=\"model\"\r\n\r\nvoxtral-small-transcribe-3-0\r\n"))
     }
 
-    func testVoxtralSmallTranscribesViaChatCompletions() async throws {
+    func testVoxtralSmallTranscribesViaAudioTranscriptions() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
         let plugin = MistralAIPlugin()
         plugin.activate(host: host)
@@ -269,8 +531,8 @@ final class MistralAIPluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"choices":[{"message":{"content":"hello there"}}]}"#.utf8),
-                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                    Data(#"{"text":"hello there","language":"en"}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/audio/transcriptions", statusCode: 200)
                 ),
             ])
         }
@@ -280,68 +542,65 @@ final class MistralAIPluginTests: XCTestCase {
         let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
 
         XCTAssertEqual(result.text, "hello there")
+        XCTAssertEqual(result.detectedLanguage, "en")
 
         let requests = store.sessions[0].requestedRequests
         XCTAssertEqual(requests.count, 1)
         let request = requests[0]
-        XCTAssertEqual(request.url?.absoluteString, "https://api.mistral.ai/v1/chat/completions")
-        let body = try XCTUnwrap(request.httpBody)
-        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(json["model"] as? String, "voxtral-small-latest")
-        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
-        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
-        XCTAssertTrue(content.contains { ($0["type"] as? String) == "input_audio" && ($0["input_audio"] as? String)?.isEmpty == false })
-        XCTAssertTrue(content.contains { ($0["type"] as? String) == "text" })
+        XCTAssertEqual(request.url?.absoluteString, "https://api.mistral.ai/v1/audio/transcriptions")
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("name=\"model\"\r\n\r\nvoxtral-small-transcribe-3-0\r\n"))
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
+        XCTAssertFalse(body.contains("input_audio"))
     }
 
-    func testSupportedLanguagesMatchVoxtralOfficialSet() {
+    func testSupportedLanguagesStayThePreviouslyOfferedSet() {
         let plugin = MistralAIPlugin()
         // A non-empty list is what makes the app expose a language picker, so the
         // user can force a language instead of relying on auto-detection. Assert
-        // the exact set so an unsupported extra language can't silently slip into
-        // the picker.
+        // the exact set so an extra code can't silently slip into the picker.
+        // Transcribe 3 documents 50 languages, but the languages page does not
+        // list the codes, so the picker keeps the eight it already offered.
         XCTAssertEqual(Set(plugin.supportedLanguages), ["en", "fr", "de", "es", "it", "pt", "nl", "hi"])
     }
 
-    func testVoxtralSmallChatInstructionUsesLanguageName() async throws {
+    func testVoxtralSmallSendsTheLanguageCodeToTheTranscriptionEndpoint() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
         let plugin = MistralAIPlugin()
         plugin.activate(host: host)
-        plugin.selectModel("voxtral-small-latest")
+        plugin.selectModel("voxtral-small-transcribe-3-0")
 
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"choices":[{"message":{"content":"ciao"}}]}"#.utf8),
-                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                    Data(#"{"text":"ciao","language":null}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/audio/transcriptions", statusCode: 200)
                 ),
             ])
         }
 
         let samples = [Float](repeating: 0.1, count: 16_000)
         let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
-        _ = try await plugin.transcribe(audio: audio, language: "it", translate: false, prompt: nil)
+        let result = try await plugin.transcribe(audio: audio, language: "it", translate: false, prompt: nil)
 
-        let body = try XCTUnwrap(store.sessions[0].requestedRequests.first?.httpBody)
-        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
-        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
-        let instruction = content.compactMap { ($0["type"] as? String) == "text" ? $0["text"] as? String : nil }.first
-        // The ISO code "it" must be surfaced to the model as "Italian".
-        XCTAssertEqual(instruction?.contains("Italian"), true)
-        XCTAssertEqual(instruction?.contains(" it."), false)
+        // A pinned language still wins when Transcribe 3 omits `language`.
+        XCTAssertEqual(result.text, "ciao")
+        XCTAssertEqual(result.detectedLanguage, "it")
+        let body = String(decoding: try XCTUnwrap(store.sessions[0].requestedRequests.first?.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nit"))
+        XCTAssertFalse(body.contains("Italian"))
     }
 
     // MARK: - Usage reporting
 
     func testProcessReportsTheChatUsage() async throws {
         let reports = try await Self.processCollectingUsage(body: #"""
-        {"model":"mistral-small-latest","choices":[{"message":{"content":"ok"}}],
+        {"model":"mistral-small-2603","choices":[{"message":{"content":"ok"}}],
          "usage":{"prompt_tokens":88,"completion_tokens":7,"total_tokens":95}}
         """#)
 
-        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 88, outputTokens: 7, model: "mistral-small-latest")])
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 88, outputTokens: 7, model: "mistral-small-2603")])
     }
 
     func testProcessWithoutUsageReportsNothing() async throws {

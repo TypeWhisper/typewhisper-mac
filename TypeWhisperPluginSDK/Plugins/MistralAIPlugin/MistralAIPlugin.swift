@@ -25,13 +25,34 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     }
     
     public func activate(host: HostServices) {
+        var persistedTranscriptionModel: String?
+        var shouldRewriteTranscriptionModel = false
+        var persistedLLMModel: String?
+        var shouldRewriteLLMModel = false
         lock.withLock {
             self._host = host
-            self._selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
-            self._selectedModelId = host.userDefault(forKey: "selectedModel") as? String
+            let storedLLMModel = host.userDefault(forKey: "selectedLLMModel") as? String
+            let resolvedLLMModel = storedLLMModel.flatMap(Self.resolvedLLMModelId)
+            self._selectedLLMModelId = resolvedLLMModel
+            let storedTranscriptionModel = host.userDefault(forKey: "selectedModel") as? String
+            let resolvedTranscriptionModel = storedTranscriptionModel.flatMap(Self.resolvedTranscriptionModelId)
+            self._selectedModelId = resolvedTranscriptionModel
             self._llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
                 ?? PluginLLMTemperatureMode.providerDefault.rawValue
             self._llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double ?? 0.3
+            persistedLLMModel = resolvedLLMModel
+            shouldRewriteLLMModel = Self.shouldRewriteStoredModel(storedLLMModel, resolved: resolvedLLMModel)
+            persistedTranscriptionModel = resolvedTranscriptionModel
+            shouldRewriteTranscriptionModel = Self.shouldRewriteStoredModel(
+                storedTranscriptionModel,
+                resolved: resolvedTranscriptionModel
+            )
+        }
+        if shouldRewriteLLMModel {
+            Self.storeModel(persistedLLMModel, forKey: "selectedLLMModel", host: host)
+        }
+        if shouldRewriteTranscriptionModel {
+            Self.storeModel(persistedTranscriptionModel, forKey: "selectedModel", host: host)
         }
         print("Mistral AI Plugin activated")
     }
@@ -78,13 +99,61 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     
     public var supportedModels: [PluginModelInfo] {
         guard !apiKey.isEmpty else { return [] }
-        return [
-            PluginModelInfo(id: "mistral-large-latest", displayName: "Mistral Large"),
-            PluginModelInfo(id: "pixtral-12b-2409", displayName: "Pixtral 12B"),
-            PluginModelInfo(id: "ministral-8b-latest", displayName: "Ministral 8B"),
-            PluginModelInfo(id: "ministral-3b-latest", displayName: "Ministral 3B"),
-            PluginModelInfo(id: "mistral-small-latest", displayName: "Mistral Small")
-        ]
+        return Self.availableLLMModels
+    }
+
+    /// Mistral Small 4. Used when the user has not picked an LLM.
+    static let defaultLLMModelId = "mistral-small-2603"
+
+    /// Mistral Large 4. Listed first in the picker.
+    static let largeLLMModelId = "mistral-large-4"
+
+    static let ministral14bModelId = "ministral-14b-2512"
+    static let ministral8bModelId = "ministral-8b-2512"
+    static let ministral3bModelId = "ministral-3b-2512"
+
+    /// Current chat lineup from the Mistral model catalog, most capable first.
+    static let availableLLMModels: [PluginModelInfo] = [
+        PluginModelInfo(id: largeLLMModelId, displayName: "Mistral Large 4"),
+        PluginModelInfo(id: defaultLLMModelId, displayName: "Mistral Small 4"),
+        PluginModelInfo(id: ministral14bModelId, displayName: "Ministral 3 14B"),
+        PluginModelInfo(id: ministral8bModelId, displayName: "Ministral 3 8B"),
+        PluginModelInfo(id: ministral3bModelId, displayName: "Ministral 3 3B"),
+    ]
+
+    /// Retired chat IDs the plugin used to save, plus the dated models the
+    /// catalog lists as their predecessors. `mistral-small-latest` and
+    /// `ministral-*-latest` are also current aliases; saving the dated ID keeps
+    /// the picker selection stable.
+    static let llmModelMigrations: [String: String] = [
+        "mistral-large-latest": largeLLMModelId,
+        "mistral-large-2512": largeLLMModelId,
+        "mistral-large-2411": largeLLMModelId,
+        "mistral-large-2407": largeLLMModelId,
+        "mistral-large-2402": largeLLMModelId,
+        "mistral-large-4-0": largeLLMModelId,
+        "mistral-small-latest": defaultLLMModelId,
+        "mistral-small-2506": defaultLLMModelId,
+        "mistral-small-2503": defaultLLMModelId,
+        "mistral-small-2501": defaultLLMModelId,
+        "mistral-small-2409": defaultLLMModelId,
+        "mistral-small-2402": defaultLLMModelId,
+        "pixtral-12b-2409": ministral14bModelId,
+        "pixtral-large-2411": ministral14bModelId,
+        "pixtral-large-latest": ministral14bModelId,
+        "ministral-14b-latest": ministral14bModelId,
+        "ministral-8b-latest": ministral8bModelId,
+        "ministral-8b-2410": ministral8bModelId,
+        "ministral-3b-latest": ministral3bModelId,
+        "ministral-3b-2410": ministral3bModelId,
+    ]
+
+    /// Empty input becomes "no selection" (`nil`). A known older chat ID becomes
+    /// its current replacement. Any other ID is kept.
+    static func resolvedLLMModelId(_ modelId: String) -> String? {
+        let trimmed = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return llmModelMigrations[trimmed] ?? trimmed
     }
     
     public func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
@@ -103,7 +172,9 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
         let llmModelId = lock.withLock { _selectedLLMModelId }
-        let selectedModel = model ?? ((llmModelId?.isEmpty == false) ? llmModelId! : "mistral-small-latest")
+        let selectedModel = model.flatMap(Self.resolvedLLMModelId)
+            ?? llmModelId.flatMap(Self.resolvedLLMModelId)
+            ?? Self.defaultLLMModelId
         let temperature = providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         let client = MistralAPIClient(apiKey: apiKey)
         return try await client.processChat(
@@ -148,15 +219,16 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     
     @objc public var preferredModelId: String? { lock.withLock { _selectedLLMModelId } }
     
-    @objc public var defaultModelId: String? { "mistral-small-latest" }
+    @objc public var defaultModelId: String? { Self.defaultLLMModelId }
     
     public func selectLLMModel(_ modelId: String) {
-        let normalized = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let valueToSave = normalized.isEmpty ? nil : normalized
+        let valueToSave = Self.resolvedLLMModelId(modelId)
         lock.withLock {
             _selectedLLMModelId = valueToSave
         }
-        host?.setUserDefault(valueToSave, forKey: "selectedLLMModel")
+        if let host {
+            Self.storeModel(valueToSave, forKey: "selectedLLMModel", host: host)
+        }
         host?.notifyCapabilitiesChanged()
     }
     
@@ -168,36 +240,82 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     
     public var transcriptionModels: [PluginModelInfo] {
         guard !apiKey.isEmpty else { return [] }
-        return [
-            PluginModelInfo(id: "voxtral-mini-latest", displayName: "Voxtral Mini Latest"),
-            PluginModelInfo(id: "voxtral-small-latest", displayName: "Voxtral Small (24B)")
-        ]
+        return Self.availableTranscriptionModels
     }
 
-    /// Models that transcribe through the chat/completions endpoint (audio input)
-    /// rather than the dedicated /audio/transcriptions endpoint, which only serves
-    /// `voxtral-mini-latest`.
-    static let chatTranscriptionModelIds: Set<String> = ["voxtral-small-latest"]
+    /// Voxtral Mini Transcribe 3. The catalog's API name, not the short alias.
+    /// Used when the user has not picked a model.
+    static let defaultTranscriptionModelId = "voxtral-mini-transcribe-3-0"
+
+    /// Voxtral Small Transcribe 3, the higher-quality file transcription model.
+    static let smallTranscriptionModelId = "voxtral-small-transcribe-3-0"
+
+    /// Both IDs are the Transcribe 3 API names for `POST /v1/audio/transcriptions`.
+    /// Mini is first because it is the default. The unversioned
+    /// `voxtral-*-transcribe-3` strings are aliases and are migrated on launch.
+    static let availableTranscriptionModels: [PluginModelInfo] = [
+        PluginModelInfo(id: defaultTranscriptionModelId, displayName: "Voxtral Mini Transcribe 3"),
+        PluginModelInfo(id: smallTranscriptionModelId, displayName: "Voxtral Small Transcribe 3"),
+    ]
+
+    /// Persisted Voxtral 2 transcription IDs, plus the short Transcribe 3 aliases.
+    /// `voxtral-mini-latest` pointed at Voxtral Mini Transcribe 2
+    /// (`voxtral-mini-2602`). `voxtral-small-latest` was sent through chat
+    /// completions because that endpoint did not serve Small; its Voxtral 2
+    /// model is `voxtral-small-2507`.
+    static let transcriptionModelMigrations: [String: String] = [
+        "voxtral-mini-latest": defaultTranscriptionModelId,
+        "voxtral-mini-2602": defaultTranscriptionModelId,
+        "voxtral-mini-transcribe-3": defaultTranscriptionModelId,
+        "voxtral-mini-transcribe-latest": defaultTranscriptionModelId,
+        "voxtral-small-latest": smallTranscriptionModelId,
+        "voxtral-small-2507": smallTranscriptionModelId,
+        "voxtral-small-transcribe-3": smallTranscriptionModelId,
+        "voxtral-small-transcribe-latest": smallTranscriptionModelId,
+    ]
+
+    /// Empty input becomes "no selection" (`nil`). A known Voxtral 2 ID becomes
+    /// its Transcribe 3 replacement. Anything else is kept, trimmed.
+    static func resolvedTranscriptionModelId(_ modelId: String) -> String? {
+        let trimmed = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return transcriptionModelMigrations[trimmed] ?? trimmed
+    }
     
     private var _selectedModelId: String?
     public var selectedModelId: String? { lock.withLock { _selectedModelId } }
     
     public func selectModel(_ modelId: String) {
-        let normalized = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let valueToSave = normalized.isEmpty ? nil : normalized
+        let valueToSave = Self.resolvedTranscriptionModelId(modelId)
         lock.withLock {
             _selectedModelId = valueToSave
         }
-        host?.setUserDefault(valueToSave, forKey: "selectedModel")
+        if let host {
+            Self.storeModel(valueToSave, forKey: "selectedModel", host: host)
+        }
         host?.notifyCapabilitiesChanged()
+    }
+
+    private static func shouldRewriteStoredModel(_ stored: String?, resolved: String?) -> Bool {
+        guard let stored else { return false }
+        if let resolved {
+            return stored != resolved
+        }
+        return true
+    }
+
+    private static func storeModel(_ modelId: String?, forKey key: String, host: HostServices) {
+        // `String?` passed to `Any?` boxes a nil, so the cast is what clears the
+        // default when the resolved id is empty.
+        host.setUserDefault(modelId as Any?, forKey: key)
     }
     
     public var supportsTranslation: Bool { false }
     public var supportsStreaming: Bool { false } // Note: We declare false here because Mistral's basic API doesn't support WebSocket streaming chunk-by-chunk in a public STT endpoint yet. The TypeWhisper app will just use transcribe(audio:...) normally.
-    // Languages officially supported by Voxtral (Mini and Small alike). Declaring
-    // them lets the app show a language picker so users can force a language
-    // instead of relying on auto-detection, which otherwise defaults erratically
-    // (e.g. transcribing Italian speech as English).
+    // Codes the language picker can force. Transcribe 3 documents 50 languages
+    // for file transcription, but the languages page does not list their codes,
+    // so this stays the eight languages the plugin already offered. Leaving the
+    // language unset lets the model detect one from the wider set.
     public var supportedLanguages: [String] {
         ["en", "fr", "de", "es", "it", "pt", "nl", "hi"]
     }
@@ -205,14 +323,10 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     public func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         let client = MistralAPIClient(apiKey: apiKey)
         let sttModelId = lock.withLock { _selectedModelId }
-        let sttModel = (sttModelId?.isEmpty == false) ? sttModelId! : "voxtral-mini-latest"
-        // Chat with audio takes about 20 minutes per request and gets base64
-        // WAV; the transcription endpoint takes 15 to 60 minutes per model.
-        if Self.chatTranscriptionModelIds.contains(sttModel) {
-            return try await PluginAudioChunking.transcribe(audio, maximumChunkDuration: 300) { chunk in
-                try await client.transcribeViaChat(audio: chunk, language: language, model: sttModel)
-            }
-        }
+        let sttModel = sttModelId.flatMap(Self.resolvedTranscriptionModelId) ?? Self.defaultTranscriptionModelId
+        // Mini and Small Transcribe 3 both use /v1/audio/transcriptions.
+        // Ten-minute chunks stay within the WAV fallback size the shared
+        // uploader already accounts for.
         return try await PluginAudioChunking.transcribe(audio) { chunk in
             try await client.transcribe(audio: chunk, language: language, model: sttModel)
         }
@@ -257,6 +371,13 @@ struct MistralAPIClient {
         if let temperature {
             body["temperature"] = temperature
         }
+        if model == MistralAIPlugin.largeLLMModelId {
+            // Large 4 returns content as thinking and text chunks and rejects
+            // `reasoning_effort` of `none`. `low` is the smallest value it
+            // accepts. Ministral 3 rejects the field, and Small 4 is documented
+            // for `none` and `high`, so every other model omits it.
+            body["reasoning_effort"] = "low"
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -285,10 +406,26 @@ struct MistralAPIClient {
               let choices = json["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
               let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let content = chatContentText(from: message["content"]) else {
             throw MistralAPIError.apiError("Failed to parse response text")
         }
         return content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+    }
+
+    /// Small and Ministral return `content` as a string. Large 4 returns a list
+    /// of chunks, `thinking` then one or more `text` chunks, including when
+    /// `reasoning_effort` is `low`. The reply is those text chunks joined.
+    private func chatContentText(from content: Any?) -> String? {
+        if let text = content as? String {
+            return text
+        }
+        guard let chunks = content as? [[String: Any]] else { return nil }
+        let texts = chunks.compactMap { chunk -> String? in
+            guard chunk["type"] as? String == "text" else { return nil }
+            return chunk["text"] as? String
+        }
+        guard !texts.isEmpty else { return nil }
+        return texts.joined()
     }
     
     // MARK: - Transcriptions (STT)
@@ -321,6 +458,15 @@ struct MistralAPIClient {
                 body.append("--\(boundary)\r\n".data(using: .utf8)!)
                 body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
                 body.append("\(language)\r\n".data(using: .utf8)!)
+            } else {
+                // Transcribe 3 leaves `language` null unless asked. Request it
+                // only when nothing is pinned: sending `return_language` with a
+                // language is a 422, "Cannot do language prediction if language
+                // is already set". A pinned language stays the fallback below
+                // when the response omits one.
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append("Content-Disposition: form-data; name=\"return_language\"\r\n\r\n".data(using: .utf8)!)
+                body.append("true\r\n".data(using: .utf8)!)
             }
 
             body.append("--\(boundary)--\r\n".data(using: .utf8)!)
@@ -363,81 +509,14 @@ struct MistralAPIClient {
                   let text = json["text"] as? String else {
                 throw MistralAPIError.apiError("Failed to parse transcription response")
             }
-            // The endpoint doubles as a language-detection service, so prefer the
-            // language reported in the response over the (optional) requested one.
+            // Prefer the language reported in the response. Transcribe 3 fills it
+            // only when `return_language` is set, which is the unpinned request.
+            // A pinned language stays the fallback.
             let detectedLanguage = (json["language"] as? String)
                 .flatMap { $0.isEmpty ? nil : $0 }
                 ?? language
                 ?? "en"
             return PluginTranscriptionResult(text: text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines), detectedLanguage: detectedLanguage)
-        } else {
-            throw MistralAPIError.apiError(errorMessage(from: data, response: httpResponse))
-        }
-    }
-
-    // MARK: - Transcription via Chat (audio-input LLM, e.g. Voxtral Small)
-
-    /// Transcribes by sending base64 audio to /v1/chat/completions. Used for
-    /// audio-capable chat models like Voxtral Small that the dedicated
-    /// transcription endpoint does not serve. The endpoint only accepts mp3/wav
-    /// audio, so we always upload WAV.
-    func transcribeViaChat(audio: AudioData, language: String?, model: String) async throws -> PluginTranscriptionResult {
-        guard let url = URL(string: "https://api.mistral.ai/v1/chat/completions") else {
-            throw MistralAPIError.invalidURL
-        }
-
-        let wav = PluginAudioUploadEncoder.wavUpload(from: PluginAudioUploadEncoder.normalizedAudioForUpload(audio))
-        let audioBase64 = wav.data.base64EncodedString()
-
-        var instruction = "Transcribe this audio verbatim. Output only the transcription text, with no additional commentary, labels, or quotation marks."
-        if let language, !language.isEmpty {
-            // Use the human-readable name (e.g. "it" -> "Italian") so the chat
-            // model reliably transcribes in the requested language.
-            let languageName = Locale(identifier: "en_US").localizedString(forLanguageCode: language) ?? language
-            instruction += " The spoken language is \(languageName)."
-        }
-
-        let body: [String: Any] = [
-            "model": model,
-            // Transcription must be deterministic, independent of the LLM
-            // workflow temperature setting.
-            "temperature": 0.0,
-            "messages": [
-                [
-                    "role": "user",
-                    "content": [
-                        ["type": "input_audio", "input_audio": audioBase64],
-                        ["type": "text", "text": instruction]
-                    ]
-                ]
-            ]
-        ]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await PluginHTTPClient.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MistralAPIError.invalidResponse
-        }
-
-        if httpResponse.statusCode == 200 {
-            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
-                from: data,
-                response: httpResponse
-            ) {
-                throw MistralAPIError.apiError(
-                    "Failed to parse chat transcription response: \(htmlPageSummary)"
-                )
-            }
-            let text = try parseChatResponse(data)
-            // Chat completions returns no structured detected-language field, so
-            // fall back to the requested language (or English).
-            return PluginTranscriptionResult(text: text, detectedLanguage: language ?? "en")
         } else {
             throw MistralAPIError.apiError(errorMessage(from: data, response: httpResponse))
         }
