@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
@@ -182,8 +183,9 @@ final class OpenRouterPlugin: NSObject,
     ) async throws -> (Data, URLResponse) {
         let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
         let preferredUpload: PluginAudioUploadFile
-        if modelId == "microsoft/mai-transcribe-2" {
-            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
+        if Self.requiresLosslessUpload(modelId: modelId) {
+            preferredUpload = (try? Self.flacUpload(from: uploadAudio.samples))
+                ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
         } else {
             preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio))
                 ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
@@ -212,6 +214,79 @@ final class OpenRouterPlugin: NSObject,
             (data, response) = try await PluginHTTPClient.data(for: request)
         }
         return (data, response)
+    }
+
+    /// MAI-Transcribe accepts only WAV, MP3 and FLAC, so it gets no M4A attempt.
+    /// FLAC instead of WAV keeps the request small: OpenRouter answers bodies
+    /// above about 5 MB several seconds later (#1880).
+    static func requiresLosslessUpload(modelId: String) -> Bool {
+        modelId.lowercased().hasPrefix("microsoft/mai-transcribe")
+    }
+
+    /// FLAC is about half the size of WAV for speech. Same encoder as the
+    /// Vercel AI Gateway plugin; plugins built for TypeWhisper 1.8 cannot
+    /// share it through the SDK.
+    static func flacUpload(from samples: [Float]) throws -> PluginAudioUploadFile {
+        guard !samples.isEmpty else {
+            throw PluginTranscriptionError.apiError("Cannot encode empty audio upload")
+        }
+
+        let sampleRate = Double(PluginAudioUploadEncoder.sampleRate)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("typewhisper-upload-\(UUID().uuidString).flac")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatFLAC,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1,
+        ]
+        // Writing Int16 buffers makes the encoder use a 16-bit source; Float32
+        // buffers produce 24-bit FLAC that is larger than the 16-bit WAV.
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw PluginTranscriptionError.apiError("Failed to create FLAC upload format")
+        }
+
+        do {
+            // The file is finalized when it goes out of scope, before it is read back.
+            let file = try AVAudioFile(
+                forWriting: url,
+                settings: settings,
+                commonFormat: .pcmFormatInt16,
+                interleaved: false
+            )
+
+            let chunkFrames = PluginAudioUploadEncoder.sampleRate * 30
+            var offset = 0
+            while offset < samples.count {
+                let count = min(chunkFrames, samples.count - offset)
+                guard let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format,
+                    frameCapacity: AVAudioFrameCount(count)
+                ), let channel = buffer.int16ChannelData?[0] else {
+                    throw PluginTranscriptionError.apiError("Failed to create FLAC upload buffer")
+                }
+                buffer.frameLength = AVAudioFrameCount(count)
+                for index in 0..<count {
+                    let clamped = max(-1.0, min(1.0, samples[offset + index]))
+                    channel[index] = Int16(clamped * 32767)
+                }
+                try file.write(from: buffer)
+                offset += count
+            }
+        }
+
+        return PluginAudioUploadFile(
+            data: try Data(contentsOf: url),
+            filename: "audio.flac",
+            contentType: "audio/flac",
+            format: "flac"
+        )
     }
 
     private static func shouldRetryTranscriptionWithWav(statusCode: Int, responseData: Data) -> Bool {
@@ -260,7 +335,9 @@ final class OpenRouterPlugin: NSObject,
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = timeout
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        // Base64 contains many "/" characters. Escaping each as "\/" adds about 14%
+        // to the body, and OpenRouter answers large bodies noticeably later.
+        request.httpBody = try JSONSerialization.data(withJSONObject: body, options: .withoutEscapingSlashes)
         return request
     }
 

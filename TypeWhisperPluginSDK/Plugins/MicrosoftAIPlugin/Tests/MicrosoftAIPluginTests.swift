@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
@@ -70,6 +71,12 @@ final class MicrosoftAIPluginTests: XCTestCase {
         XCTAssertEqual(MicrosoftAIEndpoint.regionalEndpointRegion(from: westEurope), "westeurope")
         XCTAssertEqual(MicrosoftAIEndpoint.unsupportedMAIRegion(from: westEurope), "westeurope")
         XCTAssertNil(MicrosoftAIEndpoint.unsupportedMAIRegion(from: northEurope))
+        for region in ["centralindia", "westus2"] {
+            let endpoint = try XCTUnwrap(
+                MicrosoftAIEndpoint.normalize("https://\(region).api.cognitive.microsoft.com")
+            )
+            XCTAssertNil(MicrosoftAIEndpoint.unsupportedMAIRegion(from: endpoint), region)
+        }
         XCTAssertNil(MicrosoftAIEndpoint.regionalEndpointRegion(from: resourceEndpoint))
     }
 
@@ -158,9 +165,11 @@ final class MicrosoftAIPluginTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Ocp-Apim-Subscription-Key"), "azure-key")
         XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
 
-        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        let bodyData = try XCTUnwrap(request.httpBody)
+        let body = String(decoding: bodyData, as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"definition\""))
-        XCTAssertTrue(body.contains("name=\"audio\"; filename=\"audio.wav\""))
+        XCTAssertTrue(body.contains("name=\"audio\"; filename=\"audio.flac\"\r\nContent-Type: audio/flac\r\n\r\nfLaC"))
+        XCTAssertFalse(body.contains("RIFF"))
         XCTAssertTrue(body.contains("\"model\":\"MAI-Transcribe-2\""))
         XCTAssertTrue(body.contains("\"modelOptions\""))
         XCTAssertTrue(body.contains("\"transcribeStyle\":\"verbatim\""))
@@ -463,6 +472,36 @@ final class MicrosoftAIPluginTests: XCTestCase {
         XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2"])
         let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
         XCTAssertEqual(requests.count, 1)
+    }
+
+    func testFlacUploadIsLosslessSixteenBitAndSmallerThanWav() throws {
+        // Longer than one 30 s encoder chunk, with a speech-like varying signal.
+        let samples = (0..<(16_000 * 35)).map { index -> Float in
+            let time = Float(index) / 16_000
+            return 0.4 * sinf(2 * .pi * 220 * time) * (0.5 + 0.5 * sinf(2 * .pi * 3 * time))
+        }
+
+        let upload = try MicrosoftAITranscriptionClient.flacUpload(from: samples)
+
+        XCTAssertEqual(upload.filename, "audio.flac")
+        XCTAssertEqual(upload.contentType, "audio/flac")
+        XCTAssertEqual(upload.data.prefix(4), Data("fLaC".utf8))
+        XCTAssertLessThan(upload.data.count, PluginWavEncoder.encode(samples).count)
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("microsoft-upload-test-\(UUID().uuidString).flac")
+        try upload.data.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: false)
+        XCTAssertEqual(file.fileFormat.sampleRate, 16_000)
+        XCTAssertEqual(file.fileFormat.channelCount, 1)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)))
+        try file.read(into: buffer)
+        let channel = try XCTUnwrap(buffer.int16ChannelData?[0])
+        XCTAssertEqual(
+            Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))),
+            samples.map { Int16(max(-1.0, min(1.0, $0)) * 32767) }
+        )
     }
 
     func testManifestAndLocalizationAreValid() throws {
