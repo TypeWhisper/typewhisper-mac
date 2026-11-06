@@ -43,6 +43,13 @@ SCREENSHOT_LOCALES = {
   "ja-JP" => "ja_JP",
   "zh-Hans" => "zh_Hans",
 }.freeze
+PLUGIN_SCREENSHOT_FIXTURES = File.join(FASTLANE_DIRECTORY, "plugin-screenshot-fixtures")
+
+# A fixture file as a property-list data value for a launch argument.
+def plugin_screenshot_data_default(name)
+  "<data>#{[File.binread(File.join(PLUGIN_SCREENSHOT_FIXTURES, name))].pack("m0")}</data>"
+end
+
 PLUGIN_SCREENSHOT_LANGUAGES = %w[en-US de-DE].freeze
 PLUGIN_SCREENSHOTS = [
   { slug: "apple-speech", target: "SpeechAnalyzerPlugin", id: "com.typewhisper.speechanalyzer" },
@@ -84,7 +91,16 @@ PLUGIN_SCREENSHOTS = [
       "plugin.com.typewhisper.microsoft-ai.endpoint" => "https://eastus.api.cognitive.microsoft.com",
     },
   },
-  { slug: "mistral", target: "MistralAIPlugin", id: "com.minerale.mistralai" },
+  {
+    slug: "mistral",
+    target: "MistralAIPlugin",
+    id: "com.minerale.mistralai",
+    # A saved model list from a Mistral account. Without one the settings load the
+    # account's list, which fails offline with the placeholder key.
+    defaults: {
+      "plugin.com.minerale.mistralai.modelCatalog" => plugin_screenshot_data_default("mistral-model-catalog.json"),
+    },
+  },
   { slug: "obsidian", target: "ObsidianPlugin", id: "com.typewhisper.obsidian" },
   { slug: "openai", target: "OpenAIPlugin", id: "com.typewhisper.openai", size: [560, 627] },
   { slug: "openai-compatible", target: "OpenAICompatiblePlugin", id: "com.typewhisper.openai-compatible" },
