@@ -386,10 +386,12 @@ struct MistralModelCatalog: Codable, Equatable, Sendable {
         return fixed.sorted { ($0.count, $0) > ($1.count, $1) }.first ?? group.entry.id
     }
 
-    /// A model whose IDs include one this plugin replaces with another model.
+    /// A model whose fixed IDs include one this plugin replaces with another model.
+    /// A `-latest` alias moves on to newer models, so a model holding one is not
+    /// retired by it: a new Small that takes over `mistral-small-latest` stays.
     private static func isSuperseded(_ ids: Set<String>, migrations: [String: String]) -> Bool {
         ids.contains { id in
-            guard let replacement = migrations[id] else { return false }
+            guard !id.hasSuffix("-latest"), let replacement = migrations[id] else { return false }
             return !ids.contains(replacement)
         }
     }

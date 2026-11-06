@@ -988,6 +988,9 @@ struct MistralSettingsView: View {
     @State private var isRefreshing = false
     @State private var refreshFailed = false
     @State private var hasApiKey = false
+    /// Changes with every Save and Remove, so a key check that finishes after
+    /// either cannot save its key again.
+    @State private var keyRequestId = UUID()
     private let bundle = Bundle(for: MistralAIPlugin.self)
 
     var body: some View {
@@ -1055,6 +1058,7 @@ struct MistralSettingsView: View {
 
                 if hasApiKey {
                     Button(String(localized: "Remove", bundle: bundle)) {
+                        keyRequestId = UUID()
                         apiKeyInput = ""
                         validationResult = nil
                         isValidating = false
@@ -1338,6 +1342,8 @@ struct MistralSettingsView: View {
 
         isValidating = true
         validationResult = nil
+        let requestId = UUID()
+        keyRequestId = requestId
 
         Task {
             // The model list doubles as the key check.
@@ -1355,6 +1361,7 @@ struct MistralSettingsView: View {
                 isValid = true
             }
             await MainActor.run {
+                guard keyRequestId == requestId else { return }
                 isValidating = false
                 validationResult = isValid
                 guard isValid else { return }

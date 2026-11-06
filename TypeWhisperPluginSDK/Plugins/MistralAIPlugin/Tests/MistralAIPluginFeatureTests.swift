@@ -80,6 +80,25 @@ final class MistralAIPluginFeatureTests: XCTestCase {
         XCTAssertEqual(catalog.resolvedTranscriptionModelId("voxtral-mini-latest"), "voxtral-mini-transcribe-3-0")
     }
 
+    func testANewModelThatTakesOverALatestAliasStaysInTheList() throws {
+        struct ModelsResponse: Decodable { let data: [MistralCatalogEntry] }
+        let json = #"""
+        {"data":[
+          {"id":"mistral-small-2603","name":"mistral-small-2603","description":"Mistral Small 4.","aliases":["magistral-small-latest"],"capabilities":{"completion_chat":true,"reasoning":true}},
+          {"id":"mistral-small-2701","name":"mistral-small-2701","description":"Mistral Small 4.1.","aliases":["mistral-small-latest"],"capabilities":{"completion_chat":true,"reasoning":true}},
+          {"id":"voxtral-mini-transcribe-3-0","name":"Voxtral Mini Transcribe 3.0","capabilities":{"audio_transcription":true},"audio_transcription_capabilities":{"modes":["offline"],"languages":["en"]}},
+          {"id":"voxtral-mini-transcribe-4-0","name":"Voxtral Mini Transcribe 4.0","aliases":["voxtral-mini-latest","voxtral-mini-transcribe-latest"],"capabilities":{"audio_transcription":true},"audio_transcription_capabilities":{"modes":["offline"],"languages":["en"]}}
+        ]}
+        """#
+        let entries = try JSONDecoder().decode(ModelsResponse.self, from: Data(json.utf8)).data
+        let catalog = MistralModelCatalog.from(entries: entries)
+
+        XCTAssertEqual(catalog.llmModels.map(\.id), ["mistral-small-2603", "mistral-small-2701"])
+        XCTAssertEqual(catalog.llmModels.last?.displayName, "Mistral Small 4.1")
+        XCTAssertEqual(catalog.resolvedLLMModelId("mistral-small-latest"), "mistral-small-2701")
+        XCTAssertEqual(catalog.transcriptionModels.map(\.id), ["voxtral-mini-transcribe-3-0", "voxtral-mini-transcribe-4-0"])
+    }
+
     func testModelListIsFetchedWithTheKey() async throws {
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
