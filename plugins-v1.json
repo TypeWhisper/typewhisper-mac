@@ -3654,6 +3654,7 @@
       "downloadCount": 105,
       "descriptions": {
         "de": "LLM-Anbieter und Cloud-Spracherkennung \u00fcber die Mistral AI API. Erfordert API-Key.",
+        "es": "Proveedor de LLM y transcripci\u00f3n de voz en la nube con la API de Mistral AI. Requiere una clave de API.",
         "ja": "Mistral AI API\u306b\u3088\u308bLLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3068\u30af\u30e9\u30a6\u30c9\u97f3\u58f0\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "categories": [
@@ -3665,6 +3666,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/mistral/",
       "iconURL": "https://www.typewhisper.com/brand-logos/mistral/logo.svg",
       "releases": [
+        {
+          "version": "1.3.0",
+          "minHostVersion": "1.8.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 512733,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-mistral-v1.3.0/MistralAIPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.7",
           "minHostVersion": "1.8.0",
