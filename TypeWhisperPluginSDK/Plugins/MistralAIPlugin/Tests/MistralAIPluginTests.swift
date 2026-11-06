@@ -239,8 +239,47 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertTrue(retryBody.contains("Content-Type: audio/wav"))
         XCTAssertTrue(retryBody.contains("name=\"model\"\r\n\r\nvoxtral-mini-transcribe-3-0\r\n"))
         XCTAssertTrue(retryBody.contains("name=\"language\"\r\n\r\nfr"))
-        XCTAssertTrue(retryBody.contains("name=\"return_language\"\r\n\r\ntrue"))
+        XCTAssertFalse(retryBody.contains("name=\"return_language\""))
         XCTAssertFalse(retryBody.contains("voxtral-mini-latest"))
+    }
+
+    func testReturnLanguageIsSentOnlyWhenNoLanguageIsPinned() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+
+        let url = "https://api.mistral.ai/v1/audio/transcriptions"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"hallo","language":"de"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"text":"hallo"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let detected = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+        let pinned = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: nil)
+
+        XCTAssertEqual(detected.text, "hallo")
+        XCTAssertEqual(detected.detectedLanguage, "de")
+        XCTAssertEqual(pinned.detectedLanguage, "de")
+
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        let unpinnedBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(unpinnedBody.contains("name=\"return_language\"\r\n\r\ntrue"))
+        XCTAssertFalse(unpinnedBody.contains("name=\"language\""))
+        let pinnedBody = String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self)
+        XCTAssertTrue(pinnedBody.contains("name=\"language\"\r\n\r\nde"))
+        XCTAssertFalse(pinnedBody.contains("name=\"return_language\""))
     }
 
     func testTranscriptionUsesDetectedLanguageFromResponse() async throws {

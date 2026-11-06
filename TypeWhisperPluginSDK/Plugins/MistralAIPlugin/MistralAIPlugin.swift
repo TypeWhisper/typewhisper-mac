@@ -439,14 +439,16 @@ struct MistralAPIClient {
                 body.append("--\(boundary)\r\n".data(using: .utf8)!)
                 body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
                 body.append("\(language)\r\n".data(using: .utf8)!)
+            } else {
+                // Transcribe 3 leaves `language` null unless asked. Request it
+                // only when nothing is pinned: sending `return_language` with a
+                // language is a 422, "Cannot do language prediction if language
+                // is already set". A pinned language stays the fallback below
+                // when the response omits one.
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append("Content-Disposition: form-data; name=\"return_language\"\r\n\r\n".data(using: .utf8)!)
+                body.append("true\r\n".data(using: .utf8)!)
             }
-
-            // Transcribe 3 leaves `language` null unless asked. Request it so an
-            // unpinned recording still reports the detected language. A pinned
-            // language remains the fallback when the response omits one.
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"return_language\"\r\n\r\n".data(using: .utf8)!)
-            body.append("true\r\n".data(using: .utf8)!)
 
             body.append("--\(boundary)--\r\n".data(using: .utf8)!)
             request.httpBody = body
@@ -489,8 +491,8 @@ struct MistralAPIClient {
                 throw MistralAPIError.apiError("Failed to parse transcription response")
             }
             // Prefer the language reported in the response. Transcribe 3 fills it
-            // only when `return_language` is set and the request did not pin one,
-            // so a pinned language stays the fallback.
+            // only when `return_language` is set, which is the unpinned request.
+            // A pinned language stays the fallback.
             let detectedLanguage = (json["language"] as? String)
                 .flatMap { $0.isEmpty ? nil : $0 }
                 ?? language
