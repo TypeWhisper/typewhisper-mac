@@ -1348,27 +1348,33 @@ struct MistralSettingsView: View {
         Task {
             // The model list doubles as the key check.
             let fetched: MistralModelCatalog?
-            let isValid: Bool
+            let isRejected: Bool
             do {
                 fetched = try await plugin.fetchCatalog(for: trimmed)
-                isValid = true
+                isRejected = false
             } catch PluginTranscriptionError.invalidApiKey {
                 fetched = nil
-                isValid = false
+                isRejected = true
             } catch {
-                // Not a rejected key: save it and keep the built-in list.
+                // Offline, rate-limited or an outage: the key is saved but not
+                // shown as valid, and the built-in model list stays.
                 fetched = nil
-                isValid = true
+                isRejected = false
             }
             await MainActor.run {
                 guard keyRequestId == requestId else { return }
                 isValidating = false
-                validationResult = isValid
-                guard isValid else { return }
+                if isRejected {
+                    validationResult = false
+                    return
+                }
+                validationResult = fetched == nil ? nil : true
                 plugin.setApiKey(trimmed)
                 hasApiKey = true
                 if let fetched {
                     showFetchedCatalog(fetched, fetchedWith: trimmed)
+                } else {
+                    refreshFailed = true
                 }
             }
         }
