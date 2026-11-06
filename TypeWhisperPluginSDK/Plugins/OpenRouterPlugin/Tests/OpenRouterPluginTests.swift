@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import TypeWhisperPluginSDK
 import XCTest
@@ -395,7 +396,7 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(inputAudio["format"] as? String, "m4a")
     }
 
-    func testMAITranscribe2SendsWavOnFirstRequest() async throws {
+    func testMAITranscribe2SendsFlacOnFirstRequest() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
         let plugin = OpenRouterPlugin()
         plugin.activate(host: host)
@@ -421,9 +422,43 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "microsoft/mai-transcribe-2")
         XCTAssertEqual(body["language"] as? String, "en")
         let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
-        XCTAssertEqual(inputAudio["format"] as? String, "wav")
+        XCTAssertEqual(inputAudio["format"] as? String, "flac")
         let encodedAudio = try XCTUnwrap(inputAudio["data"] as? String)
-        XCTAssertEqual(Data(base64Encoded: encodedAudio), PluginAudioUploadEncoder.wavUpload(from: audio).data)
+        let flacData = try XCTUnwrap(Data(base64Encoded: encodedAudio))
+        XCTAssertEqual(try Self.decodedFlacSamples(flacData), Self.int16Samples(audio.samples))
+    }
+
+    func testFlacUploadIsLosslessSixteenBitAndSmallerThanWav() throws {
+        // Longer than one 30 s encoder chunk, with a speech-like varying signal.
+        let samples = (0..<(16_000 * 35)).map { index -> Float in
+            let time = Float(index) / 16_000
+            return 0.4 * sinf(2 * .pi * 220 * time) * (0.5 + 0.5 * sinf(2 * .pi * 3 * time))
+        }
+
+        let upload = try OpenRouterPlugin.flacUpload(from: samples)
+
+        XCTAssertEqual(upload.format, "flac")
+        XCTAssertEqual(upload.data.prefix(4), Data("fLaC".utf8))
+        XCTAssertLessThan(upload.data.count, PluginWavEncoder.encode(samples).count)
+        XCTAssertEqual(try Self.decodedFlacSamples(upload.data), Self.int16Samples(samples))
+    }
+
+    func testTranscriptionRequestDoesNotEscapeSlashesInBase64Audio() throws {
+        let audioBytes = Data([0xFF, 0xFF, 0xFF])
+        XCTAssertEqual(audioBytes.base64EncodedString(), "////")
+
+        let request = try OpenRouterPlugin.makeTranscriptionRequest(
+            uploadFile: PluginAudioUploadFile(data: audioBytes, filename: "audio.flac", contentType: "audio/flac", format: "flac"),
+            apiKey: "openrouter-key",
+            modelId: "microsoft/mai-transcribe-2",
+            language: nil,
+            timeout: 120
+        )
+
+        let bodyText = try XCTUnwrap(request.httpBody.flatMap { String(data: $0, encoding: .utf8) })
+        XCTAssertTrue(bodyText.contains(#""data":"////""#))
+        XCTAssertTrue(bodyText.contains(#""model":"microsoft/mai-transcribe-2""#))
+        XCTAssertFalse(bodyText.contains(#"\/"#))
     }
 
     func testChunkLengthKeepsEveryRequestWithinTheUpstreamTimeout() {
@@ -510,7 +545,7 @@ final class OpenRouterPluginTests: XCTestCase {
         }
     }
 
-    func testMAITranscribe2SplitsLongRecordingsIntoWavChunks() async throws {
+    func testMAITranscribe2SplitsLongRecordingsIntoFlacChunks() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
         let plugin = OpenRouterPlugin()
         plugin.activate(host: host)
@@ -536,11 +571,12 @@ final class OpenRouterPluginTests: XCTestCase {
         let uploadedAudio = try requests.map { request -> Data in
             let body = try Self.jsonBody(from: request)
             let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
-            XCTAssertEqual(inputAudio["format"] as? String, "wav")
+            XCTAssertEqual(inputAudio["format"] as? String, "flac")
             return try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(inputAudio["data"] as? String)))
         }
-        // Each chunk carries only its own samples, as 16-bit WAV with a 44-byte header.
-        XCTAssertEqual(uploadedAudio.map(\.count).reduce(0, +), samples.count * 2 + 2 * 44)
+        // Each chunk carries only its own samples.
+        let uploadedSampleCounts = try uploadedAudio.map { try Self.decodedFlacSamples($0).count }
+        XCTAssertEqual(uploadedSampleCounts.reduce(0, +), samples.count)
         XCTAssertTrue(uploadedAudio.allSatisfy { $0.count < 25 * 1_024 * 1_024 })
     }
 
@@ -665,7 +701,12 @@ final class OpenRouterPluginTests: XCTestCase {
                 }
                 XCTAssertEqual(message, "HTTP 400: Provider returned 400")
             }
-            XCTAssertEqual(store.sessions.flatMap(\.requestedRequests).count, model == "microsoft/mai-transcribe-2" ? 1 : 2)
+            // M4A for other models and FLAC for MAI-Transcribe each get one WAV retry.
+            let formats = try store.sessions.flatMap(\.requestedRequests).map { request in
+                let inputAudio = try XCTUnwrap(Self.jsonBody(from: request)["input_audio"] as? [String: Any])
+                return inputAudio["format"] as? String
+            }
+            XCTAssertEqual(formats, [model == "microsoft/mai-transcribe-2" ? "flac" : "m4a", "wav"])
         }
     }
 
@@ -827,6 +868,25 @@ final class OpenRouterPluginTests: XCTestCase {
             try await plugin.process(systemPrompt: "System prompt", userText: "User text", model: nil)
         }
         return (reply, collector.reports)
+    }
+
+    private static func int16Samples(_ samples: [Float]) -> [Int16] {
+        samples.map { Int16(max(-1.0, min(1.0, $0)) * 32767) }
+    }
+
+    private static func decodedFlacSamples(_ data: Data) throws -> [Int16] {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("openrouter-upload-test-\(UUID().uuidString).flac")
+        try data.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: false)
+        XCTAssertEqual(file.fileFormat.sampleRate, 16_000)
+        XCTAssertEqual(file.fileFormat.channelCount, 1)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)))
+        try file.read(into: buffer)
+        let channel = try XCTUnwrap(buffer.int16ChannelData?[0])
+        return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
     }
 
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
@@ -25,7 +26,9 @@ enum MicrosoftAITranscriptStyle: String, CaseIterable, Sendable {
 
 enum MicrosoftAIEndpoint {
     static let apiVersion = "2025-10-15"
-    static let supportedMAIRegions = ["eastus", "northeurope", "southeastasia", "westus"]
+    /// Regions that list "Transcribe with MAI-Transcribe" in
+    /// https://learn.microsoft.com/azure/ai-services/speech-service/regions?tabs=llmspeech
+    static let supportedMAIRegions = ["centralindia", "eastus", "northeurope", "southeastasia", "westus", "westus2"]
 
     private static let allowedHostSuffixes = [
         ".cognitiveservices.azure.com",
@@ -207,7 +210,8 @@ struct MicrosoftAITranscriptionClient: Sendable {
 
     static let requestTimeout: TimeInterval = 180
     /// The REST reference allows 2 hours and 250 MB per request. An hour is
-    /// 115 MB as WAV, and recordings up to an hour keep one speaker numbering.
+    /// 115 MB as WAV and roughly half that as FLAC, and recordings up to an
+    /// hour keep one speaker numbering.
     static let maximumChunkDuration: TimeInterval = 60 * 60
 
     let endpoint: URL
@@ -244,9 +248,10 @@ struct MicrosoftAITranscriptionClient: Sendable {
             phraseList: dictionaryTerms.isEmpty ? nil : Definition.PhraseList(phrases: dictionaryTerms)
         )
         let definitionData = try JSONEncoder().encode(definition)
-        let upload = PluginAudioUploadEncoder.wavUpload(
-            from: PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
-        )
+        let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
+        // MAI-Transcribe and fast transcription both accept FLAC, about half the size of WAV.
+        let upload = (try? Self.flacUpload(from: uploadAudio.samples))
+            ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
         let boundary = "TypeWhisper-\(UUID().uuidString)"
 
         var request = URLRequest(url: url)
@@ -396,6 +401,71 @@ struct MicrosoftAITranscriptionClient: Sendable {
             return nil
         }
         return [normalized]
+    }
+
+    /// Same encoder as the Vercel AI Gateway plugin; plugins built for
+    /// TypeWhisper 1.8 cannot share it through the SDK.
+    static func flacUpload(from samples: [Float]) throws -> PluginAudioUploadFile {
+        guard !samples.isEmpty else {
+            throw PluginTranscriptionError.apiError("Cannot encode empty audio upload")
+        }
+
+        let sampleRate = Double(PluginAudioUploadEncoder.sampleRate)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("typewhisper-upload-\(UUID().uuidString).flac")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatFLAC,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1,
+        ]
+        // Writing Int16 buffers makes the encoder use a 16-bit source; Float32
+        // buffers produce 24-bit FLAC that is larger than the 16-bit WAV.
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw PluginTranscriptionError.apiError("Failed to create FLAC upload format")
+        }
+
+        do {
+            // The file is finalized when it goes out of scope, before it is read back.
+            let file = try AVAudioFile(
+                forWriting: url,
+                settings: settings,
+                commonFormat: .pcmFormatInt16,
+                interleaved: false
+            )
+
+            let chunkFrames = PluginAudioUploadEncoder.sampleRate * 30
+            var offset = 0
+            while offset < samples.count {
+                let count = min(chunkFrames, samples.count - offset)
+                guard let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format,
+                    frameCapacity: AVAudioFrameCount(count)
+                ), let channel = buffer.int16ChannelData?[0] else {
+                    throw PluginTranscriptionError.apiError("Failed to create FLAC upload buffer")
+                }
+                buffer.frameLength = AVAudioFrameCount(count)
+                for index in 0..<count {
+                    let clamped = max(-1.0, min(1.0, samples[offset + index]))
+                    channel[index] = Int16(clamped * 32767)
+                }
+                try file.write(from: buffer)
+                offset += count
+            }
+        }
+
+        return PluginAudioUploadFile(
+            data: try Data(contentsOf: url),
+            filename: "audio.flac",
+            contentType: "audio/flac",
+            format: "flac"
+        )
     }
 
     static func multipartBody(
