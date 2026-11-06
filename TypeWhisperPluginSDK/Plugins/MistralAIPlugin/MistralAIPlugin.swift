@@ -290,10 +290,8 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
         lock.withLock {
             _selectedModelId = valueToSave
         }
-        if let valueToSave {
-            host?.setUserDefault(valueToSave, forKey: "selectedModel")
-        } else {
-            host?.setUserDefault(nil, forKey: "selectedModel")
+        if let host {
+            Self.storeModel(valueToSave, forKey: "selectedModel", host: host)
         }
         host?.notifyCapabilitiesChanged()
     }
@@ -307,11 +305,9 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     }
 
     private static func storeModel(_ modelId: String?, forKey key: String, host: HostServices) {
-        if let modelId {
-            host.setUserDefault(modelId, forKey: key)
-        } else {
-            host.setUserDefault(nil, forKey: key)
-        }
+        // `String?` passed to `Any?` boxes a nil, so the cast is what clears the
+        // default when the resolved id is empty.
+        host.setUserDefault(modelId as Any?, forKey: key)
     }
     
     public var supportsTranslation: Bool { false }

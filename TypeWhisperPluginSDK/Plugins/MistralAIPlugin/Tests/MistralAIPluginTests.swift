@@ -127,6 +127,10 @@ final class MistralAIPluginTests: XCTestCase {
         plugin.selectModel("custom-transcription-model")
         XCTAssertEqual(plugin.selectedModelId, "custom-transcription-model")
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "custom-transcription-model")
+
+        plugin.selectModel("")
+        XCTAssertNil(plugin.selectedModelId)
+        XCTAssertNil(host.userDefault(forKey: "selectedModel"))
     }
 
     func testMistralAIProviderContractAndIdentity() throws {
@@ -191,6 +195,10 @@ final class MistralAIPluginTests: XCTestCase {
         plugin.selectLLMModel("custom-llm")
         XCTAssertEqual(plugin.selectedLLMModelId, "custom-llm")
         XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "custom-llm")
+
+        plugin.selectLLMModel("   ")
+        XCTAssertNil(plugin.selectedLLMModelId)
+        XCTAssertNil(host.userDefault(forKey: "selectedLLMModel"))
 
         for unknown in ["mistral-large-custom", "pixtral-large-9999"] {
             let unknownHost = try PluginTestHostServices(
