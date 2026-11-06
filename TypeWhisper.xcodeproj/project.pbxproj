@@ -100,6 +100,8 @@
 		D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */; };
 		F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000141 /* GeminiPlugin.swift */; };
 		4D49535452414C0000000001 /* MistralAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000002 /* MistralAIPlugin.swift */; };
+		4D49535452414C0000000012 /* MistralModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000013 /* MistralModelCatalog.swift */; };
+		4D49535452414C0000000014 /* MistralLiveTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000015 /* MistralLiveTranscriptionSession.swift */; };
 		4D49535452414C0000000010 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000003 /* manifest.json */; };
 		4D49535452414C0000000011 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000004 /* Localizable.xcstrings */; };
 		4D49535452414C000000000B /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4D49535452414C000000000C /* TypeWhisperPluginSDK */; };
@@ -1136,6 +1138,8 @@
 		BB00000000000000000142 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000143 /* GeminiPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GeminiPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		4D49535452414C0000000002 /* MistralAIPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistralAIPlugin.swift; sourceTree = "<group>"; };
+		4D49535452414C0000000013 /* MistralModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistralModelCatalog.swift; sourceTree = "<group>"; };
+		4D49535452414C0000000015 /* MistralLiveTranscriptionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistralLiveTranscriptionSession.swift; sourceTree = "<group>"; };
 		4D49535452414C0000000003 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		4D49535452414C0000000004 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		4D49535452414C0000000005 /* MistralAIPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MistralAIPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2598,6 +2602,8 @@
 			isa = PBXGroup;
 			children = (
 				4D49535452414C0000000002 /* MistralAIPlugin.swift */,
+				4D49535452414C0000000013 /* MistralModelCatalog.swift */,
+				4D49535452414C0000000015 /* MistralLiveTranscriptionSession.swift */,
 				4D49535452414C0000000003 /* manifest.json */,
 				4D49535452414C0000000004 /* Localizable.xcstrings */,
 			);
@@ -5871,6 +5877,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D49535452414C0000000001 /* MistralAIPlugin.swift in Sources */,
+				4D49535452414C0000000012 /* MistralModelCatalog.swift in Sources */,
+				4D49535452414C0000000014 /* MistralLiveTranscriptionSession.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

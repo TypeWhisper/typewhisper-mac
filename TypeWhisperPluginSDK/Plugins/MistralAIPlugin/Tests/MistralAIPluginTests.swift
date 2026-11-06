@@ -16,6 +16,11 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertTrue(plugin is any TranscriptionEnginePlugin)
         XCTAssertTrue(plugin is any LLMProviderIdentityProviding)
         XCTAssertTrue(plugin is any LLMModelSelectable)
+        XCTAssertTrue(plugin is any LLMTemperatureAndEffortControllableProvider)
+        XCTAssertTrue(plugin is any StructuredTranscriptionEnginePlugin)
+        XCTAssertTrue(plugin is any DictionaryTermsBudgetProviding)
+        XCTAssertTrue(plugin is any LiveTranscriptionModelSupportProviding)
+        XCTAssertTrue(plugin is any TranscriptPreviewFallbackPolicyProviding)
     }
 
     func testMistralAIModelsAreEmptyWithoutAPIKey() {
@@ -316,7 +321,7 @@ final class MistralAIPluginTests: XCTestCase {
     }
 
     func testMistralAIConformsToTemperatureControllableProvider() {
-        let plugin = MistralAIPlugin()
+        let plugin: Any = MistralAIPlugin()
         XCTAssertTrue(plugin is any LLMTemperatureControllableProvider)
     }
 
@@ -554,14 +559,15 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertFalse(body.contains("input_audio"))
     }
 
-    func testSupportedLanguagesStayThePreviouslyOfferedSet() {
+    func testSupportedLanguagesAreTheFiftyEightOfTranscribe3() {
         let plugin = MistralAIPlugin()
         // A non-empty list is what makes the app expose a language picker, so the
-        // user can force a language instead of relying on auto-detection. Assert
-        // the exact set so an extra code can't silently slip into the picker.
-        // Transcribe 3 documents 50 languages, but the languages page does not
-        // list the codes, so the picker keeps the eight it already offered.
-        XCTAssertEqual(Set(plugin.supportedLanguages), ["en", "fr", "de", "es", "it", "pt", "nl", "hi"])
+        // user can force a language instead of relying on auto-detection. The
+        // model list reports the codes per model; these are Transcribe 3's.
+        XCTAssertEqual(plugin.supportedLanguages.count, 58)
+        XCTAssertEqual(Set(plugin.supportedLanguages).count, 58)
+        XCTAssertTrue(Set(["en", "fr", "de", "es", "it", "pt", "nl", "hi", "ja", "uk", "mt"]).isSubset(of: Set(plugin.supportedLanguages)))
+        XCTAssertFalse(plugin.supportedLanguages.contains("yue"))
     }
 
     func testVoxtralSmallSendsTheLanguageCodeToTheTranscriptionEndpoint() async throws {
