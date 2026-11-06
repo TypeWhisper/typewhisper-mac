@@ -307,14 +307,21 @@ final class MistralAIPluginFeatureTests: XCTestCase {
         plugin.activate(host: host)
         let store = Self.transcriptionStore(answers: [#"{"text":"Saoirse Ronan spielte."}"#])
         let progress = LiveProgressRecorder()
+        let bothDeltasShown = expectation(description: "the preview shows both deltas")
 
         let session = try await plugin.createLiveTranscriptionSession(
             language: "de",
             translate: false,
             prompt: "Saoirse Ronan, TypeWhisper",
-            onProgress: { progress.append($0); return true }
+            onProgress: { text in
+                progress.append(text)
+                if text == "Servus Ronan" { bothDeltasShown.fulfill() }
+                return true
+            }
         )
         try await session.appendAudio(samples: [Float](repeating: 0.1, count: 4_000))
+        // The deltas arrive on the receive task; finishing first could close the socket before them.
+        await fulfillment(of: [bothDeltasShown], timeout: 5)
         let result = try await session.finish()
 
         XCTAssertEqual(result.text, "Saoirse Ronan spielte.")
