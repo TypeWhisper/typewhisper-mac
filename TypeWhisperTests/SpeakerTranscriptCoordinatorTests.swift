@@ -1038,6 +1038,28 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         XCTAssertEqual(ranges[0].upperBound, 3.1, accuracy: 0.06)
     }
 
+    /// Calls on loudspeakers come back on the microphone as loud as the
+    /// user, and a third of a second after the system audio has them (#1875).
+    func testDelayedLoudspeakerEchoIsNotOwnSpeech() {
+        // Remote words of uneven length, so only the true delay lines the tracks up.
+        var words: [ClosedRange<TimeInterval>] = []
+        var time: TimeInterval = 4
+        for (index, length) in [0.21, 0.35, 0.18, 0.42, 0.27, 0.5, 0.24, 0.31].enumerated() {
+            words.append(time...(time + length))
+            time += length + [0.12, 0.2, 0.09, 0.31, 0.15][index % 5]
+        }
+        let system = track(duration: 10, speech: words, level: 0.3)
+        var microphone = track(duration: 10, speech: [1...3], level: 0.05)
+        let echo = track(duration: 10, speech: words.map { ($0.lowerBound + 0.33)...($0.upperBound + 0.33) }, level: 0.05, noise: 0)
+        for index in microphone.indices { microphone[index] += echo[index] }
+
+        let ranges = SpeakerChannelAttribution.ownSpeechRanges(microphone: microphone, system: system)
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual(ranges.first?.lowerBound ?? -1, 0.9, accuracy: 0.06)
+        XCTAssertEqual(ranges.first?.upperBound ?? -1, 3.1, accuracy: 0.06)
+    }
+
     func testSilentMicrophoneAndShortBlipsGiveNoOwnSpeech() {
         let system = track(duration: 5, speech: [1...4], level: 0.3)
 
