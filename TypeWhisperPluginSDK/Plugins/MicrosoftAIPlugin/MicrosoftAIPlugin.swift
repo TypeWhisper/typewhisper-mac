@@ -1010,7 +1010,9 @@ private struct MicrosoftAISettingsView: View {
 
             Divider()
 
-            if isConfigured {
+            // A stored backup key keeps the section, so it can still be removed
+            // after the first connection was.
+            if isConfigured || hasStoredBackupAPIKey {
                 backupEndpointSection
 
                 Divider()
