@@ -121,7 +121,7 @@ struct MicrosoftAIModelCatalogResponse: Decodable, Sendable {
 }
 
 /// Azure turned the request away for capacity in the endpoint's region:
-/// HTTP 429, a 5xx status, or no answer in time. The plugin then sends the
+/// HTTP 429, a 5xx status, or no answer in time (408 or a timeout). The plugin then sends the
 /// request to the backup endpoint, if one is set, and otherwise surfaces
 /// `error`.
 struct MicrosoftAIRegionRefusal: Error {
@@ -334,7 +334,8 @@ struct MicrosoftAITranscriptionClient: Sendable {
             let error = PluginTranscriptionError.apiError(
                 "Microsoft AI transcription failed (HTTP \(httpResponse.statusCode)): \(summary)"
             )
-            if (500...599).contains(httpResponse.statusCode) {
+            // Without a backup, the shared session already retried a 408.
+            if httpResponse.statusCode == 408 || (500...599).contains(httpResponse.statusCode) {
                 throw MicrosoftAIRegionRefusal(error: error)
             }
             throw error
@@ -345,8 +346,8 @@ struct MicrosoftAITranscriptionClient: Sendable {
         let resourceTimeout = PluginHTTPClient.resourceTimeout(forUploadOf: request.httpBody?.count ?? 0)
         // With a backup endpoint, requests that fit the shared session skip
         // its retries against the same region (once after a 429's
-        // Retry-After, a ladder for 52x), so a refusal reaches the backup at
-        // once. Longer uploads need the dedicated session, which keeps them.
+        // Retry-After, a ladder for 408 and 52x), so a refusal reaches the
+        // backup at once. Longer uploads need the dedicated session, which keeps them.
         if hasBackupEndpoint,
            resourceTimeout <= PluginHTTPClient.resourceTimeout(forUploadOf: 0) {
             return try await PluginHTTPClient.data(for: request, retry: .disabled)

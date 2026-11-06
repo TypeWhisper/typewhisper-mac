@@ -123,6 +123,7 @@ final class MicrosoftAIPluginTests: XCTestCase {
                 headerFields: ["Retry-After": "1"]
             )!)),
             ("503", .success(Data(#"{"message":"Service unavailable"}"#.utf8), Self.httpResponse(statusCode: 503))),
+            ("408", .success(Data(), Self.httpResponse(statusCode: 408))),
             ("timeout", .failure(URLError(.timedOut))),
         ]
 
