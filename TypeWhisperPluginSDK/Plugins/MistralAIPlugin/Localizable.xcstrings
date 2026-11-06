@@ -582,6 +582,650 @@
           }
         }
       }
+    },
+    "After recording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach der Aufnahme"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tras la grabación"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音後"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音后"
+          }
+        }
+      }
+    },
+    "After recording – $0.21/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach der Aufnahme – 0,21 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tras la grabación – 0,21 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音後 – $0.21/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音后 – $0.21/小时"
+          }
+        }
+      }
+    },
+    "After recording – $0.24/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach der Aufnahme – 0,24 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tras la grabación – 0,24 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音後 – $0.24/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音后 – $0.24/小时"
+          }
+        }
+      }
+    },
+    "Built-in model list. Refresh loads the models of your Mistral account.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingebaute Modellliste. „Aktualisieren“ lädt die Modelle deines Mistral-Kontos."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista de modelos integrada. «Actualizar» carga los modelos de tu cuenta de Mistral."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "組み込みのモデル一覧です。「更新」でMistralアカウントのモデルを読み込みます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内置模型列表。“刷新”会加载你的 Mistral 账户中的模型。"
+          }
+        }
+      }
+    },
+    "Could not load the models of your Mistral account. The built-in list stays.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Modelle deines Mistral-Kontos ließen sich nicht laden. Die eingebaute Liste bleibt."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron cargar los modelos de tu cuenta de Mistral. Se mantiene la lista integrada."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistralアカウントのモデルを読み込めませんでした。組み込みの一覧をそのまま使います。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加载你的 Mistral 账户中的模型，将继续使用内置列表。"
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hoch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alto"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
+        }
+      }
+    },
+    "Low": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niedrig"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bajo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
+          }
+        }
+      }
+    },
+    "Marks who is speaking, for recordings with several people. Transcripts then start each speaker's part with a label.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kennzeichnet, wer spricht, für Aufnahmen mit mehreren Personen. Transkripte beginnen dann jeden Abschnitt mit dem Namen des Sprechers."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indica quién habla, para grabaciones con varias personas. Las transcripciones empiezan entonces cada intervención con una etiqueta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複数人の録音で、誰が話しているかを示します。文字起こしでは各話者の部分の先頭にラベルが付きます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标记谁在说话，适用于多人录音。转录稿会在每位说话人的内容前加上标签。"
+          }
+        }
+      }
+    },
+    "Medium": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mittel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medio"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
+          }
+        }
+      }
+    },
+    "Mistral list prices in November 2026, per hour of audio.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistral-Listenpreise im November 2026, pro Stunde Audio."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Precios de lista de Mistral en noviembre de 2026, por hora de audio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2026年11月時点のMistralの定価（音声1時間あたり）。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistral 2026 年 11 月的标价，按每小时音频计。"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivado"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        }
+      }
+    },
+    "Reasoning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reasoning"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Razonamiento"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推論"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推理"
+          }
+        }
+      }
+    },
+    "Refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新"
+          }
+        }
+      }
+    },
+    "Refresh models": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelle aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルを更新"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新模型"
+          }
+        }
+      }
+    },
+    "Sends the recording to the transcription model above when you stop; the text is usually ready in under a second. No live preview from Mistral.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schickt die Aufnahme beim Stoppen an das Transkriptionsmodell oben; der Text ist meist in unter einer Sekunde da. Keine Live-Vorschau von Mistral."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envía la grabación al modelo de transcripción de arriba al detenerla; el texto suele estar listo en menos de un segundo. Sin vista previa en directo de Mistral."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止すると録音を上の文字起こしモデルに送ります。テキストは通常1秒以内に届きます。Mistralによるライブプレビューはありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止时将录音发送到上方的转录模型；文本通常在一秒内就绪。没有来自 Mistral 的实时预览。"
+          }
+        }
+      }
+    },
+    "Speaker labels": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecherkennzeichnung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etiquetas de hablante"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者ラベル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话人标签"
+          }
+        }
+      }
+    },
+    "The lowest level is the fastest. Higher levels think before they answer, which takes several seconds longer and costs more tokens. Workflows can pick their own level.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die niedrigste Stufe ist am schnellsten. Höhere Stufen denken vor der Antwort nach, das dauert einige Sekunden länger und kostet mehr Tokens. Workflows können ihre eigene Stufe wählen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El nivel más bajo es el más rápido. Los niveles más altos razonan antes de responder, lo que tarda varios segundos más y gasta más tokens. Los flujos de trabajo pueden elegir su propio nivel."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最も低いレベルが最速です。高いレベルでは回答前に推論するため、数秒長くかかり、トークンも多く消費します。ワークフローごとに独自のレベルを選べます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最低级别最快。更高级别会在回答前进行推理，需要多花几秒并消耗更多 token。工作流可以选择自己的级别。"
+          }
+        }
+      }
+    },
+    "Transcription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripción"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录"
+          }
+        }
+      }
+    },
+    "With speaker labels on, dictations are transcribed after the recording instead of streaming.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Sprecherkennzeichnung werden Diktate nach der Aufnahme transkribiert statt gestreamt."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con las etiquetas de hablante activadas, los dictados se transcriben tras la grabación en lugar de transmitirse."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者ラベルがオンのとき、音声入力はストリーミングせず録音後に文字起こしします。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启说话人标签后，听写会在录音结束后转录，而不是流式传输。"
+          }
+        }
+      }
+    },
+    "Live": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        }
+      }
+    },
+    "Live – $0.69/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,69 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,69 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.69/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.69/小时"
+          }
+        }
+      }
+    },
+    "Live – $0.72/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,72 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,72 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.72/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.72/小时"
+          }
+        }
+      }
+    },
+    "Streams dictations that show a live preview to Voxtral Realtime, so the preview shows Mistral's text while you speak. When you stop, the transcription model above writes the final text, which is more accurate and usually ready within a second. Both are billed. Recordings, files and dictations without a preview use only the transcription model.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streamt Diktate mit Live-Vorschau an Voxtral Realtime, sodass die Vorschau schon beim Sprechen Mistrals Text zeigt. Beim Stoppen schreibt das Transkriptionsmodell oben den fertigen Text, der genauer ist und meist in unter einer Sekunde dasteht. Beides wird abgerechnet. Aufnahmen, Dateien und Diktate ohne Vorschau nutzen nur das Transkriptionsmodell."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transmite a Voxtral Realtime los dictados que muestran vista previa en directo, así la vista previa muestra el texto de Mistral mientras hablas. Al detener, el modelo de transcripción de arriba escribe el texto final, que es más preciso y suele estar listo en menos de un segundo. Se facturan ambos. Las grabaciones, los archivos y los dictados sin vista previa usan solo el modelo de transcripción."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブプレビューを表示する音声入力をVoxtral Realtimeにストリーミングし、話している間にMistralのテキストをプレビューに表示します。停止すると上の文字起こしモデルが最終テキストを作成します。こちらの方が正確で、通常1秒以内に届きます。両方とも課金されます。録音、ファイル、プレビューのない音声入力には文字起こしモデルだけを使います。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将显示实时预览的听写流式发送到 Voxtral Realtime，这样说话时预览就会显示 Mistral 的文本。停止后，上方的转录模型会生成最终文本，它更准确，通常一秒内就绪。两者都会计费。录音、文件以及没有预览的听写只使用转录模型。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
