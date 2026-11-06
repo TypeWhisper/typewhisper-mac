@@ -341,6 +341,7 @@ final class MistralAIPluginTests: XCTestCase {
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["model"] as? String, "mistral-small-2603")
         XCTAssertEqual(json["temperature"] as? Double, 0.7)
+        XCTAssertNil(json["reasoning_effort"])
     }
 
     func testExplicitRetiredLLMModelIsSentAsItsReplacement() async throws {
@@ -363,6 +364,7 @@ final class MistralAIPluginTests: XCTestCase {
         let body = try XCTUnwrap(store.sessions[0].requestedRequests.first?.httpBody)
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["model"] as? String, "ministral-14b-2512")
+        XCTAssertNil(json["reasoning_effort"])
     }
 
     func testProviderDefaultTemperatureOmitsField() async throws {
@@ -390,6 +392,73 @@ final class MistralAIPluginTests: XCTestCase {
         let body = try XCTUnwrap(requests[0].httpBody)
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertNil(json["temperature"])
+        XCTAssertNil(json["reasoning_effort"])
+    }
+
+    func testLarge4JoinsTextChunksAndRequestsLowReasoning() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+        plugin.selectLLMModel("mistral-large-latest")
+
+        let chunked = #"""
+        {"choices":[{"message":{"content":[
+          {"type":"thinking","thinking":[{"type":"text","text":"draft"}]},
+          {"type":"text","text":"Ich habe "},
+          {"type":"text","text":"gestern"}
+        ]}}]}
+        """#
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(chunked.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"plain text"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let joined = try await plugin.process(systemPrompt: "s", userText: "u", model: nil)
+        XCTAssertEqual(joined, "Ich habe gestern")
+        let plain = try await plugin.process(systemPrompt: "s", userText: "u", model: "mistral-large-4")
+        XCTAssertEqual(plain, "plain text")
+
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        for request in requests {
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["model"] as? String, "mistral-large-4")
+            XCTAssertEqual(json["reasoning_effort"] as? String, "low")
+        }
+    }
+
+    func testLarge4ThinkingWithoutTextFailsToParse() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+        plugin.selectLLMModel("mistral-large-4")
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":[{"type":"thinking","thinking":"hidden"}]}}]}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        do {
+            _ = try await plugin.process(systemPrompt: "s", userText: "u", model: nil)
+            XCTFail("A thinking chunk is not the reply")
+        } catch let error as MistralAPIError {
+            XCTAssertEqual(error.errorDescription, "API Error: Failed to parse response text")
+        }
     }
 
     func testTranscriptionSplitsLongRecordingsIntoTenMinuteRequests() async throws {

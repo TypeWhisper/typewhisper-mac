@@ -375,6 +375,13 @@ struct MistralAPIClient {
         if let temperature {
             body["temperature"] = temperature
         }
+        if model == MistralAIPlugin.largeLLMModelId {
+            // Large 4 returns content as thinking and text chunks and rejects
+            // `reasoning_effort` of `none`. `low` is the smallest value it
+            // accepts. Ministral 3 rejects the field, and Small 4 is documented
+            // for `none` and `high`, so every other model omits it.
+            body["reasoning_effort"] = "low"
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -403,10 +410,26 @@ struct MistralAPIClient {
               let choices = json["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
               let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let content = chatContentText(from: message["content"]) else {
             throw MistralAPIError.apiError("Failed to parse response text")
         }
         return content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+    }
+
+    /// Small and Ministral return `content` as a string. Large 4 returns a list
+    /// of chunks, `thinking` then one or more `text` chunks, including when
+    /// `reasoning_effort` is `low`. The reply is those text chunks joined.
+    private func chatContentText(from content: Any?) -> String? {
+        if let text = content as? String {
+            return text
+        }
+        guard let chunks = content as? [[String: Any]] else { return nil }
+        let texts = chunks.compactMap { chunk -> String? in
+            guard chunk["type"] as? String == "text" else { return nil }
+            return chunk["text"] as? String
+        }
+        guard !texts.isEmpty else { return nil }
+        return texts.joined()
     }
     
     // MARK: - Transcriptions (STT)
