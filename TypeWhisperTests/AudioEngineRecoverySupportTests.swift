@@ -3,6 +3,7 @@ import AudioUnit
 @preconcurrency import AVFoundation
 import Combine
 import XCTest
+import os
 @testable import TypeWhisper
 
 private final class TestClock: @unchecked Sendable {
@@ -5577,6 +5578,253 @@ final class AudioRecorderServiceInputOnlyCaptureTests: XCTestCase {
 
         let micFile = try AVAudioFile(forReading: micURL)
         XCTAssertEqual(micFile.length, AVAudioFramePosition(frameCounts.reduce(0) { $0 + Int($1) }))
+    }
+
+    /// #1863: a microphone that stops delivering is restarted, and the time it delivered nothing
+    /// stays in the mic track as silence, so the track keeps in step with the recording.
+    func testStalledMicrophoneIsRestartedAndItsGapIsSilent() async throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let factory = HALBackedAudioInputCaptureFactory(format: format)
+        let recordingsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AudioRecorderServiceInputOnlyCaptureTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: recordingsDirectory)
+        }
+        let service = AudioRecorderService(
+            inputActivationGuard: FakeAudioInputDeviceActivator(),
+            inputCaptureFactory: factory
+        )
+        service.recordingsDirectoryOverride = recordingsDirectory
+        service.hasMicrophonePermissionOverride = true
+        service.runsMicrophoneWatchdogTimer = false
+        let uptime = OSAllocatedUnfairLock<UInt64>(initialState: 1_000_000_000)
+        service.microphoneWatchdogUptime = { uptime.withLock { $0 } }
+
+        _ = try await service.startRecording(
+            micEnabled: true,
+            systemAudioEnabled: false,
+            format: .wav,
+            microphoneSelection: ResolvedRecordingInputSelection(
+                deviceUID: "usb-mic",
+                deviceID: AudioDeviceID(950),
+                deviceName: "USB Mic",
+                usesBluetoothTransport: false
+            )
+        )
+        factory.operations.renderDataHook = { buffers, frameCount in
+            fillRenderedChannels(buffers, with: [[Float](repeating: 0.25, count: Int(frameCount))])
+        }
+        for _ in 0..<4 {
+            XCTAssertEqual(factory.operations.invokeStoredCallback(frameCount: 480), noErr)
+        }
+
+        // Periodic delivery is disabled, so the capture looks as if it never delivered.
+        uptime.withLock { $0 += 7_000_000_000 }
+        service.testingCheckMicrophoneHealth()
+        XCTAssertEqual(factory.sessionCount, 2)
+
+        // The restarted capture's audio arrives two seconds after the first capture's.
+        uptime.withLock { $0 += 2_000_000_000 }
+        for _ in 0..<4 {
+            XCTAssertEqual(factory.operations.invokeStoredCallback(frameCount: 480), noErr)
+        }
+        let stopped = await service.stopCapture()
+        let micURL = try XCTUnwrap(stopped.micTempURL)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: micURL)
+        }
+
+        let gapFrames = 2 * 48_000 - 480
+        let micFile = try AVAudioFile(forReading: micURL)
+        XCTAssertEqual(micFile.length, AVAudioFramePosition(1_920 + gapFrames + 1_920))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(
+            pcmFormat: micFile.processingFormat,
+            frameCapacity: AVAudioFrameCount(micFile.length)
+        ))
+        try micFile.read(into: buffer)
+        let samples = try XCTUnwrap(buffer.floatChannelData?[0])
+        XCTAssertEqual(samples[1_919], 0.25, accuracy: 0.001)
+        XCTAssertEqual(samples[1_920], 0)
+        XCTAssertEqual(samples[1_920 + gapFrames - 1], 0)
+        XCTAssertEqual(samples[1_920 + gapFrames], 0.25, accuracy: 0.001)
+
+        let incident = await MainActor.run { service.microphoneIncident }
+        XCTAssertEqual(incident?.cause, .noAudio)
+        XCTAssertEqual(incident?.stoppedAt, 0)
+        XCTAssertEqual(incident?.resumedAt ?? 0, Double(1_920 + gapFrames) / 48_000, accuracy: 0.001)
+    }
+
+    /// #1863: a capture that froze into a looping buffer is restarted, and the repeated audio is
+    /// silent in the mic track and in the audio the transcript is made from.
+    func testFrozenMicrophoneLoopIsRestartedAndItsRepeatsAreSilent() async throws {
+        let sampleRate = 48_000
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Double(sampleRate),
+            channels: 1,
+            interleaved: false
+        ))
+        let factory = DirectAudioInputCaptureFactory(format: format)
+        let recordingsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AudioRecorderServiceInputOnlyCaptureTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: recordingsDirectory)
+        }
+        let service = AudioRecorderService(
+            inputActivationGuard: FakeAudioInputDeviceActivator(),
+            inputCaptureFactory: factory
+        )
+        service.recordingsDirectoryOverride = recordingsDirectory
+        service.hasMicrophonePermissionOverride = true
+        service.runsMicrophoneWatchdogTimer = false
+        let uptime = OSAllocatedUnfairLock<UInt64>(initialState: 1_000_000_000)
+        service.microphoneWatchdogUptime = { uptime.withLock { $0 } }
+        func deliver(_ samples: [Float]) {
+            // Each 100 ms buffer arrives when its audio ends, as from a real input.
+            for start in stride(from: 0, to: samples.count, by: sampleRate / 10) {
+                let chunk = Array(samples[start..<min(start + sampleRate / 10, samples.count)])
+                uptime.withLock { $0 += UInt64(chunk.count) * 1_000_000_000 / UInt64(sampleRate) }
+                factory.deliver(chunk)
+            }
+        }
+
+        _ = try await service.startRecording(
+            micEnabled: true,
+            systemAudioEnabled: false,
+            format: .wav,
+            microphoneSelection: ResolvedRecordingInputSelection(
+                deviceUID: "usb-mic",
+                deviceID: AudioDeviceID(950),
+                deviceName: "USB Mic",
+                usesBluetoothTransport: false
+            )
+        )
+        var noise = SpeechLikeNoise(seed: 0x1863, sampleRate: Double(sampleRate))
+        let speech = (0..<(10 * sampleRate)).map { _ in noise.next() }
+        deliver(speech)
+        let loop = Array(speech.suffix(17_760))
+        deliver((0..<(20 * sampleRate)).map { loop[$0 % loop.count] })
+
+        service.testingCheckMicrophoneHealth()
+        XCTAssertEqual(factory.sessionCount, 2)
+
+        // The restarted capture delivers new audio after half a second.
+        uptime.withLock { $0 += 500_000_000 }
+        deliver((0..<sampleRate).map { _ in noise.next() })
+        let stopped = await service.stopCapture(includeTranscriptionSamples: true)
+        let micURL = try XCTUnwrap(stopped.micTempURL)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: micURL)
+        }
+
+        // The temp file still holds the repeats; the finished recording silences these frames.
+        XCTAssertEqual(stopped.micSilencedFrameRanges, [AVAudioFramePosition(10 * sampleRate)..<AVAudioFramePosition(30 * sampleRate)])
+        let micFile = try AVAudioFile(forReading: micURL)
+        XCTAssertEqual(micFile.length, AVAudioFramePosition(30 * sampleRate + sampleRate / 2 + sampleRate))
+
+        // At 16 kHz the repeats start at 160 000. They stay silent up to the restart, and so does
+        // the half second before the restarted capture's audio (the converter holds back a few
+        // samples at the end of the frozen stretch).
+        let transcription = stopped.transcriptionSamples
+        XCTAssertGreaterThan(transcription[150_000..<160_000].map(abs).max() ?? 0, 0.001)
+        let firstSoundAfterRepeats = try XCTUnwrap(transcription[160_000...].firstIndex { $0 != 0 })
+        XCTAssertGreaterThan(firstSoundAfterRepeats, 30 * 16_000 + 8_000 - 1_000)
+        XCTAssertGreaterThan(transcription[firstSoundAfterRepeats...].map(abs).max() ?? 0, 0.001)
+
+        let incident = await MainActor.run { service.microphoneIncident }
+        XCTAssertEqual(incident?.cause, .repeatedAudio)
+        XCTAssertEqual(incident?.stoppedAt ?? 0, 10, accuracy: 0.01)
+        XCTAssertEqual(incident?.resumedAt ?? 0, 30.5, accuracy: 0.01)
+    }
+}
+
+/// Speech-like noise: bursts and pauses that never repeat.
+private struct SpeechLikeNoise {
+    private var state: UInt64
+    private var index = 0
+    private let sampleRate: Double
+
+    init(seed: UInt64, sampleRate: Double) {
+        self.state = seed
+        self.sampleRate = sampleRate
+    }
+
+    mutating func next() -> Float {
+        state ^= state << 13
+        state ^= state >> 7
+        state ^= state << 17
+        let white = Float(state >> 40) / Float(1 << 23) - 1
+        let time = Double(index) / sampleRate
+        index += 1
+        let envelope = 0.15 * abs(sin(2 * .pi * 2.3 * time) * sin(2 * .pi * 0.7 * time)) + 0.000_5
+        return white * Float(envelope)
+    }
+}
+
+/// Hands the test's buffers straight to the newest input-only capture.
+private final class DirectAudioInputCaptureFactory: AudioInputCaptureFactory, @unchecked Sendable {
+    private final class Session: AudioInputCaptureSession {
+        func start() throws {}
+        func stop() {}
+    }
+
+    let format: AVAudioFormat
+    private let lock = NSLock()
+    private var deliveries: [(AVAudioPCMBuffer) -> Void] = []
+
+    var sessionCount: Int { lock.withLock { deliveries.count } }
+
+    init(format: AVAudioFormat) {
+        self.format = format
+    }
+
+    func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat {
+        format
+    }
+
+    func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws {}
+
+    func prepareInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession {
+        lock.withLock { deliveries.append(onBuffer) }
+        return Session()
+    }
+
+    func startInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession {
+        try prepareInputOnlyCapture(
+            deviceID: deviceID,
+            label: label,
+            bufferSize: bufferSize,
+            deliveryQueue: deliveryQueue,
+            onBuffer: onBuffer
+        )
+    }
+
+    func deliver(_ samples: [Float]) {
+        guard let onBuffer = lock.withLock({ deliveries.last }),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)),
+              let channel = buffer.floatChannelData?[0] else { return }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        for (index, sample) in samples.enumerated() {
+            channel[index] = sample
+        }
+        onBuffer(buffer)
     }
 }
 
