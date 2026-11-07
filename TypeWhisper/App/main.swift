@@ -5,6 +5,8 @@ import Foundation
 TestHostIsolation.isolateDefaultsIfRunningTests()
 ScreenshotPreferencesIsolation.isolateDefaultsIfTakingScreenshots()
 
+reconcileAppLanguage(preferencesDomain: AppConstants.preferencesDomain)
+
 // Override Bundle.main's localization to support in-app language switching.
 // This must happen before TypeWhisperApp.main() so that all String(localized:)
 // calls resolve using the user's preferred language, not the system language.
