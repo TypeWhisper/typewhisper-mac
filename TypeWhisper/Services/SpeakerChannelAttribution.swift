@@ -1,4 +1,3 @@
-import Accelerate
 import Foundation
 import TypeWhisperPluginSDK
 
@@ -32,6 +31,9 @@ enum SpeakerChannelAttribution {
     /// Share of the expected echo left after each frame once the system
     /// audio stops, for the room's reverberation (about 3 dB per frame).
     static let echoDecay: Float = 0.7
+    /// Below this correlation the microphone doesn't follow the system
+    /// audio at any delay, and there is no echo to measure.
+    static let minimumEchoCorrelation = 0.05
 
     /// Stretches where the microphone carries the user's own speech.
     ///
@@ -41,6 +43,9 @@ enum SpeakerChannelAttribution {
     /// hundred milliseconds after the system audio has them, so the echo is
     /// measured from the recording itself: its delay, and how loud the
     /// system audio comes back on the microphone.
+    ///
+    /// Without a measurable echo, the microphone only has to be at least as
+    /// present as the system audio, relative to each track's own loudness.
     static func ownSpeechRanges(
         microphone: [Float],
         system: [Float],
@@ -56,10 +61,16 @@ enum SpeakerChannelAttribution {
         let threshold = max(minimumLevel, microphoneFloor * 3, microphoneReference * 0.12)
         guard microphoneReference > threshold else { return [] }
         let echo = expectedEcho(microphone: microphoneLevels, system: systemLevels)
+        let systemReference = max(percentile(systemLevels, 0.95), minimumLevel)
+        func standsOutFromSystemAudio(_ index: Int, _ level: Float) -> Bool {
+            if let echo { return level >= echoMargin * echo[index] }
+            let systemLevel = index < systemLevels.count ? systemLevels[index] : 0
+            return level / microphoneReference >= 0.8 * systemLevel / systemReference
+        }
 
         var ranges: [(start: TimeInterval, end: TimeInterval)] = []
         for (index, level) in microphoneLevels.enumerated() {
-            guard level > threshold, level >= echoMargin * echo[index] else { continue }
+            guard level > threshold, standsOutFromSystemAudio(index, level) else { continue }
             let start = Double(index) * frameDuration
             let end = start + frameDuration
             if let last = ranges.last, start - last.end <= maximumPause {
@@ -130,18 +141,16 @@ enum SpeakerChannelAttribution {
     static let minimumRemainder: TimeInterval = 0.2
 
     /// The level the system audio's echo is expected to reach in each
-    /// microphone frame.
+    /// microphone frame, or nil when the recording shows no echo.
     ///
     /// The system level is shifted by the echo's delay, widened by a frame
     /// on either side for jitter, held while the room still reverberates,
     /// and scaled by how loud the system audio comes back on the microphone.
     /// That ratio is read over the loudest quarter of the system audio, from
     /// its lower quarter: the echo is there whenever the system audio is
-    /// loud, the user's voice only now and then. With headphones the ratio
-    /// is the microphone's noise against the call, so the expected echo
-    /// stays negligible, whatever delay the search settled on.
-    private static func expectedEcho(microphone: [Float], system: [Float]) -> [Float] {
-        let delay = echoDelay(microphone: microphone, system: system)
+    /// loud, the user's voice only now and then.
+    private static func expectedEcho(microphone: [Float], system: [Float]) -> [Float]? {
+        guard let delay = echoDelay(microphone: microphone, system: system) else { return nil }
         var source = [Float](repeating: 0, count: microphone.count)
         var held: Float = 0
         for index in microphone.indices {
@@ -163,49 +172,48 @@ enum SpeakerChannelAttribution {
             .filter { source[$0] > systemThreshold }
             .sorted { (source[$0], -$0) > (source[$1], -$1) }
         // Under a second of system audio says nothing about the echo.
-        guard Double(loudest.count) * frameDuration >= 1 else {
-            return [Float](repeating: 0, count: microphone.count)
-        }
+        guard Double(loudest.count) * frameDuration >= 1 else { return nil }
         let sampled = loudest.prefix(max(1, loudest.count / 4))
         let gain = percentile(sampled.map { microphone[$0] / source[$0] }, 0.25)
         return source.map { $0 * gain }
     }
 
     /// Frames by which the microphone trails the system audio: the shift
-    /// with the strongest correlation between the two tracks' loudness.
-    private static func echoDelay(microphone: [Float], system: [Float]) -> Int {
+    /// with the strongest correlation between the two tracks' loudness, or
+    /// nil when no shift reaches `minimumEchoCorrelation`.
+    ///
+    /// Only frames with system audio count. Over a whole conversation the
+    /// tracks take turns, which correlates them negatively at every shift
+    /// and would let the search settle on any delay.
+    private static func echoDelay(microphone: [Float], system: [Float]) -> Int? {
         let floor = Double(minimumLevel)
         let x = microphone.map { log(max(Double($0), floor)) }
         let y = system.map { log(max(Double($0), floor)) }
-        // Running sums give each shift's means and variances in constant time.
-        func runningSums(_ values: [Double], squared: Bool) -> [Double] {
-            var sums = [Double](repeating: 0, count: values.count + 1)
-            for (index, value) in values.enumerated() {
-                sums[index + 1] = sums[index] + (squared ? value * value : value)
-            }
-            return sums
-        }
-        let sumX = runningSums(x, squared: false), sumXX = runningSums(x, squared: true)
-        let sumY = runningSums(y, squared: false), sumYY = runningSums(y, squared: true)
+        let active = system.indices.filter { system[$0] > minimumLevel }
 
-        var best = (delay: 0, correlation: -Double.infinity)
+        var best: (delay: Int, correlation: Double)?
         let maximumDelay = Int((maximumEchoDelay / frameDuration).rounded())
         for delay in 0...maximumDelay {
-            let count = min(x.count - delay, y.count)
-            guard count > 1 else { break }
-            let n = Double(count)
-            let meanX = (sumX[delay + count] - sumX[delay]) / n
-            let meanY = sumY[count] / n
-            let varianceX = (sumXX[delay + count] - sumXX[delay]) / n - meanX * meanX
-            let varianceY = sumYY[count] / n - meanY * meanY
+            var n = 0.0, sumX = 0.0, sumY = 0.0, sumXX = 0.0, sumYY = 0.0, sumXY = 0.0
+            for systemIndex in active {
+                let microphoneIndex = systemIndex + delay
+                guard microphoneIndex < x.count else { break }
+                let (a, b) = (x[microphoneIndex], y[systemIndex])
+                n += 1
+                sumX += a; sumY += b
+                sumXX += a * a; sumYY += b * b; sumXY += a * b
+            }
+            guard n > 1 else { continue }
+            let meanX = sumX / n, meanY = sumY / n
+            let varianceX = sumXX / n - meanX * meanX
+            let varianceY = sumYY / n - meanY * meanY
             guard varianceX > 1e-9, varianceY > 1e-9 else { continue }
-            let product = vDSP.dot(x[delay..<(delay + count)], y[0..<count]) / n
-            let correlation = (product - meanX * meanY) / (varianceX * varianceY).squareRoot()
-            if correlation > best.correlation {
+            let correlation = (sumXY / n - meanX * meanY) / (varianceX * varianceY).squareRoot()
+            if correlation > (best?.correlation ?? minimumEchoCorrelation) {
                 best = (delay, correlation)
             }
         }
-        return best.delay
+        return best?.delay
     }
 
     private static func levels(of samples: [Float], frameLength: Int) -> [Float] {

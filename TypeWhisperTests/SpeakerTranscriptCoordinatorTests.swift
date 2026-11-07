@@ -1011,6 +1011,34 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         }
     }
 
+    /// Words of uneven length and loudness from `start`, like a stretch of speech.
+    private func words(from start: TimeInterval, count: Int, variant: Int) -> [(ClosedRange<TimeInterval>, Float)] {
+        let lengths = [0.21, 0.35, 0.18, 0.42, 0.27, 0.5, 0.24, 0.31, 0.38]
+        let gaps = [0.12, 0.2, 0.09, 0.31, 0.15, 0.07]
+        let loudness: [Float] = [1, 0.55, 0.8, 0.35, 0.7, 0.45, 0.9]
+        var time = start
+        return (0..<count).map { index in
+            let length = lengths[(index + variant) % lengths.count]
+            defer { time += length + gaps[(index + 2 * variant) % gaps.count] }
+            return (time...(time + length), loudness[(index * 3 + variant) % loudness.count])
+        }
+    }
+
+    /// A tone that follows `words`, `delay` seconds late, and near silence elsewhere.
+    private func track(
+        duration: TimeInterval,
+        words: [(ClosedRange<TimeInterval>, Float)],
+        level: Float,
+        delay: TimeInterval = 0,
+        noise: Float = 0.0005
+    ) -> [Float] {
+        (0..<Int(duration * sampleRate)).map { index in
+            let time = Double(index) / sampleRate - delay
+            let amplitude = words.first { $0.0.contains(time) }.map { $0.1 * level } ?? noise
+            return amplitude * Float(sin(Double(index) * 0.3))
+        }
+    }
+
     func testOwnSpeechIsWhereTheMicrophoneIsActive() {
         let microphone = track(duration: 10, speech: [1...3, 6...7], level: 0.2)
         let system = track(duration: 10, speech: [3.5...5.5], level: 0.3)
@@ -1058,6 +1086,27 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         XCTAssertEqual(ranges.count, 1)
         XCTAssertEqual(ranges.first?.lowerBound ?? -1, 0.9, accuracy: 0.06)
         XCTAssertEqual(ranges.first?.upperBound ?? -1, 3.1, accuracy: 0.06)
+    }
+
+    /// In a conversation the tracks take turns, which must not pass for an
+    /// echo at some delay. The faint echo of a microphone near the speakers
+    /// stays out of own speech, and the user's turns stay in (#1875).
+    func testFaintEchoInAConversationIsNotOwnSpeech() {
+        let remote = words(from: 1, count: 6, variant: 1) + words(from: 7, count: 6, variant: 2)
+            + words(from: 13, count: 6, variant: 3)
+        let user = words(from: 4.2, count: 5, variant: 4) + words(from: 10.2, count: 5, variant: 5)
+        let system = track(duration: 18, words: remote, level: 0.3)
+        let speech = track(duration: 18, words: user, level: 0.05)
+        let echo = track(duration: 18, words: remote, level: 0.012, delay: 0.24, noise: 0)
+        let microphone = zip(speech, echo).map { $0 + $1 }
+
+        let ranges = SpeakerChannelAttribution.ownSpeechRanges(microphone: microphone, system: system)
+
+        XCTAssertEqual(ranges.count, 2)
+        XCTAssertEqual(ranges.first?.lowerBound ?? -1, 4.1, accuracy: 0.06)
+        XCTAssertEqual(ranges.first?.upperBound ?? -1, 6.6, accuracy: 0.06)
+        XCTAssertEqual(ranges.last?.lowerBound ?? -1, 10.1, accuracy: 0.06)
+        XCTAssertEqual(ranges.last?.upperBound ?? -1, 12.5, accuracy: 0.06)
     }
 
     func testSilentMicrophoneAndShortBlipsGiveNoOwnSpeech() {
