@@ -225,7 +225,7 @@ struct AppStorePremiumStoreView: View {
                     store.beginOfferCodeRedemption()
                     redeemingOfferCode = true
                 } label: {
-                    Label(localizedAppText("Redeem Code", de: "Code einlösen"), systemImage: "giftcard")
+                    Label(localizedAppText("Redeem Code", de: "Code einlösen", es: "Canjear código"), systemImage: "giftcard")
                 }
                 .disabled(store.isWorking)
                 .accessibilityIdentifier("premium.store.redeemCode")
