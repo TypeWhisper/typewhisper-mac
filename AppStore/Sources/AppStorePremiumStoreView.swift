@@ -5,8 +5,8 @@ import SwiftUI
 /// The App Store part of the Premium settings page. It replaces the license
 /// page of the direct-distribution app: products with their localized App
 /// Store prices, the free trial when the customer is eligible, renewal terms,
-/// connecting an existing TypeWhisper license, Restore Purchases, subscription
-/// management and the legal links.
+/// connecting an existing TypeWhisper license, Restore Purchases, offer code
+/// redemption, subscription management and the legal links.
 @MainActor
 struct AppStorePremiumStoreView: View {
     @ObservedObject private var store: AppStorePremiumService
@@ -14,6 +14,7 @@ struct AppStorePremiumStoreView: View {
     @Environment(\.purchase) private var purchaseAction
     @Environment(\.openURL) private var openURL
     @State private var confirmingLifetimeUpgrade = false
+    @State private var redeemingOfferCode = false
 
     private let windowPresenter: any PremiumSettingsWindowPresenting
 
@@ -61,6 +62,7 @@ struct AppStorePremiumStoreView: View {
                 messages
             }
         }
+        .modifier(AppStoreOfferCodeRedemption(isPresented: $redeemingOfferCode, store: store))
         .confirmationDialog(
             localizedAppText("Buy Lifetime Access?", de: "Lifetime-Zugang kaufen?"),
             isPresented: $confirmingLifetimeUpgrade,
@@ -218,6 +220,17 @@ struct AppStorePremiumStoreView: View {
             .disabled(store.isWorking)
             .accessibilityIdentifier("premium.store.restore")
 
+            if AppStoreOfferCodeRedemption.isAvailable, store.shouldShowPurchaseOptions {
+                Button {
+                    store.beginOfferCodeRedemption()
+                    redeemingOfferCode = true
+                } label: {
+                    Label(localizedAppText("Redeem Code", de: "Code einlösen", es: "Canjear código"), systemImage: "giftcard")
+                }
+                .disabled(store.isWorking)
+                .accessibilityIdentifier("premium.store.redeemCode")
+            }
+
             if store.activeProduct == .monthly {
                 Link(destination: AppStorePremiumService.manageSubscriptionsURL) {
                     Label(String(localized: "Manage Subscription"), systemImage: "creditcard")
@@ -349,6 +362,36 @@ struct AppStorePremiumStoreView: View {
         let purchaseAction = purchaseAction
         Task {
             await store.purchase(product) { try await purchaseAction($0) }
+        }
+    }
+}
+
+/// Apple's offer code sheet. macOS 27 and later return the redeemed
+/// transaction, macOS 15 to 26 post it to `Transaction.updates`. macOS 14 has
+/// no sheet, so the Redeem Code button is hidden there; codes can still be
+/// redeemed in the App Store app.
+private struct AppStoreOfferCodeRedemption: ViewModifier {
+    @Binding var isPresented: Bool
+    let store: AppStorePremiumService
+
+    static var isAvailable: Bool {
+        if #available(macOS 15, *) {
+            return true
+        }
+        return false
+    }
+
+    func body(content: Content) -> some View {
+        if #available(macOS 27, *) {
+            content.offerCodeRedemption(options: [], isPresented: $isPresented) { result in
+                Task { await store.finishOfferCodeRedemption(result) }
+            }
+        } else if #available(macOS 15, *) {
+            content.offerCodeRedemption(isPresented: $isPresented) { result in
+                Task { await store.offerCodeSheetClosed(result) }
+            }
+        } else {
+            content
         }
     }
 }

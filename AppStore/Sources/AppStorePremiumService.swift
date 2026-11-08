@@ -203,6 +203,67 @@ final class AppStorePremiumService: ObservableObject {
         }
     }
 
+    // MARK: - Offer Codes
+
+    /// Clears old messages before Apple's offer code sheet opens.
+    func beginOfferCodeRedemption() {
+        errorMessage = nil
+        statusMessage = nil
+    }
+
+    /// macOS 27 and later return the redeemed transaction from the sheet
+    /// instead of posting it to `Transaction.updates`, so it is applied here
+    /// like an update.
+    func finishOfferCodeRedemption(_ result: Result<VerificationResult<Transaction>, any Error>) async {
+        switch result {
+        case .success(let verification):
+            logger.info("Redeemed an App Store offer code")
+            guard case .unverified(_, let error) = verification else {
+                await handle(verification)
+                return
+            }
+            // The copy the sheet returns can fail device verification (seen
+            // with StoreKit Testing on macOS 27.2), while StoreKit verifies the
+            // same transaction when it is read back.
+            logger.warning("The redeemed transaction failed verification: \(error.localizedDescription, privacy: .public)")
+            await applyStoredTransactions()
+        case .failure(let error):
+            offerCodeRedemptionFailed(error)
+        }
+    }
+
+    /// The sheet of macOS 15 to 26 only reports that it closed, whether or not
+    /// a code was redeemed. A redeemed code is meant to arrive through
+    /// `Transaction.updates`; StoreKit is read back as well, because in testing
+    /// that update never came.
+    func offerCodeSheetClosed(_ result: Result<Void, any Error>) async {
+        switch result {
+        case .success:
+            logger.info("Offer code sheet closed")
+            await applyStoredTransactions()
+        case .failure(let error):
+            offerCodeRedemptionFailed(error)
+        }
+    }
+
+    /// Applies what StoreKit has stored, for a redemption that was not
+    /// delivered as a verified transaction.
+    private func applyStoredTransactions() async {
+        for await result in Transaction.unfinished {
+            await handle(result)
+        }
+        await refreshEntitlements()
+    }
+
+    private func offerCodeRedemptionFailed(_ error: any Error) {
+        if let storeKitError = error as? StoreKitError, case .userCancelled = storeKitError {
+            logger.info("Offer code redemption cancelled")
+            return
+        }
+        logger.error("Offer code redemption failed: \(error.localizedDescription, privacy: .public)")
+        errorMessage = error.localizedDescription
+    }
+
     // MARK: - Existing License
 
     /// Connects a TypeWhisper license bought outside the App Store through the
