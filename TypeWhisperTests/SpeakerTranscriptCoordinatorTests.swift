@@ -1012,14 +1012,19 @@ final class SpeakerChannelAttributionTests: XCTestCase {
     }
 
     /// Words of uneven length and loudness from `start`, like a stretch of speech.
-    private func words(from start: TimeInterval, count: Int, variant: Int) -> [(ClosedRange<TimeInterval>, Float)] {
+    private func words(
+        from start: TimeInterval,
+        count: Int,
+        variant: Int,
+        pausing: Bool = true
+    ) -> [(ClosedRange<TimeInterval>, Float)] {
         let lengths = [0.21, 0.35, 0.18, 0.42, 0.27, 0.5, 0.24, 0.31, 0.38]
         let gaps = [0.12, 0.2, 0.09, 0.31, 0.15, 0.07]
         let loudness: [Float] = [1, 0.55, 0.8, 0.35, 0.7, 0.45, 0.9]
         var time = start
         return (0..<count).map { index in
             let length = lengths[(index + variant) % lengths.count]
-            defer { time += length + gaps[(index + 2 * variant) % gaps.count] }
+            defer { time += length + (pausing ? gaps[(index + 2 * variant) % gaps.count] : 0) }
             return (time...(time + length), loudness[(index * 3 + variant) % loudness.count])
         }
     }
@@ -1107,6 +1112,26 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         XCTAssertEqual(ranges.first?.upperBound ?? -1, 6.6, accuracy: 0.06)
         XCTAssertEqual(ranges.last?.lowerBound ?? -1, 10.1, accuracy: 0.06)
         XCTAssertEqual(ranges.last?.upperBound ?? -1, 12.5, accuracy: 0.06)
+    }
+
+    /// An echo later than the delay search reaches can't be measured, and
+    /// the search may settle on a wrong delay. Where the system audio is
+    /// louder than the microphone, relative to each track's loudness, the
+    /// echo still stays out of own speech.
+    func testAnEchoBeyondTheDelaySearchStaysOutWhereTheSystemAudioIsLouder() {
+        // The remote talks without a pause, so the system audio is louder than the echo throughout.
+        let remote = words(from: 3, count: 32, variant: 4, pausing: false)
+        let duration = remote.last?.0.upperBound ?? 0
+        let system = track(duration: duration, words: remote, level: 0.3)
+        let speech = track(duration: duration, speech: [0.5...2.5], level: 0.05)
+        let echo = track(duration: duration, words: remote, level: 0.012, delay: 2.5, noise: 0)
+        let microphone = zip(speech, echo).map { $0 + $1 }
+
+        let ranges = SpeakerChannelAttribution.ownSpeechRanges(microphone: microphone, system: system)
+
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual(ranges.first?.lowerBound ?? -1, 0.4, accuracy: 0.06)
+        XCTAssertEqual(ranges.first?.upperBound ?? -1, 2.6, accuracy: 0.06)
     }
 
     func testSilentMicrophoneAndShortBlipsGiveNoOwnSpeech() {

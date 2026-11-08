@@ -44,8 +44,10 @@ enum SpeakerChannelAttribution {
     /// measured from the recording itself: its delay, and how loud the
     /// system audio comes back on the microphone.
     ///
-    /// Without a measurable echo, the microphone only has to be at least as
-    /// present as the system audio, relative to each track's own loudness.
+    /// The microphone also has to be at least as present as the system
+    /// audio, relative to each track's own loudness. That rule alone applies
+    /// without a measurable echo, and it keeps an echo measured at the wrong
+    /// delay from adding own speech.
     static func ownSpeechRanges(
         microphone: [Float],
         system: [Float],
@@ -63,9 +65,9 @@ enum SpeakerChannelAttribution {
         let echo = expectedEcho(microphone: microphoneLevels, system: systemLevels)
         let systemReference = max(percentile(systemLevels, 0.95), minimumLevel)
         func standsOutFromSystemAudio(_ index: Int, _ level: Float) -> Bool {
-            if let echo { return level >= echoMargin * echo[index] }
             let systemLevel = index < systemLevels.count ? systemLevels[index] : 0
-            return level / microphoneReference >= 0.8 * systemLevel / systemReference
+            guard level / microphoneReference >= 0.8 * systemLevel / systemReference else { return false }
+            return echo.map { level >= echoMargin * $0[index] } ?? true
         }
 
         var ranges: [(start: TimeInterval, end: TimeInterval)] = []
