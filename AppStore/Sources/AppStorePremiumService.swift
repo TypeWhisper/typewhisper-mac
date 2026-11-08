@@ -222,11 +222,8 @@ final class AppStorePremiumService: ObservableObject {
                 await handle(verification)
                 return
             }
-            // The copy the sheet returns can fail device verification (seen
-            // with StoreKit Testing on macOS 27.2), while StoreKit verifies the
-            // same transaction when it is read back.
             logger.warning("The redeemed transaction failed verification: \(error.localizedDescription, privacy: .public)")
-            await applyStoredTransactions()
+            await applyUnverifiedRedemption()
         case .failure(let error):
             offerCodeRedemptionFailed(error)
         }
@@ -243,6 +240,17 @@ final class AppStorePremiumService: ObservableObject {
             await applyStoredTransactions()
         case .failure(let error):
             offerCodeRedemptionFailed(error)
+        }
+    }
+
+    /// The copy the sheet returns can fail device verification (seen with
+    /// StoreKit Testing on macOS 27.2), while StoreKit verifies the same
+    /// transaction when it is read back. If Premium stays locked, the
+    /// customer sees why instead of nothing.
+    func applyUnverifiedRedemption() async {
+        await applyStoredTransactions()
+        if !hasPremiumAccess {
+            errorMessage = AppStorePremiumError.unverifiedTransaction.errorDescription
         }
     }
 

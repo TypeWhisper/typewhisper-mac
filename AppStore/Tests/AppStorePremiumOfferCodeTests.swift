@@ -19,6 +19,15 @@ final class AppStorePremiumOfferCodeTests: XCTestCase {
         XCTAssertNil(store.errorMessage)
     }
 
+    func testUnverifiedRedemptionThatLeavesPremiumLockedShowsAnError() async throws {
+        let store = try makeStore()
+
+        await store.applyUnverifiedRedemption()
+
+        XCTAssertFalse(store.hasPremiumAccess)
+        XCTAssertNotNil(store.errorMessage)
+    }
+
     private func makeStore() throws -> AppStorePremiumService {
         let suiteName = "AppStorePremiumOfferCode-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
