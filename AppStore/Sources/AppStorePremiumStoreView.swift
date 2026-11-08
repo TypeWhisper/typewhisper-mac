@@ -228,6 +228,11 @@ struct AppStorePremiumStoreView: View {
                     Label(localizedAppText("Redeem Code", de: "Code einlösen", es: "Canjear código"), systemImage: "giftcard")
                 }
                 .disabled(store.isWorking)
+                .accessibilityHint(localizedAppText(
+                    "Opens the App Store sheet for entering an offer code.",
+                    de: "Öffnet das App-Store-Fenster zum Eingeben eines Angebotscodes.",
+                    es: "Abre la ventana del App Store para introducir un código de oferta."
+                ))
                 .accessibilityIdentifier("premium.store.redeemCode")
             }
 

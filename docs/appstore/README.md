@@ -245,8 +245,9 @@ commercial term packs) and cloud sync follow it.
   Premium access) opens Apple's offer code sheet. macOS 27 returns the redeemed
   transaction, macOS 15 to 26 post it to `Transaction.updates`. After the sheet
   closes the app also reads StoreKit back, because in StoreKit Testing the
-  returned transaction failed device verification and no update arrived.
-  macOS 14 has no sheet; codes redeemed in the App Store app still arrive
+  returned transaction failed device verification and no update arrived. If
+  an unverified redemption still leaves Premium locked, the page says that the
+  transaction could not be verified. macOS 14 has no sheet; codes redeemed in the App Store app still arrive
   through `Transaction.updates`.
 - The scheme uses `AppStore/Resources/TypeWhisperAppStore.storekit` for local
   StoreKit testing in Xcode. It includes the offer code `Free Month Code` for
