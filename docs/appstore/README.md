@@ -241,8 +241,17 @@ commercial term packs) and cloud sync follow it.
   hints to buy outside the App Store. The server must accept the `macos`
   platform for this flow (`POLAR_WEB_FLOW_PLATFORMS` in `app.typewhisper.com`).
   Code: `AppStoreLicenseLink`, `PremiumAccountService.connectExistingLicense()`.
+- **Redeem Code** on the Premium page (macOS 15 and later, shown without
+  Premium access) opens Apple's offer code sheet. macOS 27 returns the redeemed
+  transaction, macOS 15 to 26 post it to `Transaction.updates`. After the sheet
+  closes the app also reads StoreKit back, because in StoreKit Testing the
+  returned transaction failed device verification and no update arrived.
+  macOS 14 has no sheet; codes redeemed in the App Store app still arrive
+  through `Transaction.updates`.
 - The scheme uses `AppStore/Resources/TypeWhisperAppStore.storekit` for local
-  StoreKit testing in Xcode.
+  StoreKit testing in Xcode. It includes the offer code `Free Month Code` for
+  the monthly subscription; Debug > StoreKit > Manage Transactions deletes the
+  redeemed transaction for another run.
 
 ## Host app differences
 

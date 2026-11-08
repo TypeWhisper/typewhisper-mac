@@ -54,7 +54,21 @@
       "subscriptions" : [
         {
           "adHocOffers" : [],
-          "codeOffers" : [],
+          "codeOffers" : [
+            {
+              "displayPrice" : "0.0",
+              "eligibility" : [
+                "expired",
+                "existing",
+                "new"
+              ],
+              "internalID" : "5E3C2A71-8D4B-4F6E-9C1A-2B7D8E4F6A30",
+              "isStackable" : true,
+              "paymentMode" : "free",
+              "referenceName" : "Free Month Code",
+              "subscriptionPeriod" : "P1M"
+            }
+          ],
           "displayPrice" : "5.99",
           "familyShareable" : false,
           "groupNumber" : 1,
