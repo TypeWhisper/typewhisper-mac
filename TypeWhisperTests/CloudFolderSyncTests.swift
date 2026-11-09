@@ -1857,6 +1857,63 @@ final class CloudFolderSyncTests: XCTestCase {
         }
     }
 
+    func testICloudBridgeMirrorCarriesFoldersOfNewerClients() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/mac-main/1700000010000-op.json", in: localRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        // A newer client adds a folder of its own after the base was recorded: a phone in
+        // iCloud, and a Mac in the local mirror.
+        let phoneFiles = [
+            "newer/v1/devices/ios-phone.json",
+            "newer/v1/ops/ios-phone/1700000020000-phone-op.json",
+            "newer/v1/ops/ios-phone/nested/deeper/extra.json",
+        ]
+        let macFiles = [
+            "newer/v1/devices/mac-main.json",
+            "newer/v1/ops/mac-main/1700000021000-mac-op.json",
+        ]
+        for path in phoneFiles {
+            try Self.writeBridgeFile(path, in: remoteRoot, seconds: 20)
+        }
+        for path in macFiles {
+            try Self.writeBridgeFile(path, in: localRoot, seconds: 21)
+        }
+        // The second pass compares against a base that includes the new files.
+        for _ in 0..<2 {
+            try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        }
+
+        for path in phoneFiles + macFiles {
+            for root in [localRoot, remoteRoot] {
+                XCTAssertEqual(try Data(contentsOf: Self.bridgeFileURL(path, in: root)), Data(path.utf8), path)
+            }
+        }
+
+        // Pruned operations and rewritten device files follow the phone, as in ops/ and devices/.
+        try FileManager.default.removeItem(
+            at: Self.bridgeFileURL("newer/v1/ops/ios-phone/nested/deeper/extra.json", in: remoteRoot)
+        )
+        try Self.writeBridgeFile("newer/v1/devices/ios-phone.json", in: remoteRoot, contents: "phone-v2", seconds: 30)
+        for _ in 0..<2 {
+            try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        }
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertFalse(Self.bridgeFileExists("newer/v1/ops/ios-phone/nested/deeper/extra.json", in: root))
+            XCTAssertEqual(
+                try Data(contentsOf: Self.bridgeFileURL("newer/v1/devices/ios-phone.json", in: root)),
+                Data("phone-v2".utf8)
+            )
+            XCTAssertTrue(Self.bridgeFileExists("newer/v1/ops/ios-phone/1700000020000-phone-op.json", in: root))
+        }
+    }
+
     func testICloudBridgeDeletesNothingWhenICloudCannotBeListed() throws {
         let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
         let unreadable = Self.bridgeFileURL("devices", in: remoteRoot)
@@ -2277,6 +2334,110 @@ final class CloudFolderSyncTests: XCTestCase {
 
         XCTAssertEqual(result.mutationsApplied, 0)
         XCTAssertTrue(result.diagnostics.isEmpty)
+    }
+
+    @MainActor
+    func testSyncLeavesFoldersOfNewerClientsAloneWithoutDiagnostics() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncNewerFolder")
+        defer { TestSupport.remove(folder) }
+
+        // A phone that syncs an ordinary snippet next to a folder of its own.
+        let package = CloudFolderSyncEngine.packageURL(for: folder)
+        let devicesURL = package.appendingPathComponent("devices", isDirectory: true)
+        let phoneOperations = package.appendingPathComponent("ops/ios-phone", isDirectory: true)
+        for directory in [devicesURL, phoneOperations] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        try Self.entitlementEncoder.encode(CloudFolderSyncDeviceRecord(
+            deviceId: "ios-phone",
+            platform: "iOS",
+            appVersion: "1.3.0",
+            updatedAt: Self.date(15),
+            capabilities: [CloudFolderSyncDeviceRecord.speakerTranscriptCapability]
+        )).write(to: devicesURL.appendingPathComponent("ios-phone.json"))
+        let snippet = Self.snippet(trigger: ";addr", replacement: "Example Street 1", updatedAt: Self.date(10))
+        let snippetOperation = CloudFolderSyncOperation.upsertSnippet(
+            snippet,
+            itemID: UserDataSyncIdentity.snippetItemID(trigger: snippet.trigger),
+            deviceId: "ios-phone"
+        )
+        try Self.entitlementEncoder.encode(snippetOperation).write(
+            to: phoneOperations.appendingPathComponent("1700000010000-\(snippetOperation.operationId).json")
+        )
+
+        // A newer client keeps its own versioned folder beside devices/ and ops/.
+        let newerURL = package.appendingPathComponent("newer", isDirectory: true)
+        let newerV1 = newerURL.appendingPathComponent("v1", isDirectory: true)
+        try Self.writeDeviceRecord("ios-phone", origin: "ios-phone-origin", in: newerV1)
+        let itemID = UUID().uuidString.lowercased()
+        let newerOperationID = UUID().uuidString.lowercased()
+        let newerFiles = [
+            "ops/ios-phone/1700000012000-\(newerOperationID).json": """
+            {"schemaVersion":1,"operationId":"\(newerOperationID)","deviceId":"ios-phone",
+             "itemId":"newerItem:\(itemID)","collection":"newerItems",
+             "kind":"upsertItem","updatedAt":"2023-11-14T22:13:32.000Z",
+             "payload":{"title":"Example","values":["one","two"]}}
+            """,
+            // Partially downloaded, as a cloud provider can leave a file.
+            "ops/ios-phone/1700000013000-\(UUID().uuidString.lowercased()).json": #"{"schemaVersion":1,"operationId":"#,
+            "ops/ios-phone/nested/deeper/extra.json": #"{"nested":true}"#,
+        ]
+        for (path, contents) in newerFiles {
+            let file = newerV1.appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data(contents.utf8).write(to: file)
+        }
+
+        // Every file and folder under newer/, with the bytes and modification date of each.
+        struct FolderEntry: Equatable {
+            let contents: Data?
+            let modificationDate: Date?
+        }
+        func newerEntries() throws -> [String: FolderEntry] {
+            var entries: [String: FolderEntry] = [:]
+            for path in try FileManager.default.subpathsOfDirectory(atPath: newerURL.path) {
+                let url = newerURL.appendingPathComponent(path)
+                let values = try url.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
+                entries[path] = FolderEntry(
+                    contents: try values.isDirectory == true ? nil : Data(contentsOf: url),
+                    modificationDate: values.contentModificationDate
+                )
+            }
+            return entries
+        }
+        let newerBefore = try newerEntries()
+        XCTAssertEqual(newerBefore.values.filter { $0.contents != nil }.count, 4)
+
+        let store = InMemoryUserDataSyncStore()
+        var state = CloudFolderSyncState(deviceId: "mac-main")
+        func syncMac(at seconds: TimeInterval) async throws -> CloudFolderSyncResult {
+            try await CloudFolderSyncEngine.sync(
+                folderURL: folder,
+                store: store,
+                state: &state,
+                entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+                now: Self.date(seconds)
+            )
+        }
+
+        let first = try await syncMac(at: 20)
+        XCTAssertEqual(try newerEntries(), newerBefore)
+        let second = try await syncMac(at: 30)
+        XCTAssertEqual(try newerEntries(), newerBefore)
+
+        XCTAssertEqual(first.diagnostics, [])
+        XCTAssertEqual(second.diagnostics, [])
+        XCTAssertEqual(first.operationsRead, 1)
+        XCTAssertEqual(first.mutationsApplied, 1)
+        XCTAssertEqual(second.mutationsApplied, 0)
+        XCTAssertEqual(store.snippets.map(\.replacement), ["Example Street 1"])
+        XCTAssertEqual(first.devices.map(\.deviceId).sorted(), ["ios-phone", "mac-main"])
+        // Files under newer/ are not part of the fingerprint, so changing them never starts a sync.
+        let fingerprint = try XCTUnwrap(second.packageFingerprint)
+        XCTAssertFalse(fingerprint.files.keys.contains { $0.contains("/typewhisper-sync/newer/") })
     }
 
     @MainActor
