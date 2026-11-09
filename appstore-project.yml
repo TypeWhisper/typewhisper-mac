@@ -38,7 +38,7 @@ packages:
     exactVersion: 3.31.4
   SwiftTransformers:
     url: https://github.com/huggingface/swift-transformers.git
-    exactVersion: 1.3.4
+    exactVersion: 1.4.0
   SwiftHuggingFace:
     url: https://github.com/huggingface/swift-huggingface.git
     exactVersion: 0.10.1

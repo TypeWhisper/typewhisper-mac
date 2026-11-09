@@ -1,5 +1,5 @@
 {
-  "originHash" : "a10ac7e335f36e8120c8eb2028d9bc1705bd2e3b3986b8e6e2da0fb0fb20d5e5",
+  "originHash" : "bf7e59823a0ef124c2af7b678e22d144c299c486ba37b72bae2c8752a19af112",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -192,10 +192,10 @@
     {
       "identity" : "swift-transformers",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/huggingface/swift-transformers",
+      "location" : "https://github.com/huggingface/swift-transformers.git",
       "state" : {
-        "revision" : "c21fdcde390313a6d98d8e33a346f2c3486c3ab0",
-        "version" : "1.3.4"
+        "revision" : "402a8a1105f52038b0949d9596981fc9e32bed17",
+        "version" : "1.4.0"
       }
     },
     {
@@ -212,8 +212,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ibireme/yyjson.git",
       "state" : {
-        "revision" : "8b4a38dc994a110abaec8a400615567bd996105f",
-        "version" : "0.12.0"
+        "revision" : "6447536015f3d600f3d65323b10976103b337ca7",
+        "version" : "0.13.0"
       }
     }
   ],
