@@ -515,7 +515,7 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
     func testStartupCleanupKeepsTheVoicesOfEveryRecordingStillInHistory() throws {
         let ids = try (0..<5).map { _ in try addRecording() }
         // Deleted without the immediate cleanup, as when the app quit in between.
-        history.onRecordsDeleted = nil
+        service.historyChanges = nil
         XCTAssertTrue(history.deleteRecord(withID: ids[1]))
         XCTAssertTrue(history.deleteRecord(withID: ids[3]))
         XCTAssertEqual(store.recordingEmbeddings.count, 5)
@@ -1054,7 +1054,7 @@ final class SpeakerProfileAPITests: XCTestCase {
         let bytes = try Data(contentsOf: file)
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
         object["recordings"] = [] // UUID-keyed Codable dictionaries use alternating arrays.
-        history.onRecordsDeleted = nil
+        service.historyChanges = nil
         XCTAssertTrue(history.deleteRecord(withID: record.0))
         try JSONSerialization.data(withJSONObject: object).write(to: file)
         rebuildServices()
