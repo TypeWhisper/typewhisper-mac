@@ -1,4 +1,7 @@
 import XCTest
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 @testable import TypeWhisper
 
 @MainActor
@@ -232,6 +235,21 @@ final class TextProcessingAPITests: XCTestCase {
         ]))
         XCTAssertEqual(viaFallback.status, 413)
         XCTAssertEqual(errorCode(viaFallback), "context_length_exceeded")
+    }
+
+    func testAppleIntelligenceContextErrorOfMacOS27IsAContextError() throws {
+        #if canImport(FoundationModels) && compiler(>=6.4)
+        guard #available(macOS 27.0, *) else {
+            throw XCTSkip("LanguageModelError exists from macOS 27.")
+        }
+        let tooLong = TextProcessingAPI.errorResponse(for: LanguageModelError.contextSizeExceeded(
+            .init(contextSize: 4_096, tokenCount: 5_000, debugDescription: "too long")
+        ))
+        XCTAssertEqual(tooLong.status, 413)
+        XCTAssertEqual(errorCode(tooLong), "context_length_exceeded")
+        #else
+        throw XCTSkip("Needs the macOS 27 SDK.")
+        #endif
     }
 
     func testWorkflowsListAndRun() async throws {
