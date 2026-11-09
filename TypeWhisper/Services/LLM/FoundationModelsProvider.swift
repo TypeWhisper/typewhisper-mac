@@ -16,6 +16,14 @@ enum LLMContextLimit {
            case .exceededContextWindowSize = generationError {
             return true
         }
+        #if compiler(>=6.4)
+        // macOS 27 reports the overflow as LanguageModelError instead.
+        if #available(macOS 27.0, *),
+           let modelError = error as? LanguageModelError,
+           case .contextSizeExceeded = modelError {
+            return true
+        }
+        #endif
         #endif
         return false
     }
