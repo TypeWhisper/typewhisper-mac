@@ -397,6 +397,11 @@ final class AudioRecorderViewModel: ObservableObject {
         didSet { defaults.set(detectSpeakers, forKey: UserDefaultsKeys.recorderDetectSpeakers) }
     }
     var speakerRecordIntake: SpeakerRecordIntake?
+    /// Saves the transcript of a recording that gets no speaker record to History.
+    var recorderTranscriptIntake: (@MainActor (RecorderTranscript) -> Void)?
+    /// Adds History records for recordings transcribed before the Recorder saved to History.
+    var recorderTranscriptImport: (@MainActor ([RecorderTranscript]) -> Void)?
+    private var isImportingEarlierTranscripts = false
     /// Adds the speakers History holds for a recording to its completion; with
     /// `true`, after a detection run for it has finished.
     var addingRecorderSpeakers: (@MainActor (RecorderTranscriptReadyPayload, Bool) async -> RecorderTranscriptReadyPayload)?
@@ -1541,6 +1546,7 @@ final class AudioRecorderViewModel: ObservableObject {
             let items = await worker.value
             guard !Task.isCancelled, let self, generation == self.recordingsLoadGeneration else { return }
             self.recordings = items
+            self.importEarlierTranscriptsIfNeeded(items)
         }
     }
 
@@ -1878,6 +1884,9 @@ final class AudioRecorderViewModel: ObservableObject {
                 let speakerRecordID = await addSpeakerRecordIfWanted(
                     result, request: request, recordingID: payload?.recordingID
                 )
+                if speakerRecordID == nil {
+                    addHistoryRecord(for: payload, result: result, request: request)
+                }
                 announce(payload, waitingForSpeakers: speakerRecordID != nil)
                 return (outcome, text)
             } else if previewCanBeTranscript, !preview.isEmpty {
@@ -1939,6 +1948,9 @@ final class AudioRecorderViewModel: ObservableObject {
                 let speakerRecordID = await addSpeakerRecordIfWanted(
                     result, request: request, recordingID: payload.recordingID
                 )
+                if speakerRecordID == nil {
+                    addHistoryRecord(for: payload, result: result, request: request)
+                }
                 announce(payload, waitingForSpeakers: speakerRecordID != nil)
             }
             return outcome
@@ -1986,6 +1998,96 @@ final class AudioRecorderViewModel: ObservableObject {
             ownSpeech: request.ownSpeech,
             recorderRecordingID: recordingID
         ))
+    }
+
+    /// Saves the transcript of a recording without a speaker record to History,
+    /// unless History is turned off.
+    private func addHistoryRecord(
+        for payload: RecorderTranscriptReadyPayload?,
+        result: TranscriptionResult?,
+        request: FinalTranscriptionRequest
+    ) {
+        guard let payload, let recorderTranscriptIntake, savesHistory else { return }
+        recorderTranscriptIntake(RecorderTranscript(
+            recordingID: payload.recordingID,
+            text: payload.text,
+            title: URL(fileURLWithPath: payload.audioFilePath).deletingPathExtension().lastPathComponent,
+            recordedAt: payload.recordedAt,
+            durationSeconds: payload.durationSeconds ?? result?.duration ?? 0,
+            language: result?.detectedLanguage,
+            engineUsed: result?.engineUsed ?? "",
+            modelUsed: request.modelOverrideId
+        ))
+    }
+
+    private var savesHistory: Bool {
+        defaults.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true
+    }
+
+    /// Recordings transcribed before the Recorder saved to History get their record
+    /// once, with the first list of recordings that is not empty. A user who turned
+    /// History off gets none.
+    private func importEarlierTranscriptsIfNeeded(_ items: [RecordingItem]) {
+        guard let recorderTranscriptImport, !isImportingEarlierTranscripts,
+              !defaults.bool(forKey: UserDefaultsKeys.recorderHistoryImportCompleted) else { return }
+        guard savesHistory else {
+            defaults.set(true, forKey: UserDefaultsKeys.recorderHistoryImportCompleted)
+            return
+        }
+        // An empty list can also be a folder that is not reachable right now.
+        guard !items.isEmpty else { return }
+        isImportingEarlierTranscripts = true
+        Task { [weak self] in
+            let transcripts = await Task.detached(priority: .utility) {
+                AudioRecorderViewModel.earlierTranscripts(of: items)
+            }.value
+            guard let self else { return }
+            recorderTranscriptImport(transcripts)
+            self.defaults.set(true, forKey: UserDefaultsKeys.recorderHistoryImportCompleted)
+            self.isImportingEarlierTranscripts = false
+        }
+    }
+
+    nonisolated private static func earlierTranscripts(of items: [RecordingItem]) -> [RecorderTranscript] {
+        items.compactMap { item in
+            guard let text = item.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty else { return nil }
+            let audioURL = item.url.resolvingSymlinksInPath()
+            guard let recordingID = importedRecordingID(for: audioURL) else { return nil }
+            return RecorderTranscript(
+                recordingID: recordingID,
+                text: text,
+                title: audioURL.deletingPathExtension().lastPathComponent,
+                recordedAt: item.date == .distantPast ? nil : item.date,
+                durationSeconds: item.duration
+            )
+        }
+    }
+
+    /// The recording's stable ID. A recording from before the ID files existed gets
+    /// one, so a later transcription finds its History record. Returns nil when the
+    /// ID is unreadable or cannot be stored.
+    nonisolated private static func importedRecordingID(for audioURL: URL) -> UUID? {
+        let identityURL = audioURL.appendingPathExtension("recording-id.json")
+        var foundExistingIdentity = false
+        for url in [identityURL, audioURL.appendingPathExtension("transcript-ready.json")] {
+            guard let data = try? Data(contentsOf: url) else { continue }
+            foundExistingIdentity = true
+            if let identity = try? JSONDecoder().decode(RecordingIdentity.self, from: data) {
+                return identity.recordingID
+            }
+        }
+        guard !foundExistingIdentity else { return nil }
+        let identity = RecordingIdentity(recordingID: UUID())
+        do {
+            // A transcription that finished meanwhile wrote the ID; its file is kept.
+            try JSONEncoder().encode(identity).write(to: identityURL, options: .withoutOverwriting)
+            return identity.recordingID
+        } catch {
+            return (try? Data(contentsOf: identityURL))
+                .flatMap { try? JSONDecoder().decode(RecordingIdentity.self, from: $0) }?
+                .recordingID
+        }
     }
 
     /// The engine gets only the parts of the recording that hold speech; the
@@ -2458,6 +2560,7 @@ final class AudioRecorderViewModel: ObservableObject {
         request: FinalTranscriptionRequest
     ) -> FinalTranscriptionOutcome {
         let (outcome, payload) = savingTranscript(text, for: audioURL, request: request)
+        addHistoryRecord(for: payload, result: nil, request: request)
         announce(payload, waitingForSpeakers: false)
         return outcome
     }

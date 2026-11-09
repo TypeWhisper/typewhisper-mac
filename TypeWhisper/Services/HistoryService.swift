@@ -148,6 +148,21 @@ struct HistoryFacets: Sendable {
     let devices: [HistoryDeviceFacet]
 }
 
+/// A Recorder recording's transcript for History, without audio or speakers.
+struct RecorderTranscript: Equatable, Sendable {
+    /// The Recorder's `recording_id` for the audio file.
+    let recordingID: UUID
+    let text: String
+    /// The recording's file name without its extension.
+    let title: String?
+    let recordedAt: Date?
+    let durationSeconds: Double
+    var language: String? = nil
+    /// Empty when the engine is not known, as for recordings from earlier versions.
+    var engineUsed = ""
+    var modelUsed: String? = nil
+}
+
 @MainActor
 final class HistoryService: ObservableObject {
     static let pluginSyncActionID = "com.typewhisper.history.transcription-updated"
@@ -615,16 +630,108 @@ final class HistoryService: ObservableObject {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
-    /// The record a Recorder recording was saved as with speaker detection.
+    /// The record a Recorder recording was saved as, with or without speakers.
     /// Throws when the lookup fails, so a failed fetch is not mistaken for a
     /// recording without a record.
-    func speakerRecord(forRecorderRecordingID recordingID: UUID) throws -> TranscriptionRecord? {
+    func record(forRecorderRecordingID recordingID: UUID) throws -> TranscriptionRecord? {
         var descriptor = FetchDescriptor<TranscriptionRecord>(
             predicate: #Predicate { $0.recorderRecordingID == recordingID },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
         descriptor.fetchLimit = 1
         return try modelContext.fetch(descriptor).first
+    }
+
+    // MARK: - Recorder transcripts
+
+    /// Saves a Recorder recording's transcript as a record without audio or speakers.
+    /// A recording that already has such a record gets the new text; a record with
+    /// speakers is left as it is. Returns the record's ID, or nil when nothing was saved.
+    @discardableResult
+    func saveRecorderTranscript(_ transcript: RecorderTranscript) -> UUID? {
+        let existing: TranscriptionRecord?
+        do {
+            existing = try record(forRecorderRecordingID: transcript.recordingID)
+        } catch {
+            // Without the lookup a second record for the same recording could be saved.
+            logger.error("Failed to look up the record of a recording: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        guard let texts = Self.validatedRecordTexts(
+            rawText: transcript.text,
+            finalText: transcript.text,
+            durationSeconds: transcript.durationSeconds
+        ) else { return nil }
+        guard let existing else {
+            let record = makeRecorderRecord(transcript, text: texts.finalText)
+            modelContext.insert(record)
+            save()
+            refreshRecentRecords()
+            return record.id
+        }
+        guard existing.speakerTranscriptState == nil, existing.rawText != texts.rawText else { return existing.id }
+        existing.rawText = texts.rawText
+        existing.finalText = texts.finalText
+        existing.renderedDocument = nil
+        existing.synchronizedStructuredDocument = nil
+        existing.wordsCount = WordCount.count(in: texts.finalText)
+        existing.language = transcript.language ?? existing.language
+        if !transcript.engineUsed.isEmpty { existing.engineUsed = transcript.engineUsed }
+        existing.modelUsed = transcript.modelUsed ?? existing.modelUsed
+        existing.contentUpdatedAt = Date()
+        save()
+        refreshRecentRecords()
+        emitPluginSyncEvent(for: existing)
+        return existing.id
+    }
+
+    /// Adds records for recordings that were transcribed before the Recorder saved
+    /// to History. Recordings that have a record keep it. Returns how many were added.
+    @discardableResult
+    func importRecorderTranscripts(_ transcripts: [RecorderTranscript]) -> Int {
+        guard !transcripts.isEmpty else { return 0 }
+        let descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.recorderRecordingID != nil }
+        )
+        guard let existing = try? modelContext.fetch(descriptor) else {
+            logger.error("Failed to look up the records of earlier recordings")
+            return 0
+        }
+        var knownRecordingIDs = Set(existing.compactMap(\.recorderRecordingID))
+        var added = 0
+        for transcript in transcripts where knownRecordingIDs.insert(transcript.recordingID).inserted {
+            guard let texts = Self.validatedRecordTexts(
+                rawText: transcript.text,
+                finalText: transcript.text,
+                durationSeconds: transcript.durationSeconds
+            ) else { continue }
+            modelContext.insert(makeRecorderRecord(transcript, text: texts.finalText))
+            added += 1
+        }
+        guard added > 0 else { return 0 }
+        save()
+        refreshRecentRecords()
+        return added
+    }
+
+    private func makeRecorderRecord(_ transcript: RecorderTranscript, text: String) -> TranscriptionRecord {
+        let record = TranscriptionRecord(
+            timestamp: transcript.recordedAt ?? Date(),
+            rawText: text,
+            finalText: text,
+            appName: transcript.title.flatMap { let s = Self.sanitize($0); return s.isEmpty ? nil : s },
+            durationSeconds: transcript.durationSeconds,
+            language: transcript.language,
+            engineUsed: transcript.engineUsed.isEmpty ? "unknown" : transcript.engineUsed,
+            modelUsed: transcript.modelUsed
+        )
+        record.originDeviceID = historySyncPreferences?.deviceID ?? ""
+        record.originPlatformRaw = "macOS"
+        record.source = .recorder
+        // The audio stays in the Recorder's folder.
+        record.historySyncAudioEligible = false
+        record.recorderRecordingID = transcript.recordingID
+        return record
     }
 
     /// Records that have speaker names, newest first.

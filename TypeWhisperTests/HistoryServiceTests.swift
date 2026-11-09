@@ -992,6 +992,47 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(payload["pipelineSteps"] as? [String], ["Cleanup"])
     }
 
+    @MainActor
+    func testRecorderTranscriptIsSavedOnceAndGetsTheTextOfALaterTranscription() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let recordingID = UUID()
+        let recordedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        func transcript(_ text: String) -> RecorderTranscript {
+            RecorderTranscript(
+                recordingID: recordingID,
+                text: text,
+                title: "Weekly sync",
+                recordedAt: recordedAt,
+                durationSeconds: 90,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+
+        let id = try XCTUnwrap(service.saveRecorderTranscript(transcript("First pass.")))
+        XCTAssertEqual(service.saveRecorderTranscript(transcript("Second pass.")), id)
+
+        let record = try XCTUnwrap(service.record(forRecorderRecordingID: recordingID))
+        XCTAssertEqual(record.id, id)
+        XCTAssertEqual(record.rawText, "Second pass.")
+        XCTAssertEqual(record.finalText, "Second pass.")
+        XCTAssertEqual(record.source, .recorder)
+        XCTAssertEqual(record.appName, "Weekly sync")
+        XCTAssertEqual(record.timestamp, recordedAt)
+        XCTAssertNil(record.audioFileName)
+        XCTAssertNil(record.speakerTranscriptState)
+
+        // The import of earlier recordings adds only recordings without a record.
+        let earlier = RecorderTranscript(
+            recordingID: UUID(), text: "Earlier recording.", title: "Old", recordedAt: nil, durationSeconds: 5
+        )
+        XCTAssertEqual(service.importRecorderTranscripts([transcript("Imported text."), earlier, earlier]), 1)
+        XCTAssertEqual(try service.record(forRecorderRecordingID: recordingID)?.finalText, "Second pass.")
+        XCTAssertEqual(try service.record(forRecorderRecordingID: earlier.recordingID)?.engineUsed, "unknown")
+    }
+
     /// Issue #1558: editing a speaker paragraph changes `finalText` like any other text edit.
     @MainActor
     func testEditingASpeakerParagraphEmitsThePluginSyncEvent() throws {

@@ -181,6 +181,8 @@ enum UserDefaultsKeys {
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
     static let recorderDetectSpeakers = "recorderDetectSpeakers"
+    /// Set once the transcripts of earlier recordings were added to History.
+    static let recorderHistoryImportCompleted = "recorderHistoryImportCompleted"
     /// Security-scoped bookmark of the folder for new recordings; absent for the default folder.
     static let recorderFolderBookmark = "recorderFolderBookmark"
     static let recorderFolderPath = "recorderFolderPath"
