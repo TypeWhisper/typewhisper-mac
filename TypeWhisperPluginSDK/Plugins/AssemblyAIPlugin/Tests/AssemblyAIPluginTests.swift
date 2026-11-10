@@ -558,6 +558,45 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertTrue(body.contains(#"{"keyterms_prompt":["TypeWhisper"],"language_codes":["de"]}"#))
     }
 
+    func testDictationModeSendsRecordingsToTheDictationAPIAndReturnsTheCleanedText() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [AssemblyAIPlugin.transcriptionModeKey: "dictation"],
+            secrets: ["api-key": "assembly-key"]
+        )
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+        XCTAssertEqual(plugin.transcriptionMode, .dictation)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"um hallo typewhisper","llm_response":"Hallo TypeWhisper!","words":[],"confidence":0.9,"audio_duration_ms":1000,"session_id":"s"}"#.utf8),
+                    Self.httpResponse(url: "https://dictation.assemblyai.com/v1/transcribe", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribeStructured(
+            audio: audio,
+            language: "de",
+            translate: false,
+            prompt: "TypeWhisper"
+        )
+
+        XCTAssertEqual(result.text, "Hallo TypeWhisper!")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
+        let request = requests[0]
+        XCTAssertEqual(request.url?.absoluteString, "https://dictation.assemblyai.com/v1/transcribe")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "assembly-key")
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-AAI-Model"))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains(#"{"keyterms_prompt":["TypeWhisper"],"language_codes":["de"]}"#))
+    }
+
     func testSyncAPIIsSkippedWhenTheAsyncAPIKeepsMoreOfTheRequest() {
         let model = AssemblyAIPlugin.universal35ProModelId
         func request(
@@ -604,8 +643,8 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
         plugin.setSpeakerDiarizationEnabled(false)
 
-        // Sync and async cost what their price says: no live session and no preview.
-        for mode in [AssemblyAITranscriptionMode.sync, .async] {
+        // Sync, Dictation and async cost what their price says: no live session and no preview.
+        for mode in [AssemblyAITranscriptionMode.sync, .dictation, .async] {
             plugin.setTranscriptionMode(mode)
             XCTAssertEqual(host.userDefault(forKey: AssemblyAIPlugin.transcriptionModeKey) as? String, mode.rawValue)
             XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
