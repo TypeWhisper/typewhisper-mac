@@ -4711,6 +4711,10 @@ final class DictationViewModel: ObservableObject {
         // An offer expiring mid-paste would return to idle and let a new dictation start
         // before this paste lands. The result feedback starts a new lifetime.
         indicatorFeedbackLifetime.cancel()
+        // A reset queued for a pending hotkey press would start that dictation mid-paste;
+        // the Insert task starts it once the paste lands.
+        insertingResetTask?.cancel()
+        insertingResetTask = nil
 
         Task { @MainActor [weak self] in
             guard let self else { return }
