@@ -3049,12 +3049,13 @@ final class DictationViewModel: ObservableObject {
         let streamingPreviewWasHidden = lastStreamingPreviewHidden || hiddenLiveSessionWasDeferred
         lastStreamingPreviewHidden = false
         stopRecordingTimer()
-        let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let stopPolicy = Self.finalizingStopPolicy(capturesReleaseTail: capturesReleaseTail)
         var samples = await audioRecordingService.stopRecording(
             policy: stopPolicy,
             bluetoothBehavior: bluetoothStopBehavior
         )
+        // Taken after the release tail, so a last word the preview shows during it is kept.
+        let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let recordingUsedBluetoothInput = recordingUsesBluetoothInput
         restoreRecordingSideEffects()
         guard !Task.isCancelled else { return }

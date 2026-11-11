@@ -10433,6 +10433,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     private final class SilenceStopProbe {
         var stopPolicies: [String] = []
         var announcements: [String] = []
+        /// The announcements made before each stop finished capturing.
+        var announcementsDuringStop: [[String]] = []
     }
 
     /// F14, F15 and F16. Each press in a test uses its own key, so the duplicate filter
@@ -10498,6 +10500,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.startRecordingOverride = {}
         context.audioRecordingService.stopRecordingOverride = { policy in
             probe.stopPolicies.append(policy.logDescription)
+            probe.announcementsDuringStop.append(probe.announcements)
             return []
         }
         let viewModel = context.dictationViewModel
@@ -10762,12 +10765,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let stoppedAnnouncement = try XCTUnwrap(
             Self.silenceStopAnnouncementText { $0.announceRecordingStopped() }
         )
-        // A key stop still records its release tail, so the announcement waits for it (#1896).
-        XCTAssertFalse(probe.announcements.contains(stoppedAnnouncement))
         // The watch of the stopped dictation reports late; it does not stop anything twice.
         viewModel.testingReportSilenceEndpoint(sessionID: firstSessionID)
         await Self.waitForDictationSessionToFinish(viewModel, id: firstSessionID)
         XCTAssertEqual(probe.stopPolicies.count, 1)
+        // A key stop still records its release tail, so the announcement waits for it (#1896).
+        XCTAssertEqual(probe.announcementsDuringStop.count, 1)
+        XCTAssertFalse(probe.announcementsDuringStop.first?.contains(stoppedAnnouncement) ?? true)
         XCTAssertTrue(probe.announcements.contains(stoppedAnnouncement))
 
         try await Self.startSilenceStopDictation(
