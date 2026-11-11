@@ -3444,6 +3444,7 @@ final class DictationViewModel: ObservableObject {
                 partialText = ""
                 var insertedTextForCorrectionTracking: String?
                 var undeliveredTranscript: UndeliveredTranscript?
+                var copiedForManualPaste = false
                 let makeUndeliveredTranscript = { (reason: UndeliveredTranscript.Reason, outputFormat: String?) in
                     UndeliveredTranscript(
                         text: text,
@@ -3603,9 +3604,7 @@ final class DictationViewModel: ObservableObject {
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
                         }
-                        if insertionResult == .copiedToClipboard {
-                            showManualPasteFeedback()
-                        }
+                        copiedForManualPaste = insertionResult == .copiedToClipboard
                         if insertionResult?.missedTextField == true {
                             undeliveredTranscript = makeUndeliveredTranscript(.noTextField, resolvedOutputFormat)
                         } else {
@@ -3696,20 +3695,35 @@ final class DictationViewModel: ObservableObject {
                 lastTranscriptionLanguage = detectedLang
 
                 if postProcessingFallback != nil {
-                    let fallbackMessage = localizedAppText(
-                        "AI post-processing failed — raw transcription inserted",
-                        de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
-                        ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
-                    )
-                    showNotchFeedback(
-                        message: fallbackMessage,
-                        icon: "exclamationmark.triangle.fill",
-                        duration: 4.0
-                    )
+                    let fallbackMessage = copiedForManualPaste
+                        ? localizedAppText(
+                            "AI post-processing failed. Raw transcription copied to the clipboard.",
+                            de: "KI-Nachbearbeitung fehlgeschlagen. Rohtext in die Zwischenablage kopiert.",
+                            ja: "AI後処理に失敗しました。未処理の文字起こしをクリップボードにコピーしました。",
+                            zh: "AI 后处理失败。已将原始转录复制到剪贴板。",
+                            es: "Falló el posprocesamiento con IA. Se copió la transcripción sin procesar al portapapeles."
+                        )
+                        : localizedAppText(
+                            "AI post-processing failed — raw transcription inserted",
+                            de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
+                            ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
+                        )
+                    // Without Accessibility, the paste hint below replaces this banner.
+                    if !copiedForManualPaste {
+                        showNotchFeedback(
+                            message: fallbackMessage,
+                            icon: "exclamationmark.triangle.fill",
+                            duration: 4.0
+                        )
+                    }
                     // The text was delivered, so this stays a warning banner (the failure is
                     // already in the Error Log above), but the menu bar keeps it with a way to
                     // the LLM fallbacks on the Workflows page.
                     lastDictationError = ErrorSummary(message: fallbackMessage, settingsTab: .workflows)
+                }
+                // Shown after the fallback warning so the ⌘V hint stays visible.
+                if copiedForManualPaste {
+                    showManualPasteFeedback()
                 }
                 // Shown last so it is not replaced: the transcript still needs a text field.
                 if let undeliveredTranscript {
