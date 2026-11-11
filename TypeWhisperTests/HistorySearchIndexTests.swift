@@ -746,10 +746,12 @@ final class HistorySearchIndexerTests: XCTestCase {
     func testAnIndexDeletedForDamageDuringAnUpdateIsBuiltAgainInFull() async throws {
         let fixture = try Fixture()
         defer { TestSupport.remove(fixture.appSupportDirectory) }
-        let indexer = fixture.makeIndexer()
+        let reads = Reads(fixture.history.searchRecordReader)
+        let indexer = fixture.makeIndexer(reads: reads)
         let firstID = fixture.addDictation("We ship the invoice export on Friday.")
         let secondID = fixture.addDictation("Book the dentist for Monday.")
         try await eventually { try await fixture.indexedIDs() == [firstID, secondID] }
+        let readsBefore = reads.started
 
         // The records table becomes unreadable while the index is open.
         _ = try indexRows("PRAGMA wal_checkpoint(TRUNCATE)", in: fixture.indexDirectory, writing: true)
@@ -762,8 +764,10 @@ final class HistorySearchIndexerTests: XCTestCase {
         try handle.write(contentsOf: Data(repeating: 0xFF, count: pageSize))
         try handle.close()
 
-        // The update that finds the damage brings back the earlier records too.
+        // The update that finds the damage brings back the earlier records too. Its own
+        // read and the read of the rebuild have started before this test looks at the index.
         let thirdID = fixture.addDictation("The roadmap stays as planned.")
+        try await eventually { reads.started >= readsBefore + 2 }
         try await eventually { try await fixture.indexedIDs() == [firstID, secondID, thirdID] }
         try await fixture.index.checkIntegrity()
         withExtendedLifetime(indexer) {}
