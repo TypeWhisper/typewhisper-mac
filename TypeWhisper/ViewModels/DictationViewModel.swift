@@ -3770,7 +3770,9 @@ final class DictationViewModel: ObservableObject {
                 )
 
                 state = .inserting
-                if actionFeedbackMessage != nil {
+                // A hotkey press queued during transcription starts now instead of waiting for
+                // the feedback to expire, as it does when it arrives while feedback is shown.
+                if actionFeedbackMessage != nil, pendingHotkeyDictationStart == nil {
                     startActionFeedbackLifetime(duration: actionDisplayDuration)
                 } else {
                     scheduleInsertingReset(after: .seconds(1.5))

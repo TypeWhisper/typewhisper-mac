@@ -9156,6 +9156,63 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
     }
 
+    /// Without Accessibility every dictation ends with the paste hint. A hotkey press queued
+    /// during transcription must not wait for that hint to expire.
+    @MainActor
+    func testClipboardPasteHintDoesNotDelayQueuedHotkeyStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        MockTranscriptionPlugin.setHang(seconds: 0.3)
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        var startCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = false
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = { startCount += 1 }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        _ = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<100 where viewModel.state != .processing {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(viewModel.state, .processing)
+        context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+
+        // The hint lasts four seconds; the queued dictation starts long before that.
+        for _ in 0..<150 where startCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await viewModel.testingWaitForRecordingStart()
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(viewModel.state, .recording)
+    }
+
     @MainActor
     func testHoveredFeedbackDoesNotDelayBufferedHotkeyStart() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
