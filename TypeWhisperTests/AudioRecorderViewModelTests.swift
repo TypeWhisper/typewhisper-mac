@@ -293,6 +293,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
             inputs.append(input)
             return UUID()
         }
+        var transcripts: [RecorderTranscript] = []
+        viewModel.recorderTranscriptIntake = { transcripts.append($0) }
         var events: [RecorderTranscriptReadyPayload] = []
         EventBus.shared.emissionObserverForTesting = { event in
             guard case .recorderTranscriptReady(let payload) = event else { return }
@@ -306,6 +308,91 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(inputs.count, 1)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(inputs.first?.recorderRecordingID, events.first?.recordingID)
+        XCTAssertTrue(transcripts.isEmpty, "The speaker record is the recording's History record")
+    }
+
+    func testRecordingWithoutSpeakerRecordIsSavedToHistoryUnlessHistoryIsOff() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("Meeting notes"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let defaults = try makeDefaults()
+        let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
+        var transcripts: [RecorderTranscript] = []
+        viewModel.recorderTranscriptIntake = { transcripts.append($0) }
+        var events: [RecorderTranscriptReadyPayload] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            guard case .recorderTranscriptReady(let payload) = event else { return }
+            events.append(payload)
+        }
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        _ = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+
+        XCTAssertEqual(transcripts.count, 1)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(transcripts.first?.recordingID, events.first?.recordingID)
+        XCTAssertEqual(transcripts.first?.text, "Meeting notes")
+        XCTAssertEqual(
+            transcripts.first?.title,
+            events.first.map { URL(fileURLWithPath: $0.audioFilePath).deletingPathExtension().lastPathComponent }
+        )
+
+        defaults.set(false, forKey: UserDefaultsKeys.historyEnabled)
+        let secondSessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        _ = try await waitForRecorderSession(viewModel, id: secondSessionID, status: .completed)
+
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(transcripts.count, 1)
+    }
+
+    func testEarlierTranscriptsAreImportedIntoHistoryOnce() async throws {
+        let directory = makeTemporaryDirectory()
+        let withID = directory.appendingPathComponent("with-id.wav")
+        let withoutID = directory.appendingPathComponent("without-id.wav")
+        let knownID = UUID()
+        try Data(#"{"recording_id":"\#(knownID.uuidString)"}"#.utf8)
+            .write(to: withID.appendingPathExtension("recording-id.json"))
+        let recordedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let items = [
+            AudioRecorderViewModel.RecordingItem(
+                url: withID, date: recordedAt, duration: 12, fileSize: 1,
+                transcript: "First recording.", transcriptionFailure: nil
+            ),
+            AudioRecorderViewModel.RecordingItem(
+                url: withoutID, date: recordedAt, duration: 8, fileSize: 1,
+                transcript: "Second recording.", transcriptionFailure: nil
+            ),
+            AudioRecorderViewModel.RecordingItem(
+                url: directory.appendingPathComponent("untranscribed.wav"), date: recordedAt, duration: 5,
+                fileSize: 1, transcript: nil, transcriptionFailure: nil
+            ),
+        ]
+        let defaults = try makeDefaults()
+        let viewModel = makeViewModel(defaults: defaults, recordingsLoader: { _, _ in items })
+        var imports: [[RecorderTranscript]] = []
+        viewModel.recorderTranscriptImport = { imports.append($0) }
+
+        viewModel.loadRecordings()
+        try await waitUntil("the earlier transcripts were imported") { imports.count == 1 }
+
+        let transcripts = try XCTUnwrap(imports.first)
+        XCTAssertEqual(transcripts.map(\.text), ["First recording.", "Second recording."])
+        XCTAssertEqual(transcripts.map(\.title), ["with-id", "without-id"])
+        XCTAssertEqual(transcripts.first?.recordingID, knownID)
+        XCTAssertEqual(transcripts.first?.recordedAt, recordedAt)
+        // A recording from before the ID files gets one, so a later transcription finds its record.
+        let storedID = try String(
+            contentsOf: withoutID.appendingPathExtension("recording-id.json"), encoding: .utf8
+        )
+        XCTAssertTrue(storedID.contains(try XCTUnwrap(transcripts.last).recordingID.uuidString))
+        XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.recorderHistoryImportCompleted))
+
+        viewModel.loadRecordings()
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(imports.count, 1)
     }
 
     /// Issue #887: with speaker detection the completion waits for the speakers,

@@ -210,6 +210,35 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(history.speakerRecords(limit: 10).count, 2)
     }
 
+    /// A recording saved without speakers gets its speaker record when it is
+    /// transcribed again with detection, and the record without speakers goes.
+    func testARecordWithoutSpeakersIsReplacedByTheSpeakerRecord() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        let coordinator = makeCoordinator()
+        var recording = input()
+        let recordingID = UUID()
+        recording.recorderRecordingID = recordingID
+        let recordedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let plainID = try XCTUnwrap(history.saveRecorderTranscript(RecorderTranscript(
+            recordingID: recordingID,
+            text: "Good morning.",
+            title: "Standup",
+            recordedAt: recordedAt,
+            durationSeconds: 3
+        )))
+
+        let addedID = await coordinator.addRecording(recording)
+        let speakerID = try XCTUnwrap(addedID)
+        try await waitUntilIdle(coordinator)
+
+        XCTAssertNotEqual(speakerID, plainID)
+        XCTAssertNil(history.record(withID: plainID))
+        let record = try XCTUnwrap(history.record(forRecorderRecordingID: recordingID))
+        XCTAssertEqual(record.id, speakerID)
+        XCTAssertEqual(record.timestamp, recordedAt)
+        XCTAssertNotNil(record.speakerTranscriptState)
+    }
+
     func testEngineLabelsAreUsedWithoutRunningTheProvider() async throws {
         let coordinator = makeCoordinator()
 

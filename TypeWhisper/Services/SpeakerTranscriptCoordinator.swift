@@ -381,14 +381,16 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
 
     /// Saves a recording with its audio to History. Speaker labels the engine
     /// returned itself are used as they are; otherwise detection is queued.
-    /// A Recorder recording that already has its record keeps that record,
-    /// whose ID is returned.
+    /// A Recorder recording that already has its speaker record keeps that record,
+    /// whose ID is returned. A record without speakers is replaced.
     func addRecording(_ input: SpeakerRecordingInput) async -> UUID? {
         guard premiumAccess() else { return nil }
+        var replaced: (id: UUID, timestamp: Date)?
         if let recordingID = input.recorderRecordingID {
             do {
-                if let existing = try historyService.speakerRecord(forRecorderRecordingID: recordingID) {
-                    return existing.id
+                if let existing = try historyService.record(forRecorderRecordingID: recordingID) {
+                    guard existing.speakerTranscriptState == nil else { return existing.id }
+                    replaced = (existing.id, existing.timestamp)
                 }
             } catch {
                 // Without the lookup a second record for the same recording could be saved.
@@ -422,6 +424,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         }.value
         guard didWriteAudio, historyService.addSpeakerRecord(
             id: id,
+            timestamp: replaced?.timestamp ?? Date(),
             text: input.result.text,
             title: input.title,
             source: input.source,
@@ -437,6 +440,10 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             transcript: providerTranscript,
             capturedInClearGeneration: clearGeneration
         ) else { return nil }
+        // The record without speakers goes only once the one with speakers is saved.
+        if let replaced {
+            historyService.deleteRecord(withID: replaced.id)
+        }
 
         if providerTranscript == nil {
             start(recordID: id)
@@ -711,7 +718,7 @@ extension SpeakerTranscriptCoordinator {
     ) async -> RecorderTranscriptReadyPayload {
         func record() -> TranscriptionRecord? {
             do {
-                return try historyService.speakerRecord(forRecorderRecordingID: payload.recordingID)
+                return try historyService.record(forRecorderRecordingID: payload.recordingID)
             } catch {
                 speakerLogger.error("Failed to look up the speaker record of a recording: \(error.localizedDescription, privacy: .public)")
                 return nil
