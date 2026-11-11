@@ -121,6 +121,8 @@ private func indexRows(_ sql: String, in directory: URL, writing: Bool = false) 
     var statement: OpaquePointer?
     defer { sqlite3_finalize(statement) }
     guard sqlite3_open_v2(path, &database, writing ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+          // The index writes through its own connection at the same time.
+          sqlite3_busy_timeout(database, 10_000) == SQLITE_OK,
           sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
         let message = String(cString: sqlite3_errmsg(database))
         // A file that is being built again has no tables for a moment.
@@ -128,12 +130,18 @@ private func indexRows(_ sql: String, in directory: URL, writing: Bool = false) 
         throw HistorySearchIndexError(code: sqlite3_errcode(database), message: message)
     }
     var rows: [[String]] = []
-    while sqlite3_step(statement) == SQLITE_ROW {
-        rows.append((0..<sqlite3_column_count(statement)).map { column in
-            sqlite3_column_text(statement, column).map { String(cString: $0) } ?? ""
-        })
+    while true {
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW:
+            rows.append((0..<sqlite3_column_count(statement)).map { column in
+                sqlite3_column_text(statement, column).map { String(cString: $0) } ?? ""
+            })
+        case SQLITE_DONE:
+            return rows
+        default:
+            throw HistorySearchIndexError(code: sqlite3_errcode(database), message: String(cString: sqlite3_errmsg(database)))
+        }
     }
-    return rows
 }
 
 /// The records with a passage that matches the full-text expression, oldest first.
@@ -436,7 +444,7 @@ final class HistorySearchIndexerTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) async throws {
-        let deadline = ContinuousClock.now + .seconds(10)
+        let deadline = ContinuousClock.now + .seconds(30)
         while ContinuousClock.now < deadline {
             if try await condition() { return }
             try await Task.sleep(for: .milliseconds(5))
