@@ -122,7 +122,10 @@ private func indexRows(_ sql: String, in directory: URL, writing: Bool = false) 
     defer { sqlite3_finalize(statement) }
     guard sqlite3_open_v2(path, &database, writing ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
           sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
-        throw HistorySearchIndexError(code: sqlite3_errcode(database), message: String(cString: sqlite3_errmsg(database)))
+        let message = String(cString: sqlite3_errmsg(database))
+        // A file that is being built again has no tables for a moment.
+        if message.hasPrefix("no such table") { return [] }
+        throw HistorySearchIndexError(code: sqlite3_errcode(database), message: message)
     }
     var rows: [[String]] = []
     while sqlite3_step(statement) == SQLITE_ROW {
@@ -548,12 +551,59 @@ final class HistorySearchIndexerTests: XCTestCase {
         // The index folder cannot be created, so the first attempt fails.
         try setLocked(true)
         let id = fixture.addDictation("We ship the invoice export on Friday.")
+        let deletedID = fixture.addDictation("Book the dentist for Monday.")
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.indexDirectory.path))
 
+        // A record deleted before the next attempt is not part of it.
+        XCTAssertTrue(fixture.history.deleteRecord(withID: deletedID))
         try setLocked(false)
         try await eventually { try await fixture.indexedIDs() == [id] }
         withExtendedLifetime(indexer) {}
+    }
+
+    func testAnUpdateThatKeepsFailingIsLeftToTheNextCheck() async throws {
+        let lockedDirectory = try TestSupport.makeTemporaryDirectory()
+        func setLocked(_ locked: Bool) throws {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: locked ? 0o555 : 0o755], ofItemAtPath: lockedDirectory.path
+            )
+        }
+        let fixture = try Fixture(indexDirectory: lockedDirectory.appendingPathComponent("HistorySearch", isDirectory: true))
+        defer {
+            try? setLocked(false)
+            TestSupport.remove(lockedDirectory)
+            TestSupport.remove(fixture.appSupportDirectory)
+        }
+        let indexer = fixture.makeIndexer(retryDelay: .milliseconds(20))
+
+        // The first attempt and its three retries all fail.
+        try setLocked(true)
+        let id = fixture.addDictation("We ship the invoice export on Friday.")
+        try await Task.sleep(for: .milliseconds(1_500))
+        try setLocked(false)
+        try await Task.sleep(for: .milliseconds(200))
+        let afterRetries = try await fixture.indexedIDs()
+        XCTAssertEqual(afterRetries, [])
+
+        await indexer.reconcile()
+        try await eventually { try await fixture.indexedIDs() == [id] }
+    }
+
+    func testADeletionDoesNotWaitForAWorkerThatPauses() async throws {
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let indexer = fixture.makeIndexer(retryDelay: .seconds(60))
+        let id = fixture.addDictation("We ship the invoice export on Friday.")
+        try await eventually { try await fixture.indexedIDs() == [id] }
+
+        // The worker now waits a minute before it looks at the new record again.
+        fixture.isBusy = true
+        fixture.addDictation("Book the dentist for Monday.")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(fixture.history.deleteRecord(withID: id))
+        try await eventually { try await fixture.indexedIDs().isEmpty }
+        await indexer.stop()
     }
 
     func testAfterStoppingNothingIsWrittenAnymore() async throws {

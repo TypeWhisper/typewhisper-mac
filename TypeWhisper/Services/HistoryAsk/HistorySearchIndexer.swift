@@ -37,6 +37,14 @@ final class HistorySearchIndexer {
     /// while no index is kept.
     private var indexMayExist = true
     private var failedUpserts = 0
+    /// Until when a batch that failed waits before it is tried again.
+    private var retryAfter: ContinuousClock.Instant?
+    /// What was removed while a batch was read or written. A failed batch must
+    /// not bring these records back when it is tried again.
+    private var removedDuringUpsert = Set<UUID>()
+    private var clearedDuringUpsert = false
+    /// The worker's wait while the app is busy or before a retry. Deletions end it.
+    private var pause: Task<Void, Never>?
     private var isStopped = false
     private var upsertTimer: Task<Void, Never>?
     private var worker: Task<Void, Never>?
@@ -77,6 +85,7 @@ final class HistorySearchIndexer {
         isStopped = true
         subscription = nil
         upsertTimer?.cancel()
+        pause?.cancel()
         await worker?.value
     }
 
@@ -155,8 +164,10 @@ final class HistorySearchIndexer {
     private func remove(_ ids: Set<UUID>) {
         waitingUpserts.subtract(ids)
         dueUpserts.subtract(ids)
+        removedDuringUpsert.formUnion(ids)
         guard indexMayExist else { return }
         removals.formUnion(ids)
+        pause?.cancel()
         startWorker()
     }
 
@@ -165,8 +176,12 @@ final class HistorySearchIndexer {
         waitingUpserts = []
         dueUpserts = []
         removals = []
+        clearedDuringUpsert = true
+        failedUpserts = 0
+        retryAfter = nil
         guard indexMayExist else { return }
         deletesIndex = true
+        pause?.cancel()
         startWorker()
     }
 
@@ -176,7 +191,7 @@ final class HistorySearchIndexer {
         case deleteIndex
         case remove(Set<UUID>)
         case upsert([UUID])
-        case waitWhileBusy
+        case wait(Duration)
     }
 
     private func startWorker() {
@@ -211,9 +226,13 @@ final class HistorySearchIndexer {
             defer { dueUpserts = [] }
             return .remove(dueUpserts)
         }
-        if isBusy() { return .waitWhileBusy }
+        if isBusy() { return .wait(busyRetryDelay) }
+        if let retryAfter, ContinuousClock.now < retryAfter { return .wait(retryAfter - .now) }
+        retryAfter = nil
         let batch = Array(dueUpserts.prefix(Self.batchSize))
         dueUpserts.subtract(batch)
+        removedDuringUpsert = []
+        clearedDuringUpsert = false
         indexMayExist = true
         return .upsert(batch)
     }
@@ -256,11 +275,15 @@ final class HistorySearchIndexer {
                     return
                 }
                 failedUpserts += 1
-                dueUpserts.formUnion(ids)
-                try? await Task.sleep(for: busyRetryDelay)
+                if !clearedDuringUpsert { dueUpserts.formUnion(Set(ids).subtracting(removedDuringUpsert)) }
+                retryAfter = .now + busyRetryDelay
             }
-        case .waitWhileBusy:
-            try? await Task.sleep(for: busyRetryDelay)
+        case .wait(let duration):
+            // A task of its own, so a deletion can end the wait.
+            let pause = Task<Void, Never> { try? await Task.sleep(for: duration) }
+            self.pause = pause
+            await pause.value
+            self.pause = nil
         }
     }
 }
