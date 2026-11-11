@@ -1569,6 +1569,8 @@ final class TextInsertionService {
         }
         // Accessibility is optional (#1906): without it, the user pastes the text manually.
         guard isAccessibilityGranted else {
+            // A cancelled insertion must not replace the clipboard or take over its restore.
+            try Task.checkCancellation()
             return copyTextForManualPaste(
                 text,
                 outputFormat: outputFormat,
