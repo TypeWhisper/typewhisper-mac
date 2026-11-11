@@ -14948,63 +14948,6 @@
         }
       }
     },
-    "Accessibility access is required to paste text into other apps." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bedienungshilfen-Zugriff wird benötigt, um Text in andere Apps einzufügen."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se necesita acceso de Accesibilidad para pegar texto en otras apps."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "他のアプリへテキストを貼り付けるには、アクセシビリティ権限が必要です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要辅助功能权限才能将文本粘贴到其他应用。"
-          }
-        }
-      }
-    },
-    "Accessibility access required" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bedienungshilfen-Zugriff erforderlich"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se necesita acceso de Accesibilidad"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アクセシビリティ権限が必要です"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要辅助功能权限"
-          }
-        }
-      }
-    },
     "Action Items" : {
       "localizations" : {
         "es" : {
@@ -43708,28 +43651,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用于采集你的语音。"
-          }
-        }
-      }
-    },
-    "Required to type into other apps." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Necesario para escribir en otras apps."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "他のアプリに入力するために必要です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用于向其他应用输入文字。"
           }
         }
       }

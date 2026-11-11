@@ -5439,6 +5439,28 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    /// Issue #1906: Accessibility is optional. Without it, the text stays on the clipboard for a
+    /// manual paste instead of failing.
+    @MainActor
+    func testInsertTextWithoutAccessibilityLeavesTextOnClipboard() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        pasteboard.setString("previous clipboard", forType: .string)
+        var pasteCount = 0
+        service.accessibilityGrantedOverride = false
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+        service.returnSimulatorOverride = { XCTFail("Auto Enter must not run without a paste") }
+
+        let result = try await service.insertText("dictated text", preserveClipboard: true, autoEnter: true)
+
+        XCTAssertEqual(result, .copiedToClipboard)
+        XCTAssertEqual(pasteboard.string(forType: .string), "dictated text")
+        XCTAssertEqual(pasteCount, 0)
+    }
+
     @MainActor
     func testCaptureInsertionContextIncludesCharactersAroundSelectionRange() throws {
         let service = TextInsertionService()
@@ -12913,21 +12935,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
         // A new API dictation may replace the offer, as the dictation hotkey does.
         XCTAssertTrue(viewModel.canStartAPIRecording)
-
-        // A failing Insert shows the error and keeps the offer.
-        context.textInsertionService.accessibilityGrantedOverride = false
-        viewModel.performActionFeedbackAction()
-        let accessibilityError = TextInsertionService.TextInsertionError.accessibilityNotGranted.localizedDescription
-        for _ in 0..<80 {
-            if viewModel.actionFeedbackMessage == accessibilityError {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-
-        XCTAssertEqual(viewModel.actionFeedbackMessage, accessibilityError)
-        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
-        context.textInsertionService.accessibilityGrantedOverride = true
 
         isTextFieldFocused = true
         viewModel.performActionFeedbackAction()

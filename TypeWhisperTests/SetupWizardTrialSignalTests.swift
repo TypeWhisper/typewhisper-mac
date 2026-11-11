@@ -135,16 +135,14 @@ final class SetupWizardTrialSignalTests: XCTestCase {
 
     private let modelA = SetupWizardTestedSelection(providerId: "local", modelId: "model-a")
     private let modelB = SetupWizardTestedSelection(providerId: "local", modelId: "model-b")
-    private let ready = SetupWizardReadiness(
-        canPrepareEngine: true, microphoneGranted: true, accessibilityGranted: true)
+    private let ready = SetupWizardReadiness(canPrepareEngine: true, microphoneGranted: true)
 
     private func insertion(for selection: SetupWizardTestedSelection) -> DictationInsertionCompletion {
         DictationInsertionCompletion(id: UUID(), providerId: selection.providerId, modelId: selection.modelId)
     }
 
     func testPreviouslyTestedProviderCannotCompleteAfterCredentialsOrAssetsAreRemoved() {
-        let unavailable = SetupWizardReadiness(
-            canPrepareEngine: false, microphoneGranted: true, accessibilityGranted: true)
+        let unavailable = SetupWizardReadiness(canPrepareEngine: false, microphoneGranted: true)
         XCTAssertFalse(unavailable.canCompleteSetup)
         XCTAssertFalse(unavailable.hasSuccessfulTest(for: modelA, testedSelections: [modelA]))
     }
@@ -161,25 +159,16 @@ final class SetupWizardTrialSignalTests: XCTestCase {
     }
 
     func testSkippedMicrophonePermissionKeepsReadyTestedEngineIncomplete() {
-        let missingMic = SetupWizardReadiness(
-            canPrepareEngine: true, microphoneGranted: false, accessibilityGranted: true)
+        let missingMic = SetupWizardReadiness(canPrepareEngine: true, microphoneGranted: false)
         XCTAssertFalse(missingMic.canCompleteSetup)
         XCTAssertFalse(missingMic.hasSuccessfulTest(for: modelA, testedSelections: [modelA]))
-    }
-
-    func testSkippedAccessibilityPermissionKeepsReadyTestedEngineIncomplete() {
-        let missingAccessibility = SetupWizardReadiness(
-            canPrepareEngine: true, microphoneGranted: true, accessibilityGranted: false)
-        XCTAssertFalse(missingAccessibility.canCompleteSetup)
-        XCTAssertFalse(missingAccessibility.hasSuccessfulTest(for: modelA, testedSelections: [modelA]))
     }
 
     func testRestorableModelCanFinishSetupWithoutClaimingSuccessfulTest() {
         let canPrepare = TranscriptionEngineReadiness.engineIsReadyOrRestorable(
             authAvailable: true, isConfigured: false,
             hasPersistedRestorableModel: true, hasPreparationFallback: false)
-        let restorable = SetupWizardReadiness(
-            canPrepareEngine: canPrepare, microphoneGranted: true, accessibilityGranted: true)
+        let restorable = SetupWizardReadiness(canPrepareEngine: canPrepare, microphoneGranted: true)
         XCTAssertTrue(restorable.canCompleteSetup)
         XCTAssertFalse(restorable.hasSuccessfulTest(for: modelA, testedSelections: []))
     }

@@ -497,10 +497,18 @@ struct SetupWizardView: View {
                     legacy: localizedAppText("Accessibility Access", de: "Bedienungshilfen-Zugriff"),
                     deviceControl: AccessibilityPermissionPane.localizedName()
                 ),
-                description: localizedAppText("Required to type into other apps.", de: "Erforderlich, um in andere Apps zu schreiben."),
+                // Optional (#1906): without it, text is copied to the clipboard and only
+                // shortcuts with a regular key work.
+                description: localizedAppText(
+                    "Pastes text into other apps and enables Fn and modifier-only shortcuts. Without it, text is copied to the clipboard.",
+                    de: "Fügt Text in andere Apps ein und ermöglicht Fn- und Modifier-Kurzbefehle. Ohne diesen Zugriff wird der Text in die Zwischenablage kopiert.",
+                    ja: "他のアプリにテキストを貼り付け、Fn キーや修飾キーのみのショートカットを使えるようにします。許可しない場合、テキストはクリップボードにコピーされます。",
+                    zh: "将文本粘贴到其他应用，并启用 Fn 键和仅修饰键快捷键。未授权时，文本会复制到剪贴板。",
+                    es: "Pega texto en otras apps y activa los atajos con Fn o solo con modificadores. Sin este acceso, el texto se copia al portapapeles."
+                ),
                 systemImage: "figure.stand",
                 isGranted: !dictation.needsAccessibilityPermission,
-                isRequired: true,
+                isRequired: false,
                 action: { dictation.requestAccessibilityPermission() }
             )
 #endif
@@ -551,7 +559,7 @@ struct SetupWizardView: View {
                 } else {
                     VStack(alignment: .trailing, spacing: 8) {
                         // Required and optional access differ in text, not only in icon
-                        // and color. Only the App Store edition has optional permissions.
+                        // and color.
                         if isRequired {
                             statusPill(
                                 localizedAppText("Needs Access", de: "Zugriff nötig"),
@@ -762,7 +770,7 @@ struct SetupWizardView: View {
 
             HotkeyRecorderView(
                 label: mode == .hybrid && recommendedHotkeyResolution.shouldApply
-                    ? HotkeyService.displayName(for: SetupWizardDefaultHotkey.recommendedHybridHotkey)
+                    ? HotkeyService.displayName(for: recommendedHybridHotkey)
                     : hotkeyLabel(for: mode),
                 title: localizedAppText("Shortcut", de: "Shortcut"),
                 onRecord: { hotkey in
@@ -797,7 +805,7 @@ struct SetupWizardView: View {
             )
         }
 
-        let recommendedName = HotkeyService.displayName(for: SetupWizardDefaultHotkey.recommendedHybridHotkey)
+        let recommendedName = HotkeyService.displayName(for: recommendedHybridHotkey)
         if selectedHotkeyMode == .hybrid, recommendedHotkeyResolution.shouldApply {
             #if APPSTORE
             let message = localizedAppText(
@@ -806,7 +814,21 @@ struct SetupWizardView: View {
                 es: "Se configurará \(recommendedName) al continuar. Haz clic en el atajo para grabar otro."
             )
             #else
-            let message = localizedAppText("Fn will be set automatically when you continue.", de: "Fn wird beim Fortfahren automatisch gesetzt.")
+            let message = dictation.needsAccessibilityPermission
+                ? localizedAppText(
+                    "\(recommendedName) will be set automatically when you continue. Fn shortcuts need the \u{201C}\(AccessibilityPermissionPane.localizedName())\u{201D} permission.",
+                    de: "\(recommendedName) wird beim Fortfahren automatisch gesetzt. Fn-Kurzbefehle brauchen die Berechtigung „\(AccessibilityPermissionPane.localizedName())“.",
+                    ja: "続行すると\(recommendedName)が自動的に設定されます。Fn キーのショートカットには「\(AccessibilityPermissionPane.localizedName())」の権限が必要です。",
+                    zh: "继续时将自动设置\(recommendedName)。Fn 快捷键需要“\(AccessibilityPermissionPane.localizedName())”权限。",
+                    es: "Se configurará \(recommendedName) automáticamente al continuar. Los atajos con Fn necesitan el permiso “\(AccessibilityPermissionPane.localizedName())”."
+                )
+                : localizedAppText(
+                    "\(recommendedName) will be set automatically when you continue.",
+                    de: "\(recommendedName) wird beim Fortfahren automatisch gesetzt.",
+                    ja: "続行すると\(recommendedName)が自動的に設定されます。",
+                    zh: "继续时将自动设置\(recommendedName)。",
+                    es: "Se configurará \(recommendedName) automáticamente al continuar."
+                )
             #endif
             return (
                 message,
@@ -1665,19 +1687,6 @@ struct SetupWizardView: View {
         if dictation.needsMicPermission {
             return String(localized: "Microphone access is required for dictation.")
         }
-#if !APPSTORE
-        if dictation.needsAccessibilityPermission {
-            return AccessibilityPermissionPane.text(
-                legacy: String(localized: "Accessibility access is required to paste text into other apps."),
-                deviceControl: localizedAppText(
-                    "Device Control and Data Access permission is required to paste text into other apps.",
-                    de: "Die Berechtigung „Gerätesteuerung und Datenzugriff“ wird benötigt, um Text in andere Apps einzufügen.",
-                    ja: "他のアプリへテキストを貼り付けるには、「デバイスの制御とデータへのアクセス」の権限が必要です。",
-                    zh: "需要“设备控制和数据访问”权限才能将文本粘贴到其他应用。"
-                )
-            )
-        }
-#endif
         if isPreparingAppleSpeechFallback {
             return localizedAppText(
                 "Apple Speech is being prepared for this test.",
@@ -1773,18 +1782,10 @@ struct SetupWizardView: View {
         modelManager.canPrepareForTranscription(engine)
     }
 
-#if APPSTORE
-    private static let requiresAccessibilityForSetup = false
-#else
-    private static let requiresAccessibilityForSetup = true
-#endif
-
     private var setupReadiness: SetupWizardReadiness {
         SetupWizardReadiness(
             canPrepareEngine: hasEngineReadyForSetupTest,
-            microphoneGranted: !dictation.needsMicPermission,
-            // The App Store edition falls back to the clipboard without PostEvent access.
-            accessibilityGranted: Self.requiresAccessibilityForSetup ? !dictation.needsAccessibilityPermission : true
+            microphoneGranted: !dictation.needsMicPermission
         )
     }
 
@@ -1951,12 +1952,18 @@ struct SetupWizardView: View {
         SetupWizardDefaultHotkey.triggerSlots.contains { !dictation.hotkeys(for: $0).isEmpty }
     }
 
+    private var recommendedHybridHotkey: UnifiedHotkey {
+        SetupWizardDefaultHotkey.recommendedHybridHotkey(
+            accessibilityGranted: !dictation.needsAccessibilityPermission
+        )
+    }
+
     private var recommendedHotkeyResolution: SetupWizardDefaultHotkey.Resolution {
         SetupWizardDefaultHotkey.resolve(
             existingTriggerHotkeys: SetupWizardDefaultHotkey.triggerSlots.reduce(into: [:]) { result, slot in
                 result[slot] = dictation.hotkeys(for: slot)
             },
-            conflictingSlot: dictation.isHotkeyAssigned(SetupWizardDefaultHotkey.recommendedHybridHotkey, excluding: .hybrid)
+            conflictingSlot: dictation.isHotkeyAssigned(recommendedHybridHotkey, excluding: .hybrid)
         )
     }
 
@@ -1966,7 +1973,7 @@ struct SetupWizardView: View {
             return
         }
 
-        dictation.setHotkey(SetupWizardDefaultHotkey.recommendedHybridHotkey, for: .hybrid)
+        dictation.setHotkey(recommendedHybridHotkey, for: .hybrid)
     }
 
     private var primaryHotkeyLabel: String {
@@ -1981,7 +1988,7 @@ struct SetupWizardView: View {
         let label = hotkeyLabel(for: mode)
         if !label.isEmpty { return label }
         if mode == .hybrid, recommendedHotkeyResolution.shouldApply {
-            return HotkeyService.displayName(for: SetupWizardDefaultHotkey.recommendedHybridHotkey)
+            return HotkeyService.displayName(for: recommendedHybridHotkey)
         }
         return localizedAppText("Not set", de: "Nicht gesetzt")
     }
@@ -2156,17 +2163,23 @@ enum SetupWizardDefaultHotkey {
     }
 
     static let triggerSlots: [HotkeySlotType] = [.hybrid, .pushToTalk, .toggle]
-    #if APPSTORE
-    // Option-Space is a Carbon hotkey and needs no permission; Fn needs Input
-    // Monitoring in the sandbox and cannot suppress the globe-key action.
-    static let recommendedHybridHotkey = UnifiedHotkey(
+    static let fnHotkey = UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
+    static let optionSpaceHotkey = UnifiedHotkey(
         keyCode: 49,
         modifierFlags: NSEvent.ModifierFlags.option.rawValue,
         isFn: false
     )
+
+    /// Option-Space is a Carbon hotkey and needs no permission. Fn needs the event tap, which
+    /// needs Accessibility; in the sandbox it needs Input Monitoring and cannot suppress the
+    /// globe-key action.
+    static func recommendedHybridHotkey(accessibilityGranted: Bool) -> UnifiedHotkey {
+    #if APPSTORE
+        optionSpaceHotkey
     #else
-    static let recommendedHybridHotkey = UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
+        accessibilityGranted ? fnHotkey : optionSpaceHotkey
     #endif
+    }
 
     static func resolve(
         existingTriggerHotkeys: [HotkeySlotType: [UnifiedHotkey]],
@@ -2307,10 +2320,10 @@ struct SetupWizardTestedSelection: Codable, Equatable {
 struct SetupWizardReadiness {
     let canPrepareEngine: Bool
     let microphoneGranted: Bool
-    let accessibilityGranted: Bool
 
+    /// Accessibility is optional: without it, the test leaves the text on the clipboard.
     var canCompleteSetup: Bool {
-        canPrepareEngine && microphoneGranted && accessibilityGranted
+        canPrepareEngine && microphoneGranted
     }
 
     func hasSuccessfulTest(

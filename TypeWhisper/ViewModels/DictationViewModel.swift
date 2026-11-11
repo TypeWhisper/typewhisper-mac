@@ -1195,16 +1195,16 @@ final class DictationViewModel: ObservableObject {
 
     /// Rechecks permissions, e.g. when the user returns from System Settings.
     func refreshInputPermissions() { settingsHandler.pollPermissionStatus() }
+#endif
 
     private func showManualPasteFeedback() {
         showNotchFeedback(
-            message: AppStoreInputAccess.manualPasteMessage,
+            message: TextInsertionService.manualPasteMessage,
             icon: "doc.on.clipboard.fill",
             duration: 4.0,
-            action: AppStoreInputAccess.isAutoPasteEnabled ? .openSettings(.home) : nil
+            action: TextInsertionService.canEnableAutomaticPaste ? .openSettings(.home) : nil
         )
     }
-#endif
 
     // MARK: - HTTP API
 
@@ -3603,11 +3603,9 @@ final class DictationViewModel: ObservableObject {
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
                         }
-#if APPSTORE
                         if insertionResult == .copiedToClipboard {
                             showManualPasteFeedback()
                         }
-#endif
                         if insertionResult?.missedTextField == true {
                             undeliveredTranscript = makeUndeliveredTranscript(.noTextField, resolvedOutputFormat)
                         } else {
@@ -3649,12 +3647,8 @@ final class DictationViewModel: ObservableObject {
                             switch insertionResult {
                             case .insertedViaAccessibility, .pasted(.verified):
                                 insertionIsVerifiable = true
-                            case .pasted(.unverified), .pasted(.notAwaited):
+                            case .pasted(.unverified), .pasted(.notAwaited), .copiedToClipboard:
                                 insertionIsVerifiable = false
-#if APPSTORE
-                            case .copiedToClipboard:
-                                insertionIsVerifiable = false
-#endif
                             }
                         } else {
                             insertionIsVerifiable = true
@@ -4738,12 +4732,10 @@ final class DictationViewModel: ObservableObject {
             // A dictation started in the meantime owns the indicator.
             guard !startQueuedDictationAfterUndeliveredTranscriptInsertion(),
                   state == .idle || state == .inserting else { return }
-#if APPSTORE
             if result == .copiedToClipboard {
                 showManualPasteFeedback()
                 return
             }
-#endif
             if result.missedTextField {
                 showUndeliveredTranscriptFeedback(transcript.with(reason: .noTextField))
             } else if result.hasUnverifiableUnchangedField {

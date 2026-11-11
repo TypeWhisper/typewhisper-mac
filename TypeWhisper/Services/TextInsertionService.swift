@@ -351,11 +351,9 @@ final class TextInsertionService {
     enum InsertionResult: Equatable {
         case insertedViaAccessibility
         case pasted(verification: PasteVerification)
-#if APPSTORE
         /// The text was left on the clipboard for a manual paste because the app may not post
         /// keyboard events.
         case copiedToClipboard
-#endif
 
         /// A readable native field stayed unchanged. Web input proxies may consume a paste
         /// without retaining its text, so their unchanged state does not prove a failure.
@@ -411,17 +409,32 @@ final class TextInsertionService {
     }
 
     enum TextInsertionError: LocalizedError {
-        case accessibilityNotGranted
         case pasteFailed(String)
 
         var errorDescription: String? {
             switch self {
-            case .accessibilityNotGranted:
-                AccessibilityPermissionPane.enableInSystemSettingsText()
             case .pasteFailed(let detail):
                 "Failed to paste text: \(detail)"
             }
         }
+    }
+
+    /// Feedback after `insertText` returned `.copiedToClipboard`.
+    static var manualPasteMessage: String {
+#if APPSTORE
+        AppStoreInputAccess.manualPasteMessage
+#else
+        AccessibilityPermissionPane.manualPasteMessage()
+#endif
+    }
+
+    /// Whether granting a permission would let TypeWhisper paste instead of copying.
+    static var canEnableAutomaticPaste: Bool {
+#if APPSTORE
+        AppStoreInputAccess.isAutoPasteEnabled
+#else
+        true
+#endif
     }
 
     var isAccessibilityGranted: Bool {
@@ -1547,11 +1560,6 @@ final class TextInsertionService {
         awaitPasteVerification: Bool = false,
         detectMissedTextField: Bool = false
     ) async throws -> InsertionResult {
-#if !APPSTORE
-        guard isAccessibilityGranted else {
-            throw TextInsertionError.accessibilityNotGranted
-        }
-#endif
         lastInsertionTiming = nil
         // Covers direct AX insertion too, so it cannot land before an earlier queued paste.
         try await settlePendingPaste()
@@ -1559,7 +1567,7 @@ final class TextInsertionService {
             try await Task.sleep(for: .milliseconds(5))
             try await settlePendingPaste()
         }
-#if APPSTORE
+        // Accessibility is optional (#1906): without it, the user pastes the text manually.
         guard isAccessibilityGranted else {
             return copyTextForManualPaste(
                 text,
@@ -1567,7 +1575,6 @@ final class TextInsertionService {
                 deferredClipboardRestore: deferredClipboardRestore
             )
         }
-#endif
 
         let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
         let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
@@ -1715,7 +1722,6 @@ final class TextInsertionService {
         return .pasted(verification: verification)
     }
 
-#if APPSTORE
     /// Leaves the text on the clipboard for a manual paste. The user's clipboard is not restored:
     /// the text has to stay there until it is pasted.
     private func copyTextForManualPaste(
@@ -1731,16 +1737,13 @@ final class TextInsertionService {
         let payload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
             ?? ClipboardContentPayload(plainText: text)
         payload.write(to: pasteboard)
-        logger.info(
-            "insertText copied text for manual paste: autoPasteEnabled=\(AppStoreInputAccess.isAutoPasteEnabled, privacy: .public)"
-        )
+        logger.info("insertText copied text for manual paste")
         lastInsertionTiming = InsertionTiming(
             insertedUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds,
             verifiedUptimeNanoseconds: nil
         )
         return .copiedToClipboard
     }
-#endif
 
     private func waitForPasteVerification(using state: PasteVerificationState) async -> PasteVerification {
         guard state.focusedTextState != nil else {

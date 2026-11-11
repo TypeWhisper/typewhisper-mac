@@ -41,40 +41,32 @@ enum AccessibilityPermissionPane {
         )
     }
 
-    /// Short status line shown when the permission is missing.
-    static func accessRequiredText(
+    /// Status line shown while the permission is missing. Dictation works without it and
+    /// leaves the text on the clipboard instead (#1906).
+    static func neededToPasteText(
         osVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
     ) -> String {
-        text(
-            legacy: String(localized: "Accessibility access required"),
-            deviceControl: localizedAppText(
-                "Device Control and Data Access permission required",
-                de: "Berechtigung „Gerätesteuerung und Datenzugriff“ erforderlich",
-                ja: "「デバイスの制御とデータへのアクセス」の権限が必要です",
-                zh: "需要“设备控制和数据访问”权限"
-            ),
-            osVersion: osVersion
+        let name = localizedName(osVersion: osVersion)
+        return localizedAppText(
+            "\(name) needed to paste automatically",
+            de: "\(name) zum automatischen Einfügen nötig",
+            ja: "自動で貼り付けるには「\(name)」が必要です",
+            zh: "需要“\(name)”才能自动粘贴",
+            es: "Se necesita \(name) para pegar automáticamente"
         )
     }
 
-    /// Full instruction naming the System Settings path to the pane.
-    static func enableInSystemSettingsText(
+    /// Feedback after text was copied to the clipboard because the permission is missing.
+    static func manualPasteMessage(
         osVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
     ) -> String {
-        text(
-            legacy: localizedAppText(
-                "Accessibility permission not granted. Please enable it in System Settings → Privacy & Security → Accessibility.",
-                de: "Die Berechtigung für Bedienungshilfen wurde nicht erteilt. Bitte aktiviere sie unter Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen.",
-                ja: "アクセシビリティの権限が許可されていません。システム設定 → プライバシーとセキュリティ → アクセシビリティで有効にしてください。",
-                zh: "未授予辅助功能权限。请在“系统设置”→“隐私与安全性”→“辅助功能”中启用。"
-            ),
-            deviceControl: localizedAppText(
-                "Device Control and Data Access permission not granted. Please enable it in System Settings → Privacy & Security → Device Control and Data Access.",
-                de: "Die Berechtigung „Gerätesteuerung und Datenzugriff“ wurde nicht erteilt. Bitte aktiviere sie unter Systemeinstellungen → Datenschutz & Sicherheit → Gerätesteuerung und Datenzugriff.",
-                ja: "「デバイスの制御とデータへのアクセス」の権限が許可されていません。システム設定 → プライバシーとセキュリティ → デバイスの制御とデータへのアクセスで有効にしてください。",
-                zh: "未授予“设备控制和数据访问”权限。请在“系统设置”→“隐私与安全性”→“设备控制和数据访问”中启用。"
-            ),
-            osVersion: osVersion
+        let name = localizedName(osVersion: osVersion)
+        return localizedAppText(
+            "Copied to clipboard. Press ⌘V to paste, or allow TypeWhisper under \u{201C}\(name)\u{201D} to paste automatically.",
+            de: "In die Zwischenablage kopiert. Füge den Text mit ⌘V ein oder erlaube TypeWhisper unter „\(name)“, um automatisch einzufügen.",
+            ja: "クリップボードにコピーしました。⌘V で貼り付けるか、「\(name)」で TypeWhisper を許可すると自動で貼り付けられます。",
+            zh: "已复制到剪贴板。按 ⌘V 粘贴，或在“\(name)”中允许 TypeWhisper 以自动粘贴。",
+            es: "Copiado en el portapapeles. Presiona ⌘V para pegar o permite TypeWhisper en “\(name)” para pegar automáticamente."
         )
     }
 }
