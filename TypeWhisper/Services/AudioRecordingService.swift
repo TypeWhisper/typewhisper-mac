@@ -332,25 +332,121 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return queue
     }()
 
+    /// Audio kept recording after the user released or pressed the shortcut, so the end of
+    /// the last word that is still on its way through the input is not cut off (#1896).
+    struct ReleaseTail: Equatable {
+        /// The tail a hotkey stop gets: at most 350 ms, ending early after 150 ms of quiet.
+        static let hotkeyStop = ReleaseTail(
+            maxDuration: 0.35,
+            quietDuration: 0.15,
+            minimumRecordingDuration: 0.3
+        )
+
+        /// The longest the tail records, counted from the stop request.
+        var maxDuration: TimeInterval
+        /// The tail ends as soon as this much audio at the end of the recording is quiet.
+        var quietDuration: TimeInterval
+        /// Shorter recordings get no tail, so a quick tap of the shortcut keeps the
+        /// short-speech handling of #157 and is still discarded as too short.
+        var minimumRecordingDuration: TimeInterval
+
+        var quietSampleCount: Int {
+            max(1, Int((quietDuration * AudioRecordingService.targetSampleRate).rounded()))
+        }
+
+        func appliesToRecording(bufferedDuration: TimeInterval) -> Bool {
+            bufferedDuration >= minimumRecordingDuration
+        }
+
+        /// The quiet window is judged in 50 ms frames, so speech at its end is never averaged
+        /// away by the quiet before it.
+        static let quietFrameSampleCount = Int(AudioRecordingService.targetSampleRate) / 20
+
+        /// True once every 50 ms frame in the last `quietDuration` of the recording stays below
+        /// the speech floor the live preview and the silence stop use.
+        func isSettled(trailingSamples: ArraySlice<Float>) -> Bool {
+            guard trailingSamples.count >= quietSampleCount else { return false }
+            let window = trailingSamples.suffix(quietSampleCount)
+            var frameStart = window.startIndex
+            while frameStart < window.endIndex {
+                let frameEnd = min(frameStart + Self.quietFrameSampleCount, window.endIndex)
+                let frame = window[frameStart..<frameEnd]
+                let rms = sqrt(frame.reduce(Float(0)) { $0 + $1 * $1 } / Float(frame.count))
+                if rms >= DictationSpeechActivity.speechRMSFloor { return false }
+                frameStart = frameEnd
+            }
+            return true
+        }
+    }
+
+    enum ReleaseTailOutcome: Equatable {
+        /// The policy asked for no tail.
+        case notRequested
+        /// The recording was too short for a tail.
+        case skippedShortRecording
+        /// The end of the recording was quiet, so the tail ended early.
+        case settled(duration: TimeInterval)
+        /// The tail ran for its full length.
+        case reachedMaxDuration(duration: TimeInterval)
+        /// The stop was cancelled during the tail, for example with Escape.
+        case cancelled(duration: TimeInterval)
+
+        var duration: TimeInterval {
+            switch self {
+            case .notRequested, .skippedShortRecording:
+                0
+            case .settled(let duration), .reachedMaxDuration(let duration), .cancelled(let duration):
+                duration
+            }
+        }
+
+        var logDescription: String {
+            switch self {
+            case .notRequested:
+                "none"
+            case .skippedShortRecording:
+                "skipped-short"
+            case .settled(let duration):
+                String(format: "settled(%.0fms)", duration * 1000)
+            case .reachedMaxDuration(let duration):
+                String(format: "max(%.0fms)", duration * 1000)
+            case .cancelled(let duration):
+                String(format: "cancelled(%.0fms)", duration * 1000)
+            }
+        }
+    }
+
     enum StopPolicy {
         case immediate
         case finalizeShortSpeech(
             minBufferedDuration: TimeInterval = 0.05,
             maxExtraCapture: TimeInterval = 0.06,
-            pollInterval: TimeInterval = 0.01
+            pollInterval: TimeInterval = 0.01,
+            releaseTail: ReleaseTail? = nil
         )
 
         var logDescription: String {
             switch self {
             case .immediate:
                 "immediate"
-            case .finalizeShortSpeech(let minBufferedDuration, let maxExtraCapture, let pollInterval):
-                String(
-                    format: "finalizeShortSpeech(min=%.3f,max=%.3f,poll=%.3f)",
-                    minBufferedDuration,
-                    maxExtraCapture,
-                    pollInterval
-                )
+            case .finalizeShortSpeech(let minBufferedDuration, let maxExtraCapture, let pollInterval, let releaseTail):
+                if let releaseTail {
+                    String(
+                        format: "finalizeShortSpeech(min=%.3f,max=%.3f,poll=%.3f,tail=%.3f,quiet=%.3f)",
+                        minBufferedDuration,
+                        maxExtraCapture,
+                        pollInterval,
+                        releaseTail.maxDuration,
+                        releaseTail.quietDuration
+                    )
+                } else {
+                    String(
+                        format: "finalizeShortSpeech(min=%.3f,max=%.3f,poll=%.3f)",
+                        minBufferedDuration,
+                        maxExtraCapture,
+                        pollInterval
+                    )
+                }
             }
         }
 
@@ -358,8 +454,17 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             switch self {
             case .immediate:
                 false
-            case .finalizeShortSpeech(let minBufferedDuration, _, _):
+            case .finalizeShortSpeech(let minBufferedDuration, _, _, _):
                 bufferedDuration < minBufferedDuration
+            }
+        }
+
+        var releaseTail: ReleaseTail? {
+            switch self {
+            case .immediate:
+                nil
+            case .finalizeShortSpeech(_, _, _, let releaseTail):
+                releaseTail
             }
         }
     }
@@ -588,6 +693,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let inputTransportResolver: AudioDeviceTransportResolving
     private let bluetoothInputStartupTracker = BluetoothInputStartupTracker()
     private var _lastStopGraceCaptureApplied = false
+    private var _lastStopReleaseTail: ReleaseTailOutcome = .notRequested
     /// Newest `prerollDuration` of converted audio while the input is armed between dictations.
     private let prerollRing = MicrophonePrerollRingBuffer(
         duration: AudioRecordingService.prerollDuration,
@@ -714,6 +820,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     var lastStopGraceCaptureApplied: Bool {
         stopStateLock.withLock { _lastStopGraceCaptureApplied }
+    }
+
+    /// How the release tail of the last stop ended, for the stop log.
+    var lastStopReleaseTail: ReleaseTailOutcome {
+        stopStateLock.withLock { _lastStopReleaseTail }
     }
 
     var hasMicrophonePermission: Bool {
@@ -2297,6 +2408,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
 
             setLastStopGraceCaptureApplied(false)
+            setLastStopReleaseTail(.notRequested)
             setRecordingActive(false)
             resetAudioLevelPublishing()
             DispatchQueue.main.async { [weak self] in
@@ -2327,22 +2439,20 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             startupConfigurationChangeGuard = nil
             return capture
         }
+        guard capture.inputCaptureSession != nil || capture.engine != nil else {
+            setRecordingActive(false)
+            if bluetoothBehavior == .release {
+                invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release-without-engine")
+                await waitForRecordingInputPreparationCleanup()
+            }
+            outputVolumeGuard.clear()
+            return []
+        }
+        // The recording stays active through the short-speech grace and the release tail, so
+        // the audio still arriving goes into the recording and never into the pre-roll ring.
+        await captureAudioAfterStopRequest(policy: policy)
         setRecordingActive(false)
         if let inputCaptureSession = capture.inputCaptureSession {
-            let bufferedDuration = postRequestBufferDuration
-            var graceApplied = false
-
-            if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
-               case .finalizeShortSpeech(_, let maxExtraCapture, let pollInterval) = policy {
-                let deadline = Date().addingTimeInterval(maxExtraCapture)
-                graceApplied = true
-
-                while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
-                    try? await Task.sleep(for: .seconds(pollInterval))
-                }
-            }
-
-            setLastStopGraceCaptureApplied(graceApplied)
             recoveryCoordinator.transitionToIdle()
             removeConfigurationObserver()
             outputVolumeGuard.captureBaseline()
@@ -2369,29 +2479,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return samples
         }
 
-        guard let engine = capture.engine else {
-            if bluetoothBehavior == .release {
-                invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release-without-engine")
-                await waitForRecordingInputPreparationCleanup()
-            }
-            outputVolumeGuard.clear()
-            return []
-        }
+        guard let engine = capture.engine else { return [] }
 
-        let bufferedDuration = postRequestBufferDuration
-        var graceApplied = false
-
-        if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
-           case .finalizeShortSpeech(_, let maxExtraCapture, let pollInterval) = policy {
-            let deadline = Date().addingTimeInterval(maxExtraCapture)
-            graceApplied = true
-
-            while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
-                try? await Task.sleep(for: .seconds(pollInterval))
-            }
-        }
-
-        setLastStopGraceCaptureApplied(graceApplied)
         recoveryCoordinator.transitionToIdle()
 
         removeConfigurationObserver()
@@ -3716,6 +3805,78 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private func setLastStopReleaseTail(_ outcome: ReleaseTailOutcome) {
+        stopStateLock.withLock {
+            _lastStopReleaseTail = outcome
+        }
+    }
+
+    /// Keeps capturing for a moment after the stop request: the short-speech grace (#157) for
+    /// a recording that has barely any audio yet, then the release tail the policy asks for.
+    /// Both are measured from the stop request, so the grace counts toward the tail.
+    private func captureAudioAfterStopRequest(policy: StopPolicy) async {
+        guard case .finalizeShortSpeech(_, let maxExtraCapture, let pollInterval, let releaseTail) = policy else {
+            setLastStopGraceCaptureApplied(false)
+            setLastStopReleaseTail(.notRequested)
+            return
+        }
+        let clock = ContinuousClock()
+        let start = clock.now
+        func elapsed() -> TimeInterval {
+            let duration = clock.now - start
+            return Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+        }
+
+        var graceApplied = false
+        if policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
+            graceApplied = true
+            // A cancelled stop ends the wait; the capture teardown still runs after it.
+            while !Task.isCancelled,
+                  elapsed() < maxExtraCapture,
+                  policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
+                try? await Task.sleep(for: .seconds(pollInterval))
+            }
+        }
+        setLastStopGraceCaptureApplied(graceApplied)
+
+        guard let releaseTail else {
+            setLastStopReleaseTail(.notRequested)
+            return
+        }
+        guard releaseTail.appliesToRecording(bufferedDuration: postRequestBufferDuration) else {
+            setLastStopReleaseTail(.skippedShortRecording)
+            return
+        }
+        let outcome: ReleaseTailOutcome
+        while true {
+            if Task.isCancelled {
+                outcome = .cancelled(duration: elapsed())
+                break
+            }
+            if releaseTail.isSettled(trailingSamples: trailingRecordedSamples(count: releaseTail.quietSampleCount)) {
+                outcome = .settled(duration: elapsed())
+                break
+            }
+            let elapsedSoFar = elapsed()
+            if elapsedSoFar >= releaseTail.maxDuration {
+                outcome = .reachedMaxDuration(duration: elapsedSoFar)
+                break
+            }
+            try? await Task.sleep(for: .seconds(min(pollInterval, releaseTail.maxDuration - elapsedSoFar)))
+        }
+        setLastStopReleaseTail(outcome)
+        logger.info(
+            "Stop release tail: outcome=\(outcome.logDescription, privacy: .public), postRequestDuration=\(String(format: "%.3f", self.postRequestBufferDuration), privacy: .public)s"
+        )
+    }
+
+    /// The newest `count` samples of the recording, for the release-tail quiet check.
+    private func trailingRecordedSamples(count: Int) -> ArraySlice<Float> {
+        bufferLock.withLock {
+            ArraySlice(sampleBuffer.suffix(count))
+        }
+    }
+
     private func drainSampleBuffer() -> [Float] {
         bufferLock.lock()
         defer { bufferLock.unlock() }
@@ -4285,6 +4446,8 @@ extension AudioRecordingService {
     func testingCurrentAudioEngine() -> AVAudioEngine? {
         engineLock.withLock { audioEngine }
     }
+
+    var testingIsRecordingActive: Bool { isRecordingActive }
 
     var testingIsMicrophonePrerollActive: Bool { isMicrophonePrerollActive }
 

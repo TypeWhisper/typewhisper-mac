@@ -306,6 +306,45 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertFalse(AudioRecordingService.StopPolicy.immediate.shouldApplyGracePeriod(bufferedDuration: 0.01))
     }
 
+    func testReleaseTail_settlesOnlyOnQuietAudioAfterARealRecording() {
+        let tail = AudioRecordingService.ReleaseTail.hotkeyStop
+        let quietWindow = tail.quietSampleCount
+        XCTAssertEqual(quietWindow, 2400)
+
+        let quiet = [Float](repeating: 0.002, count: quietWindow)
+        let speech = [Float](repeating: 0.05, count: quietWindow)
+        XCTAssertTrue(tail.isSettled(trailingSamples: ArraySlice(speech + quiet)))
+        XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(speech)))
+        // The last word still fades out in the window.
+        XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(quiet.dropLast(800) + speech.prefix(800))))
+        // Quiet speech at the end is not averaged away by the quiet before it.
+        let quietSpeech = [Float](repeating: 0.005, count: 800)
+        XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(quiet.dropLast(800) + quietSpeech)))
+        // Too little audio to judge yet.
+        XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(quiet.dropLast())))
+
+        // A quick tap keeps the short-speech handling of #157.
+        XCTAssertFalse(tail.appliesToRecording(bufferedDuration: 0.1))
+        XCTAssertTrue(tail.appliesToRecording(bufferedDuration: 0.3))
+    }
+
+    func testFinalizingStopPolicy_addsTheReleaseTailOnlyForKeyStops() {
+        let keyStop = DictationViewModel.finalizingStopPolicy(capturesReleaseTail: true)
+        XCTAssertEqual(keyStop.releaseTail, .hotkeyStop)
+        XCTAssertEqual(
+            keyStop.logDescription,
+            "finalizeShortSpeech(min=0.050,max=0.060,poll=0.010,tail=0.350,quiet=0.150)"
+        )
+        // The short-speech grace stays the same.
+        XCTAssertTrue(keyStop.shouldApplyGracePeriod(bufferedDuration: 0.049))
+        XCTAssertFalse(keyStop.shouldApplyGracePeriod(bufferedDuration: 0.05))
+
+        let otherStop = DictationViewModel.finalizingStopPolicy(capturesReleaseTail: false)
+        XCTAssertNil(otherStop.releaseTail)
+        XCTAssertEqual(otherStop.logDescription, AudioRecordingService.StopPolicy.finalizeShortSpeech().logDescription)
+        XCTAssertNil(AudioRecordingService.StopPolicy.immediate.releaseTail)
+    }
+
     func testDelayedReleaseRetainer_keepsObjectAliveUntilDelayExpires() throws {
         let retainer = DelayedReleaseRetainer<ReleaseProbe>(label: "com.typewhisper.tests.delayed-release")
         let released = expectation(description: "release after delay")

@@ -10433,6 +10433,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     private final class SilenceStopProbe {
         var stopPolicies: [String] = []
         var announcements: [String] = []
+        /// The announcements made before each stop finished capturing.
+        var announcementsDuringStop: [[String]] = []
     }
 
     /// F14, F15 and F16. Each press in a test uses its own key, so the duplicate filter
@@ -10498,6 +10500,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.startRecordingOverride = {}
         context.audioRecordingService.stopRecordingOverride = { policy in
             probe.stopPolicies.append(policy.logDescription)
+            probe.announcementsDuringStop.append(probe.announcements)
             return []
         }
         let viewModel = context.dictationViewModel
@@ -10692,6 +10695,42 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    /// Releasing push-to-talk keeps recording for a moment, so the last word is not cut off (#1896).
+    @MainActor
+    func testPushToTalkReleaseStopsWithTheReleaseTail() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: false,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .pushToTalk, releaseAfterPress: false)
+        context.hotkeyService.processCarbonHotkeyForTesting(
+            slotType: .pushToTalk,
+            hotkey: Self.silenceStopStartHotkey,
+            isPressed: false
+        )
+        XCTAssertEqual(viewModel.state, .processing)
+        for _ in 0..<300 where probe.stopPolicies.isEmpty || viewModel.state == .processing {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(
+            probe.stopPolicies,
+            [AudioRecordingService.StopPolicy.finalizeShortSpeech(releaseTail: .hotkeyStop).logDescription]
+        )
+    }
+
     @MainActor
     func testLateSilenceReportForAStoppedDictationDoesNotStopTheNextOne() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -10723,14 +10762,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .processing)
         XCTAssertNil(viewModel.silenceStopCountdownSeconds)
         XCTAssertNil(viewModel.testingSilenceEndpointSessionID)
-        XCTAssertEqual(
-            probe.announcements.last,
+        let stoppedAnnouncement = try XCTUnwrap(
             Self.silenceStopAnnouncementText { $0.announceRecordingStopped() }
         )
         // The watch of the stopped dictation reports late; it does not stop anything twice.
         viewModel.testingReportSilenceEndpoint(sessionID: firstSessionID)
         await Self.waitForDictationSessionToFinish(viewModel, id: firstSessionID)
         XCTAssertEqual(probe.stopPolicies.count, 1)
+        // A key stop still records its release tail, so the announcement waits for it (#1896).
+        XCTAssertEqual(probe.announcementsDuringStop.count, 1)
+        XCTAssertFalse(probe.announcementsDuringStop.first?.contains(stoppedAnnouncement) ?? true)
+        XCTAssertTrue(probe.announcements.contains(stoppedAnnouncement))
 
         try await Self.startSilenceStopDictation(
             context,
