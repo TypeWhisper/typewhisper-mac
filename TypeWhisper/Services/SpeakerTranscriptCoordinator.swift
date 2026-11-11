@@ -741,14 +741,15 @@ extension SpeakerTranscriptCoordinator {
 enum RecorderSpeakerSnapshot {
     static func adding(
         _ record: TranscriptionRecord?,
-        to payload: RecorderTranscriptReadyPayload
+        to payload: RecorderTranscriptReadyPayload,
+        defaults: UserDefaults = .standard
     ) -> RecorderTranscriptReadyPayload {
         var payload = payload
         guard let record, !record.isDeleted, let state = record.speakerTranscriptState else { return payload }
         payload.speakerState = state.rawValue
         guard let transcript = record.speakerTranscript else { return payload }
         let names = record.speakerNames
-        let me = SpeakerWorkspaceModel.microphoneSpeaker(
+        let microphoneSpeaker = SpeakerWorkspaceModel.microphoneSpeaker(
             of: SpeakerTranscriptPresentation.turns(of: transcript),
             ownSpeech: record.speakerOwnSpeech
         )
@@ -760,7 +761,15 @@ enum RecorderSpeakerSnapshot {
                 id: speakerID,
                 name: (isSuggestion ? nil : entry?.displayName) ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID),
                 suggestedName: isSuggestion ? entry?.displayName : nil,
-                isMe: speakerID == me
+                // The speaker the Speakers view shows as the user's own, but
+                // not for a name a voice profile only suggested.
+                isMe: SpeakerWorkspaceModel.isOwnSpeaker(
+                    speakerID,
+                    microphoneSpeakerID: microphoneSpeaker,
+                    names: names,
+                    countsSuggestions: false,
+                    defaults: defaults
+                )
             )
         }
         payload.speakerSegments = transcript.segments.map {
