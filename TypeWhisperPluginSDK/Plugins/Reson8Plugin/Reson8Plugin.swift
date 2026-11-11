@@ -1778,8 +1778,9 @@ final class Reson8Plugin: NSObject,
         return items
     }
 
+    /// Dictations leave diarization out, since Reson8 bills it and the host drops the labels.
     private func diarizationQueryItems() -> [URLQueryItem] {
-        guard diarizes(forModelId: _selectedModelId) else { return [] }
+        guard diarizes(forModelId: _selectedModelId), PluginSpeakerLabels.areRequested else { return [] }
         var items = [URLQueryItem(name: "diarize", value: "true")]
         if let maxSpeakers = _maxSpeakers {
             items.append(URLQueryItem(name: "max_speakers", value: String(maxSpeakers)))

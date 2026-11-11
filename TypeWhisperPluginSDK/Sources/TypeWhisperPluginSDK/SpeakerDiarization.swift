@@ -91,3 +91,16 @@ public protocol SpeakerDiarizationProviderPlugin: TypeWhisperPlugin {
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult
 }
+
+// MARK: - Speaker Labels in Transcriptions
+
+/// Whether the host uses the speaker labels of the current transcription.
+///
+/// Dictations insert plain text, so the host turns this off for them, and an
+/// engine that can label speakers leaves diarization out of the request, which
+/// providers bill on top of the transcription. Recordings and files keep it on.
+/// The value is task-local; read it in the task that runs `transcribe` or
+/// creates the live session, not in a detached task.
+public enum PluginSpeakerLabels {
+    @TaskLocal public static var areRequested = true
+}

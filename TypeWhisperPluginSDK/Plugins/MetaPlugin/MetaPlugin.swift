@@ -1175,8 +1175,9 @@ final class MetaPlugin: NSObject,
         return value
     }
 
+    /// Dictations transcribe without speakers, since the host drops the labels.
     private var transcriptionMode: MetaTranscriptionMode {
-        speakerDiarizationEnabled ? .diarization : .pushToTalk
+        speakerDiarizationEnabled && PluginSpeakerLabels.areRequested ? .diarization : .pushToTalk
     }
 
     private func setFetchedCatalog(_ catalog: MetaModelCatalog) {

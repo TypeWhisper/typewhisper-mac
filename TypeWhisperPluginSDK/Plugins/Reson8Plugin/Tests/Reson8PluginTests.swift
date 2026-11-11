@@ -362,6 +362,17 @@ final class Reson8PluginTests: XCTestCase {
         XCTAssertEqual(result.segments.map(\.start), [0, 2])
     }
 
+    func testDictationLeavesDiarizationOut() async throws {
+        let plugin = try Self.pluginWithFetchedModels(diarizationEnabled: true, maxSpeakers: 2)
+
+        let query = try await PluginSpeakerLabels.$areRequested.withValue(false) {
+            try await Self.queryItems(ofTranscriptionWith: plugin)
+        }
+
+        XCTAssertNil(query["diarize"])
+        XCTAssertNil(query["max_speakers"])
+    }
+
     func testDiarizationIsLeftOutForAModelThatRejectsIt() async throws {
         let plugin = try Self.pluginWithFetchedModels(diarizationEnabled: true)
         plugin.selectModel("rumble-2-flash")

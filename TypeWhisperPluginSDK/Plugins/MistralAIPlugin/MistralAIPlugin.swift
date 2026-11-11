@@ -594,7 +594,8 @@ public final class MistralAIPlugin: NSObject,
             model: modelId,
             language: Self.requestLanguage(language, supported: model.languages),
             contextBias: model.supportsContextBias ? contextBias(fromPrompt: prompt) : [],
-            diarize: isSpeakerDiarizationEnabled && model.supportsDiarization
+            // Dictations leave diarization out, since the host drops the labels.
+            diarize: isSpeakerDiarizationEnabled && model.supportsDiarization && PluginSpeakerLabels.areRequested
         )
         let client = MistralAPIClient(apiKey: apiKey)
         return try await PluginAudioChunking.transcribeStructured(audio) { chunk in

@@ -156,13 +156,16 @@ final class DictationRecoveryViewModel: ObservableObject {
             try await audioFileService.loadAudioSamples(from: url)
         }
         self.transcriptionRunner = transcriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride in
-            try await modelManager.transcribe(
-                audioSamples: samples,
-                languageSelection: languageSelection,
-                task: task,
-                engineOverrideId: engineOverrideId,
-                cloudModelOverride: cloudModelOverride
-            )
+            // A recovered dictation is saved as plain text, without speaker labels.
+            try await PluginSpeakerLabels.$areRequested.withValue(false) {
+                try await modelManager.transcribe(
+                    audioSamples: samples,
+                    languageSelection: languageSelection,
+                    task: task,
+                    engineOverrideId: engineOverrideId,
+                    cloudModelOverride: cloudModelOverride
+                )
+            }
         }
         self.engineReadinessChecker = engineReadinessChecker
         let retentionPolicy = DictationRecoveryRetentionPolicy.load(from: defaults)
