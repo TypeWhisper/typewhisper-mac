@@ -100,6 +100,8 @@ final class AssemblyAIPlugin: NSObject,
         AssemblyAIModelCatalog.resolve(_selectedModelId).dictionaryTermsBudget
     }
     var isSpeakerDiarizationEnabled: Bool { _speakerDiarizationEnabled }
+    /// Dictations leave speaker labels out, since AssemblyAI bills them and the host drops them.
+    private var diarizesRequest: Bool { _speakerDiarizationEnabled && PluginSpeakerLabels.areRequested }
     var transcriptionMode: AssemblyAITranscriptionMode { _transcriptionMode }
 
     var supportedLanguages: [String] {
@@ -166,7 +168,7 @@ final class AssemblyAIPlugin: NSObject,
         // transcribed with all of them for the final text.
         var finalTranscriber: AssemblyAILiveTranscriptionSession.FinalTranscriber?
         if keyterms.droppedCount > 0 {
-            let speakerDiarizationEnabled = _speakerDiarizationEnabled
+            let speakerDiarizationEnabled = diarizesRequest
             finalTranscriber = { @Sendable [self] audio in
                 Self.legacyResult(from: try await self.transcribeRecording(
                     audio: audio,
@@ -248,7 +250,7 @@ final class AssemblyAIPlugin: NSObject,
             modelId: modelId,
             apiKey: apiKey,
             prompt: prompt,
-            speakerDiarizationEnabled: _speakerDiarizationEnabled
+            speakerDiarizationEnabled: diarizesRequest
         )
     }
 

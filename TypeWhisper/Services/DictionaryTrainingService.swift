@@ -123,16 +123,19 @@ struct DictionaryTrainingDependencies {
                 audioRecordingService.discardActiveRecoveryRecording()
             },
             transcribe: { request in
-                let result = try await modelManager.transcribe(
-                    audioSamples: request.audioSamples,
-                    languageSelection: request.snapshot.languageSelection,
-                    task: .transcribe,
-                    engineOverrideId: request.snapshot.providerID,
-                    cloudModelOverride: request.snapshot.modelID,
-                    prompt: request.prompt,
-                    dictionaryTermHints: request.dictionaryTermHints,
-                    normalizeNumbers: request.normalizeNumbers
-                )
+                // Training compares plain text, so engines leave out speaker labels.
+                let result = try await PluginSpeakerLabels.$areRequested.withValue(false) {
+                    try await modelManager.transcribe(
+                        audioSamples: request.audioSamples,
+                        languageSelection: request.snapshot.languageSelection,
+                        task: .transcribe,
+                        engineOverrideId: request.snapshot.providerID,
+                        cloudModelOverride: request.snapshot.modelID,
+                        prompt: request.prompt,
+                        dictionaryTermHints: request.dictionaryTermHints,
+                        normalizeNumbers: request.normalizeNumbers
+                    )
+                }
                 return result.text
             },
             dictionaryEntries: { dictionaryService.entries },

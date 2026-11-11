@@ -553,8 +553,13 @@ public final class MistralAIPlugin: NSObject,
 
         // The transcription model writes the final text: it heard dictations more
         // accurately than Realtime 3 and was done sooner after the stop.
+        // The final text is requested after the stop, outside this task, so it takes
+        // the host's speaker label choice from the session start.
+        let speakerLabelsRequested = PluginSpeakerLabels.areRequested
         let finalTranscriber: MistralLiveTranscriptionSession.FinalTranscriber = { [self] audio in
-            try await self.transcribe(audio: audio, language: language, translate: false, prompt: prompt)
+            try await PluginSpeakerLabels.$areRequested.withValue(speakerLabelsRequested) {
+                try await self.transcribe(audio: audio, language: language, translate: false, prompt: prompt)
+            }
         }
         return try await MistralLiveTranscriptionSession.connect(
             socket: realtimeSocketFactory(request),
@@ -594,7 +599,8 @@ public final class MistralAIPlugin: NSObject,
             model: modelId,
             language: Self.requestLanguage(language, supported: model.languages),
             contextBias: model.supportsContextBias ? contextBias(fromPrompt: prompt) : [],
-            diarize: isSpeakerDiarizationEnabled && model.supportsDiarization
+            // Dictations leave diarization out, since the host drops the labels.
+            diarize: isSpeakerDiarizationEnabled && model.supportsDiarization && PluginSpeakerLabels.areRequested
         )
         let client = MistralAPIClient(apiKey: apiKey)
         return try await PluginAudioChunking.transcribeStructured(audio) { chunk in

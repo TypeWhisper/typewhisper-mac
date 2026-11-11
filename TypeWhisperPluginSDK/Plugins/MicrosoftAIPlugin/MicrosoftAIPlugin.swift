@@ -781,7 +781,8 @@ final class MicrosoftAIPlugin: NSObject,
         }
         let model = selectedModel
         let style = transcriptStyle
-        let diarizationEnabled = speakerDiarizationEnabled
+        // Dictations leave diarization out, since the host drops the labels.
+        let diarizationEnabled = speakerDiarizationEnabled && PluginSpeakerLabels.areRequested
         return try await PluginAudioChunking.transcribeStructured(
             audio,
             maximumChunkDuration: MicrosoftAITranscriptionClient.maximumChunkDuration

@@ -804,28 +804,33 @@ final class DictationViewModel: ObservableObject {
             Self.defaultTranscriptionDeadline(forAudioDuration: duration)
         }
         self.primaryTranscriptionRunner = primaryTranscriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride, prompt, dictionaryTermHints, normalizeNumbers in
-            try await modelManager.transcribe(
-                audioSamples: samples,
-                languageSelection: languageSelection,
-                task: task,
-                engineOverrideId: engineOverrideId,
-                cloudModelOverride: cloudModelOverride,
-                prompt: prompt,
-                dictionaryTermHints: dictionaryTermHints,
-                normalizeNumbers: normalizeNumbers
-            )
+            // Dictated text has no speaker labels, so engines leave out the diarization they bill for.
+            try await PluginSpeakerLabels.$areRequested.withValue(false) {
+                try await modelManager.transcribe(
+                    audioSamples: samples,
+                    languageSelection: languageSelection,
+                    task: task,
+                    engineOverrideId: engineOverrideId,
+                    cloudModelOverride: cloudModelOverride,
+                    prompt: prompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    normalizeNumbers: normalizeNumbers
+                )
+            }
         }
         self.recoveryFallbackRunner = recoveryFallbackRunner ?? { [modelManager] samples, languageSelection, task, configuration, prompt, dictionaryTermHints, normalizeNumbers in
-            try await modelManager.transcribe(
-                audioSamples: samples,
-                languageSelection: languageSelection,
-                task: task,
-                engineOverrideId: configuration.engineId,
-                cloudModelOverride: configuration.modelId,
-                prompt: prompt,
-                dictionaryTermHints: dictionaryTermHints,
-                normalizeNumbers: normalizeNumbers
-            )
+            try await PluginSpeakerLabels.$areRequested.withValue(false) {
+                try await modelManager.transcribe(
+                    audioSamples: samples,
+                    languageSelection: languageSelection,
+                    task: task,
+                    engineOverrideId: configuration.engineId,
+                    cloudModelOverride: configuration.modelId,
+                    prompt: prompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    normalizeNumbers: normalizeNumbers
+                )
+            }
         }
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
@@ -847,7 +852,8 @@ final class DictationViewModel: ObservableObject {
             },
             bufferedDurationProvider: { [weak audioRecordingService] in
                 audioRecordingService?.totalBufferDuration ?? 0
-            }
+            },
+            requestsSpeakerLabels: false
         )
         self.silenceEndpointMonitor = DictationSilenceEndpointMonitor { [weak audioRecordingService] offset in
             audioRecordingService?.getBufferDelta(since: offset) ?? ([], offset)

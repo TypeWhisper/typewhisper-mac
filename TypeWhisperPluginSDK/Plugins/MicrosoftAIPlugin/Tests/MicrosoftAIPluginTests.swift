@@ -611,7 +611,7 @@ final class MicrosoftAIPluginTests: XCTestCase {
         XCTAssertEqual(manifest["principalClass"] as? String, "MicrosoftAIPlugin")
         XCTAssertEqual(manifest["hosting"] as? String, "cloud")
         XCTAssertEqual(manifest["iconResourceName"] as? String, "azure.svg")
-        XCTAssertEqual(manifest["minHostVersion"] as? String, "1.8.0")
+        XCTAssertEqual(manifest["minHostVersion"] as? String, "1.8.3")
 
         XCTAssertTrue(
             FileManager.default.fileExists(

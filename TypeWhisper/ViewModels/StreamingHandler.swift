@@ -95,6 +95,9 @@ final class StreamingHandler: @unchecked Sendable {
     private let sharedState = OSAllocatedUnfairLock(initialState: SharedState())
 
     private let modelManager: ModelManagerService
+    /// False for dictations, whose text has no speaker labels, so engines leave out the
+    /// diarization they bill for.
+    private let requestsSpeakerLabels: Bool
     private let bufferProvider: () -> [Float]
     private let recentBufferProvider: (TimeInterval) -> [Float]
     private let bufferDeltaProvider: (Int) -> (samples: [Float], nextOffset: Int)
@@ -108,9 +111,11 @@ final class StreamingHandler: @unchecked Sendable {
         bufferProvider: @escaping () -> [Float],
         recentBufferProvider: @escaping (TimeInterval) -> [Float],
         bufferDeltaProvider: @escaping (Int) -> (samples: [Float], nextOffset: Int),
-        bufferedDurationProvider: @escaping () -> Double
+        bufferedDurationProvider: @escaping () -> Double,
+        requestsSpeakerLabels: Bool = true
     ) {
         self.modelManager = modelManager
+        self.requestsSpeakerLabels = requestsSpeakerLabels
         self.bufferProvider = bufferProvider
         self.recentBufferProvider = recentBufferProvider
         self.bufferDeltaProvider = bufferDeltaProvider
@@ -158,75 +163,78 @@ final class StreamingHandler: @unchecked Sendable {
         }
         onStreamingStateChange?(true)
 
+        let requestsSpeakerLabels = self.requestsSpeakerLabels
         streamingTask = Task { [weak self] in
-            await pendingStopTask?.value
-            guard !Task.isCancelled else { return }
-            guard let self else { return }
+            await PluginSpeakerLabels.$areRequested.withValue(requestsSpeakerLabels) {
+                await pendingStopTask?.value
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
 
-            if let handle = try? await self.modelManager.createLiveTranscriptionSession(
-                languageSelection: languageSelection,
-                task: task,
-                engineOverrideId: engineOverrideId,
-                cloudModelOverride: cloudModelOverride,
-                prompt: streamPrompt,
-                dictionaryTermHints: dictionaryTermHints,
-                turnEndHandler: turnEndHandler,
-                onProgress: { [weak self] text in
-                    guard let self else { return false }
-                    // Text the preview suppresses during sustained silence is likely a
-                    // hallucination, not a sign the session still transcribes.
-                    if let stablePreview = self.processPreviewUpdate(
-                        text,
-                        audioGate: self.currentLivePreviewAudioGateSnapshot(),
-                        persist: true,
-                        replacesPreviousPreview: replacesLiveSessionPreview
-                    ) {
-                        self.recordLiveSessionText(
+                if let handle = try? await self.modelManager.createLiveTranscriptionSession(
+                    languageSelection: languageSelection,
+                    task: task,
+                    engineOverrideId: engineOverrideId,
+                    cloudModelOverride: cloudModelOverride,
+                    prompt: streamPrompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    turnEndHandler: turnEndHandler,
+                    onProgress: { [weak self] text in
+                        guard let self else { return false }
+                        // Text the preview suppresses during sustained silence is likely a
+                        // hallucination, not a sign the session still transcribes.
+                        if let stablePreview = self.processPreviewUpdate(
                             text,
-                            stablePreview: stablePreview,
-                            sessionGeneration: sessionGeneration
-                        )
+                            audioGate: self.currentLivePreviewAudioGateSnapshot(),
+                            persist: true,
+                            replacesPreviousPreview: replacesLiveSessionPreview
+                        ) {
+                            self.recordLiveSessionText(
+                                text,
+                                stablePreview: stablePreview,
+                                sessionGeneration: sessionGeneration
+                            )
+                        }
+                        return true
                     }
-                    return true
+                ) {
+                    logger.info("Live transcript preview using live session providerId=\(handle.providerId, privacy: .public)")
+                    self.sharedState.withLock { $0.liveSessionHandle = handle }
+                    await self.runLiveSessionLoop(sessionGeneration: sessionGeneration, stateCheck: stateCheck)
+                    return
                 }
-            ) {
-                logger.info("Live transcript preview using live session providerId=\(handle.providerId, privacy: .public)")
-                self.sharedState.withLock { $0.liveSessionHandle = handle }
-                await self.runLiveSessionLoop(sessionGeneration: sessionGeneration, stateCheck: stateCheck)
-                return
-            }
 
-            guard !previewHidden else {
-                logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=preview-hidden")
-                await MainActor.run { [weak self] in
-                    self?.clearStreamingStateUnlessCancelled()
+                guard !previewHidden else {
+                    logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=preview-hidden")
+                    await MainActor.run { [weak self] in
+                        self?.clearStreamingStateUnlessCancelled()
+                    }
+                    return
                 }
-                return
-            }
 
-            guard self.modelManager.allowsTranscriptPreviewFallback(
-                engineOverrideId: engineOverrideId,
-                selectedProviderId: selectedProviderId,
-                cloudModelOverride: cloudModelOverride
-            ) else {
-                logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=policy-opt-out")
-                await MainActor.run { [weak self] in
-                    self?.clearStreamingStateUnlessCancelled()
+                guard self.modelManager.allowsTranscriptPreviewFallback(
+                    engineOverrideId: engineOverrideId,
+                    selectedProviderId: selectedProviderId,
+                    cloudModelOverride: cloudModelOverride
+                ) else {
+                    logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=policy-opt-out")
+                    await MainActor.run { [weak self] in
+                        self?.clearStreamingStateUnlessCancelled()
+                    }
+                    return
                 }
-                return
-            }
 
-            logger.info("Live transcript preview using fallback batch providerId=\(providerId, privacy: .public)")
-            await self.runFallbackLoop(
-                streamPrompt: streamPrompt,
-                dictionaryTermHints: dictionaryTermHints,
-                engineOverrideId: engineOverrideId,
-                languageSelection: languageSelection,
-                task: task,
-                cloudModelOverride: cloudModelOverride,
-                normalizeNumbers: normalizeNumbers,
-                stateCheck: stateCheck
-            )
+                logger.info("Live transcript preview using fallback batch providerId=\(providerId, privacy: .public)")
+                await self.runFallbackLoop(
+                    streamPrompt: streamPrompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    engineOverrideId: engineOverrideId,
+                    languageSelection: languageSelection,
+                    task: task,
+                    cloudModelOverride: cloudModelOverride,
+                    normalizeNumbers: normalizeNumbers,
+                    stateCheck: stateCheck
+                )
+            }
         }
     }
 
@@ -333,15 +341,17 @@ final class StreamingHandler: @unchecked Sendable {
 
         let handle: ModelManagerService.LiveTranscriptionSessionHandle
         do {
-            guard let createdHandle = try await modelManager.createLiveTranscriptionSession(
-                languageSelection: languageSelection,
-                task: task,
-                engineOverrideId: engineOverrideId,
-                cloudModelOverride: cloudModelOverride,
-                prompt: streamPrompt,
-                dictionaryTermHints: dictionaryTermHints,
-                onProgress: { _ in true }
-            ) else {
+            guard let createdHandle = try await PluginSpeakerLabels.$areRequested.withValue(requestsSpeakerLabels, operation: {
+                try await modelManager.createLiveTranscriptionSession(
+                    languageSelection: languageSelection,
+                    task: task,
+                    engineOverrideId: engineOverrideId,
+                    cloudModelOverride: cloudModelOverride,
+                    prompt: streamPrompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    onProgress: { _ in true }
+                )
+            }) else {
                 return nil
             }
             handle = createdHandle
