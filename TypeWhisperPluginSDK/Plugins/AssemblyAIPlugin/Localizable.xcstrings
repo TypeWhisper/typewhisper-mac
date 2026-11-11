@@ -561,30 +561,30 @@
         }
       }
     },
-    "Uploads the recording when you stop and returns it cleaned up: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI.": {
+    "Uploads the recording when you stop and returns it cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings over 20 minutes, more than 100 dictionary terms, speaker diarization, a language it doesn't support, or a failed request use the async API with the selected model instead, without cleanup.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lädt die Aufnahme beim Stopp hoch und gibt sie bereinigt zurück: Füllwörter entfernt, Satzzeichen und Großschreibung korrigiert. Keine Live-Vorschau von AssemblyAI."
+            "value": "Lädt die Aufnahme beim Stopp hoch und gibt sie von Universal-3.6 Pro bereinigt zurück: Füllwörter entfernt, Satzzeichen und Großschreibung korrigiert. Keine Live-Vorschau von AssemblyAI. Aufnahmen über 20 Minuten, mehr als 100 Wörterbuchbegriffe, Sprechererkennung, eine nicht unterstützte Sprache oder eine fehlgeschlagene Anfrage nutzen stattdessen die Async-API mit dem gewählten Modell, ohne Bereinigung."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sube la grabación al detenerte y la devuelve depurada: sin muletillas y con la puntuación y las mayúsculas corregidas. Sin vista previa en vivo de AssemblyAI."
+            "value": "Sube la grabación al detenerte y la devuelve depurada por Universal-3.6 Pro: sin muletillas y con la puntuación y las mayúsculas corregidas. Sin vista previa en vivo de AssemblyAI. Las grabaciones de más de 20 minutos, más de 100 términos del diccionario, la diarización de hablantes, un idioma no compatible o una solicitud fallida usan en su lugar la API asíncrona con el modelo seleccionado, sin depuración."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "停止時に録音をアップロードし、整えたテキストを返します。フィラーを除き、句読点と大文字小文字を修正します。AssemblyAI のライブプレビューはありません。"
+            "value": "停止時に録音をアップロードし、Universal-3.6 Pro で整えたテキストを返します。フィラーを除き、句読点と大文字小文字を修正します。AssemblyAI のライブプレビューはありません。20 分を超える録音、100 語を超える辞書の用語、話者分離、対応していない言語、またはリクエストの失敗時は、選択したモデルで非同期 API を使い、整形は行いません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "停止时上传录音并返回整理后的文本：去除口头禅，修正标点和大小写。没有来自 AssemblyAI 的实时预览。"
+            "value": "停止时上传录音，并返回由 Universal-3.6 Pro 整理后的文本：去除口头禅，修正标点和大小写。没有来自 AssemblyAI 的实时预览。超过 20 分钟的录音、超过 100 个词典术语、说话人分离、不支持的语言或请求失败时，会改用所选模型的异步 API，且不做整理。"
           }
         }
       }
