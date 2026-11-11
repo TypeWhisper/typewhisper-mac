@@ -135,7 +135,8 @@ final class HistorySearchIndexer {
                 try await index.checkIntegrity()
             } catch {
                 logger.error("Search index is inconsistent, building it again: \(String(describing: error), privacy: .public)")
-                deleteIndex()
+                // Changes that arrived during the check stay queued.
+                deletesIndex = true
                 dueUpserts.formUnion(versions.keys)
                 startWorker()
                 return
