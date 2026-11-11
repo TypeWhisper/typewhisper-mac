@@ -1637,7 +1637,7 @@ struct PluginSettingsView: View {
         Task {
             let result = await registryService.updateAllAvailablePlugins()
             if result.shouldRelaunch {
-                ApplicationRelauncher.relaunch()
+                ApplicationRelauncher.relaunch(reopening: .integrations)
             } else if !result.failures.isEmpty {
                 bulkUpdateFailures = result.failures
             }
