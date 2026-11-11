@@ -265,8 +265,15 @@ actor HistorySearchIndex {
         let connection = try SQLiteConnection(path: fileURL.path)
         // Memory mapping keeps queries fast when the file outgrows the page cache.
         try connection.execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA mmap_size=268435456;")
-        let format = try? connection.rows("SELECT value FROM index_meta WHERE key = 'format'") { $0.text(0) }.first
-        if let format {
+        let formats: [String?]?
+        do {
+            formats = try connection.rows("SELECT value FROM index_meta WHERE key = 'format'") { $0.text(0) }
+        } catch let error as HistorySearchIndexError where error.code & 0xFF == SQLITE_ERROR {
+            // No such table: a new file. Other errors, such as a locked file, pass.
+            formats = nil
+        }
+        if let formats {
+            let format = formats.first.flatMap { $0 }
             guard format == Self.formatVersion else {
                 throw HistorySearchIndexError(code: SQLITE_NOTADB, message: "index format \(format ?? "?")")
             }
