@@ -16,9 +16,12 @@ final class HistorySearchIndexer {
     /// Records read and written in one step, so a deletion never waits long.
     static let batchSize = 50
     private static let contentCheckBatchSize = 200
-    /// How often a batch that could not be read or written is tried again in a
-    /// row. After that the next check adds its records.
+    /// How often a batch that could not be read or written is tried again.
+    /// After that the next check adds its records.
     private static let upsertRetries = 3
+    /// How often per launch the index is built again after it was deleted for
+    /// damage, so a file that keeps breaking does not keep the Mac busy.
+    private static let rebuildsAfterDamage = 3
 
     private let index: HistorySearchIndex
     private let reader: HistorySearchRecordReader
@@ -36,9 +39,10 @@ final class HistorySearchIndexer {
     /// False once no index file was found, so History changes cost nothing
     /// while no index is kept.
     private var indexMayExist = true
-    private var failedUpserts = 0
-    /// Until when a batch that failed waits before it is tried again.
-    private var retryAfter: ContinuousClock.Instant?
+    /// A batch that failed, how often it was tried, and when it is tried again.
+    /// No other batch starts before it.
+    private var retry: (ids: Set<UUID>, attempt: Int, notBefore: ContinuousClock.Instant)?
+    private var rebuilds = 0
     /// What was removed while a batch was read or written. A failed batch must
     /// not bring these records back when it is tried again.
     private var removedDuringUpsert = Set<UUID>()
@@ -69,6 +73,11 @@ final class HistorySearchIndexer {
         self.upsertDelay = upsertDelay
         self.busyRetryDelay = busyRetryDelay
         subscription = historyService.changes.sink { [weak self] in self?.handle($0) }
+        Task { [weak self] in
+            await index.setDamageHandler {
+                Task { @MainActor in self?.rebuildAfterDamage() }
+            }
+        }
     }
 
     /// Checks the whole index once, some time after launch, so it costs the launch nothing.
@@ -164,6 +173,7 @@ final class HistorySearchIndexer {
     private func remove(_ ids: Set<UUID>) {
         waitingUpserts.subtract(ids)
         dueUpserts.subtract(ids)
+        retry?.ids.subtract(ids)
         removedDuringUpsert.formUnion(ids)
         guard indexMayExist else { return }
         removals.formUnion(ids)
@@ -177,8 +187,7 @@ final class HistorySearchIndexer {
         dueUpserts = []
         removals = []
         clearedDuringUpsert = true
-        failedUpserts = 0
-        retryAfter = nil
+        retry = nil
         guard indexMayExist else { return }
         deletesIndex = true
         pause?.cancel()
@@ -190,7 +199,7 @@ final class HistorySearchIndexer {
     private enum Job {
         case deleteIndex
         case remove(Set<UUID>)
-        case upsert([UUID])
+        case upsert([UUID], attempt: Int)
         case wait(Duration)
     }
 
@@ -218,23 +227,37 @@ final class HistorySearchIndexer {
             defer { removals = [] }
             return .remove(removals)
         }
-        guard !dueUpserts.isEmpty else {
+        if retry?.ids.isEmpty == true { retry = nil }
+        guard !dueUpserts.isEmpty || retry != nil else {
             worker = nil
             return nil
         }
         guard isEnabled() else {
-            defer { dueUpserts = [] }
-            return .remove(dueUpserts)
+            defer {
+                dueUpserts = []
+                retry = nil
+            }
+            return .remove(dueUpserts.union(retry?.ids ?? []))
         }
         if isBusy() { return .wait(busyRetryDelay) }
-        if let retryAfter, ContinuousClock.now < retryAfter { return .wait(retryAfter - .now) }
-        retryAfter = nil
-        let batch = Array(dueUpserts.prefix(Self.batchSize))
-        dueUpserts.subtract(batch)
+        if let retry, ContinuousClock.now < retry.notBefore { return .wait(retry.notBefore - .now) }
         removedDuringUpsert = []
         clearedDuringUpsert = false
         indexMayExist = true
-        return .upsert(batch)
+        if let retry {
+            self.retry = nil
+            return .upsert(Array(retry.ids), attempt: retry.attempt)
+        }
+        let batch = Array(dueUpserts.prefix(Self.batchSize))
+        dueUpserts.subtract(batch)
+        return .upsert(batch, attempt: 0)
+    }
+
+    /// Adds every record again after the index lost its file.
+    private func rebuildAfterDamage() {
+        guard rebuilds < Self.rebuildsAfterDamage else { return }
+        rebuilds += 1
+        Task(priority: .utility) { [weak self] in await self?.reconcile() }
     }
 
     private func perform(_ job: Job) async {
@@ -247,12 +270,15 @@ final class HistorySearchIndexer {
                 try await index.remove(ids)
                 indexMayExist = await index.exists
             } catch {
-                // A deleted record must not stay searchable. The next check builds the index again.
+                // A deleted record must not stay searchable, so the index is built again without it.
+                // A damaged file was already deleted by the index, which asks for the rebuild itself.
                 logger.error("Failed to remove records from the search index: \(String(describing: error), privacy: .public)")
+                guard (error as? HistorySearchIndexError)?.isCorruption != true else { return }
                 await index.destroy()
                 indexMayExist = false
+                rebuildAfterDamage()
             }
-        case .upsert(let ids):
+        case .upsert(let ids, let attempt):
             do {
                 let reader = reader
                 let records = try await Task.detached(priority: .utility) {
@@ -267,16 +293,13 @@ final class HistorySearchIndexer {
                     return
                 }
                 try await index.upsert(records)
-                failedUpserts = 0
             } catch {
                 logger.error("Failed to update the search index: \(String(describing: error), privacy: .public)")
-                guard failedUpserts < Self.upsertRetries else {
-                    failedUpserts = 0
-                    return
-                }
-                failedUpserts += 1
-                if !clearedDuringUpsert { dueUpserts.formUnion(Set(ids).subtracting(removedDuringUpsert)) }
-                retryAfter = .now + busyRetryDelay
+                // The index deleted its damaged file and asks for the rebuild itself.
+                if (error as? HistorySearchIndexError)?.isCorruption == true { return }
+                let remaining = clearedDuringUpsert ? [] : Set(ids).subtracting(removedDuringUpsert)
+                guard attempt < Self.upsertRetries, !remaining.isEmpty else { return }
+                retry = (remaining, attempt + 1, .now + busyRetryDelay)
             }
         case .wait(let duration):
             // A task of its own, so a deletion can end the wait.

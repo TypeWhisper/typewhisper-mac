@@ -64,6 +64,7 @@ actor HistorySearchIndex {
 
     private let directory: URL
     private var connection: SQLiteConnection?
+    private var damageHandler: (@Sendable () -> Void)?
 
     init(
         directory: URL = AppConstants.appSupportDirectory
@@ -134,6 +135,17 @@ actor HistorySearchIndex {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    /// The handler is called after the index deleted a file that was damaged or
+    /// had another format, and with it every record, so the index can be built again.
+    func setDamageHandler(_ handler: @escaping @Sendable () -> Void) {
+        damageHandler = handler
+    }
+
+    private func destroyDamagedFile() {
+        destroy()
+        damageHandler?()
+    }
+
     /// The fingerprint of every indexed record. Empty without an index file, and
     /// for a damaged one, which is deleted.
     func fingerprints() throws -> [UUID: HistorySearchFingerprint] {
@@ -147,7 +159,7 @@ actor HistorySearchIndex {
                 )
             }
         } catch let error as HistorySearchIndexError where error.isCorruption {
-            destroy()
+            destroyDamagedFile()
             return [:]
         }
         return Dictionary(rows.compactMap { id, fingerprint in id.map { ($0, fingerprint) } }) { first, _ in first }
@@ -209,8 +221,7 @@ actor HistorySearchIndex {
             try connection.execute("COMMIT")
         } catch {
             try? connection.execute("ROLLBACK")
-            // A damaged file is deleted, so the next check builds the index again.
-            if (error as? HistorySearchIndexError)?.isCorruption == true { destroy() }
+            if (error as? HistorySearchIndexError)?.isCorruption == true { destroyDamagedFile() }
             throw error
         }
     }
@@ -219,11 +230,12 @@ actor HistorySearchIndex {
 
     private func open(creating: Bool) throws -> SQLiteConnection? {
         if let connection { return connection }
-        guard creating || exists else { return nil }
+        let existed = exists
+        guard creating || existed else { return nil }
         do {
             return try openFile()
         } catch {
-            destroy()
+            if existed { destroyDamagedFile() } else { destroy() }
             return creating ? try openFile() : nil
         }
     }

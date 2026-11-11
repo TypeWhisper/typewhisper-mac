@@ -347,8 +347,9 @@ final class HistorySearchIndexerTests: XCTestCase {
             HistorySearchIndexer(
                 historyService: history,
                 index: index,
-                isEnabled: { [unowned self] in self.isEnabled },
-                isBusy: { [unowned self] in self.isBusy },
+                // Weak, because a check that still runs can outlive the test.
+                isEnabled: { [weak self] in self?.isEnabled ?? false },
+                isBusy: { [weak self] in self?.isBusy ?? false },
                 upsertDelay: .milliseconds(5),
                 busyRetryDelay: retryDelay
             )
@@ -588,6 +589,61 @@ final class HistorySearchIndexerTests: XCTestCase {
 
         await indexer.reconcile()
         try await eventually { try await fixture.indexedIDs() == [id] }
+    }
+
+    func testEveryFailedUpdateGetsItsOwnRetries() async throws {
+        let lockedDirectory = try TestSupport.makeTemporaryDirectory()
+        func setLocked(_ locked: Bool) throws {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: locked ? 0o555 : 0o755], ofItemAtPath: lockedDirectory.path
+            )
+        }
+        let fixture = try Fixture(indexDirectory: lockedDirectory.appendingPathComponent("HistorySearch", isDirectory: true))
+        defer {
+            try? setLocked(false)
+            TestSupport.remove(lockedDirectory)
+            TestSupport.remove(fixture.appSupportDirectory)
+        }
+        let indexer = fixture.makeIndexer(retryDelay: .milliseconds(200))
+
+        // The first record fails three times and is deleted before its last attempt.
+        try setLocked(true)
+        let firstID = fixture.addDictation("We ship the invoice export on Friday.")
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertTrue(fixture.history.deleteRecord(withID: firstID))
+
+        // The next record's first failure must not count as the fourth.
+        let secondID = fixture.addDictation("Book the dentist for Monday.")
+        try await Task.sleep(for: .milliseconds(100))
+        try setLocked(false)
+        try await eventually { try await fixture.indexedIDs() == [secondID] }
+        withExtendedLifetime(indexer) {}
+    }
+
+    func testAnIndexDeletedForDamageDuringAnUpdateIsBuiltAgainInFull() async throws {
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let indexer = fixture.makeIndexer()
+        let firstID = fixture.addDictation("We ship the invoice export on Friday.")
+        let secondID = fixture.addDictation("Book the dentist for Monday.")
+        try await eventually { try await fixture.indexedIDs() == [firstID, secondID] }
+
+        // The records table becomes unreadable while the index is open.
+        _ = try indexRows("PRAGMA wal_checkpoint(TRUNCATE)", in: fixture.indexDirectory, writing: true)
+        let page = try XCTUnwrap(Int(try indexRows(
+            "SELECT rootpage FROM sqlite_schema WHERE name = 'records'", in: fixture.indexDirectory
+        )[0][0]))
+        let pageSize = try XCTUnwrap(Int(try indexRows("PRAGMA page_size", in: fixture.indexDirectory)[0][0]))
+        let handle = try FileHandle(forWritingTo: fixture.indexDirectory.appendingPathComponent("index.sqlite"))
+        try handle.seek(toOffset: UInt64((page - 1) * pageSize))
+        try handle.write(contentsOf: Data(repeating: 0xFF, count: pageSize))
+        try handle.close()
+
+        // The update that finds the damage brings back the earlier records too.
+        let thirdID = fixture.addDictation("The roadmap stays as planned.")
+        try await eventually { try await fixture.indexedIDs() == [firstID, secondID, thirdID] }
+        try await fixture.index.checkIntegrity()
+        withExtendedLifetime(indexer) {}
     }
 
     func testADeletionDoesNotWaitForAWorkerThatPauses() async throws {
