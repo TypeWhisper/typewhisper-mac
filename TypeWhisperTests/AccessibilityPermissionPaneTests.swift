@@ -59,33 +59,17 @@ final class AccessibilityPermissionPaneTests: XCTestCase {
         }
     }
 
-    func testSystemSettingsInstructionNamesPaneForOSVersion() {
+    func testManualPasteMessageNamesPaneForOSVersion() {
         UserDefaults.standard.set("en", forKey: UserDefaultsKeys.preferredAppLanguage)
         XCTAssertEqual(
-            AccessibilityPermissionPane.enableInSystemSettingsText(osVersion: tahoe),
-            "Accessibility permission not granted. Please enable it in System Settings → Privacy & Security → Accessibility."
-        )
-        XCTAssertEqual(
-            AccessibilityPermissionPane.enableInSystemSettingsText(osVersion: macOS27),
-            "Device Control and Data Access permission not granted. Please enable it in System Settings → Privacy & Security → Device Control and Data Access."
+            AccessibilityPermissionPane.manualPasteMessage(osVersion: macOS27),
+            "Copied to clipboard. Press ⌘V to paste, or allow TypeWhisper under \u{201C}Device Control and Data Access\u{201D} to paste automatically."
         )
 
         UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
-        XCTAssertTrue(
-            AccessibilityPermissionPane.enableInSystemSettingsText(osVersion: tahoe)
-                .hasSuffix("Datenschutz & Sicherheit → Bedienungshilfen.")
-        )
-        XCTAssertTrue(
-            AccessibilityPermissionPane.enableInSystemSettingsText(osVersion: macOS27)
-                .hasSuffix("Datenschutz & Sicherheit → Gerätesteuerung und Datenzugriff.")
-        )
-    }
-
-    func testAccessRequiredTextOnMacOS27NamesNewPane() {
-        UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
         XCTAssertEqual(
-            AccessibilityPermissionPane.accessRequiredText(osVersion: macOS27),
-            "Berechtigung „Gerätesteuerung und Datenzugriff“ erforderlich"
+            AccessibilityPermissionPane.neededToPasteText(osVersion: macOS27),
+            "Gerätesteuerung und Datenzugriff zum automatischen Einfügen nötig"
         )
     }
 }

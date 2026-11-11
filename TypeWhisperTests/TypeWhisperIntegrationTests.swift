@@ -5439,6 +5439,28 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    /// Issue #1906: Accessibility is optional. Without it, the text stays on the clipboard for a
+    /// manual paste instead of failing.
+    @MainActor
+    func testInsertTextWithoutAccessibilityLeavesTextOnClipboard() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        pasteboard.setString("previous clipboard", forType: .string)
+        var pasteCount = 0
+        service.accessibilityGrantedOverride = false
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+        service.returnSimulatorOverride = { XCTFail("Auto Enter must not run without a paste") }
+
+        let result = try await service.insertText("dictated text", preserveClipboard: true, autoEnter: true)
+
+        XCTAssertEqual(result, .copiedToClipboard)
+        XCTAssertEqual(pasteboard.string(forType: .string), "dictated text")
+        XCTAssertEqual(pasteCount, 0)
+    }
+
     @MainActor
     func testCaptureInsertionContextIncludesCharactersAroundSelectionRange() throws {
         let service = TextInsertionService()
@@ -7472,6 +7494,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testCopySelectionRetriesWhenFirstCopyAttemptDoesNotUpdatePasteboard() async throws {
         let service = TextInsertionService()
+        service.accessibilityGrantedOverride = true
         let pasteboard = NSPasteboard.withUniqueName()
         service.pasteboardProvider = { pasteboard }
         service.copySelectionRetryDelay = .milliseconds(1)
@@ -9131,6 +9154,63 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.state, .recording)
         XCTAssertEqual(startCount, 1)
+    }
+
+    /// Without Accessibility every dictation ends with the paste hint. A hotkey press queued
+    /// during transcription must not wait for that hint to expire.
+    @MainActor
+    func testClipboardPasteHintDoesNotDelayQueuedHotkeyStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        MockTranscriptionPlugin.setHang(seconds: 0.3)
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        var startCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = false
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = { startCount += 1 }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        _ = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<100 where viewModel.state != .processing {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(viewModel.state, .processing)
+        context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+
+        // The hint lasts four seconds; the queued dictation starts long before that.
+        for _ in 0..<150 where startCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await viewModel.testingWaitForRecordingStart()
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(viewModel.state, .recording)
     }
 
     @MainActor
@@ -12913,21 +12993,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
         // A new API dictation may replace the offer, as the dictation hotkey does.
         XCTAssertTrue(viewModel.canStartAPIRecording)
-
-        // A failing Insert shows the error and keeps the offer.
-        context.textInsertionService.accessibilityGrantedOverride = false
-        viewModel.performActionFeedbackAction()
-        let accessibilityError = TextInsertionService.TextInsertionError.accessibilityNotGranted.localizedDescription
-        for _ in 0..<80 {
-            if viewModel.actionFeedbackMessage == accessibilityError {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-
-        XCTAssertEqual(viewModel.actionFeedbackMessage, accessibilityError)
-        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
-        context.textInsertionService.accessibilityGrantedOverride = true
 
         isTextFieldFocused = true
         viewModel.performActionFeedbackAction()

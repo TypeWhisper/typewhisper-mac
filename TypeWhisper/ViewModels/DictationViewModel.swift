@@ -1195,16 +1195,19 @@ final class DictationViewModel: ObservableObject {
 
     /// Rechecks permissions, e.g. when the user returns from System Settings.
     func refreshInputPermissions() { settingsHandler.pollPermissionStatus() }
+#endif
 
-    private func showManualPasteFeedback() {
+    /// - Parameter leadingMessage: Shown before the paste hint, e.g. a post-processing failure.
+    private func showManualPasteFeedback(leadingMessage: String? = nil) {
         showNotchFeedback(
-            message: AppStoreInputAccess.manualPasteMessage,
+            message: [leadingMessage, TextInsertionService.manualPasteMessage]
+                .compactMap { $0 }
+                .joined(separator: " "),
             icon: "doc.on.clipboard.fill",
             duration: 4.0,
-            action: AppStoreInputAccess.isAutoPasteEnabled ? .openSettings(.home) : nil
+            action: TextInsertionService.canEnableAutomaticPaste ? .openSettings(.home) : nil
         )
     }
-#endif
 
     // MARK: - HTTP API
 
@@ -3444,6 +3447,7 @@ final class DictationViewModel: ObservableObject {
                 partialText = ""
                 var insertedTextForCorrectionTracking: String?
                 var undeliveredTranscript: UndeliveredTranscript?
+                var copiedForManualPaste = false
                 let makeUndeliveredTranscript = { (reason: UndeliveredTranscript.Reason, outputFormat: String?) in
                     UndeliveredTranscript(
                         text: text,
@@ -3603,11 +3607,7 @@ final class DictationViewModel: ObservableObject {
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
                         }
-#if APPSTORE
-                        if insertionResult == .copiedToClipboard {
-                            showManualPasteFeedback()
-                        }
-#endif
+                        copiedForManualPaste = insertionResult == .copiedToClipboard
                         if insertionResult?.missedTextField == true {
                             undeliveredTranscript = makeUndeliveredTranscript(.noTextField, resolvedOutputFormat)
                         } else {
@@ -3630,11 +3630,14 @@ final class DictationViewModel: ObservableObject {
                             modelId: transcription.modelId
                         )
                         logger.info("Stop timing: text inserted elapsedMs=\(stopElapsedMs(), privacy: .public)")
-                        EventBus.shared.emit(.textInserted(TextInsertedPayload(
-                            text: insertionText,
-                            appName: activeApp.name,
-                            bundleIdentifier: activeApp.bundleId
-                        )))
+                        // Text left on the clipboard is not inserted until the user pastes it.
+                        if !copiedForManualPaste {
+                            EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                                text: insertionText,
+                                appName: activeApp.name,
+                                bundleIdentifier: activeApp.bundleId
+                            )))
+                        }
                         // Action-plugin runs never insert text and are out of scope for
                         // undo/restore (issue #999). A snapshot is only recorded when the
                         // insertion is verifiable: formatted output may transform the
@@ -3649,12 +3652,8 @@ final class DictationViewModel: ObservableObject {
                             switch insertionResult {
                             case .insertedViaAccessibility, .pasted(.verified):
                                 insertionIsVerifiable = true
-                            case .pasted(.unverified), .pasted(.notAwaited):
+                            case .pasted(.unverified), .pasted(.notAwaited), .copiedToClipboard:
                                 insertionIsVerifiable = false
-#if APPSTORE
-                            case .copiedToClipboard:
-                                insertionIsVerifiable = false
-#endif
                             }
                         } else {
                             insertionIsVerifiable = true
@@ -3702,20 +3701,42 @@ final class DictationViewModel: ObservableObject {
                 lastTranscriptionLanguage = detectedLang
 
                 if postProcessingFallback != nil {
-                    let fallbackMessage = localizedAppText(
-                        "AI post-processing failed — raw transcription inserted",
-                        de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
-                        ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
-                    )
-                    showNotchFeedback(
-                        message: fallbackMessage,
-                        icon: "exclamationmark.triangle.fill",
-                        duration: 4.0
-                    )
+                    let fallbackMessage = copiedForManualPaste
+                        ? localizedAppText(
+                            "AI post-processing failed. Raw transcription copied to the clipboard.",
+                            de: "KI-Nachbearbeitung fehlgeschlagen. Rohtext in die Zwischenablage kopiert.",
+                            ja: "AI後処理に失敗しました。未処理の文字起こしをクリップボードにコピーしました。",
+                            zh: "AI 后处理失败。已将原始转录复制到剪贴板。",
+                            es: "Falló el posprocesamiento con IA. Se copió la transcripción sin procesar al portapapeles."
+                        )
+                        : localizedAppText(
+                            "AI post-processing failed — raw transcription inserted",
+                            de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
+                            ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
+                        )
+                    // Without Accessibility, the paste hint below replaces this banner.
+                    if !copiedForManualPaste {
+                        showNotchFeedback(
+                            message: fallbackMessage,
+                            icon: "exclamationmark.triangle.fill",
+                            duration: 4.0
+                        )
+                    }
                     // The text was delivered, so this stays a warning banner (the failure is
                     // already in the Error Log above), but the menu bar keeps it with a way to
                     // the LLM fallbacks on the Workflows page.
                     lastDictationError = ErrorSummary(message: fallbackMessage, settingsTab: .workflows)
+                }
+                // Shown after the fallback warning so the ⌘V hint stays visible, and names
+                // the post-processing failure, whose own banner is skipped above.
+                if copiedForManualPaste {
+                    showManualPasteFeedback(leadingMessage: postProcessingFallback == nil ? nil : localizedAppText(
+                        "AI post-processing failed.",
+                        de: "KI-Nachbearbeitung fehlgeschlagen.",
+                        ja: "AI後処理に失敗しました。",
+                        zh: "AI 后处理失败。",
+                        es: "Falló el posprocesamiento con IA."
+                    ))
                 }
                 // Shown last so it is not replaced: the transcript still needs a text field.
                 if let undeliveredTranscript {
@@ -3749,7 +3770,9 @@ final class DictationViewModel: ObservableObject {
                 )
 
                 state = .inserting
-                if actionFeedbackMessage != nil {
+                // A hotkey press queued during transcription starts now instead of waiting for
+                // the feedback to expire, as it does when it arrives while feedback is shown.
+                if actionFeedbackMessage != nil, pendingHotkeyDictationStart == nil {
                     startActionFeedbackLifetime(duration: actionDisplayDuration)
                 } else {
                     scheduleInsertingReset(after: .seconds(1.5))
@@ -4688,6 +4711,10 @@ final class DictationViewModel: ObservableObject {
         // An offer expiring mid-paste would return to idle and let a new dictation start
         // before this paste lands. The result feedback starts a new lifetime.
         indicatorFeedbackLifetime.cancel()
+        // A reset queued for a pending hotkey press would start that dictation mid-paste;
+        // the Insert task starts it once the paste lands.
+        insertingResetTask?.cancel()
+        insertingResetTask = nil
 
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -4738,12 +4765,10 @@ final class DictationViewModel: ObservableObject {
             // A dictation started in the meantime owns the indicator.
             guard !startQueuedDictationAfterUndeliveredTranscriptInsertion(),
                   state == .idle || state == .inserting else { return }
-#if APPSTORE
             if result == .copiedToClipboard {
                 showManualPasteFeedback()
                 return
             }
-#endif
             if result.missedTextField {
                 showUndeliveredTranscriptFeedback(transcript.with(reason: .noTextField))
             } else if result.hasUnverifiableUnchangedField {
@@ -4762,11 +4787,14 @@ final class DictationViewModel: ObservableObject {
         activeApp: (name: String?, bundleId: String?, url: String?)
     ) {
         lastSuccessfulDictationInsertion = transcript.completion
-        EventBus.shared.emit(.textInserted(TextInsertedPayload(
-            text: insertedText,
-            appName: activeApp.name,
-            bundleIdentifier: activeApp.bundleId
-        )))
+        // Text left on the clipboard is not inserted until the user pastes it.
+        if result != .copiedToClipboard {
+            EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                text: insertedText,
+                appName: activeApp.name,
+                bundleIdentifier: activeApp.bundleId
+            )))
+        }
         // As after a dictation, Undo needs unformatted text whose insertion was verified.
         let insertionIsVerifiable = result == .insertedViaAccessibility || result == .pasted(verification: .verified)
         if transcript.outputFormat == nil, insertionIsVerifiable {

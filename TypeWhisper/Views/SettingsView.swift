@@ -1813,7 +1813,7 @@ struct PermissionsBanner: View {
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
-                        AccessibilityPermissionPane.accessRequiredText(),
+                        AccessibilityPermissionPane.neededToPasteText(),
                         systemImage: "lock.shield"
                     )
                     .foregroundStyle(.red)

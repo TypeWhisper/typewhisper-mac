@@ -455,7 +455,7 @@ struct HomeSettingsView: View {
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
-                        AccessibilityPermissionPane.accessRequiredText(),
+                        AccessibilityPermissionPane.neededToPasteText(),
                         systemImage: "lock.shield"
                     )
                     Spacer()
@@ -466,7 +466,7 @@ struct HomeSettingsView: View {
                     .controlSize(.small)
                 }
                 .accessibilityElement(children: .contain)
-                .accessibilityLabel(AccessibilityPermissionPane.accessRequiredText())
+                .accessibilityLabel(AccessibilityPermissionPane.neededToPasteText())
             }
 #endif
         }

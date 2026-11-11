@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -154,8 +155,13 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
             SetupWizardDefaultHotkey.Resolution(shouldApply: true, blockedReason: nil)
         )
         XCTAssertEqual(
-            SetupWizardDefaultHotkey.recommendedHybridHotkey,
+            SetupWizardDefaultHotkey.recommendedHybridHotkey(accessibilityGranted: true),
             UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
+        )
+        // Fn needs Accessibility; Option-Space works without it (#1906).
+        XCTAssertEqual(
+            SetupWizardDefaultHotkey.recommendedHybridHotkey(accessibilityGranted: false),
+            UnifiedHotkey(keyCode: 49, modifierFlags: NSEvent.ModifierFlags.option.rawValue, isFn: false)
         )
     }
 

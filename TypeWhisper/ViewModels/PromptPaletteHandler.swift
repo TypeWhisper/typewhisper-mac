@@ -12,9 +12,7 @@ final class PromptPaletteHandler {
         case failed
         case insertedViaAccessibility
         case insertedViaPaste
-#if APPSTORE
         case copiedToClipboard
-#endif
     }
 
     private struct PaletteContext {
@@ -293,12 +291,10 @@ final class PromptPaletteHandler {
                 autoEnter: false,
                 awaitPasteVerification: true
             )
-#if APPSTORE
             if result == .copiedToClipboard {
-                onShowNotchFeedback?(AppStoreInputAccess.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
+                onShowNotchFeedback?(TextInsertionService.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
                 return
             }
-#endif
             if result.leftFocusedTextUnchanged {
                 onShowNotchFeedback?(
                     String(localized: "Text may not have been inserted"),
@@ -428,9 +424,9 @@ final class PromptPaletteHandler {
                     insertionOutcome = textInsertionService.insertTextAt(element: element, text: result)
                         ? .insertedViaAccessibility
                         : .failed
-                } else {
-#if APPSTORE
+                } else if Self.pastesWithoutFocusedElement || !textInsertionService.isAccessibilityGranted {
                     // The sandbox cannot reach the focused element, so paste at the caret instead.
+                    // Without Accessibility, this leaves the text on the clipboard.
                     insertionOutcome = try await activateAndInsertText(
                         result,
                         bundleId: ctx.activeApp.bundleId,
@@ -439,9 +435,8 @@ final class PromptPaletteHandler {
                         outputFormat: resolvedOutputFormat,
                         deferredClipboardRestore: ctx.deferredClipboardRestore
                     )
-#else
+                } else {
                     insertionOutcome = .failed
-#endif
                 }
 
                 if workflow.output.autoEnter, insertionOutcome == .insertedViaAccessibility {
@@ -449,13 +444,11 @@ final class PromptPaletteHandler {
                     textInsertionService.simulateReturn()
                 }
 
-#if APPSTORE
                 if insertionOutcome == .copiedToClipboard {
                     soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
-                    onShowNotchFeedback?(AppStoreInputAccess.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
+                    onShowNotchFeedback?(TextInsertionService.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
                     return
                 }
-#endif
 
                 if insertionOutcome == .failed && !preserveClipboard {
                     copyWorkflowResultToClipboard(result, outputFormat: resolvedOutputFormat)
@@ -590,14 +583,20 @@ final class PromptPaletteHandler {
         return Self.insertionOutcome(forPasteResult: result)
     }
 
+    /// The App Store edition cannot read the focused element of other apps, so finding none
+    /// does not mean that no text field is focused.
+#if APPSTORE
+    private static let pastesWithoutFocusedElement = true
+#else
+    private static let pastesWithoutFocusedElement = false
+#endif
+
     private static func insertionOutcome(
         forPasteResult result: TextInsertionService.InsertionResult
     ) -> InsertionOutcome {
-#if APPSTORE
         if result == .copiedToClipboard {
             return .copiedToClipboard
         }
-#endif
         return .insertedViaPaste
     }
 }
