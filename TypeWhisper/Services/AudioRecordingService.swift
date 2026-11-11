@@ -377,12 +377,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         case settled(duration: TimeInterval)
         /// The tail ran for its full length.
         case reachedMaxDuration(duration: TimeInterval)
+        /// The stop was cancelled during the tail, for example with Escape.
+        case cancelled(duration: TimeInterval)
 
         var duration: TimeInterval {
             switch self {
             case .notRequested, .skippedShortRecording:
                 0
-            case .settled(let duration), .reachedMaxDuration(let duration):
+            case .settled(let duration), .reachedMaxDuration(let duration), .cancelled(let duration):
                 duration
             }
         }
@@ -397,6 +399,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 String(format: "settled(%.0fms)", duration * 1000)
             case .reachedMaxDuration(let duration):
                 String(format: "max(%.0fms)", duration * 1000)
+            case .cancelled(let duration):
+                String(format: "cancelled(%.0fms)", duration * 1000)
             }
         }
     }
@@ -3815,7 +3819,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         var graceApplied = false
         if policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
             graceApplied = true
-            while elapsed() < maxExtraCapture,
+            // A cancelled stop ends the wait; the capture teardown still runs after it.
+            while !Task.isCancelled,
+                  elapsed() < maxExtraCapture,
                   policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
                 try? await Task.sleep(for: .seconds(pollInterval))
             }
@@ -3832,6 +3838,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         let outcome: ReleaseTailOutcome
         while true {
+            if Task.isCancelled {
+                outcome = .cancelled(duration: elapsed())
+                break
+            }
             if releaseTail.isSettled(trailingSamples: trailingRecordedSamples(count: releaseTail.quietSampleCount)) {
                 outcome = .settled(duration: elapsed())
                 break

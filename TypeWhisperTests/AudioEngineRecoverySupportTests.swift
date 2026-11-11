@@ -1144,6 +1144,39 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertLessThan(service.lastStopReleaseTail.duration, 0.05)
     }
 
+    func testReleaseTailEndsWhenTheStopIsCancelled() async throws {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        try service.startRecording()
+        service.startRecordingOverride = nil
+        service.engineTeardownOverride = { _ in }
+        service.testingSetAudioEngine(RunningAudioEngine())
+        service.testingProcessConvertedSamples(Array(repeating: 0.05 as Float, count: 16_000))
+
+        let tail = AudioRecordingService.ReleaseTail(
+            maxDuration: 5,
+            quietDuration: 0.15,
+            minimumRecordingDuration: 0.3
+        )
+        let stopTask = Task {
+            await service.stopRecording(policy: .finalizeShortSpeech(releaseTail: tail))
+        }
+        let didClaimRecordingEngine = await waitUntil(timeout: 1) {
+            service.testingCurrentAudioEngine() == nil
+        }
+        XCTAssertTrue(didClaimRecordingEngine)
+        stopTask.cancel()
+        let samples = await stopTask.value
+
+        XCTAssertEqual(samples.count, 16_000)
+        XCTAssertFalse(service.testingIsRecordingActive)
+        guard case .cancelled(let duration) = service.lastStopReleaseTail else {
+            return XCTFail("Expected a cancelled tail, got \(service.lastStopReleaseTail)")
+        }
+        XCTAssertLessThan(duration, 1)
+    }
+
     func testRecordingSuccessDiscardDeletesRecoveryAudio() async throws {
         let directory = makeRecoveryTestDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)
