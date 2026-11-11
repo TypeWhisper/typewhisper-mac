@@ -356,10 +356,17 @@ extension HistorySearchRecord {
                 ofSpeakerSegments: speakerSegments(of: transcript, namesData: record.speakerNamesData)
             )
         }
-        if passages.isEmpty {
-            let text = visibleIsSpokenText ? visible : spoken
-            passages = HistoryPassageChunker.passages(of: text, timing: timing(record.timedText, in: text))
+        guard passages.isEmpty else {
+            // The speaker transcript holds the spoken words, so a visible text with
+            // any other wording is indexed too: a correction as much as written notes.
+            let whitespace = CharacterSet.whitespacesAndNewlines
+            if visible.trimmingCharacters(in: whitespace) != spoken.trimmingCharacters(in: whitespace) {
+                passages += HistoryPassageChunker.passages(of: visible, kind: .result)
+            }
+            return passages
         }
+        let text = visibleIsSpokenText ? visible : spoken
+        passages = HistoryPassageChunker.passages(of: text, timing: timing(record.timedText, in: text))
         if !visibleIsSpokenText {
             // An email, a translation or notes written from the recording.
             passages += HistoryPassageChunker.passages(of: visible, kind: .result)

@@ -35,6 +35,12 @@ struct HistorySearchIndexError: Error, CustomStringConvertible {
     let message: String
 
     var description: String { "SQLite error \(code): \(message)" }
+
+    /// True when SQLite found the file itself damaged.
+    var isCorruption: Bool {
+        let primaryCode = code & 0xFF
+        return primaryCode == SQLITE_CORRUPT || primaryCode == SQLITE_NOTADB
+    }
 }
 
 /// The full-text index over History, in a SQLite file of its own.
@@ -128,14 +134,21 @@ actor HistorySearchIndex {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    /// The fingerprint of every indexed record. Empty without an index file.
+    /// The fingerprint of every indexed record. Empty without an index file, and
+    /// for a damaged one, which is deleted.
     func fingerprints() throws -> [UUID: HistorySearchFingerprint] {
         guard let connection = try open(creating: false) else { return [:] }
-        let rows = try connection.rows("SELECT uuid, content_version, content_hash FROM records") { row in
-            (
-                UUID(uuidString: row.text(0) ?? ""),
-                HistorySearchFingerprint(version: row.text(1) ?? "", contentHash: row.text(2) ?? "")
-            )
+        let rows: [(UUID?, HistorySearchFingerprint)]
+        do {
+            rows = try connection.rows("SELECT uuid, content_version, content_hash FROM records") { row in
+                (
+                    UUID(uuidString: row.text(0) ?? ""),
+                    HistorySearchFingerprint(version: row.text(1) ?? "", contentHash: row.text(2) ?? "")
+                )
+            }
+        } catch let error as HistorySearchIndexError where error.isCorruption {
+            destroy()
+            return [:]
         }
         return Dictionary(rows.compactMap { id, fingerprint in id.map { ($0, fingerprint) } }) { first, _ in first }
     }
@@ -150,8 +163,9 @@ actor HistorySearchIndex {
     /// Throws when the full-text tables no longer match the stored passages and titles.
     func checkIntegrity() throws {
         guard let connection = try open(creating: false) else { return }
-        try connection.run("INSERT INTO passages_fts(passages_fts) VALUES('integrity-check')")
-        try connection.run("INSERT INTO titles_fts(titles_fts) VALUES('integrity-check')")
+        // Without a rank of 1, FTS5 only checks the full-text tables against themselves.
+        try connection.run("INSERT INTO passages_fts(passages_fts, rank) VALUES('integrity-check', 1)")
+        try connection.run("INSERT INTO titles_fts(titles_fts, rank) VALUES('integrity-check', 1)")
     }
 
     // MARK: - Rows
@@ -195,6 +209,8 @@ actor HistorySearchIndex {
             try connection.execute("COMMIT")
         } catch {
             try? connection.execute("ROLLBACK")
+            // A damaged file is deleted, so the next check builds the index again.
+            if (error as? HistorySearchIndexError)?.isCorruption == true { destroy() }
             throw error
         }
     }

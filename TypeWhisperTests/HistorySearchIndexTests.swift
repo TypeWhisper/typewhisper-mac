@@ -217,6 +217,17 @@ final class HistorySearchIndexTests: XCTestCase {
         XCTAssertEqual(counts.records, 1)
         XCTAssertEqual(counts.passages, 1)
         try await index.checkIntegrity()
+
+        // A passage that full-text search has lost is a reason to build the index again.
+        _ = try indexRows(
+            "INSERT INTO passages_fts(passages_fts, rowid, text, speaker) SELECT 'delete', id, text, speaker FROM passages",
+            in: directory, writing: true
+        )
+        XCTAssertEqual(try recordIDs(matching: "zahnarztin", in: directory), [])
+        do {
+            try await index.checkIntegrity()
+            XCTFail("The check passed although full-text search lost a passage")
+        } catch {}
     }
 
     func testPassageIDsFollowTheRecordingTimeAlsoForRecordsAddedLaterOrInTheSameSecond() async throws {
@@ -282,6 +293,29 @@ final class HistorySearchIndexTests: XCTestCase {
         // An index of another format is deleted instead of read.
         let reopened = HistorySearchIndex(directory: directory)
         let fingerprints = try await reopened.fingerprints()
+        XCTAssertEqual(fingerprints, [:])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testAnIndexWithADamagedTableIsDeletedWhenItIsRead() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let file = directory.appendingPathComponent("index.sqlite")
+        do {
+            let index = HistorySearchIndex(directory: directory)
+            try await index.upsert([record(passages: [HistoryPassage(kind: .transcript, text: "Hello.")])])
+        }
+        // The file still opens and names its format, but the records table is unreadable.
+        _ = try indexRows("PRAGMA wal_checkpoint(TRUNCATE)", in: directory, writing: true)
+        let page = try XCTUnwrap(Int(try indexRows("SELECT rootpage FROM sqlite_schema WHERE name = 'records'", in: directory)[0][0]))
+        let pageSize = try XCTUnwrap(Int(try indexRows("PRAGMA page_size", in: directory)[0][0]))
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.seek(toOffset: UInt64((page - 1) * pageSize))
+        try handle.write(contentsOf: Data(repeating: 0xFF, count: pageSize))
+        try handle.close()
+
+        let index = HistorySearchIndex(directory: directory)
+        let fingerprints = try await index.fingerprints()
         XCTAssertEqual(fingerprints, [:])
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
     }
@@ -413,6 +447,15 @@ final class HistorySearchIndexerTests: XCTestCase {
         // The older record sorts before the ones indexed first.
         XCTAssertEqual(try fixture.matches("budget OR roadmap"), [remoteID, keptID])
         try await fixture.index.checkIntegrity()
+
+        // Full-text search loses its entries while the records still look current.
+        _ = try indexRows(
+            "INSERT INTO passages_fts(passages_fts, rowid, text, speaker) SELECT 'delete', id, text, speaker FROM passages",
+            in: fixture.indexDirectory, writing: true
+        )
+        XCTAssertEqual(try fixture.matches("budget"), [])
+        await indexer?.reconcile(checkingContent: true)
+        try await eventually { try fixture.matches("budget OR roadmap") == [remoteID, keptID] }
     }
 
     func testTheContentCheckFindsChangesThatSetNoDate() async throws {
@@ -554,11 +597,17 @@ final class HistorySearchIndexerTests: XCTestCase {
 
         record.speakerTranscriptState = .ready
         XCTAssertNotEqual(HistorySearchRecord.version(of: record), pendingVersion)
+        let turns = HistoryPassage(
+            kind: .transcript, text: "Anna: Good morning.\nBen: Fine, thanks.",
+            speakers: ["Anna", "Ben"], startSeconds: 0, endSeconds: 4
+        )
+        XCTAssertEqual(try XCTUnwrap(HistorySearchRecord(record)).passages, [turns])
+
+        // The speaker transcript keeps the engine's words, so a corrected text is indexed next to it.
+        record.finalText = "Good morning. Fine, thank you."
         XCTAssertEqual(try XCTUnwrap(HistorySearchRecord(record)).passages, [
-            HistoryPassage(
-                kind: .transcript, text: "Anna: Good morning.\nBen: Fine, thanks.",
-                speakers: ["Anna", "Ben"], startSeconds: 0, endSeconds: 4
-            ),
+            turns,
+            HistoryPassage(kind: .result, text: "Good morning. Fine, thank you.", utf16Range: 0..<30),
         ])
     }
 }
