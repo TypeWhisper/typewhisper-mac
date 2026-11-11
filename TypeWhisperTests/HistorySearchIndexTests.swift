@@ -332,21 +332,22 @@ final class HistorySearchIndexerTests: XCTestCase {
         var isEnabled = true
         var isBusy = false
 
-        init() throws {
+        init(indexDirectory: URL? = nil) throws {
             appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-            indexDirectory = appSupportDirectory.appendingPathComponent(HistorySearchIndex.directoryName, isDirectory: true)
+            self.indexDirectory = indexDirectory
+                ?? appSupportDirectory.appendingPathComponent(HistorySearchIndex.directoryName, isDirectory: true)
             history = HistoryService(appSupportDirectory: appSupportDirectory)
-            index = HistorySearchIndex(directory: indexDirectory)
+            index = HistorySearchIndex(directory: self.indexDirectory)
         }
 
-        func makeIndexer() -> HistorySearchIndexer {
+        func makeIndexer(retryDelay: Duration = .milliseconds(5)) -> HistorySearchIndexer {
             HistorySearchIndexer(
                 historyService: history,
                 index: index,
                 isEnabled: { [unowned self] in self.isEnabled },
                 isBusy: { [unowned self] in self.isBusy },
                 upsertDelay: .milliseconds(5),
-                busyRetryDelay: .milliseconds(5)
+                busyRetryDelay: retryDelay
             )
         }
 
@@ -527,6 +528,49 @@ final class HistorySearchIndexerTests: XCTestCase {
         fixture.isBusy = false
         try await eventually { try await fixture.indexedIDs() == [secondID] }
         withExtendedLifetime(indexer) {}
+    }
+
+    func testAnUpdateThatFailsIsTriedAgain() async throws {
+        let lockedDirectory = try TestSupport.makeTemporaryDirectory()
+        func setLocked(_ locked: Bool) throws {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: locked ? 0o555 : 0o755], ofItemAtPath: lockedDirectory.path
+            )
+        }
+        let fixture = try Fixture(indexDirectory: lockedDirectory.appendingPathComponent("HistorySearch", isDirectory: true))
+        defer {
+            try? setLocked(false)
+            TestSupport.remove(lockedDirectory)
+            TestSupport.remove(fixture.appSupportDirectory)
+        }
+        let indexer = fixture.makeIndexer(retryDelay: .milliseconds(300))
+
+        // The index folder cannot be created, so the first attempt fails.
+        try setLocked(true)
+        let id = fixture.addDictation("We ship the invoice export on Friday.")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.indexDirectory.path))
+
+        try setLocked(false)
+        try await eventually { try await fixture.indexedIDs() == [id] }
+        withExtendedLifetime(indexer) {}
+    }
+
+    func testAfterStoppingNothingIsWrittenAnymore() async throws {
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let indexer = fixture.makeIndexer()
+        let firstID = fixture.addDictation("We ship the invoice export on Friday.")
+        try await eventually { try await fixture.indexedIDs() == [firstID] }
+
+        // As before "Delete All Data": a change that waits and later ones stay out.
+        fixture.addDictation("Book the dentist for Monday.")
+        await indexer.stop()
+        fixture.addDictation("The roadmap stays as planned.")
+        await indexer.reconcile(checkingContent: true)
+        try await Task.sleep(for: .milliseconds(100))
+        let indexed = try await fixture.indexedIDs()
+        XCTAssertEqual(indexed, [firstID])
     }
 
     func testADictationKeepsItsAppARecordingItsTitleAndAWrittenResultStandsNextToWhatWasSaid() throws {

@@ -16,6 +16,9 @@ final class HistorySearchIndexer {
     /// Records read and written in one step, so a deletion never waits long.
     static let batchSize = 50
     private static let contentCheckBatchSize = 200
+    /// How often a batch that could not be read or written is tried again in a
+    /// row. After that the next check adds its records.
+    private static let upsertRetries = 3
 
     private let index: HistorySearchIndex
     private let reader: HistorySearchRecordReader
@@ -33,6 +36,8 @@ final class HistorySearchIndexer {
     /// False once no index file was found, so History changes cost nothing
     /// while no index is kept.
     private var indexMayExist = true
+    private var failedUpserts = 0
+    private var isStopped = false
     private var upsertTimer: Task<Void, Never>?
     private var worker: Task<Void, Never>?
 
@@ -66,11 +71,20 @@ final class HistorySearchIndexer {
         }
     }
 
+    /// Ends all index work for good and waits for the running step, so nothing
+    /// writes the index while the user's data is deleted.
+    func stop() async {
+        isStopped = true
+        subscription = nil
+        upsertTimer?.cancel()
+        await worker?.value
+    }
+
     /// Adds records the index lacks, updates those whose change dates differ and
     /// removes those History no longer has. `checkingContent` also compares the
     /// content of the other records, which reads every record once.
     func reconcile(checkingContent: Bool = false) async {
-        guard isEnabled() else { return }
+        guard isEnabled(), !isStopped else { return }
         do {
             // The index first: a record History gets in between is then added, not removed.
             let indexed = try await index.fingerprints()
@@ -166,7 +180,7 @@ final class HistorySearchIndexer {
     }
 
     private func startWorker() {
-        guard worker == nil else { return }
+        guard worker == nil, !isStopped else { return }
         worker = Task(priority: .utility) { [weak self] in
             // One job at a time, so a record is never written after its removal.
             while let job = self?.nextJob() {
@@ -177,6 +191,10 @@ final class HistorySearchIndexer {
 
     /// Deletions come first. Returns nil, and frees the worker, when nothing is left.
     private func nextJob() -> Job? {
+        guard !isStopped else {
+            worker = nil
+            return nil
+        }
         if deletesIndex {
             deletesIndex = false
             return .deleteIndex
@@ -223,9 +241,23 @@ final class HistorySearchIndexer {
                 }.value
                 // Deleted since the change, or no longer ready.
                 try await index.remove(Set(ids).subtracting(records.map(\.id)))
+                guard !isStopped else { return }
+                guard isEnabled() else {
+                    // Turned off during the read: the index must not gain these records.
+                    removals.formUnion(ids)
+                    return
+                }
                 try await index.upsert(records)
+                failedUpserts = 0
             } catch {
                 logger.error("Failed to update the search index: \(String(describing: error), privacy: .public)")
+                guard failedUpserts < Self.upsertRetries else {
+                    failedUpserts = 0
+                    return
+                }
+                failedUpserts += 1
+                dueUpserts.formUnion(ids)
+                try? await Task.sleep(for: busyRetryDelay)
             }
         case .waitWhileBusy:
             try? await Task.sleep(for: busyRetryDelay)

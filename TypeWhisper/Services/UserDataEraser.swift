@@ -36,6 +36,8 @@ enum UserDataEraser {
         apiServer.stopServerAndCancelActiveRequests()
         container.remoteLinkViewModel.endPairing()
         container.remoteLinkViewModel.stop()
+        // A running index update would write History text into a new index file.
+        await container.historySearchIndexer.stop()
         let failures = await discardActiveRecording(container.audioRecorderService)
 
         // The iCloud bridge copies the remote package into the local mirror
