@@ -207,8 +207,6 @@ final class HistoryService: ObservableObject {
 
     private(set) var totalRecords: Int = 0
 
-    /// Called with the IDs of records right after they were deleted, so data
-    /// kept elsewhere for them, such as voice embeddings, goes too.
     /// Sends each change after it was saved, on the main actor.
     let changes = PassthroughSubject<HistoryRecordChange, Never>()
     /// Preserve local enrollment evidence before a name or speaker correction.
