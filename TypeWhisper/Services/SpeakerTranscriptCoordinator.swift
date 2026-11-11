@@ -761,11 +761,13 @@ enum RecorderSpeakerSnapshot {
                 id: speakerID,
                 name: (isSuggestion ? nil : entry?.displayName) ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID),
                 suggestedName: isSuggestion ? entry?.displayName : nil,
-                // The same speaker the Speakers view shows as the user's own.
+                // The speaker the Speakers view shows as the user's own, but
+                // not for a name a voice profile only suggested.
                 isMe: SpeakerWorkspaceModel.isOwnSpeaker(
                     speakerID,
                     microphoneSpeakerID: microphoneSpeaker,
                     names: names,
+                    countsSuggestions: false,
                     defaults: defaults
                 )
             )

@@ -495,10 +495,13 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         XCTAssertFalse(model.isOwnSpeaker("S1"))
     }
 
-    /// The Recorder's `is_me` follows the Speakers view, also without a microphone channel.
+    /// The Recorder's `is_me` follows the Speakers view, also without a microphone
+    /// channel, but a name a voice profile only suggested does not count.
     func testRecorderPayloadMarksTheSpeakerNamedAsTheUser() throws {
         _ = try makeModel()
-        history.setSpeakerName(String(localized: "speakers.me"), for: "S2", inRecordID: recordID)
+        let me = String(localized: "speakers.me")
+        history.setSpeakerName(me, for: "S1", profileID: UUID(), isSuggestion: true, inRecordID: recordID)
+        history.setSpeakerName(me, for: "S2", inRecordID: recordID)
         let payload = RecorderTranscriptReadyPayload(
             recordingID: UUID(),
             completedAt: Date(),
