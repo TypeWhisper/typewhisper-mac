@@ -1269,6 +1269,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .none:
                 break
             }
+            // A restart started from Settings comes back to the same page.
+            if let page = RelaunchSettingsPage.consume(), presentation != .setup {
+                SettingsNavigationCoordinator.shared.navigate(to: page.tab)
+                openSettingsWindow()
+            }
         }
     }
 

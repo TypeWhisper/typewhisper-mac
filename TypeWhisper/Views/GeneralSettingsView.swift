@@ -3,7 +3,10 @@ import ServiceManagement
 import TypeWhisperPluginSDK
 
 private func completeApplicationRelaunch(_ application: NSRunningApplication?, _ error: Error?) {
-    guard application != nil, error == nil else { return }
+    guard application != nil, error == nil else {
+        RelaunchSettingsPage.clear()
+        return
+    }
     Task { @MainActor in
         NSApplication.shared.terminate(nil)
     }
@@ -116,7 +119,7 @@ struct GeneralSettingsView: View {
         }
         .alert(String(localized: "Restart Required"), isPresented: $showRestartAlert) {
             Button(String(localized: "Restart Now")) {
-                ApplicationRelauncher.relaunch()
+                ApplicationRelauncher.relaunch(reopening: .general)
             }
             Button(String(localized: "Later"), role: .cancel) {}
         } message: {
@@ -126,16 +129,57 @@ struct GeneralSettingsView: View {
 
 }
 
+/// The Settings page a relaunch opens again, so a restart started from Settings
+/// does not leave the user without the window they were working in.
+/// Stored in the defaults because the sandbox drops launch arguments.
+enum RelaunchSettingsPage: String, CaseIterable {
+    case general
+    case integrations
+
+    /// A launch long after the restart, for example after a crash, opens no window.
+    static let maximumAge: TimeInterval = 60
+
+    var tab: SettingsTab {
+        switch self {
+        case .general: .general
+        case .integrations: .integrations
+        }
+    }
+
+    func store(in defaults: UserDefaults = .standard, now: Date = Date()) {
+        defaults.set(["page": rawValue, "date": now], forKey: UserDefaultsKeys.relaunchSettingsPage)
+    }
+
+    static func clear(in defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: UserDefaultsKeys.relaunchSettingsPage)
+    }
+
+    /// Returns the page the restart asked for and forgets it, so only the next launch opens it.
+    static func consume(from defaults: UserDefaults = .standard, now: Date = Date()) -> RelaunchSettingsPage? {
+        guard let entry = defaults.dictionary(forKey: UserDefaultsKeys.relaunchSettingsPage) else { return nil }
+        clear(in: defaults)
+        guard let rawValue = entry["page"] as? String,
+              let date = entry["date"] as? Date,
+              abs(now.timeIntervalSince(date)) <= maximumAge else { return nil }
+        return RelaunchSettingsPage(rawValue: rawValue)
+    }
+}
+
 @MainActor
 enum ApplicationRelauncher {
     #if APPSTORE
     private static var pendingTermination: DispatchWorkItem?
     #endif
 
-    static func relaunch() {
+    static func relaunch(reopening settingsPage: RelaunchSettingsPage? = nil) {
         let bundleURL = Bundle.main.bundleURL
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
+        if let settingsPage {
+            settingsPage.store()
+        } else {
+            RelaunchSettingsPage.clear()
+        }
         #if APPSTORE
         // The new instance waits for this one to quit before it checks in, so
         // waiting for the launch completion here would stall both until the
@@ -150,6 +194,7 @@ enum ApplicationRelauncher {
                 ApplicationRelauncher.pendingTermination?.cancel()
                 ApplicationRelauncher.pendingTermination = nil
                 AppStoreSingleInstance.clearRelaunchMark()
+                RelaunchSettingsPage.clear()
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: terminate)

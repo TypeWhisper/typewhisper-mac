@@ -237,6 +237,8 @@ enum UserDefaultsKeys {
     static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
     static let lastSeenWhatsNewContentVersion = "lastSeenWhatsNewContentVersion"
     static let iOSCompanionPromoCampaign = "iOSCompanionPromoCampaign"
+    /// The Settings page a restart from Settings opens again; read once by the next launch.
+    static let relaunchSettingsPage = "relaunchSettingsPage"
 
     // MARK: - Managed settings
     /// The login item state before an enforced `LaunchAtLogin` policy changed it; restored once
