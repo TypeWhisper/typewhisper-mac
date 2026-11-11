@@ -365,6 +365,29 @@ final class HistorySearchIndexTests: XCTestCase {
         XCTAssertEqual(try recordIDs(matching: "invoice", in: directory), [])
     }
 
+    func testAnIndexInAFolderThatCannotBeReadCountsAsNotDeleted() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        func setPermissions(_ permissions: Int) throws {
+            try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: directory.path)
+        }
+        defer {
+            try? setPermissions(0o755)
+            TestSupport.remove(directory)
+        }
+        let index = HistorySearchIndex(directory: directory)
+        try await index.upsert([record(passages: [HistoryPassage(kind: .transcript, text: "Hello.")])])
+
+        try setPermissions(0o000)
+        let isGoneWhileUnreadable = await index.destroy()
+        XCTAssertFalse(isGoneWhileUnreadable)
+
+        // The next attempt, as the indexer makes it with the next change, succeeds.
+        try setPermissions(0o755)
+        let isGone = await index.destroy()
+        XCTAssertTrue(isGone)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
     func testAnIndexWithADamagedTableIsDeletedWhenItIsRead() async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }

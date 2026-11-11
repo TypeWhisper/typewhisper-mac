@@ -138,9 +138,11 @@ actor HistorySearchIndex {
         let fileManager = FileManager.default
         try? fileManager.removeItem(at: directory)
         guard fileManager.fileExists(atPath: directory.path) else { return true }
-        // Emptying a file needs no right to change its folder.
+        // Emptying a file needs no right to change its folder. A folder that
+        // cannot be listed may still hold the files.
+        guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else { return false }
         var isEmpty = true
-        for name in (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? [] {
+        for name in names {
             let file = directory.appendingPathComponent(name)
             do {
                 let handle = try FileHandle(forWritingTo: file)
