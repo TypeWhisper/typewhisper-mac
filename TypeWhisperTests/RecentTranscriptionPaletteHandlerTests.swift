@@ -1350,6 +1350,24 @@ final class TranslationHostWindowTests: XCTestCase {
 
 @MainActor
 final class SelectionPaletteInteractionModelTests: XCTestCase {
+    func testPanelOriginStaysInsideVisibleFrameOnShortScreens() {
+        // A 13" MacBook Air: 875 pt visible height. Centred at midY + 60, the
+        // 404 pt clipboard palette would reach 26.5 pt above the visible frame.
+        let visibleFrame = NSRect(x: 0, y: 25, width: 1470, height: 875)
+        let size = NSSize(width: 380, height: 404)
+        let origin = SelectionPalettePanel.origin(
+            NSPoint(x: visibleFrame.midX - 190, y: visibleFrame.midY + 60),
+            size: size,
+            keptInside: visibleFrame
+        )
+        XCTAssertEqual(origin.y + size.height, visibleFrame.maxY)
+        XCTAssertEqual(origin.x, visibleFrame.midX - 190)
+
+        // A panel that already fits keeps its position.
+        let fitting = SelectionPalettePanel.origin(NSPoint(x: 100, y: 200), size: size, keptInside: visibleFrame)
+        XCTAssertEqual(fitting, NSPoint(x: 100, y: 200))
+    }
+
     func testArrowKeysMoveSelectionAndReturnSelectsCurrentItem() throws {
         let items = [
             SelectionPaletteItem(id: UUID(), title: "First"),

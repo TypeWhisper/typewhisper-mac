@@ -417,7 +417,7 @@ private struct SelectionPaletteRow: View {
     }
 }
 
-private final class SelectionPalettePanel: NSPanel {
+final class SelectionPalettePanel: NSPanel {
     var keyDownHandler: ((NSEvent) -> Bool)?
 
     init() {
@@ -453,7 +453,22 @@ private final class SelectionPalettePanel: NSPanel {
         let x = screenFrame.midX - frame.width / 2
         let y = screenFrame.midY + 60
 
-        setFrameOrigin(NSPoint(x: x, y: y))
+        setFrameOrigin(Self.origin(NSPoint(x: x, y: y), size: frame.size, keptInside: screenFrame))
+    }
+
+    /// Moves the panel back inside the visible screen area after a resize, e.g.
+    /// when a taller level replaces a shorter one.
+    func keepOnScreen() {
+        guard let screenFrame = screen?.visibleFrame else { return }
+        setFrameOrigin(Self.origin(frame.origin, size: frame.size, keptInside: screenFrame))
+    }
+
+    /// `origin` shifted just enough that a panel of `size` stays inside `visibleFrame`.
+    /// The top edge wins when the panel is taller than the frame, so the header stays visible.
+    nonisolated static func origin(_ origin: NSPoint, size: NSSize, keptInside visibleFrame: NSRect) -> NSPoint {
+        let x = max(visibleFrame.minX, min(origin.x, visibleFrame.maxX - size.width))
+        let y = min(max(origin.y, visibleFrame.minY), visibleFrame.maxY - size.height)
+        return NSPoint(x: x, y: y)
     }
 
     private func activeScreen() -> NSScreen? {
@@ -524,6 +539,7 @@ final class SelectionPaletteController: SelectionPaletteControlling {
             let newSize = NSSize(width: configuration.panelWidth, height: configuration.panelHeight)
             hostingView.frame = NSRect(origin: .zero, size: newSize)
             panel.setContentSize(newSize)
+            panel.keepOnScreen()
             presentationID = UUID()
             return
         }
