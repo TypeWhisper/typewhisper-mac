@@ -22,7 +22,10 @@ private extension PromptPaletteEntry {
 @MainActor
 protocol PromptPaletteControlling: AnyObject {
     var isVisible: Bool { get }
-    func show(entries: [PromptPaletteEntry], sourceText: String?, onSelect: @escaping (PromptPaletteEntry) -> Void)
+    /// Presents the palette. `clipboardText` is the text the workflows will process
+    /// when it comes from the clipboard rather than a selection; the palette then
+    /// shows it under a label, so the user sees what a workflow would send.
+    func show(entries: [PromptPaletteEntry], clipboardText: String?, onSelect: @escaping (PromptPaletteEntry) -> Void)
     func hide()
 }
 
@@ -38,7 +41,7 @@ final class PromptPaletteController: PromptPaletteControlling {
 
     var isVisible: Bool { paletteController.isVisible }
 
-    func show(entries: [PromptPaletteEntry], sourceText _: String?, onSelect: @escaping (PromptPaletteEntry) -> Void) {
+    func show(entries: [PromptPaletteEntry], clipboardText: String?, onSelect: @escaping (PromptPaletteEntry) -> Void) {
         let visibleEntries = entries.filter { entry in
             switch entry {
             case .workflow(let workflow):
@@ -50,8 +53,9 @@ final class PromptPaletteController: PromptPaletteControlling {
         guard !visibleEntries.isEmpty else { return }
 
         let recentEntries = visibleEntries.compactMap(\.recentEntry)
+        let workflowConfiguration = workflowLevelConfiguration(clipboardText: clipboardText)
         guard !recentEntries.isEmpty else {
-            showFlat(entries: visibleEntries, onSelect: onSelect)
+            showFlat(entries: visibleEntries, configuration: workflowConfiguration, onSelect: onSelect)
             return
         }
 
@@ -72,6 +76,7 @@ final class PromptPaletteController: PromptPaletteControlling {
             groupItem: groupItem,
             entriesByID: entriesByID,
             recentEntries: recentEntries,
+            configuration: workflowConfiguration,
             onSelect: onSelect
         )
     }
@@ -83,11 +88,12 @@ final class PromptPaletteController: PromptPaletteControlling {
         groupItem: SelectionPaletteItem,
         entriesByID: [UUID: PromptPaletteEntry],
         recentEntries: [RecentTranscriptionStore.Entry],
+        configuration baseConfiguration: SelectionPaletteConfiguration,
         initialSelectedIndex: Int? = nil,
         onSelect: @escaping (PromptPaletteEntry) -> Void
     ) {
         let (recentItems, recentByID) = paletteIndex(for: recentEntries.map(PromptPaletteEntry.recentTranscription))
-        var configuration = workflowLevelConfiguration
+        var configuration = baseConfiguration
         configuration.secondaryItems = recentItems
         configuration.initialSelectedIndex = initialSelectedIndex
         paletteController.show(
@@ -108,6 +114,7 @@ final class PromptPaletteController: PromptPaletteControlling {
                                 groupItem: groupItem,
                                 entriesByID: entriesByID,
                                 recentEntries: recentEntries,
+                                configuration: baseConfiguration,
                                 initialSelectedIndex: workflowItems.count,
                                 onSelect: onSelect
                             )
@@ -126,10 +133,14 @@ final class PromptPaletteController: PromptPaletteControlling {
 
     /// The pre-submenu behavior: a flat list, used when there are no recent
     /// transcriptions to group.
-    private func showFlat(entries: [PromptPaletteEntry], onSelect: @escaping (PromptPaletteEntry) -> Void) {
+    private func showFlat(
+        entries: [PromptPaletteEntry],
+        configuration: SelectionPaletteConfiguration,
+        onSelect: @escaping (PromptPaletteEntry) -> Void
+    ) {
         let (items, entriesByID) = paletteIndex(for: entries)
         paletteController.show(
-            configuration: workflowLevelConfiguration,
+            configuration: configuration,
             items: items,
             onSelect: { item in
                 guard let entry = entriesByID[item.id] else { return }
@@ -166,16 +177,32 @@ final class PromptPaletteController: PromptPaletteControlling {
         return (pairs.map(\.0), Dictionary(uniqueKeysWithValues: pairs.map { ($0.0.id, $0.1) }))
     }
 
-    private var workflowLevelConfiguration: SelectionPaletteConfiguration {
-        SelectionPaletteConfiguration(
+    private func workflowLevelConfiguration(clipboardText: String?) -> SelectionPaletteConfiguration {
+        let clipboardPreview = clipboardText.flatMap(Self.clipboardPreview(for:))
+        return SelectionPaletteConfiguration(
             panelWidth: 380,
-            panelHeight: 344,
-            previewText: nil,
-            previewLineLimit: 3,
+            panelHeight: clipboardPreview == nil ? 344 : 404,
+            previewText: clipboardPreview,
+            previewTitle: clipboardPreview == nil ? nil : Self.clipboardPreviewTitle,
+            previewIconSystemName: clipboardPreview == nil ? nil : "doc.on.clipboard",
+            previewLineLimit: 2,
             titleLineLimit: 1,
             searchPrompt: localizedAppText("Search workflows...", de: "Workflows suchen..."),
             emptyStateTitle: localizedAppText("No matching workflows", de: "Keine passenden Workflows")
         )
+    }
+
+    static var clipboardPreviewTitle: String {
+        localizedAppText("Text from the clipboard", de: "Text aus der Zwischenablage")
+    }
+
+    /// The start of the clipboard text on a single line, or nil when it has no
+    /// visible characters.
+    static func clipboardPreview(for text: String) -> String? {
+        let preview = text.prefix(400)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        return preview.isEmpty ? nil : preview
     }
 
     private var recentTranscriptionsConfiguration: SelectionPaletteConfiguration {

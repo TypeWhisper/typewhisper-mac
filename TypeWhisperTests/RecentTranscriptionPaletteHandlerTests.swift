@@ -449,7 +449,7 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
 
         XCTAssertTrue(controller.isVisible)
         XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Manual Summary", "recent:Recovered field text"])
-        XCTAssertEqual(controller.lastSourceText, "Selected text")
+        XCTAssertNil(controller.lastClipboardText)
     }
 
     func testWorkflowPaletteIncludesInlineCommandDictationWorkflow() throws {
@@ -766,7 +766,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertNil(insertedText)
     }
 
-    func testDirectWorkflowHotkeyUsesClipboardFallbackWhenSelectionIsUnavailable() async throws {
+    func testDirectWorkflowHotkeyAsksBeforeProcessingClipboardText() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -778,6 +778,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         textInsertionService.focusedTextElementOverride = { AXUIElementCreateSystemWide() }
 
         var insertedText: String?
+        var processedText: String?
         textInsertionService.insertTextAtOverride = { _, text in
             insertedText = text
             return true
@@ -797,6 +798,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
                 UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
             ], behavior: .processSelectedText)
         )
+        let controller = PromptPaletteControllerSpy()
         let handler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
             workflowService: workflowService,
@@ -804,23 +806,36 @@ final class PromptPaletteHandlerTests: XCTestCase {
             recentTranscriptionStore: RecentTranscriptionStore(),
             promptProcessingService: PromptProcessingService(),
             workflowTextProcessingService: WorkflowTextProcessingService(
-                promptProcessor: { _, _, _, _, _ in "Processed: Clipboard source" },
+                promptProcessor: { _, text, _, _, _ in
+                    processedText = text
+                    return "Processed: \(text)"
+                },
                 appleTranslator: nil
             ),
             soundService: SoundService(),
             accessibilityAnnouncementService: AccessibilityAnnouncementService(),
-            promptPaletteController: PromptPaletteControllerSpy()
+            promptPaletteController: controller
         )
 
-        let workflowFinished = expectWorkflowProcessingToFinish(handler)
+        let paletteShown = expectation(description: "palette shown for clipboard text")
+        controller.onShow = { paletteShown.fulfill() }
         handler.processWorkflowDirectly(
             workflow: workflow,
             currentState: .idle,
             soundFeedbackEnabled: false
         )
+        await fulfillment(of: [paletteShown], timeout: asyncWorkTimeout)
 
+        // Nothing is sent until the user confirms in the palette.
+        XCTAssertNil(processedText)
+        XCTAssertEqual(controller.lastClipboardText, "Clipboard source")
+        XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Direct Cleanup"])
+
+        let workflowFinished = expectWorkflowProcessingToFinish(handler)
+        controller.selectWorkflow(named: "Direct Cleanup")
         await fulfillment(of: [workflowFinished], timeout: asyncWorkTimeout)
 
+        XCTAssertEqual(processedText, "Clipboard source")
         XCTAssertEqual(insertedText, "Processed: Clipboard source")
     }
 
@@ -936,7 +951,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         XCTAssertTrue(controller.isVisible)
         XCTAssertEqual(controller.lastEntryDescriptions, ["recent:Recovered field text"])
-        XCTAssertNil(controller.lastSourceText)
+        XCTAssertNil(controller.lastClipboardText)
         XCTAssertNil(shownError)
         XCTAssertFalse(didCaptureActiveApp)
     }
@@ -1182,7 +1197,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         XCTAssertTrue(controller.isVisible)
         XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Translate"])
-        XCTAssertEqual(controller.lastSourceText, "Selected text")
+        XCTAssertNil(controller.lastClipboardText)
         XCTAssertNil(shownError)
     }
 
@@ -1543,7 +1558,8 @@ final class SelectionPaletteInteractionModelTests: XCTestCase {
 private final class PromptPaletteControllerSpy: PromptPaletteControlling {
     private(set) var isVisible = false
     private(set) var lastEntries: [PromptPaletteEntry]?
-    private(set) var lastSourceText: String?
+    private(set) var lastClipboardText: String?
+    var onShow: (() -> Void)?
     private var onSelect: ((PromptPaletteEntry) -> Void)?
 
     var lastEntryDescriptions: [String] {
@@ -1557,11 +1573,12 @@ private final class PromptPaletteControllerSpy: PromptPaletteControlling {
         } ?? []
     }
 
-    func show(entries: [PromptPaletteEntry], sourceText: String?, onSelect: @escaping (PromptPaletteEntry) -> Void) {
+    func show(entries: [PromptPaletteEntry], clipboardText: String?, onSelect: @escaping (PromptPaletteEntry) -> Void) {
         isVisible = true
         lastEntries = entries
-        lastSourceText = sourceText
+        lastClipboardText = clipboardText
         self.onSelect = onSelect
+        onShow?()
     }
 
     func hide() {

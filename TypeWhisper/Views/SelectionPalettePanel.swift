@@ -27,6 +27,9 @@ struct SelectionPaletteConfiguration: Equatable {
     let panelWidth: CGFloat
     let panelHeight: CGFloat
     let previewText: String?
+    /// A short label above `previewText` that says where the text comes from.
+    let previewTitle: String?
+    let previewIconSystemName: String?
     let previewLineLimit: Int
     let titleLineLimit: Int
     let searchPrompt: String?
@@ -46,6 +49,8 @@ struct SelectionPaletteConfiguration: Equatable {
         panelWidth: CGFloat = 380,
         panelHeight: CGFloat = 400,
         previewText: String? = nil,
+        previewTitle: String? = nil,
+        previewIconSystemName: String? = nil,
         previewLineLimit: Int = 3,
         titleLineLimit: Int = 1,
         searchPrompt: String? = nil,
@@ -56,6 +61,8 @@ struct SelectionPaletteConfiguration: Equatable {
         self.panelWidth = panelWidth
         self.panelHeight = panelHeight
         self.previewText = previewText
+        self.previewTitle = previewTitle
+        self.previewIconSystemName = previewIconSystemName
         self.previewLineLimit = previewLineLimit
         self.titleLineLimit = titleLineLimit
         self.searchPrompt = searchPrompt
@@ -215,14 +222,29 @@ private struct SelectionPaletteContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let previewText = model.configuration.previewText {
-                Text(previewText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(model.configuration.previewLineLimit)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
+                VStack(alignment: .leading, spacing: 4) {
+                    if let previewTitle = model.configuration.previewTitle {
+                        HStack(spacing: 5) {
+                            if let iconSystemName = model.configuration.previewIconSystemName {
+                                Image(systemName: iconSystemName)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(previewTitle)
+                        }
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Text(previewText)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(model.configuration.previewLineLimit)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .accessibilityElement(children: .combine)
 
                 Divider()
             }

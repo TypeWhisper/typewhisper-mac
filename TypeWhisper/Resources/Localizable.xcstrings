@@ -38778,24 +38778,24 @@
         }
       }
     },
-    "Pressing the shortcut transforms the current selection or clipboard without recording." : {
+    "Pressing the shortcut transforms the current selection without recording. With nothing selected, it shows the clipboard text and waits for Return." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Al presionar el atajo se transforma la selección actual o el portapapeles sin grabar."
+            "value" : "Al presionar el atajo se transforma la selección actual sin grabar. Si no hay nada seleccionado, muestra el texto del portapapeles y espera a que pulses Return."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ショートカットを押すと、録音せずに現在の選択範囲またはクリップボードを変換します。"
+            "value" : "ショートカットを押すと、録音せずに現在の選択範囲を変換します。何も選択されていない場合は、クリップボードのテキストを表示し、Return を押すまで待機します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按下快捷键直接处理当前选中文本或剪贴板内容，无需录音。"
+            "value" : "按下快捷键直接处理当前选中文本，无需录音。未选中任何内容时，会显示剪贴板中的文本，并等待按下 Return 键。"
           }
         }
       }
@@ -48707,6 +48707,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "测试 口语标点…"
+          }
+        }
+      }
+    },
+    "Text from the clipboard" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto del portapapeles"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クリップボードのテキスト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剪贴板中的文本"
           }
         }
       }

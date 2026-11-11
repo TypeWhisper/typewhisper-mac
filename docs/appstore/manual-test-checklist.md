@@ -11,7 +11,7 @@ Start with a sandbox-signed build and fresh privacy permissions:
 6. A bare F-key shortcut works with Input Monitoring off and does not reach the frontmost app.
 7. Esc during recording in another app cancels (with Input Monitoring) and also reaches that app. Without Input Monitoring, Esc only cancels while TypeWhisper is focused.
 8. A workflow with Auto Enter "Always" presses Return after pasting.
-9. Prompt palette with selected text in TextEdit: the selection is captured with ⌘C, the result replaces it and the clipboard is restored. Repeat with nothing selected and text on the clipboard.
+9. Prompt palette with selected text in TextEdit: the selection is captured with ⌘C, the result replaces it and the clipboard is restored. Repeat with nothing selected and text on the clipboard: the palette shows the text under "Text from the clipboard", and a workflow hotkey opens the palette instead of running right away.
 10. Paste-last and the recent-transcriptions palette work with and without Accessibility.
 11. Build with `TYPEWHISPER_APPSTORE_AUTOPASTE = NO`: no Accessibility card or row, nothing is posted, text is always copied.
 12. Website workflows do not match; calendar meeting auto-start still works for Zoom and Teams.

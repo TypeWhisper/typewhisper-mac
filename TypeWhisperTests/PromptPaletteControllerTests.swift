@@ -13,7 +13,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .recentTranscription(makeRecentEntry(text: "hello world")),
                 .recentTranscription(makeRecentEntry(text: "second note")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
@@ -44,7 +44,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .recentTranscription(makeRecentEntry(text: "hello world")),
                 .recentTranscription(makeRecentEntry(text: "second note")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { selected.append($0) }
         )
 
@@ -69,7 +69,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .recentTranscription(makeRecentEntry(text: "hello world")),
                 .recentTranscription(makeRecentEntry(text: "second note")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
@@ -94,7 +94,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .workflow(makeWorkflow(name: "Summarize")),
                 .recentTranscription(makeRecentEntry(text: "hello world")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
@@ -114,7 +114,7 @@ final class PromptPaletteControllerTests: XCTestCase {
         var selected: [PromptPaletteEntry] = []
         controller.show(
             entries: [.recentTranscription(entry)],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { selected.append($0) }
         )
 
@@ -137,7 +137,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .workflow(makeWorkflow(name: "Summarize")),
                 .recentTranscription(makeRecentEntry(text: "hello world")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { selected.append($0) }
         )
 
@@ -159,7 +159,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .workflow(makeWorkflow(name: "Summarize")),
                 .workflow(makeWorkflow(name: "Translate")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { selected.append($0) }
         )
 
@@ -178,7 +178,7 @@ final class PromptPaletteControllerTests: XCTestCase {
         let controller = PromptPaletteController(paletteController: spy)
         controller.show(
             entries: [.recentTranscription(makeRecentEntry(text: "hello world"))],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
@@ -197,7 +197,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .workflow(makeWorkflow(name: "Disabled", isEnabled: false)),
                 .recentTranscription(makeRecentEntry(text: "hello world")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
@@ -207,10 +207,34 @@ final class PromptPaletteControllerTests: XCTestCase {
         XCTAssertEqual(spy.shows[0].items.map(\.title), ["hello world"])
     }
 
+    func testClipboardTextIsShownAboveWorkflowsAndKeptAfterBackingOut() {
+        let spy = SelectionPaletteControllerSpy()
+        let controller = PromptPaletteController(paletteController: spy)
+        controller.show(
+            entries: [
+                .workflow(makeWorkflow(name: "Summarize")),
+                .recentTranscription(makeRecentEntry(text: "hello world")),
+            ],
+            clipboardText: "  First line\n\nsecond line  ",
+            onSelect: { _ in }
+        )
+
+        let workflowLevel = spy.shows[0].configuration
+        XCTAssertEqual(workflowLevel.previewTitle, PromptPaletteController.clipboardPreviewTitle)
+        XCTAssertEqual(workflowLevel.previewText, "First line second line")
+
+        // Recent transcriptions do not use the clipboard text, so their level has no label.
+        spy.selectItem(at: 1, inShow: 0)
+        XCTAssertNil(spy.shows[1].configuration.previewText)
+
+        spy.pressEscape(inShow: 1)
+        XCTAssertEqual(spy.shows[2].configuration.previewText, "First line second line")
+    }
+
     func testEmptyEntriesShowNothing() {
         let spy = SelectionPaletteControllerSpy()
         let controller = PromptPaletteController(paletteController: spy)
-        controller.show(entries: [], sourceText: nil, onSelect: { _ in })
+        controller.show(entries: [], clipboardText: nil, onSelect: { _ in })
 
         XCTAssertTrue(spy.shows.isEmpty)
         XCTAssertFalse(spy.isVisible)
@@ -224,7 +248,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .workflow(makeWorkflow(name: "Summarize")),
                 .recentTranscription(makeRecentEntry(text: "hello world")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
@@ -246,7 +270,7 @@ final class PromptPaletteControllerTests: XCTestCase {
                 .workflow(makeWorkflow(name: "Summarize")),
                 .recentTranscription(makeRecentEntry(text: "hello world")),
             ],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
@@ -259,7 +283,7 @@ final class PromptPaletteControllerTests: XCTestCase {
         let controller = PromptPaletteController(paletteController: spy)
         controller.show(
             entries: [.workflow(makeWorkflow(name: "Summarize"))],
-            sourceText: nil,
+            clipboardText: nil,
             onSelect: { _ in }
         )
 
