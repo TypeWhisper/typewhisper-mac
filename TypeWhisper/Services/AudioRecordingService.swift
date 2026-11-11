@@ -358,13 +358,24 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             bufferedDuration >= minimumRecordingDuration
         }
 
-        /// True once the last `quietDuration` of the recording stays below the speech floor
-        /// the live preview and the silence stop use.
+        /// The quiet window is judged in 50 ms frames, so speech at its end is never averaged
+        /// away by the quiet before it.
+        static let quietFrameSampleCount = Int(AudioRecordingService.targetSampleRate) / 20
+
+        /// True once every 50 ms frame in the last `quietDuration` of the recording stays below
+        /// the speech floor the live preview and the silence stop use.
         func isSettled(trailingSamples: ArraySlice<Float>) -> Bool {
             guard trailingSamples.count >= quietSampleCount else { return false }
             let window = trailingSamples.suffix(quietSampleCount)
-            let rms = sqrt(window.reduce(Float(0)) { $0 + $1 * $1 } / Float(window.count))
-            return rms < DictationSpeechActivity.speechRMSFloor
+            var frameStart = window.startIndex
+            while frameStart < window.endIndex {
+                let frameEnd = min(frameStart + Self.quietFrameSampleCount, window.endIndex)
+                let frame = window[frameStart..<frameEnd]
+                let rms = sqrt(frame.reduce(Float(0)) { $0 + $1 * $1 } / Float(frame.count))
+                if rms >= DictationSpeechActivity.speechRMSFloor { return false }
+                frameStart = frameEnd
+            }
+            return true
         }
     }
 

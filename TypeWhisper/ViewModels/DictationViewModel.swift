@@ -2973,7 +2973,9 @@ final class DictationViewModel: ObservableObject {
         markActiveDictationSessionProcessingIfNeeded()
         // A push-to-talk recording interrupted by other keys is discarded without
         // transcription; its discard banner is announced instead.
-        if pendingPushToTalkDiscardMessage == nil {
+        // After a key stop the microphone still records the release tail, so a spoken
+        // announcement would end up in the recording. It follows once capture ends.
+        if pendingPushToTalkDiscardMessage == nil, !capturesReleaseTail {
             if stoppedAfterSilence {
                 accessibilityAnnouncementService.announceRecordingStoppedAfterSilence()
             } else {
@@ -3056,6 +3058,9 @@ final class DictationViewModel: ObservableObject {
         let recordingUsedBluetoothInput = recordingUsesBluetoothInput
         restoreRecordingSideEffects()
         guard !Task.isCancelled else { return }
+        if capturesReleaseTail {
+            accessibilityAnnouncementService.announceRecordingStopped()
+        }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
         let recordingIsDigitalSilence = !samples.isEmpty && isDigitalSilence(samples)
         let liveSessionResultBeforePreviewFallback: TranscriptionResult?

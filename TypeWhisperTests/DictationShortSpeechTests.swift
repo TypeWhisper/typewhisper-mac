@@ -317,6 +317,9 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(speech)))
         // The last word still fades out in the window.
         XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(quiet.dropLast(800) + speech.prefix(800))))
+        // Quiet speech at the end is not averaged away by the quiet before it.
+        let quietSpeech = [Float](repeating: 0.005, count: 800)
+        XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(quiet.dropLast(800) + quietSpeech)))
         // Too little audio to judge yet.
         XCTAssertFalse(tail.isSettled(trailingSamples: ArraySlice(quiet.dropLast())))
 
