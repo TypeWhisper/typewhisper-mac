@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// What the workspace can do with one speaker's voice.
@@ -24,6 +25,9 @@ final class SpeakerVoiceProfileService: ObservableObject {
     let store: VoiceProfileStore
     private let historyService: HistoryService
     private let premiumAccess: @MainActor () -> Bool
+    /// Removes the voices of deleted recordings right away. Without it they go
+    /// with the next `removeEmbeddingsOfDeletedRecordings()`.
+    var historyChanges: AnyCancellable?
 
     init(
         store: VoiceProfileStore,
@@ -33,8 +37,15 @@ final class SpeakerVoiceProfileService: ObservableObject {
         self.store = store
         self.historyService = historyService
         self.premiumAccess = premiumAccess
-        historyService.onRecordsDeleted = { [weak store] ids in
-            store?.removeEmbeddings(forRecordIDs: Set(ids))
+        historyChanges = historyService.changes.sink { [weak store] change in
+            switch change {
+            case .removed(let ids):
+                store?.removeEmbeddings(forRecordIDs: ids)
+            case .cleared:
+                store?.removeEmbeddings(exceptForRecordIDs: [])
+            case .upserted:
+                break
+            }
         }
         historyService.onSpeakerNamesWillChange = { [weak store] record in
             guard let transcript = record.speakerTranscript else { return }

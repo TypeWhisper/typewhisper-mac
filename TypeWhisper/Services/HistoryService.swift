@@ -148,6 +148,17 @@ struct HistoryFacets: Sendable {
     let devices: [HistoryDeviceFacet]
 }
 
+/// A saved change to History's records, for code that keeps data derived from them,
+/// such as a search index.
+enum HistoryRecordChange: Equatable, Sendable {
+    /// Records that were added, or whose text, title, timing, speakers or speaker
+    /// names changed. Inbox, audio and detection-state changes are not reported.
+    case upserted(Set<UUID>)
+    case removed(Set<UUID>)
+    /// Every record was removed.
+    case cleared
+}
+
 /// A Recorder recording's transcript for History, without audio or speakers.
 struct RecorderTranscript: Equatable, Sendable {
     /// The Recorder's `recording_id` for the audio file.
@@ -196,9 +207,8 @@ final class HistoryService: ObservableObject {
 
     private(set) var totalRecords: Int = 0
 
-    /// Called with the IDs of records right after they were deleted, so data
-    /// kept elsewhere for them, such as voice embeddings, goes too.
-    var onRecordsDeleted: (([UUID]) -> Void)?
+    /// Sends each change after it was saved, on the main actor.
+    let changes = PassthroughSubject<HistoryRecordChange, Never>()
     /// Preserve local enrollment evidence before a name or speaker correction.
     var onSpeakerNamesWillChange: ((TranscriptionRecord) throws -> Void)?
     /// A pending detector must finish before a version replaces the text it captured.
@@ -455,6 +465,7 @@ final class HistoryService: ObservableObject {
         modelContext.insert(record)
         save()
         refreshRecentRecords()
+        changes.send(.upserted([id]))
     }
 
     // MARK: - Speaker transcripts
@@ -529,6 +540,7 @@ final class HistoryService: ObservableObject {
         modelContext.insert(record)
         save()
         refreshRecentRecords()
+        changes.send(.upserted([id]))
         return true
     }
 
@@ -552,6 +564,7 @@ final class HistoryService: ObservableObject {
         record.speakerWords = words
         record.speakerWordsAreFromSecondPass = wordsAreFromSecondPass ? true : nil
         save()
+        changes.send(.upserted([id]))
     }
 
     /// Stores the result of a detection run. Names given for an earlier run
@@ -572,6 +585,7 @@ final class HistoryService: ObservableObject {
         record.speakerTranscriptUpdatedAt = now
         save()
         refreshRecentRecords()
+        changes.send(.upserted([id]))
         return true
     }
 
@@ -616,6 +630,7 @@ final class HistoryService: ObservableObject {
         }
         save()
         refreshRecentRecords()
+        changes.send(.upserted([id]))
         if updatesText { emitPluginSyncEvent(for: record) }
         return true
     }
@@ -667,6 +682,7 @@ final class HistoryService: ObservableObject {
             modelContext.insert(record)
             save()
             refreshRecentRecords()
+            changes.send(.upserted([record.id]))
             return record.id
         }
         guard existing.speakerTranscriptState == nil, existing.rawText != texts.rawText else { return existing.id }
@@ -681,6 +697,7 @@ final class HistoryService: ObservableObject {
         existing.contentUpdatedAt = Date()
         save()
         refreshRecentRecords()
+        changes.send(.upserted([existing.id]))
         emitPluginSyncEvent(for: existing)
         return existing.id
     }
@@ -698,20 +715,22 @@ final class HistoryService: ObservableObject {
             return 0
         }
         var knownRecordingIDs = Set(existing.compactMap(\.recorderRecordingID))
-        var added = 0
+        var addedIDs = Set<UUID>()
         for transcript in transcripts where knownRecordingIDs.insert(transcript.recordingID).inserted {
             guard let texts = Self.validatedRecordTexts(
                 rawText: transcript.text,
                 finalText: transcript.text,
                 durationSeconds: transcript.durationSeconds
             ) else { continue }
-            modelContext.insert(makeRecorderRecord(transcript, text: texts.finalText))
-            added += 1
+            let record = makeRecorderRecord(transcript, text: texts.finalText)
+            modelContext.insert(record)
+            addedIDs.insert(record.id)
         }
-        guard added > 0 else { return 0 }
+        guard !addedIDs.isEmpty else { return 0 }
         save()
         refreshRecentRecords()
-        return added
+        changes.send(.upserted(addedIDs))
+        return addedIDs.count
     }
 
     private func makeRecorderRecord(_ transcript: RecorderTranscript, text: String) -> TranscriptionRecord {
@@ -745,22 +764,23 @@ final class HistoryService: ObservableObject {
 
     /// Renames the speakers linked to a voice profile in every recording.
     func renameSpeakers(linkedTo profileID: UUID, to name: String) {
-        var changed = false
+        var changedIDs = Set<UUID>()
         let now = Date()
         for record in recordsWithSpeakerNames() {
             guard let original = record.speakerNames else { continue }
             var names = original
             for entry in names.entries where entry.profileID == profileID && entry.displayName != name {
                 names.setName(name, for: entry.speakerID, profileID: profileID, isSuggestion: entry.isSuggestion == true)
-                changed = true
+                changedIDs.insert(record.id)
                 // A renamed suggestion is still only a suggestion and is not synced.
                 if entry.isSuggestion != true { record.speakerNamesUpdatedAt = now }
             }
             record.speakerNames = names.stamped(against: original, at: now)
         }
-        guard changed else { return }
+        guard !changedIDs.isEmpty else { return }
         save()
         refreshRecentRecords()
+        changes.send(.upserted(changedIDs))
     }
 
     func setSpeakerName(
@@ -808,6 +828,7 @@ final class HistoryService: ObservableObject {
             throw error
         }
         refreshRecentRecords()
+        changes.send(.upserted([id]))
     }
 
     /// Removes a name a voice profile suggested and keeps that profile from
@@ -828,6 +849,7 @@ final class HistoryService: ObservableObject {
             return
         }
         refreshRecentRecords()
+        changes.send(.upserted([id]))
     }
 
     /// Speaker detection does not survive a quit; such records can be retried.
@@ -872,6 +894,7 @@ final class HistoryService: ObservableObject {
         record.contentUpdatedAt = Date()
         save()
         refreshRecentRecords()
+        changes.send(.upserted([record.id]))
         emitPluginSyncEvent(for: record)
     }
 
@@ -915,7 +938,7 @@ final class HistoryService: ObservableObject {
         modelContext.delete(record)
         save()
         refreshRecentRecords()
-        onRecordsDeleted?([id])
+        changes.send(.removed([id]))
     }
 
     func deleteRecords(_ records: [TranscriptionRecord]) {
@@ -927,7 +950,7 @@ final class HistoryService: ObservableObject {
         }
         save()
         refreshRecentRecords()
-        onRecordsDeleted?(ids)
+        if !ids.isEmpty { changes.send(.removed(Set(ids))) }
     }
 
     /// Returns false when the records could not be read, so nothing was deleted.
@@ -944,7 +967,7 @@ final class HistoryService: ObservableObject {
             }
             save()
             refreshRecentRecords()
-            onRecordsDeleted?(ids)
+            changes.send(.cleared)
             return true
         } catch {
             logger.error("Failed to clear records: \(error.localizedDescription)")
@@ -1361,7 +1384,7 @@ final class HistoryService: ObservableObject {
         }
         save()
         refreshRecentRecords()
-        onRecordsDeleted?(ids)
+        changes.send(.removed(Set(ids)))
     }
 
     func completeInbox(_ record: TranscriptionRecord) {
@@ -1510,6 +1533,7 @@ final class HistoryService: ObservableObject {
 
     func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
         var deletedIDs: [UUID] = []
+        var upsertedIDs = Set<UUID>()
         for mutation in mutations {
             switch mutation {
             case .upsertHistoryContent(let content):
@@ -1519,6 +1543,7 @@ final class HistoryService: ObservableObject {
                     record.contentUpdatedAt,
                     fallback: record.timestamp
                 ) else { continue }
+                upsertedIDs.insert(content.recordID)
                 let previousContent = HistoryTranscriptionVersion.capture(record)
                 if let reset = content.alignmentResetAt,
                    reset > (record.transcriptionAlignmentResetAt ?? .distantPast) {
@@ -1598,6 +1623,7 @@ final class HistoryService: ObservableObject {
                       transcript.isValid else { continue }
                 let record = remoteRecord(for: transcript.recordID, timestamp: transcript.updatedAt)
                 guard transcript.updatedAt >= record.speakerTranscriptUpdatedAt else { continue }
+                upsertedIDs.insert(transcript.recordID)
                 let replacedRevision = record.speakerTranscript?.revision
                 record.speakerTranscript = transcript.speakerTranscript
                 record.speakerTranscriptState = .ready
@@ -1610,6 +1636,7 @@ final class HistoryService: ObservableObject {
                       speakers.isValid else { continue }
                 let record = remoteRecord(for: speakers.recordID, timestamp: speakers.updatedAt)
                 applySynchronizedSpeakerNames(speakers, to: record)
+                upsertedIDs.insert(speakers.recordID)
             case .deleteHistory(let recordID):
                 if let record = record(withID: recordID) {
                     deleteAudioFile(for: record)
@@ -1626,7 +1653,10 @@ final class HistoryService: ObservableObject {
         }
         try modelContext.save()
         refreshRecentRecords()
-        if !deletedIDs.isEmpty { onRecordsDeleted?(deletedIDs) }
+        // A record changed and deleted in one batch is only reported as removed.
+        upsertedIDs.subtract(deletedIDs)
+        if !upsertedIDs.isEmpty { changes.send(.upserted(upsertedIDs)) }
+        if !deletedIDs.isEmpty { changes.send(.removed(Set(deletedIDs))) }
     }
 
     /// Names another device gave. Names for another transcript than the
@@ -2072,6 +2102,7 @@ final class HistoryService: ObservableObject {
             throw error
         }
         refreshRecentRecords()
+        changes.send(.upserted([record.id]))
     }
 
     func discardTranscriptionVersion(_ id: UUID, in record: TranscriptionRecord) throws {
@@ -2162,6 +2193,7 @@ final class HistoryService: ObservableObject {
             DemoEntry(dayOffset: 6, hourOffset: 15, rawText: "Check the server logs for the memory leak. It seems to happen after about two hours of continuous use.", finalText: "Check the server logs for the memory leak. It seems to happen after about two hours of continuous use.", appName: "Terminal", bundleId: "com.apple.Terminal", appURL: nil, duration: 7.8, language: "en", engine: "parakeet"),
         ]
 
+        var seededIDs = Set<UUID>()
         for entry in entries {
             let dayStart = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -entry.dayOffset, to: now)!)
             let timestamp = calendar.date(byAdding: .hour, value: entry.hourOffset, to: dayStart)!
@@ -2178,10 +2210,12 @@ final class HistoryService: ObservableObject {
                 engineUsed: entry.engine
             )
             modelContext.insert(record)
+            seededIDs.insert(record.id)
         }
 
         save()
         refreshRecentRecords()
+        changes.send(.upserted(seededIDs))
     }
     #endif
 }

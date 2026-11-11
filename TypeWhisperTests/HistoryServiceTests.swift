@@ -992,6 +992,82 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(payload["pipelineSteps"] as? [String], ["Cleanup"])
     }
 
+    /// A search index follows History through these changes, so each one names its records.
+    @MainActor
+    func testChangesNameTheRecordsThatWereAddedChangedAndRemoved() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        var changes: [HistoryRecordChange] = []
+        let observation = service.changes.sink { changes.append($0) }
+        defer { observation.cancel() }
+        func take() -> [HistoryRecordChange] {
+            defer { changes = [] }
+            return changes
+        }
+
+        let dictationID = UUID()
+        XCTAssertTrue(service.addRecord(
+            id: dictationID, rawText: "Hello", finalText: "Hello", appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes", durationSeconds: 1, language: "en", engineUsed: "test"
+        ))
+        XCTAssertEqual(take(), [.upserted([dictationID])])
+
+        service.updateRecord(try XCTUnwrap(service.record(withID: dictationID)), finalText: "Hello there")
+        XCTAssertEqual(take(), [.upserted([dictationID])])
+
+        let meetingID = UUID()
+        XCTAssertTrue(service.addSpeakerRecord(
+            id: meetingID, text: "Good morning. Fine.", title: "Meeting", source: .recorder,
+            durationSeconds: 3, language: "en", engineUsed: "test", timedText: [], granularity: .segment
+        ))
+        XCTAssertEqual(take(), [.upserted([meetingID])])
+
+        // The detection state alone changes nothing a search could find.
+        service.setSpeakerTranscriptState(.failed, forRecordID: meetingID)
+        XCTAssertEqual(take(), [])
+
+        let transcript = SpeakerTranscript(source: .localDiarizer, segments: [
+            SpeakerTranscriptSegment(text: "Good morning.", start: 0, end: 2, speakerID: "S1"),
+            SpeakerTranscriptSegment(text: "Fine.", start: 2, end: 3, speakerID: "S2"),
+        ])
+        XCTAssertTrue(service.storeSpeakerTranscript(transcript, forRecordID: meetingID))
+        XCTAssertEqual(take(), [.upserted([meetingID])])
+        service.setSpeakerName("Anna", for: "S1", inRecordID: meetingID)
+        XCTAssertEqual(take(), [.upserted([meetingID])])
+
+        // Another device changes one record and deletes the other.
+        try service.applyUserDataSyncMutations([
+            .upsertHistoryContent(UserDataSyncHistoryContentV1(
+                recordID: meetingID,
+                createdAt: Date(),
+                updatedAt: Date().addingTimeInterval(60),
+                originDeviceID: "other-mac",
+                originPlatform: "macOS",
+                source: RecordingSource.recorder.rawValue,
+                processingState: RecordingProcessingState.ready.rawValue,
+                rawTranscript: "Good morning. Fine.",
+                finalText: "Good morning. Fine, thanks.",
+                durationSeconds: 3,
+                detectedLanguage: "en",
+                engineDisplayName: "test"
+            )),
+            .deleteHistory(recordID: dictationID),
+        ])
+        XCTAssertEqual(take(), [.upserted([meetingID]), .removed([dictationID])])
+
+        XCTAssertTrue(service.deleteRecord(withID: meetingID))
+        XCTAssertEqual(take(), [.removed([meetingID])])
+
+        XCTAssertTrue(service.addRecord(
+            rawText: "One more", finalText: "One more", appName: nil,
+            appBundleIdentifier: nil, durationSeconds: 1, language: nil, engineUsed: "test"
+        ))
+        _ = take()
+        XCTAssertTrue(service.clearAll())
+        XCTAssertEqual(take(), [.cleared])
+    }
+
     @MainActor
     func testRecorderTranscriptIsSavedOnceAndGetsTheTextOfALaterTranscription() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
