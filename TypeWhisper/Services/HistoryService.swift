@@ -209,6 +209,8 @@ final class HistoryService: ObservableObject {
 
     /// Sends each change after it was saved, on the main actor.
     let changes = PassthroughSubject<HistoryRecordChange, Never>()
+    /// Reads records for the search index off the main actor.
+    var searchRecordReader: HistorySearchRecordReader { HistorySearchRecordReader(container: modelContainer) }
     /// Preserve local enrollment evidence before a name or speaker correction.
     var onSpeakerNamesWillChange: ((TranscriptionRecord) throws -> Void)?
     /// A pending detector must finish before a version replaces the text it captured.
