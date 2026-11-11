@@ -231,6 +231,26 @@ final class PromptPaletteControllerTests: XCTestCase {
         XCTAssertEqual(spy.shows[2].configuration.previewText, "First line second line")
     }
 
+    func testClipboardLabelStaysWhenTextStartsWithLongWhitespace() {
+        let spy = SelectionPaletteControllerSpy()
+        let controller = PromptPaletteController(paletteController: spy)
+        controller.show(
+            entries: [.workflow(makeWorkflow(name: "Summarize"))],
+            clipboardText: String(repeating: " ", count: 500) + "Private note",
+            onSelect: { _ in }
+        )
+        XCTAssertEqual(spy.shows[0].configuration.previewTitle, PromptPaletteController.clipboardPreviewTitle)
+        XCTAssertEqual(spy.shows[0].configuration.previewText, "Private note")
+
+        controller.show(
+            entries: [.workflow(makeWorkflow(name: "Summarize"))],
+            clipboardText: "  \n\t ",
+            onSelect: { _ in }
+        )
+        XCTAssertEqual(spy.shows[1].configuration.previewTitle, PromptPaletteController.clipboardPreviewTitle)
+        XCTAssertNil(spy.shows[1].configuration.previewText)
+    }
+
     func testEmptyEntriesShowNothing() {
         let spy = SelectionPaletteControllerSpy()
         let controller = PromptPaletteController(paletteController: spy)

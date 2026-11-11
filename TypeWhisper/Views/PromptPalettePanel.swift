@@ -178,13 +178,15 @@ final class PromptPaletteController: PromptPaletteControlling {
     }
 
     private func workflowLevelConfiguration(clipboardText: String?) -> SelectionPaletteConfiguration {
-        let clipboardPreview = clipboardText.flatMap(Self.clipboardPreview(for:))
+        // The label stays even when the clipboard holds only whitespace: the
+        // workflow still receives that text.
+        let showsClipboard = clipboardText != nil
         return SelectionPaletteConfiguration(
             panelWidth: 380,
-            panelHeight: clipboardPreview == nil ? 344 : 404,
-            previewText: clipboardPreview,
-            previewTitle: clipboardPreview == nil ? nil : Self.clipboardPreviewTitle,
-            previewIconSystemName: clipboardPreview == nil ? nil : "doc.on.clipboard",
+            panelHeight: showsClipboard ? 404 : 344,
+            previewText: clipboardText.flatMap(Self.clipboardPreview(for:)),
+            previewTitle: showsClipboard ? Self.clipboardPreviewTitle : nil,
+            previewIconSystemName: showsClipboard ? "doc.on.clipboard" : nil,
             previewLineLimit: 2,
             titleLineLimit: 1,
             searchPrompt: localizedAppText("Search workflows...", de: "Workflows suchen..."),
@@ -199,7 +201,7 @@ final class PromptPaletteController: PromptPaletteControlling {
     /// The start of the clipboard text on a single line, or nil when it has no
     /// visible characters.
     static func clipboardPreview(for text: String) -> String? {
-        let preview = text.prefix(400)
+        let preview = text.drop(while: \.isWhitespace).prefix(400)
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
         return preview.isEmpty ? nil : preview

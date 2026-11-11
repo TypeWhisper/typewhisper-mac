@@ -72,6 +72,7 @@ struct SelectionPaletteConfiguration: Equatable {
     }
 
     var showsSearchField: Bool { searchPrompt != nil }
+    var showsPreview: Bool { previewText != nil || previewTitle != nil }
 }
 
 @MainActor
@@ -221,7 +222,7 @@ private struct SelectionPaletteContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let previewText = model.configuration.previewText {
+            if model.configuration.showsPreview {
                 VStack(alignment: .leading, spacing: 4) {
                     if let previewTitle = model.configuration.previewTitle {
                         HStack(spacing: 5) {
@@ -235,10 +236,12 @@ private struct SelectionPaletteContentView: View {
                         .foregroundStyle(.secondary)
                     }
 
-                    Text(previewText)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(model.configuration.previewLineLimit)
+                    if let previewText = model.configuration.previewText {
+                        Text(previewText)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(model.configuration.previewLineLimit)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
@@ -255,7 +258,7 @@ private struct SelectionPaletteContentView: View {
                     text: model.searchText
                 )
                 .padding(.horizontal, 12)
-                .padding(.top, model.configuration.previewText == nil ? 12 : 10)
+                .padding(.top, model.configuration.showsPreview ? 10 : 12)
                 .padding(.bottom, 10)
             }
 
