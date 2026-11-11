@@ -308,6 +308,63 @@ final class HistorySearchIndexTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
     }
 
+    func testAnIndexThatCannotBeOpenedForNowIsKept() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let file = directory.appendingPathComponent("index.sqlite")
+        let id = UUID()
+        do {
+            let index = HistorySearchIndex(directory: directory)
+            try await index.upsert([record(id, passages: [HistoryPassage(kind: .transcript, text: "Hello.")])])
+        }
+
+        // Unreadable is not damaged: the error passes, and the file stays.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+        let index = HistorySearchIndex(directory: directory)
+        do {
+            _ = try await index.fingerprints()
+            XCTFail("Reading an unreadable index did not fail")
+        } catch {}
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        let fingerprints = try await index.fingerprints()
+        XCTAssertEqual(Array(fingerprints.keys), [id])
+    }
+
+    func testAnIndexThatCannotBeDeletedIsEmptied() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        func setLocked(_ locked: Bool) throws {
+            try FileManager.default.setAttributes([.posixPermissions: locked ? 0o555 : 0o755], ofItemAtPath: directory.path)
+        }
+        defer {
+            try? setLocked(false)
+            TestSupport.remove(directory)
+        }
+        let index = HistorySearchIndex(directory: directory)
+        try await index.upsert([
+            record(passages: [HistoryPassage(kind: .transcript, text: "We ship the invoice export on Friday.")]),
+        ])
+
+        // Files in a folder that cannot be changed cannot be deleted.
+        try setLocked(true)
+        let isGone = await index.destroy()
+        XCTAssertTrue(isGone)
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        XCTAssertTrue(names.contains("index.sqlite"))
+        for name in names {
+            let size = try FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(name).path)[.size] as? Int
+            XCTAssertEqual(size, 0, name)
+        }
+
+        // The emptied file becomes a new index.
+        try setLocked(false)
+        try await index.upsert([record(passages: [HistoryPassage(kind: .transcript, text: "Hello.")])])
+        let counts = try await index.counts()
+        XCTAssertEqual(counts.records, 1)
+        XCTAssertEqual(try recordIDs(matching: "invoice", in: directory), [])
+    }
+
     func testAnIndexWithADamagedTableIsDeletedWhenItIsRead() async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }

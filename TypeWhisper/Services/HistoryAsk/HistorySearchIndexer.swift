@@ -37,6 +37,8 @@ final class HistorySearchIndexer {
     private var dueUpserts = Set<UUID>()
     private var removals = Set<UUID>()
     private var deletesIndex = false
+    /// The index could not be deleted or emptied. The next change to History tries again.
+    private var deletionFailed = false
     /// False once no index file was found, so History changes cost nothing
     /// while no index is kept.
     private var indexMayExist = true
@@ -108,6 +110,7 @@ final class HistorySearchIndexer {
     /// removes those History no longer has. `checkingContent` also compares the
     /// content of the other records, which reads every record once.
     func reconcile(checkingContent: Bool = false) async {
+        retryFailedDeletion()
         guard isEnabled(), !isStopped else { return }
         do {
             // The index first: a record History gets in between is then added, not removed.
@@ -154,6 +157,7 @@ final class HistorySearchIndexer {
     }
 
     private func handle(_ change: HistoryRecordChange) {
+        retryFailedDeletion()
         switch change {
         case .upserted(let ids):
             guard isEnabled() else {
@@ -185,6 +189,20 @@ final class HistorySearchIndexer {
         removals.formUnion(ids)
         pause?.cancel()
         startWorker()
+    }
+
+    private func retryFailedDeletion() {
+        guard deletionFailed else { return }
+        deletionFailed = false
+        deletesIndex = true
+        startWorker()
+    }
+
+    private func destroyIndex() async {
+        let isGone = await index.destroy()
+        indexMayExist = !isGone
+        deletionFailed = !isGone
+        if !isGone { logger.error("Failed to delete the search index") }
     }
 
     private func deleteIndex() {
@@ -269,8 +287,7 @@ final class HistorySearchIndexer {
     private func perform(_ job: Job) async {
         switch job {
         case .deleteIndex:
-            await index.destroy()
-            indexMayExist = false
+            await destroyIndex()
         case .remove(let ids):
             do {
                 try await index.remove(ids)
@@ -279,9 +296,8 @@ final class HistorySearchIndexer {
                 // A deleted record must not stay searchable, so the index is built again without it.
                 // A damaged file was already deleted by the index, which asks for the rebuild itself.
                 logger.error("Failed to remove records from the search index: \(String(describing: error), privacy: .public)")
-                guard (error as? HistorySearchIndexError)?.isCorruption != true else { return }
-                await index.destroy()
-                indexMayExist = false
+                guard (error as? HistorySearchIndexError)?.isUnusableFile != true else { return }
+                await destroyIndex()
                 rebuildAfterDamage()
             }
         case .upsert(let ids, let attempt):
@@ -300,7 +316,7 @@ final class HistorySearchIndexer {
             } catch {
                 logger.error("Failed to update the search index: \(String(describing: error), privacy: .public)")
                 // The index deleted its damaged file and asks for the rebuild itself.
-                if (error as? HistorySearchIndexError)?.isCorruption == true { return }
+                if (error as? HistorySearchIndexError)?.isUnusableFile == true { return }
                 let remaining = clearedDuringUpsert ? [] : Set(ids).subtracting(removedDuringUpsert)
                 guard attempt < Self.upsertRetries, !remaining.isEmpty else { return }
                 retry = (remaining, attempt + 1, .now + busyRetryDelay)

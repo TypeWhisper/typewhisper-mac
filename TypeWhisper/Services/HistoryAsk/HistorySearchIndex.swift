@@ -36,8 +36,9 @@ struct HistorySearchIndexError: Error, CustomStringConvertible {
 
     var description: String { "SQLite error \(code): \(message)" }
 
-    /// True when SQLite found the file itself damaged.
-    var isCorruption: Bool {
+    /// True when the file is damaged or is not an index of this format. Other
+    /// errors, such as a locked or unreadable file, can pass.
+    var isUnusableFile: Bool {
         let primaryCode = code & 0xFF
         return primaryCode == SQLITE_CORRUPT || primaryCode == SQLITE_NOTADB
     }
@@ -129,10 +130,27 @@ actor HistorySearchIndex {
         }
     }
 
-    /// Closes the index and deletes its files.
-    func destroy() {
+    /// Closes the index and deletes its files. Files that cannot be deleted are
+    /// emptied instead. Returns false when text of History is still on disk.
+    @discardableResult
+    func destroy() -> Bool {
         connection = nil
-        try? FileManager.default.removeItem(at: directory)
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: directory)
+        guard fileManager.fileExists(atPath: directory.path) else { return true }
+        // Emptying a file needs no right to change its folder.
+        var isEmpty = true
+        for name in (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? [] {
+            let file = directory.appendingPathComponent(name)
+            do {
+                let handle = try FileHandle(forWritingTo: file)
+                try handle.truncate(atOffset: 0)
+                try handle.close()
+            } catch {
+                isEmpty = false
+            }
+        }
+        return isEmpty
     }
 
     /// The handler is called after the index deleted a file that was damaged or
@@ -158,7 +176,7 @@ actor HistorySearchIndex {
                     HistorySearchFingerprint(version: row.text(1) ?? "", contentHash: row.text(2) ?? "")
                 )
             }
-        } catch let error as HistorySearchIndexError where error.isCorruption {
+        } catch let error as HistorySearchIndexError where error.isUnusableFile {
             destroyDamagedFile()
             return [:]
         }
@@ -221,7 +239,7 @@ actor HistorySearchIndex {
             try connection.execute("COMMIT")
         } catch {
             try? connection.execute("ROLLBACK")
-            if (error as? HistorySearchIndexError)?.isCorruption == true { destroyDamagedFile() }
+            if (error as? HistorySearchIndexError)?.isUnusableFile == true { destroyDamagedFile() }
             throw error
         }
     }
@@ -234,8 +252,8 @@ actor HistorySearchIndex {
         guard creating || existed else { return nil }
         do {
             return try openFile()
-        } catch {
-            if existed { destroyDamagedFile() } else { destroy() }
+        } catch let error as HistorySearchIndexError where existed && error.isUnusableFile {
+            destroyDamagedFile()
             return creating ? try openFile() : nil
         }
     }
@@ -248,10 +266,15 @@ actor HistorySearchIndex {
         let format = try? connection.rows("SELECT value FROM index_meta WHERE key = 'format'") { $0.text(0) }.first
         if let format {
             guard format == Self.formatVersion else {
-                throw HistorySearchIndexError(code: SQLITE_SCHEMA, message: "index format \(format ?? "?")")
+                throw HistorySearchIndexError(code: SQLITE_NOTADB, message: "index format \(format ?? "?")")
             }
         } else {
-            try connection.execute(Self.schema)
+            do {
+                try connection.execute(Self.schema)
+            } catch let error as HistorySearchIndexError where error.code & 0xFF == SQLITE_ERROR {
+                // A database with other tables in the way.
+                throw HistorySearchIndexError(code: SQLITE_NOTADB, message: "not a search index: \(error.message)")
+            }
         }
         self.connection = connection
         return connection
