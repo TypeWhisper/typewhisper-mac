@@ -2006,10 +2006,9 @@ final class TextInsertionService {
             }
             return CopiedTextSelection(text: text, deferredClipboardRestore: deferredRestore)
         }
-#if APPSTORE
-        // Without PostEvent access the copy never arrives; do not wait for it.
+        // Without Accessibility the copy never arrives, and an unrelated clipboard change
+        // could pass for the selection; do not wait for it.
         guard isAccessibilityGranted else { return nil }
-#endif
 
         let pasteboard = pasteboardProvider()
 

@@ -1197,9 +1197,12 @@ final class DictationViewModel: ObservableObject {
     func refreshInputPermissions() { settingsHandler.pollPermissionStatus() }
 #endif
 
-    private func showManualPasteFeedback() {
+    /// - Parameter leadingMessage: Shown before the paste hint, e.g. a post-processing failure.
+    private func showManualPasteFeedback(leadingMessage: String? = nil) {
         showNotchFeedback(
-            message: TextInsertionService.manualPasteMessage,
+            message: [leadingMessage, TextInsertionService.manualPasteMessage]
+                .compactMap { $0 }
+                .joined(separator: " "),
             icon: "doc.on.clipboard.fill",
             duration: 4.0,
             action: TextInsertionService.canEnableAutomaticPaste ? .openSettings(.home) : nil
@@ -3627,11 +3630,14 @@ final class DictationViewModel: ObservableObject {
                             modelId: transcription.modelId
                         )
                         logger.info("Stop timing: text inserted elapsedMs=\(stopElapsedMs(), privacy: .public)")
-                        EventBus.shared.emit(.textInserted(TextInsertedPayload(
-                            text: insertionText,
-                            appName: activeApp.name,
-                            bundleIdentifier: activeApp.bundleId
-                        )))
+                        // Text left on the clipboard is not inserted until the user pastes it.
+                        if !copiedForManualPaste {
+                            EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                                text: insertionText,
+                                appName: activeApp.name,
+                                bundleIdentifier: activeApp.bundleId
+                            )))
+                        }
                         // Action-plugin runs never insert text and are out of scope for
                         // undo/restore (issue #999). A snapshot is only recorded when the
                         // insertion is verifiable: formatted output may transform the
@@ -3721,9 +3727,16 @@ final class DictationViewModel: ObservableObject {
                     // the LLM fallbacks on the Workflows page.
                     lastDictationError = ErrorSummary(message: fallbackMessage, settingsTab: .workflows)
                 }
-                // Shown after the fallback warning so the ⌘V hint stays visible.
+                // Shown after the fallback warning so the ⌘V hint stays visible, and names
+                // the post-processing failure, whose own banner is skipped above.
                 if copiedForManualPaste {
-                    showManualPasteFeedback()
+                    showManualPasteFeedback(leadingMessage: postProcessingFallback == nil ? nil : localizedAppText(
+                        "AI post-processing failed.",
+                        de: "KI-Nachbearbeitung fehlgeschlagen.",
+                        ja: "AI後処理に失敗しました。",
+                        zh: "AI 后处理失败。",
+                        es: "Falló el posprocesamiento con IA."
+                    ))
                 }
                 // Shown last so it is not replaced: the transcript still needs a text field.
                 if let undeliveredTranscript {
@@ -4768,11 +4781,14 @@ final class DictationViewModel: ObservableObject {
         activeApp: (name: String?, bundleId: String?, url: String?)
     ) {
         lastSuccessfulDictationInsertion = transcript.completion
-        EventBus.shared.emit(.textInserted(TextInsertedPayload(
-            text: insertedText,
-            appName: activeApp.name,
-            bundleIdentifier: activeApp.bundleId
-        )))
+        // Text left on the clipboard is not inserted until the user pastes it.
+        if result != .copiedToClipboard {
+            EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                text: insertedText,
+                appName: activeApp.name,
+                bundleIdentifier: activeApp.bundleId
+            )))
+        }
         // As after a dictation, Undo needs unformatted text whose insertion was verified.
         let insertionIsVerifiable = result == .insertedViaAccessibility || result == .pasted(verification: .verified)
         if transcript.outputFormat == nil, insertionIsVerifiable {

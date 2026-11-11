@@ -7494,6 +7494,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testCopySelectionRetriesWhenFirstCopyAttemptDoesNotUpdatePasteboard() async throws {
         let service = TextInsertionService()
+        service.accessibilityGrantedOverride = true
         let pasteboard = NSPasteboard.withUniqueName()
         service.pasteboardProvider = { pasteboard }
         service.copySelectionRetryDelay = .milliseconds(1)
