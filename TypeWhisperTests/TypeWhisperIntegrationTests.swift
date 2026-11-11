@@ -10692,6 +10692,42 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    /// Releasing push-to-talk keeps recording for a moment, so the last word is not cut off (#1896).
+    @MainActor
+    func testPushToTalkReleaseStopsWithTheReleaseTail() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: false,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .pushToTalk, releaseAfterPress: false)
+        context.hotkeyService.processCarbonHotkeyForTesting(
+            slotType: .pushToTalk,
+            hotkey: Self.silenceStopStartHotkey,
+            isPressed: false
+        )
+        XCTAssertEqual(viewModel.state, .processing)
+        for _ in 0..<300 where probe.stopPolicies.isEmpty || viewModel.state == .processing {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(
+            probe.stopPolicies,
+            [AudioRecordingService.StopPolicy.finalizeShortSpeech(releaseTail: .hotkeyStop).logDescription]
+        )
+    }
+
     @MainActor
     func testLateSilenceReportForAStoppedDictationDoesNotStopTheNextOne() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

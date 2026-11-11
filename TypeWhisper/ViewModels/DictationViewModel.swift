@@ -1605,6 +1605,12 @@ final class DictationViewModel: ObservableObject {
         )
     }
 
+    /// The stop policy of a stop that transcribes the recording. Key stops add the release
+    /// tail; API and silence stops do not, since nobody spoke right up to them.
+    nonisolated static func finalizingStopPolicy(capturesReleaseTail: Bool) -> AudioRecordingService.StopPolicy {
+        .finalizeShortSpeech(releaseTail: capturesReleaseTail ? .hotkeyStop : nil)
+    }
+
     static func bluetoothStopBehavior(
         usesBluetoothInput: Bool,
         restoresSystemAudio: Bool
@@ -1846,7 +1852,8 @@ final class DictationViewModel: ObservableObject {
                 self.pendingHotkeyStartTask = nil
                 return
             }
-            self.stopDictation()
+            // The user lets go of (or presses) the shortcut right after the last word.
+            self.stopDictation(capturesReleaseTail: true)
         }
 
         hotkeyService.onWorkflowDictationStart = { [weak self] workflowId, requestTimestamp in
@@ -1866,7 +1873,7 @@ final class DictationViewModel: ObservableObject {
             guard let self, self.activeDictationSessionID == sessionID,
                   self.state == .recording else { return }
             self.hotkeyService.cancelDictation()
-            self.stopDictation(submitRequested: true)
+            self.stopDictation(submitRequested: true, capturesReleaseTail: true)
         }
 
         hotkeyService.onCancelPressed = { [weak self] in
@@ -2931,7 +2938,13 @@ final class DictationViewModel: ObservableObject {
 
     /// `stoppedAfterSilence` marks the silence stop of a toggle dictation, which takes the same
     /// path as a second press of the shortcut and only announces its own reason.
-    private func stopDictation(submitRequested: Bool = false, stoppedAfterSilence: Bool = false) {
+    /// `capturesReleaseTail` keeps recording for a moment after a key stop, so the end of the
+    /// last word still in the input is not cut off (#1896).
+    private func stopDictation(
+        submitRequested: Bool = false,
+        stoppedAfterSilence: Bool = false,
+        capturesReleaseTail: Bool = false
+    ) {
         if state == .processing, recordingStartTask != nil, !isStopInFlight {
             cancelCurrentOperation()
             return
@@ -2971,12 +2984,17 @@ final class DictationViewModel: ObservableObject {
             guard let self else { return }
             await finalizeStopDictation(
                 submitRequested: submitRequested,
-                hiddenLiveSessionWasDeferred: hiddenLiveSessionWasDeferred
+                hiddenLiveSessionWasDeferred: hiddenLiveSessionWasDeferred,
+                capturesReleaseTail: capturesReleaseTail
             )
         }
     }
 
-    private func finalizeStopDictation(submitRequested: Bool, hiddenLiveSessionWasDeferred: Bool) async {
+    private func finalizeStopDictation(
+        submitRequested: Bool,
+        hiddenLiveSessionWasDeferred: Bool,
+        capturesReleaseTail: Bool
+    ) async {
         var didStartTranscriptionTask = false
         defer {
             if Task.isCancelled {
@@ -3030,7 +3048,7 @@ final class DictationViewModel: ObservableObject {
         lastStreamingPreviewHidden = false
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
+        let stopPolicy = Self.finalizingStopPolicy(capturesReleaseTail: capturesReleaseTail)
         var samples = await audioRecordingService.stopRecording(
             policy: stopPolicy,
             bluetoothBehavior: bluetoothStopBehavior
@@ -3116,9 +3134,10 @@ final class DictationViewModel: ObservableObject {
             transcribeShortQuietClipsAggressively: transcribeShortQuietClipsAggressively
         )
         let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
+        let releaseTail = audioRecordingService.lastStopReleaseTail
 
         logger.info(
-            "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), hasPreviewText=\(hasPreviewText, privacy: .public), previewTextLength=\(previewText.count, privacy: .public), hasConfirmedText=\(hasConfirmedText, privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
+            "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), hasPreviewText=\(hasPreviewText, privacy: .public), previewTextLength=\(previewText.count, privacy: .public), hasConfirmedText=\(hasConfirmedText, privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), releaseTail=\(releaseTail.logDescription, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
         )
 
         if decision != .transcribe {

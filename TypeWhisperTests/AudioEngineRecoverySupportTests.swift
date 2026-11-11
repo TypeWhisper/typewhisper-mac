@@ -1085,6 +1085,65 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(error.localizedDescription.contains("got 0.0 Hz/0 ch"))
     }
 
+    /// Audio that arrives after a key stop belongs to the recording (#1896).
+    func testReleaseTailKeepsRecordingAudioThatArrivesAfterTheStop() async throws {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        try service.startRecording()
+        service.startRecordingOverride = nil
+        service.engineTeardownOverride = { _ in }
+        service.testingSetAudioEngine(RunningAudioEngine())
+        let speech = Array(repeating: 0.05 as Float, count: 16_000)
+        service.testingProcessConvertedSamples(speech)
+
+        let tail = AudioRecordingService.ReleaseTail(
+            maxDuration: 2,
+            quietDuration: 0.15,
+            minimumRecordingDuration: 0.3
+        )
+        let stopTask = Task {
+            await service.stopRecording(policy: .finalizeShortSpeech(releaseTail: tail))
+        }
+        let didClaimRecordingEngine = await waitUntil(timeout: 1) {
+            service.testingCurrentAudioEngine() == nil
+        }
+        XCTAssertTrue(didClaimRecordingEngine)
+        XCTAssertTrue(service.testingIsRecordingActive, "The recording stays active during the tail")
+
+        // The end of the last word, then the quiet that ends the tail early.
+        let lastWord = Array(repeating: 0.05 as Float, count: 4_000)
+        let quiet = Array(repeating: 0.001 as Float, count: 2_400)
+        service.testingProcessConvertedSamples(lastWord)
+        service.testingProcessConvertedSamples(quiet)
+        let samples = await stopTask.value
+
+        XCTAssertEqual(samples.count, speech.count + lastWord.count + quiet.count)
+        XCTAssertFalse(service.testingIsRecordingActive)
+        guard case .settled(let duration) = service.lastStopReleaseTail else {
+            return XCTFail("Expected a settled tail, got \(service.lastStopReleaseTail)")
+        }
+        XCTAssertLessThan(duration, tail.maxDuration)
+    }
+
+    func testReleaseTailEndsAtOnceWhenTheRecordingAlreadyEndsQuiet() async throws {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        try service.startRecording()
+        service.startRecordingOverride = nil
+        service.engineTeardownOverride = { _ in }
+        service.testingSetAudioEngine(RunningAudioEngine())
+        service.testingProcessConvertedSamples(Array(repeating: 0.05 as Float, count: 16_000))
+        service.testingProcessConvertedSamples(Array(repeating: 0.001 as Float, count: 4_000))
+
+        let samples = await service.stopRecording(policy: .finalizeShortSpeech(releaseTail: .hotkeyStop))
+
+        XCTAssertEqual(samples.count, 20_000)
+        XCTAssertEqual(service.lastStopReleaseTail, .settled(duration: service.lastStopReleaseTail.duration))
+        XCTAssertLessThan(service.lastStopReleaseTail.duration, 0.05)
+    }
+
     func testRecordingSuccessDiscardDeletesRecoveryAudio() async throws {
         let directory = makeRecoveryTestDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)
