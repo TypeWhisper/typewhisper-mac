@@ -324,6 +324,62 @@ final class HistorySearchIndexTests: XCTestCase {
     }
 }
 
+/// History's reader for the indexer, with reads that fail, wait, or still return
+/// a record that History has deleted.
+private final class Reads: @unchecked Sendable {
+    struct Failure: Error {}
+
+    private let lock = NSLock()
+    private let reader: HistorySearchRecordReader
+    private var count = 0
+    private var failures = 0
+    private var waitingRead: Int?
+    private var staleRecords: [UUID: HistorySearchRecord] = [:]
+    private let gate = DispatchSemaphore(value: 0)
+
+    init(_ reader: HistorySearchRecordReader) {
+        self.reader = reader
+    }
+
+    /// How many reads have started.
+    var started: Int { lock.withLock { count } }
+
+    func failNext(_ reads: Int) {
+        lock.withLock { failures = reads }
+    }
+
+    /// The read with this number waits, after it started, until `resume()`.
+    func hold(read: Int) {
+        lock.withLock { waitingRead = read }
+    }
+
+    func resume() {
+        gate.signal()
+    }
+
+    /// The records as they are now are returned by later reads even after History deleted them.
+    func keepStale(_ ids: [UUID]) throws {
+        let records = try reader.records(withIDs: ids)
+        lock.withLock {
+            for record in records { staleRecords[record.id] = record }
+        }
+    }
+
+    func read(_ ids: [UUID]) throws -> [HistorySearchRecord] {
+        let (waits, fails) = lock.withLock {
+            count += 1
+            let fails = failures > 0
+            if fails { failures -= 1 }
+            return (count == waitingRead, fails)
+        }
+        if waits { gate.wait() }
+        if fails { throw Failure() }
+        let records = try reader.records(withIDs: ids)
+        let found = Set(records.map(\.id))
+        return records + lock.withLock { ids.filter { !found.contains($0) }.compactMap { staleRecords[$0] } }
+    }
+}
+
 @MainActor
 final class HistorySearchIndexerTests: XCTestCase {
     @MainActor
@@ -335,23 +391,25 @@ final class HistorySearchIndexerTests: XCTestCase {
         var isEnabled = true
         var isBusy = false
 
-        init(indexDirectory: URL? = nil) throws {
+        init() throws {
             appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-            self.indexDirectory = indexDirectory
-                ?? appSupportDirectory.appendingPathComponent(HistorySearchIndex.directoryName, isDirectory: true)
+            indexDirectory = appSupportDirectory.appendingPathComponent(HistorySearchIndex.directoryName, isDirectory: true)
             history = HistoryService(appSupportDirectory: appSupportDirectory)
-            index = HistorySearchIndex(directory: self.indexDirectory)
+            index = HistorySearchIndex(directory: indexDirectory)
         }
 
-        func makeIndexer(retryDelay: Duration = .milliseconds(5)) -> HistorySearchIndexer {
-            HistorySearchIndexer(
+        func makeIndexer(retryDelay: Duration = .milliseconds(5), reads: Reads? = nil) -> HistorySearchIndexer {
+            var readRecords: (@Sendable ([UUID]) throws -> [HistorySearchRecord])?
+            if let reads { readRecords = { try reads.read($0) } }
+            return HistorySearchIndexer(
                 historyService: history,
                 index: index,
                 // Weak, because a check that still runs can outlive the test.
                 isEnabled: { [weak self] in self?.isEnabled ?? false },
                 isBusy: { [weak self] in self?.isBusy ?? false },
                 upsertDelay: .milliseconds(5),
-                busyRetryDelay: retryDelay
+                busyRetryDelay: retryDelay,
+                readRecords: readRecords
             )
         }
 
@@ -534,56 +592,64 @@ final class HistorySearchIndexerTests: XCTestCase {
         withExtendedLifetime(indexer) {}
     }
 
-    func testAnUpdateThatFailsIsTriedAgain() async throws {
-        let lockedDirectory = try TestSupport.makeTemporaryDirectory()
-        func setLocked(_ locked: Bool) throws {
-            try FileManager.default.setAttributes(
-                [.posixPermissions: locked ? 0o555 : 0o755], ofItemAtPath: lockedDirectory.path
-            )
-        }
-        let fixture = try Fixture(indexDirectory: lockedDirectory.appendingPathComponent("HistorySearch", isDirectory: true))
-        defer {
-            try? setLocked(false)
-            TestSupport.remove(lockedDirectory)
-            TestSupport.remove(fixture.appSupportDirectory)
-        }
-        let indexer = fixture.makeIndexer(retryDelay: .milliseconds(300))
+    func testAFailedUpdateIsTriedAgainWithoutTheRecordsDeletedWhileItRan() async throws {
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let reads = Reads(fixture.history.searchRecordReader)
+        let indexer = fixture.makeIndexer(reads: reads)
 
-        // The index folder cannot be created, so the first attempt fails.
-        try setLocked(true)
-        let id = fixture.addDictation("We ship the invoice export on Friday.")
+        // The first read waits and then fails. While it waits, one of its records is deleted.
+        reads.hold(read: 1)
+        reads.failNext(1)
+        let keptID = fixture.addDictation("We ship the invoice export on Friday.")
         let deletedID = fixture.addDictation("Book the dentist for Monday.")
-        try await Task.sleep(for: .milliseconds(100))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.indexDirectory.path))
-
-        // A record deleted before the next attempt is not part of it.
+        try await eventually { reads.started == 1 }
+        // As after a deletion that History could not save: the reader still finds the record.
+        try reads.keepStale([deletedID])
         XCTAssertTrue(fixture.history.deleteRecord(withID: deletedID))
-        try setLocked(false)
-        try await eventually { try await fixture.indexedIDs() == [id] }
+        reads.resume()
+
+        try await eventually { try await fixture.indexedIDs() == [keptID] }
+        try await Task.sleep(for: .milliseconds(100))
+        let indexed = try await fixture.indexedIDs()
+        XCTAssertEqual(indexed, [keptID])
+        XCTAssertEqual(reads.started, 2)
+        withExtendedLifetime(indexer) {}
+    }
+
+    func testAFailedUpdateIsNotTriedAgainAfterDeleteHistory() async throws {
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let reads = Reads(fixture.history.searchRecordReader)
+        let indexer = fixture.makeIndexer(reads: reads)
+
+        reads.hold(read: 1)
+        reads.failNext(1)
+        let id = fixture.addDictation("We ship the invoice export on Friday.")
+        try await eventually { reads.started == 1 }
+        try reads.keepStale([id])
+        XCTAssertTrue(fixture.history.clearAll())
+        reads.resume()
+
+        try await Task.sleep(for: .milliseconds(150))
+        let indexed = try await fixture.indexedIDs()
+        XCTAssertEqual(indexed, [])
+        XCTAssertEqual(reads.started, 1)
         withExtendedLifetime(indexer) {}
     }
 
     func testAnUpdateThatKeepsFailingIsLeftToTheNextCheck() async throws {
-        let lockedDirectory = try TestSupport.makeTemporaryDirectory()
-        func setLocked(_ locked: Bool) throws {
-            try FileManager.default.setAttributes(
-                [.posixPermissions: locked ? 0o555 : 0o755], ofItemAtPath: lockedDirectory.path
-            )
-        }
-        let fixture = try Fixture(indexDirectory: lockedDirectory.appendingPathComponent("HistorySearch", isDirectory: true))
-        defer {
-            try? setLocked(false)
-            TestSupport.remove(lockedDirectory)
-            TestSupport.remove(fixture.appSupportDirectory)
-        }
-        let indexer = fixture.makeIndexer(retryDelay: .milliseconds(20))
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let reads = Reads(fixture.history.searchRecordReader)
+        let indexer = fixture.makeIndexer(reads: reads)
 
-        // The first attempt and its three retries all fail.
-        try setLocked(true)
+        // The first attempt and its three retries fail; a fifth read would succeed.
+        reads.failNext(4)
         let id = fixture.addDictation("We ship the invoice export on Friday.")
-        try await Task.sleep(for: .milliseconds(1_500))
-        try setLocked(false)
-        try await Task.sleep(for: .milliseconds(200))
+        try await eventually { reads.started == 4 }
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(reads.started, 4)
         let afterRetries = try await fixture.indexedIDs()
         XCTAssertEqual(afterRetries, [])
 
@@ -592,31 +658,23 @@ final class HistorySearchIndexerTests: XCTestCase {
     }
 
     func testEveryFailedUpdateGetsItsOwnRetries() async throws {
-        let lockedDirectory = try TestSupport.makeTemporaryDirectory()
-        func setLocked(_ locked: Bool) throws {
-            try FileManager.default.setAttributes(
-                [.posixPermissions: locked ? 0o555 : 0o755], ofItemAtPath: lockedDirectory.path
-            )
-        }
-        let fixture = try Fixture(indexDirectory: lockedDirectory.appendingPathComponent("HistorySearch", isDirectory: true))
-        defer {
-            try? setLocked(false)
-            TestSupport.remove(lockedDirectory)
-            TestSupport.remove(fixture.appSupportDirectory)
-        }
-        let indexer = fixture.makeIndexer(retryDelay: .milliseconds(200))
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let reads = Reads(fixture.history.searchRecordReader)
+        let indexer = fixture.makeIndexer(reads: reads)
 
-        // The first record fails three times and is deleted before its last attempt.
-        try setLocked(true)
+        // The first record fails three times and is deleted during its third read.
+        reads.hold(read: 3)
+        reads.failNext(4)
         let firstID = fixture.addDictation("We ship the invoice export on Friday.")
-        try await Task.sleep(for: .milliseconds(500))
+        try await eventually { reads.started == 3 }
         XCTAssertTrue(fixture.history.deleteRecord(withID: firstID))
+        reads.resume()
 
         // The next record's first failure must not count as the fourth.
         let secondID = fixture.addDictation("Book the dentist for Monday.")
-        try await Task.sleep(for: .milliseconds(100))
-        try setLocked(false)
         try await eventually { try await fixture.indexedIDs() == [secondID] }
+        XCTAssertEqual(reads.started, 5)
         withExtendedLifetime(indexer) {}
     }
 

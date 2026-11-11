@@ -25,6 +25,7 @@ final class HistorySearchIndexer {
 
     private let index: HistorySearchIndex
     private let reader: HistorySearchRecordReader
+    private let readRecords: @Sendable ([UUID]) throws -> [HistorySearchRecord]
     private let isEnabled: @MainActor () -> Bool
     private let isBusy: @MainActor () -> Bool
     private let upsertDelay: Duration
@@ -58,16 +59,21 @@ final class HistorySearchIndexer {
     ///     only loses records: those that were deleted and those that changed, so it never
     ///     holds text that History no longer has.
     ///   - isBusy: True while indexing would compete with a dictation or a recording.
+    ///   - readRecords: Reads the records to index in place of History's reader, so
+    ///     tests can make a read fail or wait.
     init(
         historyService: HistoryService,
         index: HistorySearchIndex = HistorySearchIndex(),
         isEnabled: @escaping @MainActor () -> Bool,
         isBusy: @escaping @MainActor () -> Bool = { false },
         upsertDelay: Duration = .seconds(2),
-        busyRetryDelay: Duration = .seconds(2)
+        busyRetryDelay: Duration = .seconds(2),
+        readRecords: (@Sendable ([UUID]) throws -> [HistorySearchRecord])? = nil
     ) {
         self.index = index
-        reader = historyService.searchRecordReader
+        let reader = historyService.searchRecordReader
+        self.reader = reader
+        self.readRecords = readRecords ?? { try reader.records(withIDs: $0) }
         self.isEnabled = isEnabled
         self.isBusy = isBusy
         self.upsertDelay = upsertDelay
@@ -280,10 +286,8 @@ final class HistorySearchIndexer {
             }
         case .upsert(let ids, let attempt):
             do {
-                let reader = reader
-                let records = try await Task.detached(priority: .utility) {
-                    try reader.records(withIDs: ids)
-                }.value
+                let readRecords = readRecords
+                let records = try await Task.detached(priority: .utility) { try readRecords(ids) }.value
                 // Deleted since the change, or no longer ready.
                 try await index.remove(Set(ids).subtracting(records.map(\.id)))
                 guard !isStopped else { return }
