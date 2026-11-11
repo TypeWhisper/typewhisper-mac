@@ -374,7 +374,8 @@ final class AssemblyAIPlugin: NSObject,
     }
 
     /// With `cleanedUp`, the recording goes to the Dictation API instead, which takes the
-    /// same request and returns the text cleaned up.
+    /// same request, always runs Universal-3.6 Pro and returns the text cleaned up. When
+    /// `makeSyncRequest` returns nil or this throws, the async fallback has no cleanup.
     private func transcribeSync(
         audio: AudioData,
         request syncRequest: SyncRequest,
@@ -1595,7 +1596,7 @@ private struct AssemblyAISettingsView: View {
                     case .sync:
                         Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
                     case .dictation:
-                        Text("Uploads the recording when you stop and returns it cleaned up: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI.", bundle: bundle)
+                        Text("Uploads the recording when you stop and returns it cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings over 20 minutes, more than 100 dictionary terms, speaker diarization, a language it doesn't support, or a failed request use the async API with the selected model instead, without cleanup.", bundle: bundle)
                     case .async:
                         Text("Lowest price; the text takes a few seconds after you stop. No live preview from AssemblyAI.", bundle: bundle)
                     }
