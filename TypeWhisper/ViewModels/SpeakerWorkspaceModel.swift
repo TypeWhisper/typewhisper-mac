@@ -86,6 +86,16 @@ final class SpeakerWorkspaceModel: ObservableObject {
     /// speaker heard on the microphone channel of a Recorder recording, or
     /// one named as the user ("Me" in the app's language, or their own name).
     func isOwnSpeaker(_ speakerID: String) -> Bool {
+        Self.isOwnSpeaker(speakerID, microphoneSpeakerID: microphoneSpeakerID, names: names, defaults: defaults)
+    }
+
+    /// The rule behind `isOwnSpeaker(_:)`, which the Recorder's `is_me` follows too.
+    static func isOwnSpeaker(
+        _ speakerID: String,
+        microphoneSpeakerID: String?,
+        names: SpeakerNameTable?,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
         if speakerID == microphoneSpeakerID { return true }
         guard let name = names?.displayName(for: speakerID) else { return false }
         return SpeakerOwnName.isOwnName(name, defaults: defaults)

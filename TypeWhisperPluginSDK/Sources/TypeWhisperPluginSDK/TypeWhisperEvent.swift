@@ -133,7 +133,7 @@ public struct RecorderSpeaker: Sendable, Codable, Equatable {
     public let id: String
     public let name: String
     public let suggestedName: String?
-    /// The speaker heard on the microphone, the user of this Mac.
+    /// The user of this Mac: the speaker heard on the microphone, or one named as the user.
     public let isMe: Bool
 
     public init(id: String, name: String, suggestedName: String? = nil, isMe: Bool = false) {

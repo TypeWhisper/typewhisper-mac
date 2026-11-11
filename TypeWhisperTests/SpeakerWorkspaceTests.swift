@@ -1,5 +1,6 @@
 import XCTest
 @testable import TypeWhisper
+import TypeWhisperPluginSDK
 
 final class SpeakerWorkspaceTests: XCTestCase {
     private func segment(_ text: String, _ start: TimeInterval, _ end: TimeInterval, _ speaker: String?) -> SpeakerTranscriptSegment {
@@ -492,6 +493,24 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
 
         XCTAssertTrue(model.isOwnSpeaker("S2"))
         XCTAssertFalse(model.isOwnSpeaker("S1"))
+    }
+
+    /// The Recorder's `is_me` follows the Speakers view, also without a microphone channel.
+    func testRecorderPayloadMarksTheSpeakerNamedAsTheUser() throws {
+        _ = try makeModel()
+        history.setSpeakerName(String(localized: "speakers.me"), for: "S2", inRecordID: recordID)
+        let payload = RecorderTranscriptReadyPayload(
+            recordingID: UUID(),
+            completedAt: Date(),
+            text: "",
+            audioFilePath: "/tmp/a.m4a",
+            transcriptFilePath: "/tmp/a.txt"
+        )
+
+        let result = RecorderSpeakerSnapshot.adding(history.record(withID: recordID), to: payload)
+
+        XCTAssertEqual(result.speakers?.map(\.id), ["S1", "S2"])
+        XCTAssertEqual(result.speakers?.map(\.isMe), [false, true])
     }
 
     /// Renaming the microphone speaker names the user in later recordings too;
