@@ -525,10 +525,18 @@ final class HistorySearchIndexerTests: XCTestCase {
         line: UInt = #line
     ) async throws {
         let deadline = ContinuousClock.now + .seconds(30)
+        // A file that is deleted and built again can fail to open for a moment.
+        var lastError: Error?
         while ContinuousClock.now < deadline {
-            if try await condition() { return }
+            do {
+                if try await condition() { return }
+                lastError = nil
+            } catch {
+                lastError = error
+            }
             try await Task.sleep(for: .milliseconds(5))
         }
+        if let lastError { throw lastError }
         XCTFail("The index did not reach the expected state", file: file, line: line)
     }
 
