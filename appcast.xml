@@ -5,6 +5,15 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.8.3-daily.20261112</title>
+      <pubDate>Thu, 12 Nov 2026 04:59:25 +0000</pubDate>
+      <sparkle:version>1635</sparkle:version>
+      <sparkle:shortVersionString>1.8.3-daily.20261112</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.8.3-daily.20261112/TypeWhisper-v1.8.3-daily.20261112.zip" sparkle:edSignature="ilriVFcRg380bTJaFTbbvjXux4gWOgixpRkCwyKC4s9U3LL6lg81wn4hLbA/yE5PwnRP4kXlmF43qZAQbHEECw==" length="25227549" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.8.3-rc1</title>
       <pubDate>Wed, 11 Nov 2026 15:25:11 +0000</pubDate>
       <sparkle:version>1628</sparkle:version>
@@ -12,15 +21,6 @@
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:channel>release-candidate</sparkle:channel>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.8.3-rc1/TypeWhisper-v1.8.3-rc1.zip" sparkle:edSignature="oZV598JEmdoX8OFhTBJOydIPtt1Y8zCQtwXrcT7QixR1coYYSTG52j8n6qBZn2F5z1H2MqngGP9zfAsIy5YWAg==" length="25202290" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.8.2-daily.20261111</title>
-      <pubDate>Wed, 11 Nov 2026 12:19:39 +0000</pubDate>
-      <sparkle:version>1623</sparkle:version>
-      <sparkle:shortVersionString>1.8.2-daily.20261111</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.8.2-daily.20261111/TypeWhisper-v1.8.2-daily.20261111.zip" sparkle:edSignature="LliJs/MkQnBoHXAo5nY6/EoHR4XYUMBUh66F1TluqJOng9I+Fm/VSdi8QosfkGDIuRUpZP1OwHEnPMdD0keBBA==" length="25178393" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.8.2</title>
