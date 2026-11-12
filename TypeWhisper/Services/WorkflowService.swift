@@ -91,6 +91,36 @@ final class WorkflowService: ObservableObject {
         }
 
         fetchWorkflows()
+        migrateLegacyTranslationSetting()
+    }
+
+    /// Replaces the retired "Enable translation" setting with an equivalent workflow.
+    /// The setting translated every dictation with Apple Translate unless a workflow
+    /// matched. An Always Translation workflow sorted after all others does the same:
+    /// app, website, and earlier Always workflows still win. Runs at launch and after
+    /// a backup import, and clears the setting so it runs only once.
+    func migrateLegacyTranslationSetting() {
+        guard userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled) else {
+            userDefaults.removeObject(forKey: UserDefaultsKeys.translationEnabled)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.translationTargetLanguage)
+            return
+        }
+
+        let storedTarget = userDefaults.string(forKey: UserDefaultsKeys.translationTargetLanguage)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // The setting defaulted to English when no target was stored.
+        let targetLanguage = storedTarget?.isEmpty == false ? storedTarget ?? "en" : "en"
+        addWorkflow(
+            name: WorkflowTemplate.translation.definition.name,
+            template: .translation,
+            trigger: .global(),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+                WorkflowBehavior.targetLanguageSettingKey: targetLanguage,
+            ])
+        )
+        userDefaults.removeObject(forKey: UserDefaultsKeys.translationEnabled)
+        userDefaults.removeObject(forKey: UserDefaultsKeys.translationTargetLanguage)
     }
 
     static func clampedShortTranscriptionMinimumWords(_ value: Int) -> Int {

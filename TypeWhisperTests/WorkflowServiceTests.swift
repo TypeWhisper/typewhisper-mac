@@ -805,6 +805,34 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(disabledReload.shortTranscriptionMinimumWords, 0)
     }
 
+    func testLegacyTranslationSettingBecomesAnAlwaysTranslationWorkflowOnce() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let existing = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        existing.addWorkflow(name: "Clean everywhere", template: .cleanedText, trigger: .global())
+        defaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
+        defaults.set("de", forKey: UserDefaultsKeys.translationTargetLanguage)
+
+        let migrated = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        let translation = try XCTUnwrap(migrated.workflows.first { $0.template == .translation })
+
+        XCTAssertEqual(translation.trigger, .global())
+        XCTAssertTrue(translation.isEnabled)
+        XCTAssertTrue(translation.usesAppleTranslate)
+        XCTAssertEqual(translation.translationTargetLanguage, "de")
+        // Like the setting, it only applies when no other workflow matches.
+        XCTAssertEqual(migrated.matchWorkflow(bundleIdentifier: "com.apple.TextEdit")?.workflow.name, "Clean everywhere")
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.translationEnabled))
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.translationTargetLanguage))
+
+        let relaunched = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 1)
+    }
+
     func testWorkflowServiceClampsShortTranscriptionMinimumWords() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }

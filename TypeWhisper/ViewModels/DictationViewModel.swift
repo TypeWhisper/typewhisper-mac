@@ -2711,13 +2711,6 @@ final class DictationViewModel: ObservableObject {
         return settingsViewModel.selectedTask
     }
 
-    private var effectiveTranslationTarget: String? {
-        if settingsViewModel.translationEnabled {
-            return settingsViewModel.translationTargetLanguage
-        }
-        return nil
-    }
-
     private var effectiveEngineOverrideId: String? {
         DictationTranscriptionOverrideResolver.engineId(for: matchedWorkflow)
     }
@@ -2898,8 +2891,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var requiresVisiblePostProcessingPhase: Bool {
-        effectiveTranslationTarget != nil
-            || matchedWorkflow?.isManuallyRunnable == true
+        matchedWorkflow?.isManuallyRunnable == true
             || effectiveOutputFormat != nil
             || effectiveActionPluginId != nil
             || !PluginManager.shared.postProcessors.isEmpty
@@ -3268,7 +3260,6 @@ final class DictationViewModel: ObservableObject {
                 let task = effectiveTask
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
-                let translationTarget = effectiveTranslationTarget
                 let primaryEngineId = engineOverride ?? modelManager.selectedProviderId
                 let dictionaryProviderId = primaryEngineId
 
@@ -3356,7 +3347,6 @@ final class DictationViewModel: ObservableObject {
                 // whether the model ran rather than whether a handler exists.
                 let modelPostProcessingRan = OSAllocatedUnfairLock(initialState: false)
                 let llmHandler = buildLLMHandler(
-                    translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
                     configuredLanguage: language,
                     resolvedOutputFormat: resolvedOutputFormat,
@@ -5080,10 +5070,9 @@ final class DictationViewModel: ObservableObject {
 
     // MARK: - Shared Helpers
 
-    /// Builds an LLM handler for the post-processing pipeline.
-    /// Priority: workflow > translation > nil.
+    /// Builds the workflow handler for the post-processing pipeline, or nil when no
+    /// matched workflow processes the text.
     private func buildLLMHandler(
-        translationTarget: String?,
         detectedLanguage: String?,
         configuredLanguage: String?,
         resolvedOutputFormat: String?,
@@ -5091,54 +5080,17 @@ final class DictationViewModel: ObservableObject {
         stopTimingStart: CFAbsoluteTime? = nil,
         modelPostProcessingRan: OSAllocatedUnfairLock<Bool>? = nil
     ) -> ((String) async throws -> String)? {
-        if let workflowHandler = buildWorkflowTextProcessingHandler(
-            translationTarget: translationTarget,
+        buildWorkflowTextProcessingHandler(
             detectedLanguage: detectedLanguage,
             configuredLanguage: configuredLanguage,
             resolvedOutputFormat: resolvedOutputFormat,
             incrementalPostProcessing: incrementalPostProcessing,
             stopTimingStart: stopTimingStart,
             modelPostProcessingRan: modelPostProcessingRan
-        ) {
-            return workflowHandler
-        }
-
-        #if canImport(Translation)
-        if let targetCode = translationTarget {
-            if #available(macOS 15, *), let ts = translationService as? TranslationService {
-                let sourceRaw = detectedLanguage ?? configuredLanguage
-                let sourceNormalized = TranslationService.normalizedLanguageIdentifier(from: sourceRaw)
-                if let sourceRaw {
-                    if let sourceNormalized {
-                        if sourceRaw.caseInsensitiveCompare(sourceNormalized) != .orderedSame {
-                            logger.info("Translation source normalized \(sourceRaw, privacy: .public) -> \(sourceNormalized, privacy: .public)")
-                        }
-                    } else {
-                        logger.warning("Translation source language \(sourceRaw, privacy: .public) invalid, using auto source")
-                    }
-                }
-                let sourceLanguage = sourceNormalized.map { Locale.Language(identifier: $0) }
-                return { text in
-                    guard let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) else {
-                        logger.error("Translation target language invalid: \(targetCode, privacy: .public)")
-                        return text
-                    }
-                    modelPostProcessingRan?.withLock { $0 = true }
-                    if targetCode.caseInsensitiveCompare(targetNormalized) != .orderedSame {
-                        logger.info("Translation target normalized \(targetCode, privacy: .public) -> \(targetNormalized, privacy: .public)")
-                    }
-                    let target = Locale.Language(identifier: targetNormalized)
-                    return try await ts.translate(text: text, to: target, source: sourceLanguage)
-                }
-            }
-        }
-        #endif
-
-        return nil
+        )
     }
 
     private func buildWorkflowTextProcessingHandler(
-        translationTarget: String?,
         detectedLanguage: String?,
         configuredLanguage: String?,
         resolvedOutputFormat: String?,
@@ -5152,7 +5104,6 @@ final class DictationViewModel: ObservableObject {
         let workflowService = workflowService
         guard workflowProcessor.canProcess(
             workflow: workflow,
-            fallbackTranslationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
             configuredLanguage: configuredLanguage,
             resolvedOutputFormat: resolvedOutputFormat
@@ -5163,7 +5114,6 @@ final class DictationViewModel: ObservableObject {
         let segmentedRequest = workflow.usesSegmentedPostProcessing
             ? workflowProcessor.segmentedPromptRequest(
                 workflow: workflow,
-                fallbackTranslationTarget: translationTarget,
                 detectedLanguage: detectedLanguage,
                 configuredLanguage: configuredLanguage,
                 resolvedOutputFormat: resolvedOutputFormat
@@ -5174,7 +5124,6 @@ final class DictationViewModel: ObservableObject {
             ? nil
             : workflowProcessor.segmentedPromptRequest(
                 workflow: workflow,
-                fallbackTranslationTarget: translationTarget,
                 detectedLanguage: nil,
                 configuredLanguage: configuredLanguage,
                 resolvedOutputFormat: resolvedOutputFormat
@@ -5196,7 +5145,6 @@ final class DictationViewModel: ObservableObject {
                 return try await workflowProcessor.process(
                     workflow: workflow,
                     text: text,
-                    fallbackTranslationTarget: translationTarget,
                     detectedLanguage: detectedLanguage,
                     configuredLanguage: configuredLanguage,
                     resolvedOutputFormat: resolvedOutputFormat,
@@ -5207,7 +5155,7 @@ final class DictationViewModel: ObservableObject {
             return try await workflowProcessor.withAppleTranslateFallback(
                 workflow: workflow,
                 text: text,
-                fallbackTranslationTarget: translationTarget,
+                fallbackTranslationTarget: nil,
                 detectedLanguage: detectedLanguage,
                 configuredLanguage: configuredLanguage
             ) {
@@ -5298,7 +5246,6 @@ final class DictationViewModel: ObservableObject {
         let configuredLanguage = languageSelection.requestedLanguage
         guard let request = workflowTextProcessingService.segmentedPromptRequest(
             workflow: workflow,
-            fallbackTranslationTarget: effectiveTranslationTarget,
             detectedLanguage: nil,
             configuredLanguage: configuredLanguage,
             resolvedOutputFormat: outputFormat
