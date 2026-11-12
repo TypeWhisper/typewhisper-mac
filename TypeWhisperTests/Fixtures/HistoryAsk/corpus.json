@@ -1,0 +1,2841 @@
+{
+ "referenceDate": "2026-11-12T10:00:00+01:00",
+ "timeZone": "Europe/Berlin",
+ "records": [
+  {
+   "id": "r001",
+   "daysAgo": 3,
+   "time": "14:05",
+   "source": "recorder",
+   "language": "de",
+   "title": "Kick-off Druckerei Müller",
+   "turns": [
+    [
+     "Anna",
+     "Danke, dass ihr alle da seid. Ich bestelle 200 Plakate bis Donnerstag bei der Druckerei Müller, die Vorlage ist seit gestern freigegeben."
+    ],
+    [
+     "Ben",
+     "Die Flyer brauchen wir erst zur Messe im Januar. Das Format bleibt A5, und wir drucken diesmal auf Recyclingpapier."
+    ],
+    [
+     "Carla",
+     "Das Budget für den Druck liegt bei 1.800 Euro. Mehr gibt die Geschäftsführung in diesem Quartal nicht frei."
+    ],
+    [
+     "Anna",
+     "Dann lassen wir die Aufkleber weg. Ben, kannst du bei der Druckerei nachfragen, ob sie die Plakate direkt an den Messebauer liefern?"
+    ],
+    [
+     "Ben",
+     "Mache ich. Ich frage auch nach einem Probedruck, damit die Farben stimmen. Beim letzten Mal war das Blau viel zu dunkel."
+    ],
+    [
+     "Carla",
+     "Bitte denkt an die Rechnungsadresse, die hat sich geändert. Die Buchhaltung sitzt jetzt in der Lindenstraße 14."
+    ],
+    [
+     "Anna",
+     "Gut. Nächster Termin ist in zwei Wochen, bis dahin sollte der Probedruck da sein und wir entscheiden über die Auflage der Flyer."
+    ],
+    [
+     "Ben",
+     "Eine Sache noch: Der Messebauer braucht die Maße der Rückwand bis Ende des Monats, sonst wird der Aufbau teurer."
+    ],
+    [
+     "Carla",
+     "Die Maße schicke ich ihm morgen. Drei Meter breit und zwei Meter fünfzig hoch, wie im letzten Jahr."
+    ]
+   ]
+  },
+  {
+   "id": "r002",
+   "daysAgo": 1,
+   "time": "09:12",
+   "source": "mac",
+   "language": "de",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Kurzes Update an das Team: Der Release von Version 2.4 verschiebt sich auf nächsten Dienstag, weil der Login-Fehler auf Android noch nicht behoben ist. Die Testgruppe bekommt heute Abend einen neuen Build."
+  },
+  {
+   "id": "r003",
+   "daysAgo": 1,
+   "time": "17:40",
+   "source": "mac",
+   "language": "de",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Sehr geehrter Herr Brandt, die Heizung im Wohnzimmer fällt seit drei Tagen immer wieder aus. Bitte schicken Sie einen Handwerker, am besten vormittags. Mit freundlichen Grüßen"
+  },
+  {
+   "id": "r004",
+   "daysAgo": 5,
+   "time": "08:30",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Einkaufsliste für Samstag: Hafermilch, Parmesan, Zitronen, Backpapier und Geschenkpapier für Lenas Geburtstag."
+  },
+  {
+   "id": "r005",
+   "daysAgo": 8,
+   "time": "19:30",
+   "source": "recorder",
+   "language": "de",
+   "title": "Elternabend Klasse 3b",
+   "turns": [
+    [
+     "Frau Keller",
+     "Die Klassenfahrt nach Lüneburg findet im Mai statt und kostet 145 Euro pro Kind. Die Anmeldung muss bis zu den Weihnachtsferien bei mir sein."
+    ],
+    [
+     "Herr Aydin",
+     "Können die Kinder auch später nachgemeldet werden? Wir wissen noch nicht, ob wir im Mai umziehen."
+    ],
+    [
+     "Frau Keller",
+     "Bis Ende Januar geht das noch. Außerdem suchen wir Lesepaten für die erste Stunde am Mittwoch."
+    ],
+    [
+     "Herr Aydin",
+     "Ich kann alle zwei Wochen kommen. Und der Kuchenbasar ist am 28. November, richtig?"
+    ],
+    [
+     "Frau Keller",
+     "Genau, von zehn bis dreizehn Uhr in der Aula. Der Erlös geht an die Schulbibliothek."
+    ]
+   ]
+  },
+  {
+   "id": "r006",
+   "daysAgo": 20,
+   "time": "21:10",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Idee für den Blog: ein Erfahrungsbericht über drei Monate Arbeiten mit Stehschreibtisch, mit Fotos vom Umbau des Arbeitszimmers."
+  },
+  {
+   "id": "r007",
+   "daysAgo": 15,
+   "time": "10:00",
+   "source": "recorder",
+   "language": "de",
+   "title": "Quartalsplanung Vertrieb",
+   "turns": [
+    [
+     "Jonas",
+     "Das Umsatzziel für das erste Quartal liegt bei 420.000 Euro. Das sind acht Prozent mehr als im Vorjahr."
+    ],
+    [
+     "Miriam",
+     "Mit dem neuen Großkunden Nordwind Logistik ist das machbar. Der Rahmenvertrag wird gerade von der Rechtsabteilung geprüft."
+    ],
+    [
+     "Tobias",
+     "Die Umstellung des CRM auf HubSpot muss bis Februar fertig sein, sonst verlieren wir die Daten aus dem alten System."
+    ],
+    [
+     "Jonas",
+     "Und die Messe in Köln? Wer fährt hin?"
+    ],
+    [
+     "Miriam",
+     "Tobias und ich. Wir brauchen noch Hotelzimmer, die Preise steigen jede Woche."
+    ],
+    [
+     "Tobias",
+     "Ich buche heute. Außerdem schlage ich vor, die Provision für Neukunden von fünf auf sieben Prozent anzuheben."
+    ],
+    [
+     "Jonas",
+     "Das bespreche ich mit der Geschäftsführung. Bis zum nächsten Termin habe ich eine Antwort."
+    ]
+   ]
+  },
+  {
+   "id": "r008",
+   "daysAgo": 9,
+   "time": "12:15",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Termin beim Kinderzahnarzt für Emil ist am 19. November um 15:30 Uhr. Versichertenkarte und das gelbe Heft mitbringen."
+  },
+  {
+   "id": "r009",
+   "daysAgo": 40,
+   "time": "11:20",
+   "source": "mac",
+   "language": "de",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Angebot an Firma Seidel: 14 Tagessätze zu je 950 Euro für die Migration der Lagerverwaltung, Start frühestens Mitte Januar. Reisekosten werden nach Aufwand berechnet."
+  },
+  {
+   "id": "r010",
+   "daysAgo": 12,
+   "time": "16:05",
+   "source": "recorder",
+   "language": "de",
+   "title": "Sprachnotiz Arzttermin",
+   "text": "Sprachnotiz nach dem Arzttermin: Der Blutdruck war 135 zu 85. Dr. Hoffmann empfiehlt weniger Salz und drei Mal pro Woche Ausdauersport. Kontrolle in sechs Wochen, das Rezept für die Tabletten liegt in der Apotheke am Markt."
+  },
+  {
+   "id": "r011",
+   "daysAgo": 4,
+   "time": "22:02",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "github.com",
+   "text": "Kommentar zum Pull Request: Die Wiederholungslogik sollte exponentielles Backoff verwenden, sonst überlasten wir die Schnittstelle bei einem Ausfall. Bitte auch einen Test für den Timeout ergänzen."
+  },
+  {
+   "id": "r012",
+   "daysAgo": 25,
+   "time": "19:00",
+   "source": "recorder",
+   "language": "de",
+   "title": "Vereinssitzung Ruderclub",
+   "turns": [
+    [
+     "Holger",
+     "Das Dach vom Bootshaus muss saniert werden. Der Kostenvoranschlag liegt bei 12.000 Euro."
+    ],
+    [
+     "Sabine",
+     "Dann müssen wir den Mitgliedsbeitrag anheben. Ich schlage 180 Euro im Jahr vor, bisher sind es 150."
+    ],
+    [
+     "Holger",
+     "Darüber stimmen wir auf der Hauptversammlung ab. Das Sommerfest ist übrigens am 20. Juni."
+    ],
+    [
+     "Sabine",
+     "Ich kümmere mich um den Grill und frage die Jugendabteilung wegen der Tombola."
+    ]
+   ]
+  },
+  {
+   "id": "r013",
+   "daysAgo": 2,
+   "time": "07:55",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Ich schaffe es heute nicht zum Training, mein Knie tut seit dem Lauf am Sonntag weh."
+  },
+  {
+   "id": "r014",
+   "daysAgo": 60,
+   "time": "18:20",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Rezept von Oma Gerda für Rouladen: Senf, Speck, Gewürzgurken und Zwiebeln einrollen, zwei Stunden schmoren und die Soße mit Rotwein ablöschen."
+  },
+  {
+   "id": "r015",
+   "daysAgo": 10,
+   "time": "09:30",
+   "source": "recorder",
+   "language": "de",
+   "title": "Jour fixe Entwicklung",
+   "turns": [
+    [
+     "Lukas",
+     "Den Umstieg auf Swift 6 machen wir erst nach dem Release, vorher ist das Risiko zu groß."
+    ],
+    [
+     "Nina",
+     "Einverstanden. Ich habe übrigens das Speicherleck im Audio-Puffer gefunden, der Ringpuffer wurde nie freigegeben."
+    ],
+    [
+     "Farid",
+     "Sehr gut. Die Testabdeckung der Synchronisierung liegt jetzt bei 80 Prozent, es fehlen noch die Konfliktfälle."
+    ],
+    [
+     "Lukas",
+     "Die Konfliktfälle übernimmt Nina. Farid, du schaust dir bitte die Absturzberichte aus der Beta an."
+    ],
+    [
+     "Farid",
+     "Mache ich. Die meisten Abstürze kommen von einem einzigen Gerät mit einem alten Betriebssystem."
+    ]
+   ]
+  },
+  {
+   "id": "r016",
+   "daysAgo": 33,
+   "time": "20:45",
+   "source": "mac",
+   "language": "de",
+   "app": "Pages",
+   "bundleID": "com.apple.iWork.Pages",
+   "text": "Bewerbungsanschreiben: Seit acht Jahren leite ich Projekte im Maschinenbau, zuletzt die Einführung einer neuen Fertigungslinie in Stuttgart. Besonders reizt mich an Ihrer Stelle die internationale Ausrichtung."
+  },
+  {
+   "id": "r017",
+   "daysAgo": 7,
+   "time": "13:10",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Der Vermieter hat angerufen: Die Nebenkostenabrechnung kommt im Dezember, wir bekommen voraussichtlich 230 Euro zurück."
+  },
+  {
+   "id": "r018",
+   "daysAgo": 45,
+   "time": "15:00",
+   "source": "recorder",
+   "language": "de",
+   "title": "Interview Hausarzt-Studie",
+   "turns": [
+    [
+     "Interviewerin",
+     "Wie lange warten Sie im Schnitt auf einen Termin bei Ihrem Hausarzt?"
+    ],
+    [
+     "Teilnehmer",
+     "Meistens zwei bis drei Wochen. Für eine Krankschreibung rufe ich inzwischen die Videosprechstunde an."
+    ],
+    [
+     "Interviewerin",
+     "Nutzen Sie das E-Rezept über die App Ihrer Krankenkasse?"
+    ],
+    [
+     "Teilnehmer",
+     "Ja, das klappt gut. Nur meine Mutter kommt damit nicht zurecht, sie holt den Ausdruck weiter in der Praxis ab."
+    ]
+   ]
+  },
+  {
+   "id": "r019",
+   "daysAgo": 22,
+   "time": "11:00",
+   "source": "iPad",
+   "language": "de",
+   "text": "Notizen zur Fortbildung Brandschutz: Feuerlöscher alle zwei Jahre prüfen lassen. Fluchtwege dürfen nicht mit Kartons zugestellt sein, und jede Etage braucht zwei Ersthelfer."
+  },
+  {
+   "id": "r020",
+   "daysAgo": 16,
+   "time": "10:35",
+   "source": "mac",
+   "language": "de",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Reklamation an den Möbelhändler: Das gelieferte Sofa hat einen Riss an der linken Armlehne. Ich bitte um Austausch oder einen Preisnachlass von 15 Prozent."
+  },
+  {
+   "id": "r021",
+   "daysAgo": 50,
+   "time": "20:00",
+   "source": "recorder",
+   "language": "de",
+   "title": "Hochzeitsplanung",
+   "turns": [
+    [
+     "Julia",
+     "Für die Feier nehmen wir Gut Sonnenhof. Es passen 85 Gäste in den Saal, und draußen ist Platz für die Trauung."
+    ],
+    [
+     "Stefan",
+     "Das Catering sollte komplett vegetarisch sein, das war dir wichtig. Die Fotografin kostet 2.400 Euro für den ganzen Tag."
+    ],
+    [
+     "Julia",
+     "Das ist in Ordnung. Der Termin steht: 12. September. Die Einladungen gehen im Februar raus."
+    ],
+    [
+     "Stefan",
+     "Dann fehlt nur noch die Band. Mein Cousin spielt in einer, ich frage ihn am Wochenende."
+    ]
+   ]
+  },
+  {
+   "id": "r022",
+   "daysAgo": 11,
+   "time": "14:00",
+   "source": "windows",
+   "language": "de",
+   "text": "Protokoll Betriebsrat: Die Kernarbeitszeit wird auf 10 bis 15 Uhr verkürzt. Homeoffice bleibt bei drei Tagen pro Woche, die Regelung gilt ab Januar."
+  },
+  {
+   "id": "r023",
+   "daysAgo": 1,
+   "time": "08:05",
+   "source": "appleWatch",
+   "language": "de",
+   "text": "Auto steht im Parkhaus am Bahnhof, Ebene 3, Platz 47."
+  },
+  {
+   "id": "r024",
+   "daysAgo": 6,
+   "time": "09:50",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Steuerberaterin Frau Lindner braucht bis Ende November die Belege für das Arbeitszimmer und die Fahrtkosten. Die Spendenquittungen liegen im blauen Ordner."
+  },
+  {
+   "id": "r025",
+   "daysAgo": 75,
+   "time": "21:30",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Urlaubsplanung: zwei Wochen Südtirol im August. Die Ferienwohnung in Meran kostet 1.350 Euro, die Anzahlung ist bis Ende März fällig."
+  },
+  {
+   "id": "r026",
+   "daysAgo": 120,
+   "time": "12:40",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Garantie Waschmaschine: gekauft am 14. Juli bei Elektro Krüger, fünf Jahre Garantie, Rechnungsnummer 88213."
+  },
+  {
+   "id": "r027",
+   "daysAgo": 2,
+   "time": "11:00",
+   "source": "recorder",
+   "language": "de",
+   "title": "Budgetrunde Marketing",
+   "turns": [
+    [
+     "Carla",
+     "Wir wechseln das Newsletter-Tool. Brevo kostet die Hälfte und kann die Segmente aus dem Shop übernehmen."
+    ],
+    [
+     "Ben",
+     "Der Messestand ist mit 9.500 Euro der größte Posten. Können wir die Fläche verkleinern?"
+    ],
+    [
+     "Anna",
+     "Nein, die Fläche bleibt. Dafür streichen wir das Podcast-Sponsoring, das hat kaum Anmeldungen gebracht."
+    ],
+    [
+     "Carla",
+     "Einverstanden. Das frei gewordene Geld geht in Suchanzeigen für das Frühjahr."
+    ]
+   ]
+  },
+  {
+   "id": "r028",
+   "daysAgo": 8,
+   "time": "15:25",
+   "source": "mac",
+   "language": "de",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Der Kunde Nordwind möchte die Schnittstelle zur Zollabwicklung schon im Dezember testen. Bitte plant dafür zwei Personen aus dem Backend ein."
+  },
+  {
+   "id": "r029",
+   "daysAgo": 3,
+   "time": "17:15",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Kannst du bitte Milch und Windeln Größe 4 mitbringen, wir haben nichts mehr."
+  },
+  {
+   "id": "r030",
+   "daysAgo": 27,
+   "time": "19:45",
+   "source": "mac",
+   "language": "de",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Kündigung Fitnessstudio: Hiermit kündige ich meine Mitgliedschaft Nummer 55120 fristgerecht zum 31. Dezember. Bitte bestätigen Sie mir den Eingang schriftlich."
+  },
+  {
+   "id": "r031",
+   "daysAgo": 35,
+   "time": "22:15",
+   "source": "recorder",
+   "language": "de",
+   "title": "Bandprobe",
+   "text": "Setliste für den Auftritt im Jazzkeller: Wir starten mit Blue Bossa, das neue Stück von Miriam kommt an dritter Stelle. Die Zugabe ist Autumn Leaves, und der Soundcheck beginnt um 18 Uhr."
+  },
+  {
+   "id": "r032",
+   "daysAgo": 65,
+   "time": "08:45",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Der Heizungsableser kommt am Dienstag zwischen 8 und 12 Uhr. Schlüssel bei Familie Yilmaz im zweiten Stock abgeben."
+  },
+  {
+   "id": "r033",
+   "daysAgo": 17,
+   "time": "13:30",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Buchtipp von Katrin: Die Vermessung der Welt von Daniel Kehlmann, soll ich unbedingt im Urlaub lesen."
+  },
+  {
+   "id": "r034",
+   "daysAgo": 5,
+   "time": "16:20",
+   "source": "mac",
+   "language": "de",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Feedback an unseren Praktikanten: Die Präsentation war klar aufgebaut, aber die Diagramme brauchen eine größere Schrift und Quellenangaben."
+  },
+  {
+   "id": "r035",
+   "daysAgo": 19,
+   "time": "10:10",
+   "source": "recorder",
+   "language": "de",
+   "title": "Planung Podcast Folge 12",
+   "text": "Also ich denke, wir sollten den Gast viel früher vorstellen, nicht erst nach dem langen Intro. Und die Werbung, hm, die nervt mittendrin, die packen wir ans Ende. Aufnehmen können wir am Vierundzwanzigsten im Studio B, da ist noch frei.",
+   "result": "Entscheidungen\n- Gastvorstellung in den ersten zwei Minuten\n- Werbeblock nur am Schluss der Folge\n- Aufzeichnung am 24. November im Studio B",
+   "resultTitle": "Besprechungsnotizen Podcast"
+  },
+  {
+   "id": "r036",
+   "daysAgo": 4,
+   "time": "09:05",
+   "source": "mac",
+   "language": "de",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "schreib dem Steuerbüro dass die fehlenden Unterlagen nächste Woche kommen und dass ich mich für die Verspätung entschuldige",
+   "result": "Sehr geehrte Frau Lindner,\n\ndie fehlenden Unterlagen sende ich Ihnen in der kommenden Woche zu. Bitte entschuldigen Sie die Verzögerung.\n\nMit freundlichen Grüßen"
+  },
+  {
+   "id": "r037",
+   "daysAgo": 85,
+   "time": "18:00",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Umzug Checkliste: Nachsendeauftrag bei der Post stellen, Strom und Internet ummelden, Transporter für den 3. Oktober reservieren und die Kaution vom alten Vermieter zurückfordern."
+  },
+  {
+   "id": "r038",
+   "daysAgo": 38,
+   "time": "12:00",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Das Fahrrad ist in der Werkstatt Radwerk am Hafen. Neue Bremsbeläge und eine Kette, Abholung Freitag ab 16 Uhr, kostet ungefähr 90 Euro."
+  },
+  {
+   "id": "r039",
+   "daysAgo": 150,
+   "time": "10:30",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Gartenplan für das Frühjahr: Tomaten erst nach den Eisheiligen rauspflanzen, die Himbeeren zurückschneiden und für das Hochbeet neue Erde bestellen."
+  },
+  {
+   "id": "r040",
+   "daysAgo": 100,
+   "time": "14:50",
+   "source": "mac",
+   "language": "de",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "An die Haftpflichtversicherung: Am 2. August ist mir beim Besuch bei Freunden ein Rotweinglas auf den Teppich gefallen. Die Schadennummer lautet HV 2291."
+  },
+  {
+   "id": "r041",
+   "daysAgo": 13,
+   "time": "09:00",
+   "source": "recorder",
+   "language": "de",
+   "title": "Vortrag Barrierefreiheit",
+   "text": "Mitschnitt vom Vortrag: Barrierefreiheit beginnt bei der Tastaturbedienung. Jede Schaltfläche braucht eine Beschriftung für den Screenreader, und der Kontrast von Text sollte mindestens 4,5 zu 1 betragen. Ab Juni gilt dafür das Barrierefreiheitsstärkungsgesetz auch für Onlineshops."
+  },
+  {
+   "id": "r042",
+   "daysAgo": 6,
+   "time": "15:10",
+   "source": "recorder",
+   "language": "de",
+   "title": "Teamrunde",
+   "turns": [
+    [
+     "Anna",
+     "Ich bin vom 23. Dezember bis zum 6. Januar im Urlaub. Vertretung macht in der Zeit Carla."
+    ],
+    [
+     "Ben",
+     "Dann verschieben wir die Abnahme der Website auf die zweite Januarwoche."
+    ],
+    [
+     "Carla",
+     "Passt. Ich brauche vorher noch die Zugangsdaten für das Shopsystem."
+    ]
+   ]
+  },
+  {
+   "id": "r043",
+   "daysAgo": 2,
+   "time": "18:30",
+   "source": "mac",
+   "language": "en",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Quick heads-up: the staging server will be down tonight between ten and midnight for the database migration. Please finish your test runs before nine."
+  },
+  {
+   "id": "r044",
+   "daysAgo": 6,
+   "time": "15:00",
+   "source": "recorder",
+   "language": "en",
+   "title": "Design review onboarding",
+   "turns": [
+    [
+     "Priya",
+     "The onboarding flow drops forty percent of users at the permission screen. That is our biggest leak right now."
+    ],
+    [
+     "Marcus",
+     "Let's move the microphone permission after the first successful dictation. People accept it once they see the value."
+    ],
+    [
+     "Elena",
+     "I'll have the new illustrations ready by Wednesday. The dark mode versions take one more day."
+    ],
+    [
+     "Priya",
+     "Good. We also need a skip button on the keyboard tutorial, support gets tickets about it every week."
+    ],
+    [
+     "Marcus",
+     "I can ship the skip button in the next build. The copy still needs a review from legal."
+    ]
+   ]
+  },
+  {
+   "id": "r045",
+   "daysAgo": 30,
+   "time": "07:45",
+   "source": "iPhone",
+   "language": "en",
+   "text": "Reminder to self: renew the passport before March. The appointment at the consulate takes about six weeks to get."
+  },
+  {
+   "id": "r046",
+   "daysAgo": 18,
+   "time": "16:40",
+   "source": "mac",
+   "language": "en",
+   "app": "Chrome",
+   "bundleID": "com.google.Chrome",
+   "domain": "docs.google.com",
+   "text": "The proposal should open with the customer's problem, not with our company history. Cut the second page down to three bullet points and move the pricing table to the appendix."
+  },
+  {
+   "id": "r047",
+   "daysAgo": 13,
+   "time": "17:00",
+   "source": "recorder",
+   "language": "en",
+   "title": "Investor call",
+   "turns": [
+    [
+     "Daniel",
+     "Our runway is eighteen months at the current burn. Churn fell to 2.1 percent after the pricing change."
+    ],
+    [
+     "Sophie",
+     "That's encouraging. What is the hiring plan for next year?"
+    ],
+    [
+     "Daniel",
+     "Two backend engineers in Lisbon and one designer. We will not open a second office before the next round."
+    ],
+    [
+     "Sophie",
+     "Please send the updated cap table before the board meeting on the fifteenth."
+    ]
+   ]
+  },
+  {
+   "id": "r048",
+   "daysAgo": 3,
+   "time": "23:10",
+   "source": "mac",
+   "language": "en",
+   "app": "Xcode",
+   "bundleID": "com.apple.dt.Xcode",
+   "text": "TODO: the waveform view redraws on every audio buffer. Throttle it to thirty frames per second and reuse the path instead of rebuilding it."
+  },
+  {
+   "id": "r049",
+   "daysAgo": 9,
+   "time": "10:15",
+   "source": "mac",
+   "language": "en",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Hi Tom, thanks for the quote. We'd like to go ahead with the annual plan for twenty-five seats, starting December first. Could you send the contract to our finance team?"
+  },
+  {
+   "id": "r050",
+   "daysAgo": 21,
+   "time": "14:30",
+   "source": "recorder",
+   "language": "en",
+   "title": "Sprint retro",
+   "turns": [
+    [
+     "Aisha",
+     "The flaky tests cost us two days this sprint. I want one person on call for the test suite."
+    ],
+    [
+     "Ben",
+     "Agreed. The pairing sessions on Thursdays worked well, let's keep them."
+    ],
+    [
+     "Chloe",
+     "Reminder that we have a deploy freeze before Black Friday, nothing goes out after the twentieth."
+    ]
+   ]
+  },
+  {
+   "id": "r051",
+   "daysAgo": 4,
+   "time": "20:20",
+   "source": "iPhone",
+   "language": "en",
+   "text": "Gift ideas for Dad's seventieth: a weekend in Edinburgh, a new fly-fishing rod, or the whisky tasting he mentioned."
+  },
+  {
+   "id": "r052",
+   "daysAgo": 55,
+   "time": "11:05",
+   "source": "mac",
+   "language": "en",
+   "app": "Word",
+   "bundleID": "com.microsoft.Word",
+   "text": "Lecture notes: photosynthesis converts light energy into chemical energy stored in glucose. The Calvin cycle happens in the stroma, the light reactions in the thylakoid membrane."
+  },
+  {
+   "id": "r053",
+   "daysAgo": 10,
+   "time": "13:45",
+   "source": "mac",
+   "language": "en",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "notion.so",
+   "text": "Roadmap update: offline mode moves to the second quarter, the Windows beta ships in February, and the redesign of the pricing page is cancelled."
+  },
+  {
+   "id": "r054",
+   "daysAgo": 24,
+   "time": "08:20",
+   "source": "mac",
+   "language": "en",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Dear Mr. Patel, the dishwasher in the flat has been leaking since Monday. Could you arrange a repair this week? I work from home on Thursday and Friday."
+  },
+  {
+   "id": "r055",
+   "daysAgo": 42,
+   "time": "06:50",
+   "source": "appleWatch",
+   "language": "en",
+   "text": "Training log: long run of twenty-eight kilometres along the river, average pace five minutes forty. Left calf felt tight after kilometre twenty."
+  },
+  {
+   "id": "r056",
+   "daysAgo": 95,
+   "time": "19:10",
+   "source": "iPhone",
+   "language": "en",
+   "text": "Grandma's lemon drizzle cake: two hundred grams of butter, three eggs, zest of two lemons, bake for forty-five minutes and pour the syrup over while it is still warm."
+  },
+  {
+   "id": "r057",
+   "daysAgo": 1,
+   "time": "09:45",
+   "source": "recorder",
+   "language": "en",
+   "title": "Daily standup",
+   "turns": [
+    [
+     "Marcus",
+     "Yesterday I finished the export to Markdown. Today I start on the share extension."
+    ],
+    [
+     "Priya",
+     "I'm blocked on the App Store review, they rejected the screenshots for the iPad."
+    ],
+    [
+     "Elena",
+     "I can redo the iPad screenshots this afternoon, send me the rejection note."
+    ]
+   ]
+  },
+  {
+   "id": "r058",
+   "daysAgo": 70,
+   "time": "12:30",
+   "source": "mac",
+   "language": "en",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Conference takeaways: the keynote on local language models, a workshop about accessibility audits, and a tip to record customer interviews with consent forms prepared in advance."
+  },
+  {
+   "id": "r059",
+   "daysAgo": 110,
+   "time": "15:35",
+   "source": "mac",
+   "language": "en",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "To the travel insurance: my suitcase arrived two days late in Lisbon. The claim number is TR 55402, and I attach the receipts for the clothes I had to buy."
+  },
+  {
+   "id": "r060",
+   "daysAgo": 28,
+   "time": "10:00",
+   "source": "recorder",
+   "language": "en",
+   "title": "Pricing workshop",
+   "turns": [
+    [
+     "Sophie",
+     "The annual plan should be two months cheaper than paying monthly. That is what most competitors do."
+    ],
+    [
+     "Daniel",
+     "And the team tier starts at five seats. Below that people can buy single licences."
+    ],
+    [
+     "Sophie",
+     "I'd test a student discount of fifty percent in the spring."
+    ]
+   ]
+  },
+  {
+   "id": "r061",
+   "daysAgo": 14,
+   "time": "08:10",
+   "source": "iPhone",
+   "language": "fr",
+   "text": "Rappel : réserver le train pour Lyon avant vendredi. Le billet aller-retour coûte quatre-vingt-dix euros avec la carte de réduction."
+  },
+  {
+   "id": "r062",
+   "daysAgo": 70,
+   "time": "11:40",
+   "source": "mac",
+   "language": "fr",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Réunion avec le fournisseur : la livraison des pièces détachées est repoussée à la mi-décembre à cause d'une grève au port de Marseille."
+  },
+  {
+   "id": "r063",
+   "daysAgo": 31,
+   "time": "09:20",
+   "source": "iPhone",
+   "language": "fr",
+   "text": "Rendez-vous chez le dentiste mardi à seize heures, ne pas oublier la carte vitale et la radio de l'année dernière."
+  },
+  {
+   "id": "r064",
+   "daysAgo": 28,
+   "time": "07:30",
+   "source": "iPhone",
+   "language": "it",
+   "text": "Ricordati di chiamare l'idraulico per la perdita sotto il lavandino della cucina, preferibilmente martedì mattina."
+  },
+  {
+   "id": "r065",
+   "daysAgo": 90,
+   "time": "16:00",
+   "source": "mac",
+   "language": "it",
+   "app": "Pages",
+   "bundleID": "com.apple.iWork.Pages",
+   "text": "Appunti per la presentazione: il fatturato è cresciuto del dodici per cento grazie ai nuovi clienti in Svizzera. Il prossimo obiettivo è aprire un ufficio a Zurigo."
+  },
+  {
+   "id": "r066",
+   "daysAgo": 48,
+   "time": "19:40",
+   "source": "iPhone",
+   "language": "it",
+   "text": "Ricetta della nonna per il ragù: soffritto di sedano, carota e cipolla, carne macinata mista, un bicchiere di vino rosso e tre ore di cottura a fuoco lento."
+  },
+  {
+   "id": "r067",
+   "daysAgo": 41,
+   "time": "13:01",
+   "source": "iPad",
+   "language": "de",
+   "text": "Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Das Budget für das nächste Quartal steht noch nicht fest. Die Fähre legt nur dienstags und freitags ab."
+  },
+  {
+   "id": "r068",
+   "daysAgo": 32,
+   "time": "21:40",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Kannst du die Kinder heute von der Schule abholen? Der Termin beim Friseur ist am Dienstag um halb fünf. Der Handwerker kommt am Montag zwischen neun und zwölf."
+  },
+  {
+   "id": "r069",
+   "daysAgo": 61,
+   "time": "07:07",
+   "source": "windows",
+   "language": "de",
+   "text": "Das Budget für das nächste Quartal steht noch nicht fest. Die Abstimmung mit der Buchhaltung dauert länger als geplant."
+  },
+  {
+   "id": "r070",
+   "daysAgo": 16,
+   "time": "21:14",
+   "source": "iPad",
+   "language": "de",
+   "text": "Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Das Hotel hat die Buchung für zwei Nächte bestätigt. Die Fähre legt nur dienstags und freitags ab. Am Donnerstag fahren wir nach dem Frühstück los. Der Flug wurde um drei Stunden nach hinten verschoben."
+  },
+  {
+   "id": "r071",
+   "daysAgo": 23,
+   "time": "19:46",
+   "source": "mac",
+   "language": "en",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Can you pick up the kids from school today? Please remember to take the bins out. The transfer to the landlord has gone out."
+  },
+  {
+   "id": "r072",
+   "daysAgo": 26,
+   "time": "20:56",
+   "source": "iPhone",
+   "language": "en",
+   "text": "The flight was pushed back by three hours. We still need a rental car for the first week. The endpoint sometimes takes ten seconds to answer. The hotel confirmed the booking for two nights."
+  },
+  {
+   "id": "r073",
+   "daysAgo": 37,
+   "time": "14:42",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Der neue Kollege fängt am Ersten an und braucht einen Laptop. Wir brauchen für das Projekt noch eine Freigabe von der Geschäftsführung."
+  },
+  {
+   "id": "r074",
+   "daysAgo": 36,
+   "time": "07:08",
+   "source": "iPhone",
+   "language": "en",
+   "text": "The transfer to the landlord has gone out. The tax return is due at the end of the month. The car loan runs for two more years."
+  },
+  {
+   "id": "r075",
+   "daysAgo": 33,
+   "time": "17:39",
+   "source": "mac",
+   "language": "en",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "linkedin.com",
+   "text": "We still need sign-off from management for the project. The endpoint sometimes takes ten seconds to answer. The database got very slow over the weekend. The tests pass locally but not in the pipeline."
+  },
+  {
+   "id": "r076",
+   "daysAgo": 112,
+   "time": "08:58",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Wir brauchen noch einen Mietwagen für die erste Woche. Die Rechnung für den letzten Monat ist noch offen. Denk bitte daran, den Müll rauszubringen."
+  },
+  {
+   "id": "r077",
+   "daysAgo": 27,
+   "time": "13:49",
+   "source": "mac",
+   "language": "en",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "The build has been failing on the server since this morning. We should update the dependencies before the release."
+  },
+  {
+   "id": "r078",
+   "daysAgo": 166,
+   "time": "14:38",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Bitte schaut euch den Pull Request von Sabine an. Die Datenbank ist am Wochenende sehr langsam geworden."
+  },
+  {
+   "id": "r079",
+   "daysAgo": 253,
+   "time": "08:20",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Das Paket liegt bei den Nachbarn im Erdgeschoss. Am Wochenende kommen meine Eltern zu Besuch. Der Handwerker kommt am Donnerstag zwischen neun und zwölf."
+  },
+  {
+   "id": "r080",
+   "daysAgo": 64,
+   "time": "14:38",
+   "source": "mac",
+   "language": "en",
+   "app": "Word",
+   "bundleID": "com.microsoft.Word",
+   "text": "Please review the contract before we sign it. The tests pass locally but not in the pipeline."
+  },
+  {
+   "id": "r081",
+   "daysAgo": 45,
+   "time": "13:43",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "linkedin.com",
+   "text": "Wir brauchen für das Projekt noch eine Freigabe von der Geschäftsführung. Das Budget für das nächste Quartal steht noch nicht fest. Die Präsentation für den Kunden ist fast fertig, es fehlen nur die Zahlen."
+  },
+  {
+   "id": "r082",
+   "daysAgo": 31,
+   "time": "14:35",
+   "source": "windows",
+   "language": "de",
+   "text": "Die Physiotherapie hat mir zehn Sitzungen verschrieben. Die Krankenkasse übernimmt die Kosten für die Brille nicht. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause."
+  },
+  {
+   "id": "r083",
+   "daysAgo": 23,
+   "time": "21:22",
+   "source": "iPhone",
+   "language": "en",
+   "text": "I booked a table for four. The parcel is with the neighbours on the ground floor."
+  },
+  {
+   "id": "r084",
+   "daysAgo": 19,
+   "time": "17:00",
+   "source": "mac",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Der Termin beim Hautarzt wurde auf Freitag verlegt. Die Impfung für die Reise muss vier Wochen vorher gemacht werden."
+  },
+  {
+   "id": "r085",
+   "daysAgo": 55,
+   "time": "12:12",
+   "source": "appleWatch",
+   "language": "de",
+   "text": "Der Zug nach Hamburg fährt um 7:42 von Gleis 5. Das Hotel hat die Buchung für zwei Nächte bestätigt. Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Am Montag fahren wir nach dem Frühstück los."
+  },
+  {
+   "id": "r086",
+   "daysAgo": 50,
+   "time": "15:01",
+   "source": "recorder",
+   "language": "en",
+   "title": "Team catch-up",
+   "turns": [
+    [
+     "Sophie",
+     "Can you pick up the kids from school today?"
+    ],
+    [
+     "Grace",
+     "The car loan runs for two more years."
+    ],
+    [
+     "Aisha",
+     "Memory usage climbs noticeably after an hour."
+    ],
+    [
+     "Sophie",
+     "The transfer to the landlord has gone out."
+    ],
+    [
+     "Grace",
+     "The transfer to the landlord has gone out."
+    ],
+    [
+     "Aisha",
+     "We should cancel the phone contract and switch."
+    ],
+    [
+     "Sophie",
+     "The transfer to the landlord has gone out."
+    ],
+    [
+     "Grace",
+     "The parcel is with the neighbours on the ground floor."
+    ],
+    [
+     "Aisha",
+     "We still need sign-off from management for the project."
+    ],
+    [
+     "Sophie",
+     "The new hire starts on the first and needs a laptop."
+    ]
+   ]
+  },
+  {
+   "id": "r087",
+   "daysAgo": 31,
+   "time": "11:57",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Bitte schaut euch den Pull Request von Miriam an. Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Der Build schlägt seit heute Morgen auf dem Server fehl. Ich habe den Fehler in der Anmeldung nachstellen können. Bitte schaut euch den Pull Request von Nina an."
+  },
+  {
+   "id": "r088",
+   "daysAgo": 86,
+   "time": "15:13",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Wir sollten den Handyvertrag kündigen und wechseln. Die Impfung für die Reise muss vier Wochen vorher gemacht werden. Das Hotel hat die Buchung für zwei Nächte bestätigt."
+  },
+  {
+   "id": "r089",
+   "daysAgo": 29,
+   "time": "13:33",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "docs.google.com",
+   "text": "Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht. Der Build schlägt seit heute Morgen auf dem Server fehl. Die Tests laufen lokal durch, nur in der Pipeline nicht."
+  },
+  {
+   "id": "r090",
+   "daysAgo": 74,
+   "time": "16:57",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Bitte tragt eure Stunden bis Mittwoch in die Zeiterfassung ein. Wir brauchen noch einen Mietwagen für die erste Woche. Das Hotel hat die Buchung für zwei Nächte bestätigt. Die Überweisung an den Vermieter ist raus."
+  },
+  {
+   "id": "r091",
+   "daysAgo": 91,
+   "time": "19:52",
+   "source": "mac",
+   "language": "de",
+   "text": "Wir müssen noch ein Geschenk für Holger besorgen. Am Wochenende kommen meine Eltern zu Besuch. Die Steuererklärung muss bis Ende Juli beim Finanzamt sein. Ich bin heute gegen sieben zu Hause. Wir müssen noch ein Geschenk für Farid besorgen."
+  },
+  {
+   "id": "r092",
+   "daysAgo": 110,
+   "time": "16:19",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Die Krankenkasse übernimmt die Kosten für die Brille nicht. Die Impfung für die Reise muss vier Wochen vorher gemacht werden. Die Physiotherapie hat mir zehn Sitzungen verschrieben. Bitte hol das Rezept in der Praxis ab."
+  },
+  {
+   "id": "r093",
+   "daysAgo": 46,
+   "time": "14:37",
+   "source": "iPad",
+   "language": "de",
+   "text": "Der Handwerker kommt am Donnerstag zwischen neun und zwölf. Der Termin beim Friseur ist am Montag um halb fünf. Ich bin heute gegen sieben zu Hause. Ich habe einen Tisch für vier Personen reserviert. Das Paket liegt bei den Nachbarn im Erdgeschoss."
+  },
+  {
+   "id": "r094",
+   "daysAgo": 23,
+   "time": "07:47",
+   "source": "mac",
+   "language": "de",
+   "app": "Chrome",
+   "bundleID": "com.google.Chrome",
+   "domain": "docs.google.com",
+   "text": "Der Zug nach Hamburg fährt um 7:42 von Gleis 5. Das Hotel hat die Buchung für zwei Nächte bestätigt."
+  },
+  {
+   "id": "r095",
+   "daysAgo": 185,
+   "time": "18:05",
+   "source": "iPhone",
+   "language": "en",
+   "text": "We should cancel the phone contract and switch. Please review the contract before we sign it. I'll send the notes from the last meeting around this afternoon."
+  },
+  {
+   "id": "r096",
+   "daysAgo": 90,
+   "time": "19:13",
+   "source": "appleWatch",
+   "language": "de",
+   "text": "Bitte hol das Rezept in der Praxis ab. Ich habe den Fehler in der Anmeldung nachstellen können. Bitte schaut euch den Pull Request von Anna an."
+  },
+  {
+   "id": "r097",
+   "daysAgo": 73,
+   "time": "18:26",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Die Tests laufen lokal durch, nur in der Pipeline nicht. Das Update für die App geht morgen in die Prüfung. Ich habe einen Tisch für vier Personen reserviert. Wir sollten die Abhängigkeiten vor dem Release aktualisieren."
+  },
+  {
+   "id": "r098",
+   "daysAgo": 28,
+   "time": "16:33",
+   "source": "mac",
+   "language": "de",
+   "app": "Word",
+   "bundleID": "com.microsoft.Word",
+   "text": "Die Steuererklärung muss bis Ende Juli beim Finanzamt sein. Ich bin heute gegen sieben zu Hause. Der Dauerauftrag für den Strom muss angepasst werden. Die Fähre legt nur dienstags und freitags ab."
+  },
+  {
+   "id": "r099",
+   "daysAgo": 26,
+   "time": "07:08",
+   "source": "mac",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Die Tests laufen lokal durch, nur in der Pipeline nicht. Das Update für die App geht morgen in die Prüfung."
+  },
+  {
+   "id": "r100",
+   "daysAgo": 94,
+   "time": "17:18",
+   "source": "mac",
+   "language": "de",
+   "text": "Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Die Fähre legt nur dienstags und freitags ab. Der Zug nach Hamburg fährt um 7:42 von Gleis 5. Der Flug wurde um drei Stunden nach hinten verschoben. Ich soll die Tabletten morgens und abends nehmen."
+  },
+  {
+   "id": "r101",
+   "daysAgo": 15,
+   "time": "17:55",
+   "source": "windows",
+   "language": "en",
+   "text": "We should cancel the phone contract and switch. The tax return is due at the end of the month. I filed the dentist's invoice with the insurance."
+  },
+  {
+   "id": "r102",
+   "daysAgo": 63,
+   "time": "08:26",
+   "source": "recorder",
+   "language": "de",
+   "title": "Kundentermin",
+   "turns": [
+    [
+     "Anna",
+     "Bitte schaut euch den Pull Request von Miriam an."
+    ],
+    [
+     "Tobias",
+     "Der Speicherverbrauch steigt nach einer Stunde deutlich an."
+    ],
+    [
+     "Farid",
+     "Der Termin beim Hautarzt wurde auf Donnerstag verlegt."
+    ],
+    [
+     "Anna",
+     "Ich bin heute gegen sieben zu Hause."
+    ],
+    [
+     "Tobias",
+     "Wir sollten den Handyvertrag kündigen und wechseln."
+    ],
+    [
+     "Farid",
+     "Die Abstimmung mit der Buchhaltung dauert länger als geplant."
+    ],
+    [
+     "Anna",
+     "Können wir das Thema im nächsten Meeting besprechen?"
+    ],
+    [
+     "Tobias",
+     "Das Protokoll vom letzten Termin schicke ich heute noch herum."
+    ],
+    [
+     "Farid",
+     "Das Backup vom Freitag ließ sich problemlos einspielen."
+    ],
+    [
+     "Anna",
+     "Bitte schaut euch den Pull Request von Lukas an."
+    ],
+    [
+     "Tobias",
+     "Bitte hol das Rezept in der Praxis ab."
+    ],
+    [
+     "Farid",
+     "Die Datenbank ist am Wochenende sehr langsam geworden."
+    ],
+    [
+     "Anna",
+     "Der Build schlägt seit heute Morgen auf dem Server fehl."
+    ],
+    [
+     "Tobias",
+     "Der Handwerker kommt am Donnerstag zwischen neun und zwölf."
+    ],
+    [
+     "Farid",
+     "Ich habe einen Tisch für vier Personen reserviert."
+    ],
+    [
+     "Anna",
+     "Ich bin heute gegen sieben zu Hause."
+    ],
+    [
+     "Tobias",
+     "Wir sollten die Abhängigkeiten vor dem Release aktualisieren."
+    ]
+   ]
+  },
+  {
+   "id": "r103",
+   "daysAgo": 57,
+   "time": "10:13",
+   "source": "keyboard",
+   "language": "en",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "I printed the travel documents and put them in the folder. We still need a rental car for the first week. The train to Manchester leaves at 7:42 from platform five. The hotel confirmed the booking for two nights."
+  },
+  {
+   "id": "r104",
+   "daysAgo": 40,
+   "time": "12:34",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "github.com",
+   "text": "Wir brauchen noch einen Mietwagen für die erste Woche. Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Das Hotel hat die Buchung für zwei Nächte bestätigt. Am Donnerstag fahren wir nach dem Frühstück los. Der Flug wurde um drei Stunden nach hinten verschoben."
+  },
+  {
+   "id": "r105",
+   "daysAgo": 93,
+   "time": "18:59",
+   "source": "windows",
+   "language": "de",
+   "text": "Die Wäsche hängt noch auf dem Balkon. Der Build schlägt seit heute Morgen auf dem Server fehl. Bitte schaut euch den Pull Request von Lukas an. Die Schnittstelle antwortet manchmal erst nach zehn Sekunden."
+  },
+  {
+   "id": "r106",
+   "daysAgo": 58,
+   "time": "18:00",
+   "source": "recorder",
+   "language": "en",
+   "title": "Client call",
+   "turns": [
+    [
+     "Aisha",
+     "The endpoint sometimes takes ten seconds to answer."
+    ],
+    [
+     "Elena",
+     "Can you pick up the kids from school today?"
+    ],
+    [
+     "Priya",
+     "The hotel confirmed the booking for two nights."
+    ],
+    [
+     "Aisha",
+     "Can you pick up the kids from school today?"
+    ],
+    [
+     "Elena",
+     "I printed the travel documents and put them in the folder."
+    ],
+    [
+     "Priya",
+     "I'll send the notes from the last meeting around this afternoon."
+    ],
+    [
+     "Aisha",
+     "Can we discuss this in the next meeting?"
+    ],
+    [
+     "Elena",
+     "The plumber is coming on Wednesday between nine and twelve."
+    ],
+    [
+     "Priya",
+     "The client is waiting for an answer on the timeline."
+    ],
+    [
+     "Aisha",
+     "The hotel confirmed the booking for two nights."
+    ],
+    [
+     "Elena",
+     "Last month's invoice is still open."
+    ],
+    [
+     "Priya",
+     "The budget for next quarter is not final yet."
+    ],
+    [
+     "Aisha",
+     "I booked a table for four."
+    ]
+   ]
+  },
+  {
+   "id": "r107",
+   "daysAgo": 236,
+   "time": "13:54",
+   "source": "mac",
+   "language": "en",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "The train to Manchester leaves at 7:42 from platform five. The plumber is coming on Friday between nine and twelve."
+  },
+  {
+   "id": "r108",
+   "daysAgo": 6,
+   "time": "09:22",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "docs.google.com",
+   "text": "Wir brauchen noch einen Mietwagen für die erste Woche. Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Am Wochenende kommen meine Eltern zu Besuch."
+  },
+  {
+   "id": "r109",
+   "daysAgo": 46,
+   "time": "17:02",
+   "source": "mac",
+   "language": "en",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Can you pick up the kids from school today? Last month's invoice is still open. I moved the meeting with Priya to Wednesday. The budget for next quarter is not final yet."
+  },
+  {
+   "id": "r110",
+   "daysAgo": 154,
+   "time": "21:07",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Die Schnittstelle antwortet manchmal erst nach zehn Sekunden. Der Build schlägt seit heute Morgen auf dem Server fehl. Bitte schaut euch den Pull Request von Ben an. Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Bitte schaut euch den Pull Request von Nina an."
+  },
+  {
+   "id": "r111",
+   "daysAgo": 175,
+   "time": "20:17",
+   "source": "iPhone",
+   "language": "en",
+   "text": "Please review the contract before we sign it. Last month's invoice is still open. The budget for next quarter is not final yet."
+  },
+  {
+   "id": "r112",
+   "daysAgo": 35,
+   "time": "16:33",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "linkedin.com",
+   "text": "Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Bitte hol das Rezept in der Praxis ab. Die Krankenkasse übernimmt die Kosten für die Brille nicht. Die Fähre legt nur dienstags und freitags ab."
+  },
+  {
+   "id": "r113",
+   "daysAgo": 4,
+   "time": "21:55",
+   "source": "mac",
+   "language": "de",
+   "text": "Die Steuererklärung muss bis Ende Juli beim Finanzamt sein. Die Überweisung an den Vermieter ist raus. Die Fähre legt nur dienstags und freitags ab."
+  },
+  {
+   "id": "r114",
+   "daysAgo": 303,
+   "time": "18:57",
+   "source": "recorder",
+   "language": "de",
+   "title": "Wochenplanung",
+   "turns": [
+    [
+     "Holger",
+     "Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht."
+    ],
+    [
+     "Heike",
+     "Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause."
+    ],
+    [
+     "Miriam",
+     "Die Steuererklärung muss bis Ende Juli beim Finanzamt sein."
+    ],
+    [
+     "Holger",
+     "Wir sollten die Abhängigkeiten vor dem Release aktualisieren."
+    ],
+    [
+     "Heike",
+     "Der Flug wurde um drei Stunden nach hinten verschoben."
+    ],
+    [
+     "Miriam",
+     "Der Build schlägt seit heute Morgen auf dem Server fehl."
+    ],
+    [
+     "Holger",
+     "Bitte hol das Rezept in der Praxis ab."
+    ],
+    [
+     "Heike",
+     "Bitte hol das Rezept in der Praxis ab."
+    ],
+    [
+     "Miriam",
+     "Denk bitte daran, den Müll rauszubringen."
+    ],
+    [
+     "Holger",
+     "Das Paket liegt bei den Nachbarn im Erdgeschoss."
+    ],
+    [
+     "Heike",
+     "Das Hotel hat die Buchung für zwei Nächte bestätigt."
+    ],
+    [
+     "Miriam",
+     "Die Überweisung an den Vermieter ist raus."
+    ],
+    [
+     "Holger",
+     "Bitte tragt eure Stunden bis Mittwoch in die Zeiterfassung ein."
+    ],
+    [
+     "Heike",
+     "Ich soll die Tabletten morgens und abends nehmen."
+    ],
+    [
+     "Miriam",
+     "Das Budget für das nächste Quartal steht noch nicht fest."
+    ],
+    [
+     "Holger",
+     "Die Abstimmung mit der Buchhaltung dauert länger als geplant."
+    ],
+    [
+     "Heike",
+     "Der Dauerauftrag für den Strom muss angepasst werden."
+    ],
+    [
+     "Miriam",
+     "Die Steuererklärung muss bis Ende Juli beim Finanzamt sein."
+    ],
+    [
+     "Holger",
+     "Wir sollten den Handyvertrag kündigen und wechseln."
+    ],
+    [
+     "Heike",
+     "Die Krankenkasse übernimmt die Kosten für die Brille nicht."
+    ],
+    [
+     "Miriam",
+     "Der Kunde wartet auf eine Rückmeldung zum Zeitplan."
+    ],
+    [
+     "Holger",
+     "Bitte schaut euch den Pull Request von Sabine an."
+    ]
+   ]
+  },
+  {
+   "id": "r115",
+   "daysAgo": 138,
+   "time": "19:21",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Die Wäsche hängt noch auf dem Balkon. Der Zug nach Hamburg fährt um 7:42 von Gleis 5."
+  },
+  {
+   "id": "r116",
+   "daysAgo": 21,
+   "time": "13:53",
+   "source": "mac",
+   "language": "en",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Can you pick up the kids from school today? The flight was pushed back by three hours. We still need sign-off from management for the project."
+  },
+  {
+   "id": "r117",
+   "daysAgo": 100,
+   "time": "07:21",
+   "source": "mac",
+   "language": "en",
+   "app": "Word",
+   "bundleID": "com.microsoft.Word",
+   "text": "The car loan runs for two more years. The tax return is due at the end of the month. We should cancel the phone contract and switch. I filed the dentist's invoice with the insurance."
+  },
+  {
+   "id": "r118",
+   "daysAgo": 40,
+   "time": "19:36",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "notion.so",
+   "text": "Bitte hol das Rezept in der Praxis ab. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause."
+  },
+  {
+   "id": "r119",
+   "daysAgo": 96,
+   "time": "09:51",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Ich soll die Tabletten morgens und abends nehmen. Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Die Physiotherapie hat mir zehn Sitzungen verschrieben. Die Krankenkasse übernimmt die Kosten für die Brille nicht."
+  },
+  {
+   "id": "r120",
+   "daysAgo": 99,
+   "time": "09:05",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Der neue Kollege fängt am Ersten an und braucht einen Laptop. Die Rechnung für den letzten Monat ist noch offen."
+  },
+  {
+   "id": "r121",
+   "daysAgo": 116,
+   "time": "19:38",
+   "source": "mac",
+   "language": "de",
+   "text": "Der Kredit für das Auto läuft noch zwei Jahre. Das Konto ist diesen Monat ziemlich leer. Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht."
+  },
+  {
+   "id": "r122",
+   "daysAgo": 94,
+   "time": "10:55",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Bitte hol das Rezept in der Praxis ab. Die Impfung für die Reise muss vier Wochen vorher gemacht werden. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause."
+  },
+  {
+   "id": "r123",
+   "daysAgo": 144,
+   "time": "07:20",
+   "source": "keyboard",
+   "language": "en",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "The new hire starts on the first and needs a laptop. We still need a rental car for the first week. Can we discuss this in the next meeting? The budget for next quarter is not final yet. Please log your hours by Friday."
+  },
+  {
+   "id": "r124",
+   "daysAgo": 54,
+   "time": "17:42",
+   "source": "recorder",
+   "language": "de",
+   "title": "Statusrunde",
+   "turns": [
+    [
+     "Heike",
+     "Die Fähre legt nur dienstags und freitags ab."
+    ],
+    [
+     "Anna",
+     "Bitte hol das Rezept in der Praxis ab."
+    ],
+    [
+     "Jonas",
+     "Die Fähre legt nur dienstags und freitags ab."
+    ],
+    [
+     "Heike",
+     "Der Kredit für das Auto läuft noch zwei Jahre."
+    ],
+    [
+     "Anna",
+     "Die Überweisung an den Vermieter ist raus."
+    ],
+    [
+     "Jonas",
+     "Der Termin beim Hautarzt wurde auf Donnerstag verlegt."
+    ],
+    [
+     "Heike",
+     "Die Abstimmung mit der Buchhaltung dauert länger als geplant."
+    ],
+    [
+     "Anna",
+     "Wir brauchen für das Projekt noch eine Freigabe von der Geschäftsführung."
+    ],
+    [
+     "Jonas",
+     "Der Flug wurde um drei Stunden nach hinten verschoben."
+    ]
+   ]
+  },
+  {
+   "id": "r125",
+   "daysAgo": 83,
+   "time": "10:39",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Die Fähre legt nur dienstags und freitags ab. Die Krankenkasse übernimmt die Kosten für die Brille nicht."
+  },
+  {
+   "id": "r126",
+   "daysAgo": 400,
+   "time": "08:52",
+   "source": "mac",
+   "language": "de",
+   "text": "Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Der Build schlägt seit heute Morgen auf dem Server fehl."
+  },
+  {
+   "id": "r127",
+   "daysAgo": 169,
+   "time": "14:35",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht. Bitte tragt eure Stunden bis Dienstag in die Zeiterfassung ein. Die Physiotherapie hat mir zehn Sitzungen verschrieben. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt."
+  },
+  {
+   "id": "r128",
+   "daysAgo": 30,
+   "time": "16:11",
+   "source": "mac",
+   "language": "de",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Der Termin beim Hautarzt wurde auf Mittwoch verlegt. Der Termin beim Hautarzt wurde auf Donnerstag verlegt. Der Termin beim Hautarzt wurde auf Dienstag verlegt."
+  },
+  {
+   "id": "r129",
+   "daysAgo": 36,
+   "time": "18:25",
+   "source": "mac",
+   "language": "en",
+   "app": "Chrome",
+   "bundleID": "com.google.Chrome",
+   "domain": "notion.so",
+   "text": "Last month's invoice is still open. I moved the meeting with Chloe to Wednesday. Can we discuss this in the next meeting? The client is waiting for an answer on the timeline. I'll send the notes from the last meeting around this afternoon."
+  },
+  {
+   "id": "r130",
+   "daysAgo": 146,
+   "time": "14:07",
+   "source": "iPad",
+   "language": "de",
+   "text": "Wir sollten den Handyvertrag kündigen und wechseln. Bitte tragt eure Stunden bis Dienstag in die Zeiterfassung ein. Die Steuererklärung muss bis Ende Juli beim Finanzamt sein. Die Überweisung an den Vermieter ist raus. Der Flug wurde um drei Stunden nach hinten verschoben."
+  },
+  {
+   "id": "r131",
+   "daysAgo": 22,
+   "time": "17:49",
+   "source": "recorder",
+   "language": "de",
+   "title": "Statusrunde",
+   "turns": [
+    [
+     "Ben",
+     "Der Kredit für das Auto läuft noch zwei Jahre."
+    ],
+    [
+     "Sabine",
+     "Die Krankenkasse übernimmt die Kosten für die Brille nicht."
+    ],
+    [
+     "Holger",
+     "Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht."
+    ],
+    [
+     "Ben",
+     "Wir müssen noch ein Geschenk für Ben besorgen."
+    ],
+    [
+     "Sabine",
+     "Bitte hol das Rezept in der Praxis ab."
+    ],
+    [
+     "Holger",
+     "Die Tests laufen lokal durch, nur in der Pipeline nicht."
+    ],
+    [
+     "Ben",
+     "Der Kunde wartet auf eine Rückmeldung zum Zeitplan."
+    ],
+    [
+     "Sabine",
+     "Wir brauchen noch einen Mietwagen für die erste Woche."
+    ]
+   ]
+  },
+  {
+   "id": "r132",
+   "daysAgo": 28,
+   "time": "08:49",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "github.com",
+   "text": "Der Dauerauftrag für den Strom muss angepasst werden. Die Wäsche hängt noch auf dem Balkon. Der Handwerker kommt am Mittwoch zwischen neun und zwölf."
+  },
+  {
+   "id": "r133",
+   "daysAgo": 23,
+   "time": "14:27",
+   "source": "recorder",
+   "language": "de",
+   "title": "Abstimmung Projekt",
+   "turns": [
+    [
+     "Carla",
+     "Bitte tragt eure Stunden bis Donnerstag in die Zeiterfassung ein."
+    ],
+    [
+     "Holger",
+     "Das Protokoll vom letzten Termin schicke ich heute noch herum."
+    ],
+    [
+     "Petra",
+     "Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt."
+    ],
+    [
+     "Carla",
+     "Das Konto ist diesen Monat ziemlich leer."
+    ],
+    [
+     "Holger",
+     "Bitte hol das Rezept in der Praxis ab."
+    ],
+    [
+     "Petra",
+     "Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause."
+    ],
+    [
+     "Carla",
+     "Am Dienstag fahren wir nach dem Frühstück los."
+    ],
+    [
+     "Holger",
+     "Der Build schlägt seit heute Morgen auf dem Server fehl."
+    ],
+    [
+     "Petra",
+     "Bitte hol das Rezept in der Praxis ab."
+    ],
+    [
+     "Carla",
+     "Die Überweisung an den Vermieter ist raus."
+    ],
+    [
+     "Holger",
+     "Der Handwerker kommt am Mittwoch zwischen neun und zwölf."
+    ],
+    [
+     "Petra",
+     "Die Überweisung an den Vermieter ist raus."
+    ],
+    [
+     "Carla",
+     "Kannst du die Kinder heute von der Schule abholen?"
+    ]
+   ]
+  },
+  {
+   "id": "r134",
+   "daysAgo": 143,
+   "time": "19:05",
+   "source": "mac",
+   "language": "de",
+   "text": "Der Handwerker kommt am Donnerstag zwischen neun und zwölf. Der Termin beim Friseur ist am Freitag um halb fünf. Kannst du die Kinder heute von der Schule abholen? Der Termin beim Friseur ist am Dienstag um halb fünf."
+  },
+  {
+   "id": "r135",
+   "daysAgo": 107,
+   "time": "14:25",
+   "source": "mac",
+   "language": "de",
+   "text": "Denk bitte daran, den Müll rauszubringen. Der Zug nach Hamburg fährt um 7:42 von Gleis 5. Der Handwerker kommt am Donnerstag zwischen neun und zwölf. Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Ich habe einen Tisch für vier Personen reserviert."
+  },
+  {
+   "id": "r136",
+   "daysAgo": 10,
+   "time": "09:44",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Der Zug nach Hamburg fährt um 7:42 von Gleis 5. Wir brauchen noch einen Mietwagen für die erste Woche. Ich habe den Termin mit Farid auf Montag verschoben."
+  },
+  {
+   "id": "r137",
+   "daysAgo": 85,
+   "time": "16:56",
+   "source": "mac",
+   "language": "de",
+   "text": "Der Dauerauftrag für den Strom muss angepasst werden. Die Tests laufen lokal durch, nur in der Pipeline nicht. Die Überweisung an den Vermieter ist raus."
+  },
+  {
+   "id": "r138",
+   "daysAgo": 73,
+   "time": "12:21",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Der Handwerker kommt am Dienstag zwischen neun und zwölf. Denk bitte daran, den Müll rauszubringen. Das Paket liegt bei den Nachbarn im Erdgeschoss. Wir müssen noch ein Geschenk für Tobias besorgen. Kannst du die Kinder heute von der Schule abholen?"
+  },
+  {
+   "id": "r139",
+   "daysAgo": 36,
+   "time": "19:21",
+   "source": "mac",
+   "language": "de",
+   "text": "Die Physiotherapie hat mir zehn Sitzungen verschrieben. Bitte hol das Rezept in der Praxis ab. Kannst du die Kinder heute von der Schule abholen? Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Ich soll die Tabletten morgens und abends nehmen."
+  },
+  {
+   "id": "r140",
+   "daysAgo": 60,
+   "time": "19:16",
+   "source": "windows",
+   "language": "en",
+   "text": "Please review the contract before we sign it. We should cancel the phone contract and switch."
+  },
+  {
+   "id": "r141",
+   "daysAgo": 43,
+   "time": "13:57",
+   "source": "mac",
+   "language": "en",
+   "text": "The build has been failing on the server since this morning. I managed to reproduce the bug in the sign-in flow."
+  },
+  {
+   "id": "r142",
+   "daysAgo": 33,
+   "time": "13:26",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Wir müssen noch ein Geschenk für Farid besorgen. Der Handwerker kommt am Montag zwischen neun und zwölf. Kannst du die Kinder heute von der Schule abholen? Das Paket liegt bei den Nachbarn im Erdgeschoss."
+  },
+  {
+   "id": "r143",
+   "daysAgo": 41,
+   "time": "20:20",
+   "source": "mac",
+   "language": "de",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "Am Mittwoch fahren wir nach dem Frühstück los. Wir brauchen noch einen Mietwagen für die erste Woche. Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt."
+  },
+  {
+   "id": "r144",
+   "daysAgo": 54,
+   "time": "18:38",
+   "source": "windows",
+   "language": "de",
+   "text": "Ich habe einen Tisch für vier Personen reserviert. Am Wochenende kommen meine Eltern zu Besuch. Wir müssen noch ein Geschenk für Nina besorgen."
+  },
+  {
+   "id": "r145",
+   "daysAgo": 8,
+   "time": "13:52",
+   "source": "iPad",
+   "language": "en",
+   "text": "The flight was pushed back by three hours. I printed the travel documents and put them in the folder. The hotel confirmed the booking for two nights. The endpoint sometimes takes ten seconds to answer."
+  },
+  {
+   "id": "r146",
+   "daysAgo": 37,
+   "time": "19:02",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Der Termin beim Hautarzt wurde auf Montag verlegt. Die Impfung für die Reise muss vier Wochen vorher gemacht werden."
+  },
+  {
+   "id": "r147",
+   "daysAgo": 57,
+   "time": "20:33",
+   "source": "iPhone",
+   "language": "en",
+   "text": "We still need a rental car for the first week. We still need a present for Aisha. I printed the travel documents and put them in the folder. The car loan runs for two more years. Please take a look at the pull request from Marcus."
+  },
+  {
+   "id": "r148",
+   "daysAgo": 17,
+   "time": "20:10",
+   "source": "recorder",
+   "language": "de",
+   "title": "Wochenplanung",
+   "turns": [
+    [
+     "Petra",
+     "Das Hotel hat die Buchung für zwei Nächte bestätigt."
+    ],
+    [
+     "Sabine",
+     "Die Abstimmung mit der Buchhaltung dauert länger als geplant."
+    ],
+    [
+     "Ben",
+     "Der Kredit für das Auto läuft noch zwei Jahre."
+    ],
+    [
+     "Petra",
+     "Die Überweisung an den Vermieter ist raus."
+    ],
+    [
+     "Sabine",
+     "Das Konto ist diesen Monat ziemlich leer."
+    ],
+    [
+     "Ben",
+     "Denk bitte daran, den Müll rauszubringen."
+    ],
+    [
+     "Petra",
+     "Der Handwerker kommt am Dienstag zwischen neun und zwölf."
+    ],
+    [
+     "Sabine",
+     "Denk bitte daran, den Müll rauszubringen."
+    ],
+    [
+     "Ben",
+     "Der neue Kollege fängt am Ersten an und braucht einen Laptop."
+    ],
+    [
+     "Petra",
+     "Wir brauchen noch einen Mietwagen für die erste Woche."
+    ],
+    [
+     "Sabine",
+     "Ich bin heute gegen sieben zu Hause."
+    ],
+    [
+     "Ben",
+     "Das Konto ist diesen Monat ziemlich leer."
+    ],
+    [
+     "Petra",
+     "Der Speicherverbrauch steigt nach einer Stunde deutlich an."
+    ],
+    [
+     "Sabine",
+     "Die Physiotherapie hat mir zehn Sitzungen verschrieben."
+    ],
+    [
+     "Ben",
+     "Ich soll die Tabletten morgens und abends nehmen."
+    ],
+    [
+     "Petra",
+     "Der Speicherverbrauch steigt nach einer Stunde deutlich an."
+    ],
+    [
+     "Sabine",
+     "Der Kunde wartet auf eine Rückmeldung zum Zeitplan."
+    ]
+   ]
+  },
+  {
+   "id": "r149",
+   "daysAgo": 87,
+   "time": "13:17",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Das Paket liegt bei den Nachbarn im Erdgeschoss. Der Termin beim Friseur ist am Mittwoch um halb fünf. Kannst du die Kinder heute von der Schule abholen?"
+  },
+  {
+   "id": "r150",
+   "daysAgo": 85,
+   "time": "15:27",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Die Impfung für die Reise muss vier Wochen vorher gemacht werden. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Die Krankenkasse übernimmt die Kosten für die Brille nicht. Ich soll die Tabletten morgens und abends nehmen. Der Handwerker kommt am Dienstag zwischen neun und zwölf."
+  },
+  {
+   "id": "r151",
+   "daysAgo": 27,
+   "time": "15:54",
+   "source": "appleWatch",
+   "language": "de",
+   "text": "Die Rechnung für den letzten Monat ist noch offen. Die Impfung für die Reise muss vier Wochen vorher gemacht werden. Können wir das Thema im nächsten Meeting besprechen? Das Budget für das nächste Quartal steht noch nicht fest. Der Kunde wartet auf eine Rückmeldung zum Zeitplan."
+  },
+  {
+   "id": "r152",
+   "daysAgo": 23,
+   "time": "18:17",
+   "source": "mac",
+   "language": "en",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "I filed the dentist's invoice with the insurance. The hotel confirmed the booking for two nights. The endpoint sometimes takes ten seconds to answer."
+  },
+  {
+   "id": "r153",
+   "daysAgo": 49,
+   "time": "19:55",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht. Der Kredit für das Auto läuft noch zwei Jahre."
+  },
+  {
+   "id": "r154",
+   "daysAgo": 131,
+   "time": "19:50",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Der Dauerauftrag für den Strom muss angepasst werden. Die Steuererklärung muss bis Ende Juli beim Finanzamt sein."
+  },
+  {
+   "id": "r155",
+   "daysAgo": 24,
+   "time": "18:05",
+   "source": "mac",
+   "language": "en",
+   "app": "Chrome",
+   "bundleID": "com.google.Chrome",
+   "domain": "linkedin.com",
+   "text": "Can you pick up the kids from school today? The tax return is due at the end of the month. I filed the dentist's invoice with the insurance. The slides for the client are almost done, only the numbers are missing. We should cancel the phone contract and switch."
+  },
+  {
+   "id": "r156",
+   "daysAgo": 5,
+   "time": "21:03",
+   "source": "mac",
+   "language": "en",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "I printed the travel documents and put them in the folder. Please remember to take the bins out. The hotel confirmed the booking for two nights. The flight was pushed back by three hours. The new hire starts on the first and needs a laptop."
+  },
+  {
+   "id": "r157",
+   "daysAgo": 24,
+   "time": "20:33",
+   "source": "iPad",
+   "language": "de",
+   "text": "Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Wir müssen noch ein Geschenk für Carla besorgen. Das Paket liegt bei den Nachbarn im Erdgeschoss. Ich habe den Fehler in der Anmeldung nachstellen können."
+  },
+  {
+   "id": "r158",
+   "daysAgo": 49,
+   "time": "15:35",
+   "source": "iPad",
+   "language": "de",
+   "text": "Wir sollten den Handyvertrag kündigen und wechseln. Das Konto ist diesen Monat ziemlich leer. Der Kredit für das Auto läuft noch zwei Jahre. Bitte hol das Rezept in der Praxis ab."
+  },
+  {
+   "id": "r159",
+   "daysAgo": 24,
+   "time": "19:56",
+   "source": "recorder",
+   "language": "en",
+   "title": "Weekly sync",
+   "turns": [
+    [
+     "Sophie",
+     "My parents are visiting this weekend."
+    ],
+    [
+     "Aisha",
+     "The app update goes to review tomorrow."
+    ],
+    [
+     "Liam",
+     "The car loan runs for two more years."
+    ],
+    [
+     "Sophie",
+     "We still need a present for Priya."
+    ],
+    [
+     "Aisha",
+     "I filed the dentist's invoice with the insurance."
+    ],
+    [
+     "Liam",
+     "We should update the dependencies before the release."
+    ],
+    [
+     "Sophie",
+     "My parents are visiting this weekend."
+    ],
+    [
+     "Aisha",
+     "The client is waiting for an answer on the timeline."
+    ],
+    [
+     "Liam",
+     "I booked a table for four."
+    ],
+    [
+     "Sophie",
+     "The parcel is with the neighbours on the ground floor."
+    ],
+    [
+     "Aisha",
+     "Last month's invoice is still open."
+    ],
+    [
+     "Liam",
+     "The database got very slow over the weekend."
+    ],
+    [
+     "Sophie",
+     "The train to Manchester leaves at 7:42 from platform five."
+    ],
+    [
+     "Aisha",
+     "The build has been failing on the server since this morning."
+    ],
+    [
+     "Liam",
+     "The flight was pushed back by three hours."
+    ],
+    [
+     "Sophie",
+     "We still need a rental car for the first week."
+    ],
+    [
+     "Aisha",
+     "Memory usage climbs noticeably after an hour."
+    ],
+    [
+     "Liam",
+     "The flight was pushed back by three hours."
+    ],
+    [
+     "Sophie",
+     "I managed to reproduce the bug in the sign-in flow."
+    ],
+    [
+     "Aisha",
+     "I moved the meeting with Marcus to Thursday."
+    ],
+    [
+     "Liam",
+     "I'll send the notes from the last meeting around this afternoon."
+    ],
+    [
+     "Sophie",
+     "I printed the travel documents and put them in the folder."
+    ]
+   ]
+  },
+  {
+   "id": "r160",
+   "daysAgo": 40,
+   "time": "17:28",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Die Fähre legt nur dienstags und freitags ab. Die Impfung für die Reise muss vier Wochen vorher gemacht werden. Wir brauchen noch einen Mietwagen für die erste Woche. Der Flug wurde um drei Stunden nach hinten verschoben. Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt."
+  },
+  {
+   "id": "r161",
+   "daysAgo": 55,
+   "time": "12:09",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Das Budget für das nächste Quartal steht noch nicht fest. Am Dienstag fahren wir nach dem Frühstück los. Der Zug nach Hamburg fährt um 7:42 von Gleis 5."
+  },
+  {
+   "id": "r162",
+   "daysAgo": 9,
+   "time": "07:38",
+   "source": "appleWatch",
+   "language": "de",
+   "text": "Das Konto ist diesen Monat ziemlich leer. Der Kredit für das Auto läuft noch zwei Jahre."
+  },
+  {
+   "id": "r163",
+   "daysAgo": 240,
+   "time": "17:54",
+   "source": "mac",
+   "language": "en",
+   "text": "I filed the dentist's invoice with the insurance. The tax return is due at the end of the month."
+  },
+  {
+   "id": "r164",
+   "daysAgo": 14,
+   "time": "17:19",
+   "source": "mac",
+   "language": "en",
+   "text": "The train to Manchester leaves at 7:42 from platform five. I printed the travel documents and put them in the folder. Please take a look at the pull request from Elena. We still need a rental car for the first week."
+  },
+  {
+   "id": "r165",
+   "daysAgo": 262,
+   "time": "18:49",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Wir sollten den Handyvertrag kündigen und wechseln. Die Wäsche hängt noch auf dem Balkon. Das Paket liegt bei den Nachbarn im Erdgeschoss. Das Konto ist diesen Monat ziemlich leer."
+  },
+  {
+   "id": "r166",
+   "daysAgo": 14,
+   "time": "09:29",
+   "source": "mac",
+   "language": "en",
+   "app": "Word",
+   "bundleID": "com.microsoft.Word",
+   "text": "The hotel confirmed the booking for two nights. The slides for the client are almost done, only the numbers are missing."
+  },
+  {
+   "id": "r167",
+   "daysAgo": 14,
+   "time": "17:38",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Ich habe einen Tisch für vier Personen reserviert. Wir sollten die Abhängigkeiten vor dem Release aktualisieren. Das Update für die App geht morgen in die Prüfung."
+  },
+  {
+   "id": "r168",
+   "daysAgo": 24,
+   "time": "12:44",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Bitte prüft den Vertrag, bevor wir ihn unterschreiben. Bitte tragt eure Stunden bis Freitag in die Zeiterfassung ein."
+  },
+  {
+   "id": "r169",
+   "daysAgo": 33,
+   "time": "17:21",
+   "source": "mac",
+   "language": "de",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "Das Budget für das nächste Quartal steht noch nicht fest. Die Präsentation für den Kunden ist fast fertig, es fehlen nur die Zahlen."
+  },
+  {
+   "id": "r170",
+   "daysAgo": 64,
+   "time": "12:00",
+   "source": "mac",
+   "language": "de",
+   "text": "Bitte schaut euch den Pull Request von Miriam an. Bitte schaut euch den Pull Request von Lukas an."
+  },
+  {
+   "id": "r171",
+   "daysAgo": 136,
+   "time": "08:11",
+   "source": "mac",
+   "language": "en",
+   "app": "Word",
+   "bundleID": "com.microsoft.Word",
+   "text": "We should update the dependencies before the release. The tests pass locally but not in the pipeline. I managed to reproduce the bug in the sign-in flow. The database got very slow over the weekend."
+  },
+  {
+   "id": "r172",
+   "daysAgo": 23,
+   "time": "17:16",
+   "source": "mac",
+   "language": "en",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "The endpoint sometimes takes ten seconds to answer. The database got very slow over the weekend."
+  },
+  {
+   "id": "r173",
+   "daysAgo": 57,
+   "time": "20:06",
+   "source": "keyboard",
+   "language": "de",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Bitte hol das Rezept in der Praxis ab. Die Physiotherapie hat mir zehn Sitzungen verschrieben. Ich soll die Tabletten morgens und abends nehmen."
+  },
+  {
+   "id": "r174",
+   "daysAgo": 66,
+   "time": "07:38",
+   "source": "iPhone",
+   "language": "de",
+   "text": "Die Präsentation für den Kunden ist fast fertig, es fehlen nur die Zahlen. Der neue Kollege fängt am Ersten an und braucht einen Laptop. Das Konto ist diesen Monat ziemlich leer. Das Budget für das nächste Quartal steht noch nicht fest. Das Protokoll vom letzten Termin schicke ich heute noch herum."
+  },
+  {
+   "id": "r175",
+   "daysAgo": 30,
+   "time": "16:00",
+   "source": "mac",
+   "language": "en",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "The car loan runs for two more years. The app update goes to review tomorrow."
+  },
+  {
+   "id": "r176",
+   "daysAgo": 1,
+   "time": "14:52",
+   "source": "windows",
+   "language": "de",
+   "text": "Der Flug wurde um drei Stunden nach hinten verschoben. Am Mittwoch fahren wir nach dem Frühstück los."
+  },
+  {
+   "id": "r177",
+   "daysAgo": 90,
+   "time": "11:28",
+   "source": "mac",
+   "language": "de",
+   "app": "Chrome",
+   "bundleID": "com.google.Chrome",
+   "domain": "github.com",
+   "text": "Die Physiotherapie hat mir zehn Sitzungen verschrieben. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Bitte hol das Rezept in der Praxis ab. Die Krankenkasse übernimmt die Kosten für die Brille nicht."
+  },
+  {
+   "id": "r178",
+   "daysAgo": 104,
+   "time": "21:20",
+   "source": "mac",
+   "language": "de",
+   "text": "Ich soll die Tabletten morgens und abends nehmen. Die Krankenkasse übernimmt die Kosten für die Brille nicht. Die Physiotherapie hat mir zehn Sitzungen verschrieben."
+  },
+  {
+   "id": "r179",
+   "daysAgo": 8,
+   "time": "16:32",
+   "source": "iPhone",
+   "language": "en",
+   "text": "The train to Manchester leaves at 7:42 from platform five. The hotel confirmed the booking for two nights. The client is waiting for an answer on the timeline. I filed the dentist's invoice with the insurance."
+  },
+  {
+   "id": "r180",
+   "daysAgo": 15,
+   "time": "16:12",
+   "source": "recorder",
+   "language": "de",
+   "title": "Abstimmung Projekt",
+   "turns": [
+    [
+     "Miriam",
+     "Wir brauchen für das Projekt noch eine Freigabe von der Geschäftsführung."
+    ],
+    [
+     "Petra",
+     "Wir brauchen noch einen Mietwagen für die erste Woche."
+    ],
+    [
+     "Farid",
+     "Die Physiotherapie hat mir zehn Sitzungen verschrieben."
+    ],
+    [
+     "Miriam",
+     "Die Impfung für die Reise muss vier Wochen vorher gemacht werden."
+    ],
+    [
+     "Petra",
+     "Die Präsentation für den Kunden ist fast fertig, es fehlen nur die Zahlen."
+    ],
+    [
+     "Farid",
+     "Der Kredit für das Auto läuft noch zwei Jahre."
+    ],
+    [
+     "Miriam",
+     "Das Hotel hat die Buchung für zwei Nächte bestätigt."
+    ],
+    [
+     "Petra",
+     "Der Kunde wartet auf eine Rückmeldung zum Zeitplan."
+    ],
+    [
+     "Farid",
+     "Die Datenbank ist am Wochenende sehr langsam geworden."
+    ],
+    [
+     "Miriam",
+     "Wir brauchen noch einen Mietwagen für die erste Woche."
+    ],
+    [
+     "Petra",
+     "Die Schnittstelle antwortet manchmal erst nach zehn Sekunden."
+    ],
+    [
+     "Farid",
+     "Die Steuererklärung muss bis Ende Juli beim Finanzamt sein."
+    ],
+    [
+     "Miriam",
+     "Die Physiotherapie hat mir zehn Sitzungen verschrieben."
+    ],
+    [
+     "Petra",
+     "Denk bitte daran, den Müll rauszubringen."
+    ],
+    [
+     "Farid",
+     "Ich habe den Fehler in der Anmeldung nachstellen können."
+    ]
+   ]
+  },
+  {
+   "id": "r181",
+   "daysAgo": 25,
+   "time": "16:13",
+   "source": "iPhone",
+   "language": "en",
+   "text": "The tax return is due at the end of the month. The car loan runs for two more years. The budget for next quarter is not final yet."
+  },
+  {
+   "id": "r182",
+   "daysAgo": 33,
+   "time": "10:40",
+   "source": "mac",
+   "language": "en",
+   "app": "Slack",
+   "bundleID": "com.tinyspeck.slackmacgap",
+   "text": "We still need a rental car for the first week. The tax return is due at the end of the month. The endpoint sometimes takes ten seconds to answer. I filed the dentist's invoice with the insurance."
+  },
+  {
+   "id": "r183",
+   "daysAgo": 19,
+   "time": "10:27",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Wir brauchen für das Projekt noch eine Freigabe von der Geschäftsführung. Die Abstimmung mit der Buchhaltung dauert länger als geplant. Bitte prüft den Vertrag, bevor wir ihn unterschreiben. Der neue Kollege fängt am Ersten an und braucht einen Laptop."
+  },
+  {
+   "id": "r184",
+   "daysAgo": 84,
+   "time": "18:16",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "notion.so",
+   "text": "Die Impfung für die Reise muss vier Wochen vorher gemacht werden. Die Physiotherapie hat mir zehn Sitzungen verschrieben. Ich soll die Tabletten morgens und abends nehmen. Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Denk bitte daran, den Müll rauszubringen."
+  },
+  {
+   "id": "r185",
+   "daysAgo": 1,
+   "time": "14:16",
+   "source": "mac",
+   "language": "de",
+   "text": "Ich habe seit gestern Kopfschmerzen und bleibe heute zu Hause. Die Krankenkasse übernimmt die Kosten für die Brille nicht. Bitte hol das Rezept in der Praxis ab."
+  },
+  {
+   "id": "r186",
+   "daysAgo": 10,
+   "time": "20:23",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "github.com",
+   "text": "Das Paket liegt bei den Nachbarn im Erdgeschoss. Die Abstimmung mit der Buchhaltung dauert länger als geplant. Der Build schlägt seit heute Morgen auf dem Server fehl. Der Termin beim Friseur ist am Montag um halb fünf."
+  },
+  {
+   "id": "r187",
+   "daysAgo": 27,
+   "time": "09:50",
+   "source": "iPhone",
+   "language": "en",
+   "text": "The slides for the client are almost done, only the numbers are missing. We still need sign-off from management for the project."
+  },
+  {
+   "id": "r188",
+   "daysAgo": 11,
+   "time": "12:42",
+   "source": "mac",
+   "language": "de",
+   "text": "Ich habe einen Tisch für vier Personen reserviert. Der Termin beim Friseur ist am Dienstag um halb fünf. Am Wochenende kommen meine Eltern zu Besuch. Wir müssen noch ein Geschenk für Farid besorgen."
+  },
+  {
+   "id": "r189",
+   "daysAgo": 40,
+   "time": "20:02",
+   "source": "mac",
+   "language": "de",
+   "app": "Notes",
+   "bundleID": "com.apple.Notes",
+   "text": "Der Flug wurde um drei Stunden nach hinten verschoben. Am Mittwoch fahren wir nach dem Frühstück los. Das Hotel hat die Buchung für zwei Nächte bestätigt. Denk bitte daran, den Müll rauszubringen. Wir brauchen noch einen Mietwagen für die erste Woche."
+  },
+  {
+   "id": "r190",
+   "daysAgo": 22,
+   "time": "18:31",
+   "source": "keyboard",
+   "language": "en",
+   "app": "WhatsApp",
+   "bundleID": "net.whatsapp.WhatsApp",
+   "text": "The plumber is coming on Friday between nine and twelve. Can we discuss this in the next meeting? I'll be home around seven tonight. My parents are visiting this weekend. Can you pick up the kids from school today?"
+  },
+  {
+   "id": "r191",
+   "daysAgo": 135,
+   "time": "20:58",
+   "source": "mac",
+   "language": "en",
+   "app": "Mail",
+   "bundleID": "com.apple.mail",
+   "text": "The build has been failing on the server since this morning. The app update goes to review tomorrow. Memory usage climbs noticeably after an hour. The database got very slow over the weekend. The tests pass locally but not in the pipeline."
+  },
+  {
+   "id": "r192",
+   "daysAgo": 94,
+   "time": "13:43",
+   "source": "recorder",
+   "language": "en",
+   "title": "Team catch-up",
+   "turns": [
+    [
+     "Chloe",
+     "The tests pass locally but not in the pipeline."
+    ],
+    [
+     "Daniel",
+     "We still need a present for Sophie."
+    ],
+    [
+     "Tom",
+     "We still need a present for Elena."
+    ],
+    [
+     "Chloe",
+     "The flight was pushed back by three hours."
+    ],
+    [
+     "Daniel",
+     "The flight was pushed back by three hours."
+    ],
+    [
+     "Tom",
+     "I printed the travel documents and put them in the folder."
+    ],
+    [
+     "Chloe",
+     "Memory usage climbs noticeably after an hour."
+    ],
+    [
+     "Daniel",
+     "I moved the meeting with Elena to Friday."
+    ],
+    [
+     "Tom",
+     "The tests pass locally but not in the pipeline."
+    ],
+    [
+     "Chloe",
+     "We still need a present for Tom."
+    ],
+    [
+     "Daniel",
+     "I moved the meeting with Liam to Wednesday."
+    ],
+    [
+     "Tom",
+     "The tax return is due at the end of the month."
+    ],
+    [
+     "Chloe",
+     "I'll be home around seven tonight."
+    ],
+    [
+     "Daniel",
+     "We should cancel the phone contract and switch."
+    ],
+    [
+     "Tom",
+     "My parents are visiting this weekend."
+    ]
+   ]
+  },
+  {
+   "id": "r193",
+   "daysAgo": 24,
+   "time": "10:39",
+   "source": "mac",
+   "language": "de",
+   "app": "Safari",
+   "bundleID": "com.apple.Safari",
+   "domain": "github.com",
+   "text": "Das Backup vom Dienstag ließ sich problemlos einspielen. Die Tests laufen lokal durch, nur in der Pipeline nicht. Das Backup vom Donnerstag ließ sich problemlos einspielen. Die Datenbank ist am Wochenende sehr langsam geworden."
+  },
+  {
+   "id": "r194",
+   "daysAgo": 241,
+   "time": "21:07",
+   "source": "recorder",
+   "language": "de",
+   "title": "Wochenplanung",
+   "turns": [
+    [
+     "Nina",
+     "Das Backup vom Dienstag ließ sich problemlos einspielen."
+    ],
+    [
+     "Sabine",
+     "Die Schnittstelle antwortet manchmal erst nach zehn Sekunden."
+    ],
+    [
+     "Heike",
+     "Der Flug wurde um drei Stunden nach hinten verschoben."
+    ],
+    [
+     "Nina",
+     "Die Rechnung für den letzten Monat ist noch offen."
+    ],
+    [
+     "Sabine",
+     "Am Wochenende kommen meine Eltern zu Besuch."
+    ],
+    [
+     "Heike",
+     "Das Protokoll vom letzten Termin schicke ich heute noch herum."
+    ],
+    [
+     "Nina",
+     "Der Handwerker kommt am Mittwoch zwischen neun und zwölf."
+    ],
+    [
+     "Sabine",
+     "Ich habe die Reiseunterlagen ausgedruckt und in die Mappe gelegt."
+    ],
+    [
+     "Heike",
+     "Wir müssen noch ein Geschenk für Farid besorgen."
+    ],
+    [
+     "Nina",
+     "Ich soll die Tabletten morgens und abends nehmen."
+    ],
+    [
+     "Sabine",
+     "Die Physiotherapie hat mir zehn Sitzungen verschrieben."
+    ],
+    [
+     "Heike",
+     "Wir brauchen noch einen Mietwagen für die erste Woche."
+    ],
+    [
+     "Nina",
+     "Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht."
+    ],
+    [
+     "Sabine",
+     "Wir müssen noch ein Geschenk für Petra besorgen."
+    ],
+    [
+     "Heike",
+     "Der Flug wurde um drei Stunden nach hinten verschoben."
+    ],
+    [
+     "Nina",
+     "Ich habe die Rechnung vom Zahnarzt bei der Versicherung eingereicht."
+    ],
+    [
+     "Sabine",
+     "Der Handwerker kommt am Freitag zwischen neun und zwölf."
+    ],
+    [
+     "Heike",
+     "Der Build schlägt seit heute Morgen auf dem Server fehl."
+    ],
+    [
+     "Nina",
+     "Das Konto ist diesen Monat ziemlich leer."
+    ],
+    [
+     "Sabine",
+     "Der neue Kollege fängt am Ersten an und braucht einen Laptop."
+    ],
+    [
+     "Heike",
+     "Die Krankenkasse übernimmt die Kosten für die Brille nicht."
+    ]
+   ]
+  },
+  {
+   "id": "r195",
+   "daysAgo": 51,
+   "time": "16:10",
+   "source": "mac",
+   "language": "en",
+   "text": "Can we discuss this in the next meeting? The slides for the client are almost done, only the numbers are missing."
+  },
+  {
+   "id": "r196",
+   "daysAgo": 69,
+   "time": "15:41",
+   "source": "appleWatch",
+   "language": "de",
+   "text": "Bitte prüft den Vertrag, bevor wir ihn unterschreiben. Bitte tragt eure Stunden bis Mittwoch in die Zeiterfassung ein."
+  },
+  {
+   "id": "r197",
+   "daysAgo": 125,
+   "time": "15:45",
+   "source": "iPad",
+   "language": "en",
+   "text": "The car loan runs for two more years. I filed the dentist's invoice with the insurance. We should cancel the phone contract and switch. The client is waiting for an answer on the timeline."
+  },
+  {
+   "id": "r198",
+   "daysAgo": 32,
+   "time": "16:52",
+   "source": "windows",
+   "language": "en",
+   "text": "I filed the dentist's invoice with the insurance. We should cancel the phone contract and switch."
+  },
+  {
+   "id": "r199",
+   "daysAgo": 3,
+   "time": "16:55",
+   "source": "mac",
+   "language": "en",
+   "text": "The endpoint sometimes takes ten seconds to answer. Memory usage climbs noticeably after an hour. The build has been failing on the server since this morning. We should update the dependencies before the release. The tests pass locally but not in the pipeline."
+  },
+  {
+   "id": "r200",
+   "daysAgo": 20,
+   "time": "14:16",
+   "source": "mac",
+   "language": "de",
+   "text": "Der Dauerauftrag für den Strom muss angepasst werden. Der Kredit für das Auto läuft noch zwei Jahre. Wir sollten den Handyvertrag kündigen und wechseln. Die Steuererklärung muss bis Ende Juli beim Finanzamt sein. Die Krankenkasse übernimmt die Kosten für die Brille nicht."
+  }
+ ]
+}

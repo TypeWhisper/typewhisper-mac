@@ -276,6 +276,11 @@
 		AA4A5C000000000000000002 /* HistorySearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000002 /* HistorySearchIndex.swift */; };
 		AA4A5C000000000000000003 /* HistorySearchIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000003 /* HistorySearchIndexer.swift */; };
 		AA4A5C000000000000000004 /* HistorySearchIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000004 /* HistorySearchIndexTests.swift */; };
+		AA4A5C000000000000000005 /* HistoryPeriodResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000005 /* HistoryPeriodResolver.swift */; };
+		AA4A5C000000000000000006 /* HistoryFullTextQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000006 /* HistoryFullTextQuery.swift */; };
+		AA4A5C000000000000000007 /* AskHistoryPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000007 /* AskHistoryPlanner.swift */; };
+		AA4A5C000000000000000008 /* HistoryRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000008 /* HistoryRetriever.swift */; };
+		AA4A5C000000000000000009 /* HistoryRetrievalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000009 /* HistoryRetrievalTests.swift */; };
 		AA7E11000000000000000004 /* RemoteLinkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000004 /* RemoteLinkViewModel.swift */; };
 		AA7E11000000000000000005 /* RemoteLinkSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */; };
 		AA7E11000000000000000006 /* RemoteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000006 /* RemoteLinkTests.swift */; };
@@ -1015,6 +1020,11 @@
 		BB4A5C000000000000000002 /* HistorySearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySearchIndex.swift; sourceTree = "<group>"; };
 		BB4A5C000000000000000003 /* HistorySearchIndexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySearchIndexer.swift; sourceTree = "<group>"; };
 		BB4A5C000000000000000004 /* HistorySearchIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySearchIndexTests.swift; sourceTree = "<group>"; };
+		BB4A5C000000000000000005 /* HistoryPeriodResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPeriodResolver.swift; sourceTree = "<group>"; };
+		BB4A5C000000000000000006 /* HistoryFullTextQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryFullTextQuery.swift; sourceTree = "<group>"; };
+		BB4A5C000000000000000007 /* AskHistoryPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryPlanner.swift; sourceTree = "<group>"; };
+		BB4A5C000000000000000008 /* HistoryRetriever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetriever.swift; sourceTree = "<group>"; };
+		BB4A5C000000000000000009 /* HistoryRetrievalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetrievalTests.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000004 /* RemoteLinkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkViewModel.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkSettingsView.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000006 /* RemoteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkTests.swift; sourceTree = "<group>"; };
@@ -2515,6 +2525,10 @@
 				BB4A5C000000000000000001 /* HistoryPassageChunker.swift */,
 				BB4A5C000000000000000002 /* HistorySearchIndex.swift */,
 				BB4A5C000000000000000003 /* HistorySearchIndexer.swift */,
+				BB4A5C000000000000000005 /* HistoryPeriodResolver.swift */,
+				BB4A5C000000000000000006 /* HistoryFullTextQuery.swift */,
+				BB4A5C000000000000000007 /* AskHistoryPlanner.swift */,
+				BB4A5C000000000000000008 /* HistoryRetriever.swift */,
 			);
 			path = HistoryAsk;
 			sourceTree = "<group>";
@@ -3394,6 +3408,7 @@
 				BB7E11000000000000000008 /* TextProcessingAPITests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
 				BB4A5C000000000000000004 /* HistorySearchIndexTests.swift */,
+				BB4A5C000000000000000009 /* HistoryRetrievalTests.swift */,
 				CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */,
 				DB812023194EF7026721F4F3 /* HistoryLLMUsageTests.swift */,
 				C75DC15B3FC3545BA8471BBB /* LLMUsageRecordingTests.swift */,
@@ -5489,6 +5504,7 @@
 				AA7E11000000000000000008 /* TextProcessingAPITests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
 				AA4A5C000000000000000004 /* HistorySearchIndexTests.swift in Sources */,
+				AA4A5C000000000000000009 /* HistoryRetrievalTests.swift in Sources */,
 				1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */,
 				9DA7BD7932F43C516ABA7AC4 /* HistoryLLMUsageTests.swift in Sources */,
 				348F609D334BDF2713E83410 /* LLMUsageRecordingTests.swift in Sources */,
@@ -5650,6 +5666,10 @@
 				AA4A5C000000000000000001 /* HistoryPassageChunker.swift in Sources */,
 				AA4A5C000000000000000002 /* HistorySearchIndex.swift in Sources */,
 				AA4A5C000000000000000003 /* HistorySearchIndexer.swift in Sources */,
+				AA4A5C000000000000000005 /* HistoryPeriodResolver.swift in Sources */,
+				AA4A5C000000000000000006 /* HistoryFullTextQuery.swift in Sources */,
+				AA4A5C000000000000000007 /* AskHistoryPlanner.swift in Sources */,
+				AA4A5C000000000000000008 /* HistoryRetriever.swift in Sources */,
 				AA7E11000000000000000002 /* RemoteLinkConnection.swift in Sources */,
 				AA7E11000000000000000001 /* RemoteLinkProtocol.swift in Sources */,
 				AA00000000000000000043 /* HTTPServer.swift in Sources */,

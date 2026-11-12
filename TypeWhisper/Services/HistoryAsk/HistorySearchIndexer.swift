@@ -369,6 +369,14 @@ struct HistorySearchRecordReader: Sendable {
         )
     }
 
+    /// The records among `ids` that History still has.
+    func existingIDs(among ids: Set<UUID>) throws -> Set<UUID> {
+        let ids = Array(ids)
+        var descriptor = FetchDescriptor<TranscriptionRecord>(predicate: #Predicate { ids.contains($0.id) })
+        descriptor.propertiesToFetch = [\TranscriptionRecord.id]
+        return Set(try ModelContext(container).fetch(descriptor).map(\.id))
+    }
+
     private func fetch(_ ids: [UUID]) throws -> [TranscriptionRecord] {
         try ModelContext(container).fetch(
             FetchDescriptor<TranscriptionRecord>(predicate: #Predicate { ids.contains($0.id) })
