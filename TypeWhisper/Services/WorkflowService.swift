@@ -107,7 +107,8 @@ final class WorkflowService: ObservableObject {
             // An older backup that has the setting off turns the migrated workflow off. An
             // absent key is the normal state after the migration and changes nothing.
             if userDefaults.object(forKey: UserDefaultsKeys.translationEnabled) != nil,
-               let migratedWorkflow, migratedWorkflow.isEnabled {
+               let migratedWorkflow {
+                // Saving again also retries a disable whose earlier save failed.
                 migratedWorkflow.isEnabled = false
                 updateWorkflow(migratedWorkflow)
                 guard !modelContext.hasChanges else { return }
