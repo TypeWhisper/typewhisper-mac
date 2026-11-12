@@ -831,6 +831,14 @@ final class WorkflowServiceTests: XCTestCase {
 
         let relaunched = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
         XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 1)
+
+        // Importing an older backup again updates the migrated workflow instead of adding one.
+        defaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
+        defaults.set("fr", forKey: UserDefaultsKeys.translationTargetLanguage)
+        relaunched.migrateLegacyTranslationSetting()
+        let translations = relaunched.workflows.filter { $0.template == .translation }
+        XCTAssertEqual(translations.count, 1)
+        XCTAssertEqual(translations.first?.translationTargetLanguage, "fr")
     }
 
     func testWorkflowServiceClampsShortTranscriptionMinimumWords() throws {

@@ -110,15 +110,27 @@ final class WorkflowService: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         // The setting defaulted to English when no target was stored.
         let targetLanguage = storedTarget?.isEmpty == false ? storedTarget ?? "en" : "en"
-        addWorkflow(
-            name: WorkflowTemplate.translation.definition.name,
-            template: .translation,
-            trigger: .global(),
-            behavior: WorkflowBehavior(settings: [
-                WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
-                WorkflowBehavior.targetLanguageSettingKey: targetLanguage,
-            ])
-        )
+        // Importing an older backup again restores the setting. Update the workflow an
+        // earlier migration created instead of adding another one.
+        if let migrated = workflows.first(where: {
+            $0.template == .translation && $0.trigger?.kind == .global && $0.usesAppleTranslate
+        }) {
+            var behavior = migrated.behavior
+            behavior.settings[WorkflowBehavior.targetLanguageSettingKey] = targetLanguage
+            migrated.behavior = behavior
+            migrated.isEnabled = true
+            updateWorkflow(migrated)
+        } else {
+            addWorkflow(
+                name: WorkflowTemplate.translation.definition.name,
+                template: .translation,
+                trigger: .global(),
+                behavior: WorkflowBehavior(settings: [
+                    WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+                    WorkflowBehavior.targetLanguageSettingKey: targetLanguage,
+                ])
+            )
+        }
         userDefaults.removeObject(forKey: UserDefaultsKeys.translationEnabled)
         userDefaults.removeObject(forKey: UserDefaultsKeys.translationTargetLanguage)
     }
