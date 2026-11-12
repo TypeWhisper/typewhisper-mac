@@ -206,7 +206,61 @@ struct WorkflowTextProcessingService {
             )
         }
 
-        return try await process(request: request, text: text)
+        let llmRequest = request
+        return try await withAppleTranslateFallback(
+            workflow: workflow,
+            text: text,
+            fallbackTranslationTarget: fallbackTranslationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage
+        ) {
+            try await process(request: llmRequest, text: text)
+        }
+    }
+
+    /// Runs `operation`, the LLM request(s) of a workflow. When a translation workflow's
+    /// LLM step fails for a reason other than cancellation, Apple Translate translates
+    /// `text` on-device instead, so an unreachable provider still produces a translation.
+    /// Rethrows the LLM error for other workflows, or when Apple Translate is unavailable
+    /// or fails as well.
+    func withAppleTranslateFallback(
+        workflow: Workflow,
+        text: String,
+        fallbackTranslationTarget: String?,
+        detectedLanguage: String?,
+        configuredLanguage: String?,
+        _ operation: () async throws -> String
+    ) async throws -> String {
+        do {
+            return try await operation()
+        } catch {
+            guard workflow.template == .translation,
+                  !workflow.usesAppleTranslate,
+                  !workflow.usesInlineCommands,
+                  !Task.isCancelled,
+                  !isPostProcessingCancellation(error),
+                  let appleTranslator,
+                  let targetLanguageCode = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(
+                      from: workflow.translationTargetLanguage ?? fallbackTranslationTarget ?? "en"
+                  ) else {
+                throw error
+            }
+
+            workflowTextProcessingLogger.warning(
+                "LLM translation failed, falling back to Apple Translate: \(error.localizedDescription, privacy: .public)"
+            )
+            let sourceLanguageCode = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(
+                from: detectedLanguage ?? configuredLanguage
+            )
+            do {
+                return try await appleTranslator(text, targetLanguageCode, sourceLanguageCode)
+            } catch let appleError {
+                workflowTextProcessingLogger.error(
+                    "Apple Translate fallback failed: \(appleError.localizedDescription, privacy: .public)"
+                )
+                throw error
+            }
+        }
     }
 
     /// The system prompt `process(workflow:text:)` sends for `workflow`, including the

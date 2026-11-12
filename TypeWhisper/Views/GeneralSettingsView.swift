@@ -54,7 +54,7 @@ struct GeneralSettingsView: View {
                         }
                     }
 
-                    Text(String(localized: "Uses Apple Translate (on-device)"))
+                    Text(String(localized: "Uses Apple Translate (on-device). To translate with your own LLM provider, such as an OpenAI-compatible API, create a Translation workflow."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     }

@@ -53813,30 +53813,30 @@
         }
       }
     },
-    "Uses Apple Translate (on-device)" : {
+    "Uses Apple Translate (on-device). To translate with your own LLM provider, such as an OpenAI-compatible API, create a Translation workflow." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verwendet Apple Translate (lokal)"
+            "value" : "Verwendet Apple Translate (lokal). Für Übersetzungen mit einem eigenen LLM-Anbieter, etwa einer OpenAI-kompatiblen API, lege einen Übersetzungs-Workflow an."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Usa Apple Translate (en el dispositivo)"
+            "value" : "Usa Apple Translate (en el dispositivo). Para traducir con tu propio proveedor de LLM, como una API compatible con OpenAI, crea un flujo de trabajo de traducción."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apple翻訳を使用します（オンデバイス）"
+            "value" : "Apple翻訳を使用します（オンデバイス）。OpenAI互換APIなど独自のLLMプロバイダで翻訳するには、翻訳ワークフローを作成してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用 Apple 翻译（设备端）"
+            "value" : "使用 Apple 翻译（设备端）。如需使用自己的 LLM 提供商（例如兼容 OpenAI 的 API）进行翻译，请创建翻译工作流。"
           }
         }
       }

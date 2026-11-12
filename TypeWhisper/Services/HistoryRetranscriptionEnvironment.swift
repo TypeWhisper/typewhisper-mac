@@ -203,26 +203,31 @@ enum HistoryRetranscriptionEnvironment {
                                 ?? promptProcessing.workflowUsesLocalLLMProvider(providerOverride: segmentedRequest.providerId)
                         )
                         let requests = WorkflowRequests()
-                        do {
-                            let outcome = try await LLMUsageLedger.$current.withValue(llmUsage) {
-                                try await WorkflowSegmentedPostProcessor(policy: policy).process(
-                                    text: beforeWorkflow, incrementalSession: nil, incrementalRequest: nil,
-                                    segmentProcessor: { segment in
-                                        try await requests.run {
-                                            try await workflowProcessor.process(request: segmentedRequest, text: segment)
+                        final = try await workflowProcessor.withAppleTranslateFallback(
+                            workflow: frozenWorkflow, text: beforeWorkflow, fallbackTranslationTarget: nil,
+                            detectedLanguage: result.detectedLanguage, configuredLanguage: request.language
+                        ) {
+                            do {
+                                let outcome = try await LLMUsageLedger.$current.withValue(llmUsage) {
+                                    try await WorkflowSegmentedPostProcessor(policy: policy).process(
+                                        text: beforeWorkflow, incrementalSession: nil, incrementalRequest: nil,
+                                        segmentProcessor: { segment in
+                                            try await requests.run {
+                                                try await workflowProcessor.process(request: segmentedRequest, text: segment)
+                                            }
+                                        },
+                                        wholeTextProcessor: {
+                                            await requests.waitUntilIdle()
+                                            try Task.checkCancellation()
+                                            return try await workflowProcessor.process(request: segmentedRequest, text: beforeWorkflow)
                                         }
-                                    },
-                                    wholeTextProcessor: {
-                                        await requests.waitUntilIdle()
-                                        try Task.checkCancellation()
-                                        return try await workflowProcessor.process(request: segmentedRequest, text: beforeWorkflow)
-                                    }
-                                )
+                                    )
+                                }
+                                return outcome.text
+                            } catch {
+                                await requests.waitUntilIdle()
+                                throw error
                             }
-                            final = outcome.text
-                        } catch {
-                            await requests.waitUntilIdle()
-                            throw error
                         }
                     } else {
                         final = try await LLMUsageLedger.$current.withValue(llmUsage) {

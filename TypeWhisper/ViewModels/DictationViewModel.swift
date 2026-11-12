@@ -5204,23 +5204,31 @@ final class DictationViewModel: ObservableObject {
                 )
             }
 
-            let llmStart = CFAbsoluteTimeGetCurrent()
-            let outcome = try await WorkflowSegmentedPostProcessor(policy: segmentationPolicy).process(
+            return try await workflowProcessor.withAppleTranslateFallback(
+                workflow: workflow,
                 text: text,
-                incrementalSession: incrementalPostProcessing,
-                incrementalRequest: incrementalRequest,
-                segmentProcessor: { segment in
-                    try await workflowProcessor.process(request: segmentedRequest, text: segment)
-                },
-                // Same request `process(workflow:)` builds for this workflow and text.
-                wholeTextProcessor: {
-                    try await workflowProcessor.process(request: segmentedRequest, text: text)
-                }
-            )
-            let llmMs = String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - llmStart) * 1000)
-            let elapsedMs = stopTimingStart.map { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - $0) * 1000) } ?? "n/a"
-            logger.info("Stop timing: segmented workflow LLM done elapsedMs=\(elapsedMs, privacy: .public), llmMs=\(llmMs, privacy: .public), \(outcome.report.logDescription, privacy: .public)")
-            return outcome.text
+                fallbackTranslationTarget: translationTarget,
+                detectedLanguage: detectedLanguage,
+                configuredLanguage: configuredLanguage
+            ) {
+                let llmStart = CFAbsoluteTimeGetCurrent()
+                let outcome = try await WorkflowSegmentedPostProcessor(policy: segmentationPolicy).process(
+                    text: text,
+                    incrementalSession: incrementalPostProcessing,
+                    incrementalRequest: incrementalRequest,
+                    segmentProcessor: { segment in
+                        try await workflowProcessor.process(request: segmentedRequest, text: segment)
+                    },
+                    // Same request `process(workflow:)` builds for this workflow and text.
+                    wholeTextProcessor: {
+                        try await workflowProcessor.process(request: segmentedRequest, text: text)
+                    }
+                )
+                let llmMs = String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - llmStart) * 1000)
+                let elapsedMs = stopTimingStart.map { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - $0) * 1000) } ?? "n/a"
+                logger.info("Stop timing: segmented workflow LLM done elapsedMs=\(elapsedMs, privacy: .public), llmMs=\(llmMs, privacy: .public), \(outcome.report.logDescription, privacy: .public)")
+                return outcome.text
+            }
         }
     }
 

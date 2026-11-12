@@ -1727,6 +1727,52 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(capturedTemperature, workflow.behavior.temperatureDirective)
     }
 
+    func testLLMTranslationFallsBackToAppleTranslateWhenTheProviderFails() async throws {
+        let workflow = Workflow(
+            name: "LLM Translate",
+            template: .translation,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(settings: ["targetLanguage": "German"])
+        )
+
+        var capturedTargetLanguage: String?
+        var capturedSourceLanguage: String?
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { _, _, _, _, _ in
+                throw URLError(.cannotConnectToHost)
+            },
+            appleTranslator: { text, targetLanguage, sourceLanguage in
+                capturedTargetLanguage = targetLanguage
+                capturedSourceLanguage = sourceLanguage
+                return text == "Hello world" ? "Hallo Welt" : text
+            }
+        )
+
+        let result = try await service.process(
+            workflow: workflow,
+            text: "Hello world",
+            detectedLanguage: "English"
+        )
+
+        XCTAssertEqual(result, "Hallo Welt")
+        XCTAssertEqual(capturedTargetLanguage, "de")
+        XCTAssertEqual(capturedSourceLanguage, "en")
+
+        let cancelling = WorkflowTextProcessingService(
+            promptProcessor: { _, _, _, _, _ in throw CancellationError() },
+            appleTranslator: { _, _, _ in
+                XCTFail("A cancelled LLM translation must not fall back to Apple Translate")
+                return ""
+            }
+        )
+        do {
+            _ = try await cancelling.process(workflow: workflow, text: "Hello world")
+            XCTFail("Expected the cancellation to propagate")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+    }
+
     func testScreenContextIsAddedAsFencedReferenceOnlyWhenEnabled() async throws {
         func capturedPrompt(screenContextEnabled: Bool?) async throws -> String? {
             let workflow = Workflow(
