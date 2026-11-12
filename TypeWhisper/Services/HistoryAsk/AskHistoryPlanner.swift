@@ -144,6 +144,33 @@ struct AskHistoryPlanner: Sendable {
         return plan
     }
 
+    /// Whether a model should read the question together with the earlier
+    /// conversation: a follow-up that names fewer than two things to search for.
+    static func needsFollowUpPlan(_ plan: HistorySearchPlan, history: [AskHistoryTurn]) -> Bool {
+        !history.isEmpty && plan.keywords.count + plan.names.count < 2
+    }
+
+    /// The plan for a follow-up question with what a model read from the
+    /// conversation. The period and the places come from the question alone,
+    /// because models invent periods.
+    func plan(for question: String, followUp: AskHistoryFollowUpPlan) -> HistorySearchPlan {
+        var plan = plan(for: question)
+        let rewritten = self.plan(for: followUp.question)
+        let stopWords = Self.stopWords(for: plan.language ?? rewritten.language)
+        var seen = Set<String>()
+        plan.keywords = (plan.keywords + rewritten.keywords + followUp.keywords)
+            .filter { !stopWords.contains(Self.folded($0)) && seen.insert(Self.folded($0)).inserted }
+            .prefix(Self.maximumKeywords)
+            .map { $0 }
+        for name in rewritten.names where !plan.names.contains(name) {
+            plan.names.append(name)
+        }
+        // Words that are names are searched as names only.
+        let names = Set(plan.names.flatMap { $0.split(separator: " ").map { Self.folded(String($0)) } })
+        plan.keywords.removeAll { names.contains(Self.folded($0)) }
+        return plan
+    }
+
     // MARK: - Words
 
     private struct Word {

@@ -801,6 +801,131 @@ class PromptProcessingService: ObservableObject {
         cloudModelOverride: String? = nil,
         effortOverride: String? = nil
     ) async throws -> AskHistoryAnswer {
+        try await tryingHistoryProviders(
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
+        ) { candidate, onLocalProviderUsed in
+            try await self.historyAnswer(to: request, from: candidate, onLocalProviderUsed: onLocalProviderUsed)
+        }
+    }
+
+    /// The provider an overview is tried with first, and whether the overview
+    /// is made from a summary of each recording. Apple Intelligence and the
+    /// local models lose recordings when one prompt holds several; cloud
+    /// models take them in one prompt.
+    func historyOverviewProvider(
+        providerOverride: String? = nil
+    ) -> (providerId: String, providerName: String, usesSummaries: Bool)? {
+        guard let first = candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil).first else {
+            return nil
+        }
+        let providerId = normalizeProviderId(first.providerId)
+        let usesSummaries: Bool
+        switch historyProviderKind(of: providerId) {
+        case .appleIntelligence, .local: usesSummaries = true
+        case .openAICompatible, .cloud: usesSummaries = false
+        }
+        return (providerId, displayName(for: providerId), usesSummaries)
+    }
+
+    /// Summarizes one recording for an overview. `passages` hold its text in
+    /// order; a recording longer than the provider's context is summarized in
+    /// parts, and the parts' summaries are then made into one.
+    func summarizeHistoryRecording(
+        passages: [String],
+        title: String?,
+        providerOverride: String? = nil,
+        cloudModelOverride: String? = nil,
+        effortOverride: String? = nil
+    ) async throws -> String {
+        try await tryingHistoryProviders(
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
+        ) { candidate, onLocalProviderUsed in
+            let kind = self.historyProviderKind(of: self.normalizeProviderId(candidate.providerId))
+            var summaries: [String] = []
+            let parts = AskHistoryBudget.parts(of: passages, maximumCharacters: AskHistoryBudget.summaryCharacters(for: kind))
+            for (offset, part) in parts.enumerated() {
+                try Task.checkCancellation()
+                summaries.append(try await self.historyCompletion(
+                    from: candidate,
+                    instructions: AskHistoryPromptBuilder.summaryInstructions,
+                    prompt: AskHistoryPromptBuilder.summaryPrompt(
+                        of: part, title: title, part: offset + 1, partCount: parts.count
+                    ),
+                    onLocalProviderUsed: onLocalProviderUsed
+                ))
+            }
+            guard summaries.count > 1 else {
+                return summaries.first ?? ""
+            }
+            return try await self.historyCompletion(
+                from: candidate,
+                instructions: AskHistoryPromptBuilder.combinedSummaryInstructions,
+                prompt: AskHistoryPromptBuilder.combinedSummaryPrompt(of: summaries),
+                onLocalProviderUsed: onLocalProviderUsed
+            )
+        }
+    }
+
+    /// Asks a model to make a follow-up question stand alone and to name what
+    /// to search for. Nil when no provider gave a usable plan, so the search
+    /// goes on with the words of the question alone.
+    func planHistoryFollowUp(
+        question: String,
+        history: [AskHistoryTurn],
+        providerOverride: String? = nil,
+        cloudModelOverride: String? = nil,
+        effortOverride: String? = nil
+    ) async -> AskHistoryFollowUpPlan? {
+        let prompt = AskHistoryFollowUpPlan.prompt(question: question, history: history)
+        let reply = try? await tryingHistoryProviders(
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
+        ) { candidate, onLocalProviderUsed in
+            try await self.historyCompletion(
+                from: candidate,
+                instructions: AskHistoryFollowUpPlan.instructions,
+                prompt: prompt,
+                onLocalProviderUsed: onLocalProviderUsed
+            )
+        }
+        return reply.flatMap(AskHistoryFollowUpPlan.init(reply:))
+    }
+
+    /// A provider's reply to a prompt that is answered as it is. An empty reply is a failure.
+    private func historyCompletion(
+        from candidate: LLMFallbackPriorityItem,
+        instructions: String,
+        prompt: String,
+        onLocalProviderUsed: (any LLMProviderPlugin) -> Void
+    ) async throws -> String {
+        // Measuring a prompt or an earlier step may have taken a moment.
+        try Task.checkCancellation()
+        let reply = try await processSingleProvider(
+            providerId: normalizeProviderId(candidate.providerId),
+            requestedModelId: candidate.modelId,
+            requestedEffortId: candidate.effortId,
+            prompt: instructions,
+            text: prompt,
+            temperatureDirective: .inheritProviderSetting,
+            answersPrompt: true,
+            onLocalProviderUsed: onLocalProviderUsed
+        )
+        try Task.checkCancellation()
+        let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            throw LLMFallbackAttemptError.emptyResult
+        }
+        return text
+    }
+
+    /// Runs `attempt` with the providers `process` would try: the enforced
+    /// pair, the given provider, or the fallback list in its order, until one
+    /// succeeds.
+    private func tryingHistoryProviders<Result>(
+        providerOverride: String?,
+        cloudModelOverride: String?,
+        effortOverride: String?,
+        attempt: @MainActor (LLMFallbackPriorityItem, (any LLMProviderPlugin) -> Void) async throws -> Result
+    ) async throws -> Result {
         if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
             throw ManagedPolicyRefusal(reason: reason)
         }
@@ -826,7 +951,7 @@ class PromptProcessingService: ObservableObject {
         for candidate in candidates {
             try Task.checkCancellation()
             do {
-                return try await historyAnswer(to: request, from: candidate) { provider in
+                return try await attempt(candidate) { provider in
                     guard !localProvidersUsed.contains(where: { $0 === provider }) else { return }
                     localProvidersUsed.append(provider)
                     modelManagerService?.beginAutoUnloadProtectedUse(of: provider)
@@ -849,7 +974,7 @@ class PromptProcessingService: ObservableObject {
                     exceededContext: LLMContextLimit.isReported(by: error)
                 )
                 failures.append(failure)
-                logger.warning("History answer failed for \(failure.providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
+                logger.warning("History request failed for \(failure.providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
             }
         }
         if let refusal = policyRefusals.first, policyRefusals.count == failures.count {
@@ -874,19 +999,12 @@ class PromptProcessingService: ObservableObject {
         var isRetry = false
         while true {
             do {
-                // Measuring the prompt may have taken a moment.
-                try Task.checkCancellation()
-                let reply = try await processSingleProvider(
-                    providerId: providerId,
-                    requestedModelId: candidate.modelId,
-                    requestedEffortId: candidate.effortId,
-                    prompt: prompt.instructions,
-                    text: prompt.singlePrompt,
-                    temperatureDirective: .inheritProviderSetting,
-                    answersPrompt: true,
+                let reply = try await historyCompletion(
+                    from: candidate,
+                    instructions: prompt.instructions,
+                    prompt: prompt.singlePrompt,
                     onLocalProviderUsed: onLocalProviderUsed
                 )
-                try Task.checkCancellation()
                 // An answer of nothing but a citation of a missing source is empty.
                 let text = AskHistoryCitations.withoutUnknownSources(reply, sourceCount: prompt.sources.count)
                     .trimmingCharacters(in: .whitespacesAndNewlines)

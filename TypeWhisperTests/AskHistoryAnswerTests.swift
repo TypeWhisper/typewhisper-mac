@@ -215,24 +215,22 @@ final class AskHistoryCitationsTests: XCTestCase {
     }
 }
 
+/// Builds a `PromptProcessingService` with stand-in plugins and removes what it made.
 @MainActor
-final class AskHistoryAnswerTests: XCTestCase {
+final class AskHistoryTestEnvironment {
     private var directories: [URL] = []
     private var defaultsSuites: [String] = []
 
-    override func tearDown() async throws {
-        directories.forEach(TestSupport.remove)
-        directories = []
-        defaultsSuites.forEach { UserDefaults().removePersistentDomain(forName: $0) }
-        defaultsSuites = []
-        try await super.tearDown()
-    }
-
-    private func makeService(
-        providers: [AnsweringProvider], pluginIds: [String: String] = [:], fallbacks: [String] = []
-    ) throws -> PromptProcessingService {
+    func makeDirectory() throws -> URL {
         let directory = try TestSupport.makeTemporaryDirectory()
         directories.append(directory)
+        return directory
+    }
+
+    func makeService(
+        providers: [AnsweringProvider], pluginIds: [String: String] = [:], fallbacks: [String] = []
+    ) throws -> PromptProcessingService {
+        let directory = try makeDirectory()
         PluginManager.shared = PluginManager(appSupportDirectory: directory)
         PluginManager.shared.loadedPlugins = providers.map { provider in
             LoadedPlugin(
@@ -248,7 +246,7 @@ final class AskHistoryAnswerTests: XCTestCase {
                 isEnabled: true
             )
         }
-        let suite = "AskHistoryAnswerTests-\(UUID().uuidString)"
+        let suite = "AskHistoryTests-\(UUID().uuidString)"
         defaultsSuites.append(suite)
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         if !fallbacks.isEmpty {
@@ -258,6 +256,29 @@ final class AskHistoryAnswerTests: XCTestCase {
             )
         }
         return PromptProcessingService(userDefaults: defaults)
+    }
+
+    func cleanUp() {
+        directories.forEach(TestSupport.remove)
+        directories = []
+        defaultsSuites.forEach { UserDefaults().removePersistentDomain(forName: $0) }
+        defaultsSuites = []
+    }
+}
+
+@MainActor
+final class AskHistoryAnswerTests: XCTestCase {
+    private let environment = AskHistoryTestEnvironment()
+
+    override func tearDown() async throws {
+        environment.cleanUp()
+        try await super.tearDown()
+    }
+
+    private func makeService(
+        providers: [AnsweringProvider], pluginIds: [String: String] = [:], fallbacks: [String] = []
+    ) throws -> PromptProcessingService {
+        try environment.makeService(providers: providers, pluginIds: pluginIds, fallbacks: fallbacks)
     }
 
     /// Sources of 1,000 characters each, so budgets show in their number.
@@ -393,7 +414,7 @@ final class AskHistoryAnswerTests: XCTestCase {
 
 /// Answers from a queue and keeps what it was asked.
 @objc(AskHistoryAnswerTestsProvider)
-private final class AnsweringProvider: NSObject, LLMProviderPlugin, LLMProviderIdentityProviding,
+final class AnsweringProvider: NSObject, LLMProviderPlugin, LLMProviderIdentityProviding,
     LLMProviderSetupStatusProviding, @unchecked Sendable {
     static var pluginId: String { "com.typewhisper.tests.answering-llm" }
     static var pluginName: String { "Answering LLM" }
@@ -459,7 +480,7 @@ private final class AnsweringProvider: NSObject, LLMProviderPlugin, LLMProviderI
 }
 
 /// Stands in for Apple Intelligence with a context of 4,096 tokens.
-private final class OnDeviceAnswerer: LLMProvider, @unchecked Sendable {
+final class OnDeviceAnswerer: LLMProvider, @unchecked Sendable {
     let charactersPerToken: Int?
     private let lock = NSLock()
     private var prompts: [String] = []

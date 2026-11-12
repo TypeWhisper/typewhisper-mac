@@ -53,6 +53,32 @@ extension AskHistoryBudget {
     }
 }
 
+extension AskHistoryBudget {
+    /// Characters of a recording one summary request holds. Apple Intelligence
+    /// gets what fits its smallest context of 4,096 tokens.
+    static func summaryCharacters(for kind: AskHistoryProviderKind) -> Int {
+        switch kind {
+        case .appleIntelligence: 8_000
+        case .local, .openAICompatible: 12_000
+        case .cloud: 30_000
+        }
+    }
+
+    /// The passages of a recording joined into parts of at most the given
+    /// length. A longer passage is a part of its own.
+    static func parts(of passages: [String], maximumCharacters: Int) -> [String] {
+        var parts: [String] = []
+        for passage in passages where !passage.isEmpty {
+            if let last = parts.last, last.count + 1 + passage.count <= maximumCharacters {
+                parts[parts.count - 1] = last + "\n" + passage
+            } else {
+                parts.append(passage)
+            }
+        }
+        return parts
+    }
+}
+
 extension AskHistoryRequest {
     /// The request for a question, from what a search found for its plan.
     init(

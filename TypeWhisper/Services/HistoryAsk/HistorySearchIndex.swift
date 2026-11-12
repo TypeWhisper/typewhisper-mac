@@ -408,6 +408,49 @@ actor HistorySearchIndex {
         }
     }
 
+    // MARK: - Summaries
+
+    /// The text of a record as the index holds it: what was said, in order,
+    /// without a document written from it. Empty for a record it does not hold.
+    func transcript(ofRecord id: UUID) throws -> [HistoryPassage] {
+        try reading([]) { connection in
+            try connection.rows(
+                """
+                SELECT p.id FROM passages p JOIN records r ON r.id = p.record_id
+                WHERE r.uuid = ?1 AND p.kind = ?2 ORDER BY p.id
+                """,
+                [.text(id.uuidString), .text(HistoryPassage.Kind.transcript.rawValue)]
+            ) { $0.integer(0) }
+            .compactMap { try self.hit(forPassage: $0, in: connection)?.passage }
+        }
+    }
+
+    /// The summary kept for a record, unless the record changed since or is gone.
+    func summary(ofRecord id: UUID) throws -> String? {
+        try reading(nil) { connection in
+            try connection.rows(
+                """
+                SELECT s.summary FROM summaries s JOIN records r ON r.uuid = s.uuid
+                WHERE s.uuid = ?1 AND s.content_hash = r.content_hash
+                """,
+                [.text(id.uuidString)]
+            ) { $0.text(0) }.first ?? nil
+        }
+    }
+
+    /// Keeps a summary of a record until the record changes or is removed.
+    /// Does nothing for a record the index does not hold.
+    func setSummary(_ summary: String, ofRecord id: UUID) throws {
+        guard let connection = try open(creating: false) else { return }
+        try connection.run(
+            """
+            INSERT OR REPLACE INTO summaries(uuid, content_hash, summary)
+            SELECT uuid, content_hash, ?2 FROM records WHERE uuid = ?1
+            """,
+            [.text(id.uuidString), .text(summary)]
+        )
+    }
+
     /// The speakers, apps and domains of the indexed records.
     func vocabulary() throws -> HistorySearchVocabulary {
         if let cachedVocabulary { return cachedVocabulary }
@@ -570,6 +613,8 @@ actor HistorySearchIndex {
             )
             try connection.run("DELETE FROM records WHERE id = ?1", [.integer(rowID)])
         }
+        // A summary belongs to the text it was made from.
+        try connection.run("DELETE FROM summaries WHERE uuid = ?1", [.text(id.uuidString)])
     }
 
     private func freeRowID(at date: Date, in connection: SQLiteConnection) throws -> Int64 {
@@ -641,9 +686,19 @@ actor HistorySearchIndex {
                 throw HistorySearchIndexError(code: SQLITE_NOTADB, message: "not a search index: \(error.message)")
             }
         }
+        // Added after the first format without changing it: older versions ignore the table.
+        try connection.execute(Self.summariesSchema)
         self.connection = connection
         return connection
     }
+
+    private static let summariesSchema = """
+        CREATE TABLE IF NOT EXISTS summaries(
+          uuid TEXT PRIMARY KEY,
+          content_hash TEXT NOT NULL,
+          summary TEXT NOT NULL
+        ) WITHOUT ROWID;
+        """
 
     private static let schema = """
         BEGIN;
