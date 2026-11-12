@@ -850,6 +850,12 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 2)
         XCTAssertEqual(relaunched.workflow(id: translation.id)?.translationTargetLanguage, "fr")
 
+        // An older backup with the setting off turns the migrated workflow off.
+        defaults.set(false, forKey: UserDefaultsKeys.translationEnabled)
+        relaunched.migrateLegacyTranslationSetting()
+        XCTAssertEqual(relaunched.workflow(id: translation.id)?.isEnabled, false)
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.translationEnabled))
+
         // The user's own Always Apple Translate workflow is never taken for the migrated one.
         let own = try XCTUnwrap(relaunched.workflow(id: ownWorkflow.id))
         XCTAssertFalse(own.isEnabled)

@@ -100,7 +100,18 @@ final class WorkflowService: ObservableObject {
     /// app, website, and earlier Always workflows still win. Runs at launch and after
     /// a backup import, and clears the setting so it runs only once.
     func migrateLegacyTranslationSetting() {
+        let migratedWorkflow = userDefaults.string(forKey: UserDefaultsKeys.migratedTranslationWorkflowId)
+            .flatMap(UUID.init(uuidString:))
+            .flatMap(workflow(id:))
         guard userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled) else {
+            // An older backup that has the setting off turns the migrated workflow off. An
+            // absent key is the normal state after the migration and changes nothing.
+            if userDefaults.object(forKey: UserDefaultsKeys.translationEnabled) != nil,
+               let migratedWorkflow, migratedWorkflow.isEnabled {
+                migratedWorkflow.isEnabled = false
+                updateWorkflow(migratedWorkflow)
+                guard !modelContext.hasChanges else { return }
+            }
             userDefaults.removeObject(forKey: UserDefaultsKeys.translationEnabled)
             userDefaults.removeObject(forKey: UserDefaultsKeys.translationTargetLanguage)
             return
@@ -113,9 +124,7 @@ final class WorkflowService: ObservableObject {
         // Importing an older backup again restores the setting. Update the workflow an
         // earlier migration created instead of adding another one. Workflows the user
         // created stay untouched, even when they look the same.
-        let migratedId = userDefaults.string(forKey: UserDefaultsKeys.migratedTranslationWorkflowId)
-            .flatMap(UUID.init(uuidString:))
-        if let migrated = migratedId.flatMap(workflow(id:)) {
+        if let migrated = migratedWorkflow {
             var behavior = migrated.behavior
             behavior.settings[WorkflowBehavior.targetLanguageSettingKey] = targetLanguage
             migrated.behavior = behavior
