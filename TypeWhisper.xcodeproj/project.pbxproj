@@ -281,6 +281,10 @@
 		AA4A5C000000000000000007 /* AskHistoryPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000007 /* AskHistoryPlanner.swift */; };
 		AA4A5C000000000000000008 /* HistoryRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000008 /* HistoryRetriever.swift */; };
 		AA4A5C000000000000000009 /* HistoryRetrievalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000009 /* HistoryRetrievalTests.swift */; };
+		AA4A5C00000000000000000A /* AskHistoryPromptBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C00000000000000000A /* AskHistoryPromptBuilder.swift */; };
+		AA4A5C00000000000000000B /* AskHistoryCitations.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C00000000000000000B /* AskHistoryCitations.swift */; };
+		AA4A5C00000000000000000C /* AskHistoryAnswer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C00000000000000000C /* AskHistoryAnswer.swift */; };
+		AA4A5C00000000000000000D /* AskHistoryAnswerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C00000000000000000D /* AskHistoryAnswerTests.swift */; };
 		AA7E11000000000000000004 /* RemoteLinkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000004 /* RemoteLinkViewModel.swift */; };
 		AA7E11000000000000000005 /* RemoteLinkSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */; };
 		AA7E11000000000000000006 /* RemoteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000006 /* RemoteLinkTests.swift */; };
@@ -1025,6 +1029,10 @@
 		BB4A5C000000000000000007 /* AskHistoryPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryPlanner.swift; sourceTree = "<group>"; };
 		BB4A5C000000000000000008 /* HistoryRetriever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetriever.swift; sourceTree = "<group>"; };
 		BB4A5C000000000000000009 /* HistoryRetrievalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetrievalTests.swift; sourceTree = "<group>"; };
+		BB4A5C00000000000000000A /* AskHistoryPromptBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryPromptBuilder.swift; sourceTree = "<group>"; };
+		BB4A5C00000000000000000B /* AskHistoryCitations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryCitations.swift; sourceTree = "<group>"; };
+		BB4A5C00000000000000000C /* AskHistoryAnswer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryAnswer.swift; sourceTree = "<group>"; };
+		BB4A5C00000000000000000D /* AskHistoryAnswerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryAnswerTests.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000004 /* RemoteLinkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkViewModel.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkSettingsView.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000006 /* RemoteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkTests.swift; sourceTree = "<group>"; };
@@ -2529,6 +2537,9 @@
 				BB4A5C000000000000000006 /* HistoryFullTextQuery.swift */,
 				BB4A5C000000000000000007 /* AskHistoryPlanner.swift */,
 				BB4A5C000000000000000008 /* HistoryRetriever.swift */,
+				BB4A5C00000000000000000A /* AskHistoryPromptBuilder.swift */,
+				BB4A5C00000000000000000B /* AskHistoryCitations.swift */,
+				BB4A5C00000000000000000C /* AskHistoryAnswer.swift */,
 			);
 			path = HistoryAsk;
 			sourceTree = "<group>";
@@ -3409,6 +3420,7 @@
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
 				BB4A5C000000000000000004 /* HistorySearchIndexTests.swift */,
 				BB4A5C000000000000000009 /* HistoryRetrievalTests.swift */,
+				BB4A5C00000000000000000D /* AskHistoryAnswerTests.swift */,
 				CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */,
 				DB812023194EF7026721F4F3 /* HistoryLLMUsageTests.swift */,
 				C75DC15B3FC3545BA8471BBB /* LLMUsageRecordingTests.swift */,
@@ -5505,6 +5517,7 @@
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
 				AA4A5C000000000000000004 /* HistorySearchIndexTests.swift in Sources */,
 				AA4A5C000000000000000009 /* HistoryRetrievalTests.swift in Sources */,
+				AA4A5C00000000000000000D /* AskHistoryAnswerTests.swift in Sources */,
 				1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */,
 				9DA7BD7932F43C516ABA7AC4 /* HistoryLLMUsageTests.swift in Sources */,
 				348F609D334BDF2713E83410 /* LLMUsageRecordingTests.swift in Sources */,
@@ -5670,6 +5683,9 @@
 				AA4A5C000000000000000006 /* HistoryFullTextQuery.swift in Sources */,
 				AA4A5C000000000000000007 /* AskHistoryPlanner.swift in Sources */,
 				AA4A5C000000000000000008 /* HistoryRetriever.swift in Sources */,
+				AA4A5C00000000000000000A /* AskHistoryPromptBuilder.swift in Sources */,
+				AA4A5C00000000000000000B /* AskHistoryCitations.swift in Sources */,
+				AA4A5C00000000000000000C /* AskHistoryAnswer.swift in Sources */,
 				AA7E11000000000000000002 /* RemoteLinkConnection.swift in Sources */,
 				AA7E11000000000000000001 /* RemoteLinkProtocol.swift in Sources */,
 				AA00000000000000000043 /* HTTPServer.swift in Sources */,

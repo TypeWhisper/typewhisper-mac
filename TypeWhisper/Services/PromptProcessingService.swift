@@ -784,6 +784,166 @@ class PromptProcessingService: ObservableObject {
         throw LLMFallbackExhaustedError(failures: failures)
     }
 
+    // MARK: - History questions
+
+    private static let openAICompatiblePluginId = "com.typewhisper.openai-compatible"
+
+    /// Answers a question from excerpts of History.
+    ///
+    /// The providers are tried like those of `process`: the enforced pair, the
+    /// given provider, or the fallback list in its order. Each gets as many
+    /// excerpts as its context holds, and one that reports the input as too
+    /// long is asked once more with fewer. Memories are not added, and the
+    /// question is not wrapped as dictated text, which must not be answered.
+    func answerHistoryQuestion(
+        _ request: AskHistoryRequest,
+        providerOverride: String? = nil,
+        cloudModelOverride: String? = nil,
+        effortOverride: String? = nil
+    ) async throws -> AskHistoryAnswer {
+        if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
+            throw ManagedPolicyRefusal(reason: reason)
+        }
+        let usesFallbackList = Self.trimmedOrNil(providerOverride) == nil
+            && PluginManager.shared?.enforcedLlmResolution == nil
+        let candidates = self.candidates(
+            providerOverride: providerOverride,
+            cloudModelOverride: cloudModelOverride,
+            effortOverride: effortOverride
+        )
+        guard !candidates.isEmpty else {
+            throw LLMFallbackExhaustedError(failures: [])
+        }
+
+        var localProvidersUsed: [any LLMProviderPlugin] = []
+        defer {
+            for provider in localProvidersUsed {
+                modelManagerService?.endAutoUnloadProtectedUse(of: provider)
+            }
+        }
+        var failures: [LLMFallbackAttemptFailure] = []
+        var policyRefusals: [ManagedPolicyRefusal] = []
+        for candidate in candidates {
+            try Task.checkCancellation()
+            do {
+                return try await historyAnswer(to: request, from: candidate) { provider in
+                    guard !localProvidersUsed.contains(where: { $0 === provider }) else { return }
+                    localProvidersUsed.append(provider)
+                    modelManagerService?.beginAutoUnloadProtectedUse(of: provider)
+                }
+            } catch {
+                if Task.isCancelled {
+                    throw CancellationError()
+                }
+                guard usesFallbackList, !Self.isCancellation(error) else {
+                    throw error
+                }
+                if let refusal = error as? ManagedPolicyRefusal {
+                    policyRefusals.append(refusal)
+                }
+                let failure = LLMFallbackAttemptFailure(
+                    providerId: normalizeProviderId(candidate.providerId),
+                    modelId: candidate.modelId,
+                    effortId: candidate.effortId,
+                    reason: Self.failureReason(for: error),
+                    exceededContext: LLMContextLimit.isReported(by: error)
+                )
+                failures.append(failure)
+                logger.warning("History answer failed for \(failure.providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
+            }
+        }
+        if let refusal = policyRefusals.first, policyRefusals.count == failures.count {
+            throw refusal
+        }
+        throw LLMFallbackExhaustedError(failures: failures)
+    }
+
+    private func historyAnswer(
+        to request: AskHistoryRequest,
+        from candidate: LLMFallbackPriorityItem,
+        onLocalProviderUsed: (any LLMProviderPlugin) -> Void
+    ) async throws -> AskHistoryAnswer {
+        let providerId = normalizeProviderId(candidate.providerId)
+        let kind = historyProviderKind(of: providerId)
+        var budget = AskHistoryBudget.initial(for: kind, isOverview: request.overviewRecordCount != nil)
+        var prompt = AskHistoryPromptBuilder.prompt(for: request, budget: budget)
+        if kind == .appleIntelligence, let provider = appleIntelligenceProvider {
+            (budget, prompt) = await measured(budget, prompt, of: request, for: provider)
+        }
+
+        var isRetry = false
+        while true {
+            do {
+                let text = try await processSingleProvider(
+                    providerId: providerId,
+                    requestedModelId: candidate.modelId,
+                    requestedEffortId: candidate.effortId,
+                    prompt: prompt.instructions,
+                    text: prompt.singlePrompt,
+                    temperatureDirective: .inheritProviderSetting,
+                    answersPrompt: true,
+                    onLocalProviderUsed: onLocalProviderUsed
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else {
+                    throw LLMFallbackAttemptError.emptyResult
+                }
+                return AskHistoryAnswer(
+                    text: AskHistoryCitations.withoutUnknownSources(text, sourceCount: prompt.sources.count),
+                    sources: prompt.sources,
+                    citedSources: AskHistoryCitations.numbers(in: text, sourceCount: prompt.sources.count),
+                    providerId: providerId,
+                    providerName: displayName(for: providerId)
+                )
+            } catch where !isRetry && !Task.isCancelled && LLMContextLimit.isReported(by: error) {
+                logger.info("History answer exceeded the context of \(providerId, privacy: .public); asking again with fewer sources")
+                isRetry = true
+                budget = budget.compact(for: kind)
+                prompt = AskHistoryPromptBuilder.prompt(for: request, budget: budget)
+            }
+        }
+    }
+
+    /// Fewer sources until the request fills no more of Apple Intelligence's
+    /// context than answers stay correct with.
+    private func measured(
+        _ budget: AskHistoryBudget,
+        _ prompt: AskHistoryPrompt,
+        of request: AskHistoryRequest,
+        for provider: LLMProvider
+    ) async -> (AskHistoryBudget, AskHistoryPrompt) {
+        var budget = budget
+        var prompt = prompt
+        for _ in 0..<8 {
+            guard let tokens = await provider.inputTokens(instructions: prompt.instructions, prompt: prompt.singlePrompt) else {
+                budget.sourceCharacters = min(budget.sourceCharacters, AskHistoryBudget.unmeasuredAppleIntelligenceSources)
+                return (budget, AskHistoryPromptBuilder.prompt(for: request, budget: budget))
+            }
+            let limit = AskHistoryBudget.appleIntelligenceContextShare * Double(tokens.contextSize)
+            guard Double(tokens.count) > limit, budget.sourceCharacters > 1_000 else { break }
+            // By the characters the sources take now, and a little below the
+            // share, because tokens per character vary.
+            let fitting = Double(prompt.sourcesSection.count) * limit / Double(tokens.count) * 0.95
+            budget.sourceCharacters = max(1_000, Int(fitting))
+            prompt = AskHistoryPromptBuilder.prompt(for: request, budget: budget)
+        }
+        return (budget, prompt)
+    }
+
+    private func historyProviderKind(of providerId: String) -> AskHistoryProviderKind {
+        if providerId == Self.appleIntelligenceId {
+            return .appleIntelligence
+        }
+        guard let plugin = PluginManager.shared?.llmProvider(for: providerId) else {
+            return .cloud
+        }
+        if Self.isLocalLLMProvider(plugin) {
+            return .local
+        }
+        return PluginManager.shared?.pluginId(ofLLMProvider: plugin) == Self.openAICompatiblePluginId
+            ? .openAICompatible
+            : .cloud
+    }
+
     private func processSingleProvider(
         providerId: String,
         requestedModelId: String?,
@@ -791,6 +951,7 @@ class PromptProcessingService: ObservableObject {
         prompt: String,
         text: String,
         temperatureDirective: PluginLLMTemperatureDirective,
+        answersPrompt: Bool = false,
         onLocalProviderUsed: (any LLMProviderPlugin) -> Void
     ) async throws -> String {
         if providerId == Self.appleIntelligenceId {
@@ -808,7 +969,9 @@ class PromptProcessingService: ObservableObject {
             logger.info("Processing prompt with Apple Intelligence")
             let providerStart = ContinuousClock.now
             do {
-                let result = try await provider.process(systemPrompt: prompt, userText: text)
+                let result = answersPrompt
+                    ? try await provider.answer(instructions: prompt, prompt: text)
+                    : try await provider.process(systemPrompt: prompt, userText: text)
                 logger.info("Prompt provider call finished in \(ContinuousClock.now - providerStart)")
                 // On-device: no token counts, but the provider still made the text.
                 recordLLMRequest(
