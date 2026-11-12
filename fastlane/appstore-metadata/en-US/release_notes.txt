@@ -1,9 +1,9 @@
-TypeWhisper 1.8.2 makes ElevenLabs dictations much faster, uploads less audio for the live preview with cloud engines and lets you import your own Parakeet models.
+TypeWhisper 1.8.3 transcribes with more cloud engines while you speak, saves every Recorder transcript to History and no longer cuts off the last word with push-to-talk.
 
-• ElevenLabs: short dictations no longer wait about 15 seconds after you stop speaking. The new Scribe v2 Medical model and more languages are available, and German and other languages are formatted correctly with automatic detection.
-• Live preview: cloud engines that cannot stream, such as Groq or ElevenLabs, no longer upload the last seconds of audio again every few seconds. The preview runs on a local engine instead, while the final text still comes from your dictation engine.
-• Parakeet: import your own Parakeet models converted to Core ML, for example a fine-tune for one language.
-• Apple Speech: pick Hong Kong Cantonese with Traditional Chinese characters. Language Detection tells Cantonese apart from Mandarin.
-• Dictation into Flutter apps and the kitty terminal works reliably.
-• The HTTP API can return the time of each word.
-• The "New in TypeWhisper" window stays in front of Settings and has a single Continue button.
+• Live dictation: AssemblyAI, Mistral AI, Reson8 and ElevenLabs transcribe while you speak. The live preview and the Live Transcript window show the provider's own transcript, and the final text is ready a fraction of a second after you stop.
+• Push-to-talk keeps recording up to 350 ms after you release the key while you are still speaking, so the last word is no longer lost.
+• Recorder: every transcribed recording gets a History record with its transcript, name, duration and engine, so search, sync and exports include it. With calls on speakers, the other participants are no longer credited to "Me".
+• Dictations no longer ask cloud engines for speaker labels, which providers bill on top of the transcription.
+• Premium: redeem App Store offer codes on the Premium page (macOS 15 and later).
+• New models and settings for AssemblyAI, Mistral AI, Reson8 and Microsoft AI. Soniox uses its new STT v6.
+• Recordings recover after undocking a Mac from clamshell mode, other apps' audio is no longer turned down during calls on a MacBook, and the interface follows the language set for TypeWhisper in System Settings.
