@@ -1620,7 +1620,7 @@ private struct WorkflowEditorPage: View {
                     }
                 }
 
-                if !isRunningTest, workflowService.shouldSkipAIProcessingForShortDictation(text: testInput) {
+                if !isRunningTest, workflowService.shouldSkipAIProcessingForShortDictation(text: testInput, workflow: makeTestWorkflow()) {
                     Text(
                         localizedAppText(
                             "A real dictation this short is inserted without AI processing. The test still runs it.",
@@ -1745,26 +1745,18 @@ private struct WorkflowEditorPage: View {
         )
     }
 
-    /// The translation target a real dictation would fall back to when the workflow has none.
-    private var testFallbackTranslationTarget: String? {
-        settingsViewModel.translationEnabled ? settingsViewModel.translationTargetLanguage : nil
-    }
-
     /// Whether the draft sends a prompt to an LLM, so the prompt preview has something to show.
     private var testPromptAvailable: Bool {
         guard draftCanBeTested, !draft.usesAppleTranslate else { return false }
         let workflow = makeTestWorkflow()
         return workflow.usesInlineCommands
-            || workflow.systemPrompt(fallbackTranslationTarget: testFallbackTranslationTarget) != nil
+            || workflow.systemPrompt() != nil
     }
 
     /// The prompt a run of the draft sends, built the same way as in a real dictation.
     private var testSystemPrompt: String? {
         guard testPromptAvailable else { return nil }
-        return makeTestProcessor().systemPrompt(
-            workflow: makeTestWorkflow(),
-            fallbackTranslationTarget: testFallbackTranslationTarget
-        )
+        return makeTestProcessor().systemPrompt(workflow: makeTestWorkflow())
     }
 
     private func makeTestProcessor() -> WorkflowTextProcessingService {
@@ -1789,7 +1781,6 @@ private struct WorkflowEditorPage: View {
 
         let processor = makeTestProcessor()
         let workflow = makeTestWorkflow()
-        let fallbackTranslationTarget = testFallbackTranslationTarget
 
         let runID = UUID()
         testRunID = runID
@@ -1807,11 +1798,7 @@ private struct WorkflowEditorPage: View {
                 }
             }
             do {
-                let result = try await processor.process(
-                    workflow: workflow,
-                    text: text,
-                    fallbackTranslationTarget: fallbackTranslationTarget
-                )
+                let result = try await processor.process(workflow: workflow, text: text)
                 guard !Task.isCancelled, testRunID == runID else { return }
                 testOutput = result
                 testDurationMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)

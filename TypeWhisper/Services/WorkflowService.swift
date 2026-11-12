@@ -91,14 +91,72 @@ final class WorkflowService: ObservableObject {
         }
 
         fetchWorkflows()
+        migrateLegacyTranslationSetting()
+    }
+
+    /// Replaces the retired "Enable translation" setting with an equivalent workflow.
+    /// The setting translated every dictation with Apple Translate unless a workflow
+    /// matched. An Always Translation workflow sorted after all others does the same:
+    /// app, website, and earlier Always workflows still win. Runs at launch and after
+    /// a backup import, and clears the setting so it runs only once.
+    func migrateLegacyTranslationSetting() {
+        let migratedWorkflow = userDefaults.string(forKey: UserDefaultsKeys.migratedTranslationWorkflowId)
+            .flatMap(UUID.init(uuidString:))
+            .flatMap(workflow(id:))
+        guard userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled) else {
+            // An older backup that has the setting off turns the migrated workflow off. An
+            // absent key is the normal state after the migration and changes nothing.
+            if userDefaults.object(forKey: UserDefaultsKeys.translationEnabled) != nil,
+               let migratedWorkflow {
+                // Saving again also retries a disable whose earlier save failed.
+                migratedWorkflow.isEnabled = false
+                updateWorkflow(migratedWorkflow)
+                guard !modelContext.hasChanges else { return }
+            }
+            userDefaults.removeObject(forKey: UserDefaultsKeys.translationEnabled)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.translationTargetLanguage)
+            return
+        }
+
+        let storedTarget = userDefaults.string(forKey: UserDefaultsKeys.translationTargetLanguage)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // The setting defaulted to English when no target was stored.
+        let targetLanguage = storedTarget?.isEmpty == false ? storedTarget ?? "en" : "en"
+        // Importing an older backup again restores the setting. Update the workflow an
+        // earlier migration created instead of adding another one. Workflows the user
+        // created stay untouched, even when they look the same.
+        if let migrated = migratedWorkflow {
+            var behavior = migrated.behavior
+            behavior.settings[WorkflowBehavior.targetLanguageSettingKey] = targetLanguage
+            migrated.behavior = behavior
+            migrated.isEnabled = true
+            updateWorkflow(migrated)
+        } else if let added = addWorkflow(
+            name: WorkflowTemplate.translation.definition.name,
+            template: .translation,
+            trigger: .global(),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+                WorkflowBehavior.targetLanguageSettingKey: targetLanguage,
+            ])
+        ) {
+            userDefaults.set(added.id.uuidString, forKey: UserDefaultsKeys.migratedTranslationWorkflowId)
+        }
+        // Keep the setting when the workflow could not be saved, so the next launch retries.
+        guard !modelContext.hasChanges else { return }
+        userDefaults.removeObject(forKey: UserDefaultsKeys.translationEnabled)
+        userDefaults.removeObject(forKey: UserDefaultsKeys.translationTargetLanguage)
     }
 
     static func clampedShortTranscriptionMinimumWords(_ value: Int) -> Int {
         min(max(value, shortTranscriptionMinimumWordsRange.lowerBound), shortTranscriptionMinimumWordsRange.upperBound)
     }
 
-    func shouldSkipAIProcessingForShortDictation(text: String) -> Bool {
-        guard shortTranscriptionMinimumWords > 0,
+    func shouldSkipAIProcessingForShortDictation(text: String, workflow: Workflow? = nil) -> Bool {
+        // Apple Translate is on-device translation, not an AI enhancement step, so short
+        // dictations are still translated, as the retired translation setting did.
+        guard workflow?.usesAppleTranslate != true,
+              shortTranscriptionMinimumWords > 0,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
 
         // Punctuation-only text counts as zero words and stays short.

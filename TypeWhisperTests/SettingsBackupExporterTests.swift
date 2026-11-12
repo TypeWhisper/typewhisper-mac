@@ -795,7 +795,12 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.preferencesApplied, 8)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.updateChannel), AppConstants.ReleaseChannel.daily.rawValue)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage), "de")
-        XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
+        // The retired translation setting comes back as an Always Translation workflow.
+        XCTAssertNil(destination.userDefaults.object(forKey: UserDefaultsKeys.translationEnabled))
+        XCTAssertEqual(
+            destination.workflowService.workflows.filter { $0.template == .translation && $0.trigger?.kind == .global }.count,
+            1
+        )
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.showMenuBarIcon), false)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle), "overlay")
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorTheme), "glass")

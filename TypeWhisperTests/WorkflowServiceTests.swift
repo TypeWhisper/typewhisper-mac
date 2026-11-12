@@ -805,6 +805,63 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(disabledReload.shortTranscriptionMinimumWords, 0)
     }
 
+    func testLegacyTranslationSettingBecomesAnAlwaysTranslationWorkflowOnce() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let existing = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        existing.addWorkflow(name: "Clean everywhere", template: .cleanedText, trigger: .global())
+        let appleTranslateToSpanish = [
+            WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+            WorkflowBehavior.targetLanguageSettingKey: "es",
+        ]
+        let ownWorkflow = try XCTUnwrap(existing.addWorkflow(
+            name: "My Spanish",
+            template: .translation,
+            trigger: .global(),
+            behavior: WorkflowBehavior(settings: appleTranslateToSpanish),
+            isEnabled: false
+        ))
+        defaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
+        defaults.set("de", forKey: UserDefaultsKeys.translationTargetLanguage)
+
+        let migrated = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        let translation = try XCTUnwrap(migrated.workflows.first { $0.template == .translation && $0.id != ownWorkflow.id })
+
+        XCTAssertEqual(translation.trigger, .global())
+        XCTAssertTrue(translation.isEnabled)
+        XCTAssertTrue(translation.usesAppleTranslate)
+        XCTAssertEqual(translation.translationTargetLanguage, "de")
+        // Like the setting, it only applies when no other workflow matches.
+        XCTAssertEqual(migrated.matchWorkflow(bundleIdentifier: "com.apple.TextEdit")?.workflow.name, "Clean everywhere")
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.translationEnabled))
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.translationTargetLanguage))
+
+        let relaunched = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 2)
+
+        // Importing an older backup again updates the migrated workflow instead of adding one.
+        defaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
+        defaults.set("fr", forKey: UserDefaultsKeys.translationTargetLanguage)
+        relaunched.migrateLegacyTranslationSetting()
+        XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 2)
+        XCTAssertEqual(relaunched.workflow(id: translation.id)?.translationTargetLanguage, "fr")
+
+        // An older backup with the setting off turns the migrated workflow off.
+        defaults.set(false, forKey: UserDefaultsKeys.translationEnabled)
+        relaunched.migrateLegacyTranslationSetting()
+        XCTAssertEqual(relaunched.workflow(id: translation.id)?.isEnabled, false)
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.translationEnabled))
+
+        // The user's own Always Apple Translate workflow is never taken for the migrated one.
+        let own = try XCTUnwrap(relaunched.workflow(id: ownWorkflow.id))
+        XCTAssertFalse(own.isEnabled)
+        XCTAssertEqual(own.translationTargetLanguage, "es")
+    }
+
     func testWorkflowServiceClampsShortTranscriptionMinimumWords() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -845,6 +902,15 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank\nyou!"))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open new tab"))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open.\nnew tab!"))
+        let appleTranslate = Workflow(
+            name: "Translate",
+            template: .translation,
+            trigger: .global(),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+            ])
+        )
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "thank you", workflow: appleTranslate))
 
         service.shortTranscriptionMinimumWords = 1
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
@@ -1725,6 +1791,56 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(capturedProvider, "Groq")
         XCTAssertEqual(capturedModel, "llama-3.3")
         XCTAssertEqual(capturedTemperature, workflow.behavior.temperatureDirective)
+    }
+
+    func testLLMTranslationFallsBackToAppleTranslateWhenTheProviderFails() async throws {
+        let workflow = Workflow(
+            name: "LLM Translate",
+            template: .translation,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(settings: ["targetLanguage": "German"])
+        )
+
+        var capturedTargetLanguage: String?
+        var capturedSourceLanguage: String?
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { _, _, _, _, _ in
+                throw URLError(.cannotConnectToHost)
+            },
+            appleTranslator: { _, _, _ in
+                XCTFail("The fallback must use the strict translator, which throws instead of returning the source text")
+                return ""
+            },
+            strictAppleTranslator: { text, targetLanguage, sourceLanguage in
+                capturedTargetLanguage = targetLanguage
+                capturedSourceLanguage = sourceLanguage
+                return text == "Hello world" ? "Hallo Welt" : text
+            }
+        )
+
+        let result = try await service.process(
+            workflow: workflow,
+            text: "Hello world",
+            detectedLanguage: "English"
+        )
+
+        XCTAssertEqual(result, "Hallo Welt")
+        XCTAssertEqual(capturedTargetLanguage, "de")
+        XCTAssertEqual(capturedSourceLanguage, "en")
+
+        let cancelling = WorkflowTextProcessingService(
+            promptProcessor: { _, _, _, _, _ in throw CancellationError() },
+            appleTranslator: { _, _, _ in
+                XCTFail("A cancelled LLM translation must not fall back to Apple Translate")
+                return ""
+            }
+        )
+        do {
+            _ = try await cancelling.process(workflow: workflow, text: "Hello world")
+            XCTFail("Expected the cancellation to propagate")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
     }
 
     func testScreenContextIsAddedAsFencedReferenceOnlyWhenEnabled() async throws {

@@ -1009,6 +1009,8 @@ enum SettingsBackupExporter {
         apply(preferences.selectedTask, forKey: UserDefaultsKeys.selectedTask)
         apply(preferences.translationEnabled, forKey: UserDefaultsKeys.translationEnabled)
         apply(preferences.translationTargetLanguage, forKey: UserDefaultsKeys.translationTargetLanguage)
+        // Backups from before the translation setting was retired turn it into a workflow.
+        workflowService.migrateLegacyTranslationSetting()
         apply(preferences.showMenuBarIcon, forKey: UserDefaultsKeys.showMenuBarIcon)
         apply(preferences.dockIconBehaviorWhenMenuBarHidden, forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden)
         apply(preferences.audioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)

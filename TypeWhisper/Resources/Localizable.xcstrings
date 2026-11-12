@@ -25346,34 +25346,6 @@
         }
       }
     },
-    "Enable translation" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung aktivieren"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Activar traducción"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳を有効にする"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启用翻译"
-          }
-        }
-      }
-    },
     "Effort" : {
       "comment" : "Label of the reasoning-effort picker for a language model.",
       "localizations" : {
@@ -53809,34 +53781,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用户类型"
-          }
-        }
-      }
-    },
-    "Uses Apple Translate (on-device)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verwendet Apple Translate (lokal)"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Usa Apple Translate (en el dispositivo)"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple翻訳を使用します（オンデバイス）"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用 Apple 翻译（设备端）"
           }
         }
       }
