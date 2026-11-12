@@ -72,18 +72,23 @@ struct WorkflowTextProcessingService {
     private let promptProcessor: PromptProcessor
     private let effortPromptProcessor: EffortPromptProcessor?
     private let appleTranslator: AppleTranslator?
+    /// Throws instead of returning the source text when Apple Translate times out or
+    /// fails, so the fallback for a failed LLM translation can tell success from failure.
+    private let strictAppleTranslator: AppleTranslator?
     private let providerResolver: ProviderResolver?
     private let vocabularyProvider: VocabularyProvider?
 
     init(
         promptProcessor: @escaping PromptProcessor,
         appleTranslator: AppleTranslator?,
+        strictAppleTranslator: AppleTranslator? = nil,
         providerResolver: ProviderResolver? = nil,
         vocabularyProvider: VocabularyProvider? = nil
     ) {
         self.promptProcessor = promptProcessor
         self.effortPromptProcessor = nil
         self.appleTranslator = appleTranslator
+        self.strictAppleTranslator = strictAppleTranslator ?? appleTranslator
         self.providerResolver = providerResolver
         self.vocabularyProvider = vocabularyProvider
     }
@@ -124,20 +129,27 @@ struct WorkflowTextProcessingService {
 
         #if canImport(Translation)
         if #available(macOS 15, *), let translationService = translationService as? TranslationService {
-            self.appleTranslator = { text, targetLanguageCode, sourceLanguageCode in
-                let targetLanguage = Locale.Language(identifier: targetLanguageCode)
-                let sourceLanguage = sourceLanguageCode.map { Locale.Language(identifier: $0) }
-                return try await translationService.translate(
-                    text: text,
-                    to: targetLanguage,
-                    source: sourceLanguage
-                )
+            func translator(strict: Bool) -> AppleTranslator {
+                { text, targetLanguageCode, sourceLanguageCode in
+                    let targetLanguage = Locale.Language(identifier: targetLanguageCode)
+                    let sourceLanguage = sourceLanguageCode.map { Locale.Language(identifier: $0) }
+                    return try await translationService.translate(
+                        text: text,
+                        to: targetLanguage,
+                        source: sourceLanguage,
+                        strict: strict
+                    )
+                }
             }
+            self.appleTranslator = translator(strict: false)
+            self.strictAppleTranslator = translator(strict: true)
         } else {
             self.appleTranslator = nil
+            self.strictAppleTranslator = nil
         }
         #else
         self.appleTranslator = nil
+        self.strictAppleTranslator = nil
         #endif
     }
 
@@ -239,7 +251,7 @@ struct WorkflowTextProcessingService {
                   !workflow.usesInlineCommands,
                   !Task.isCancelled,
                   !isPostProcessingCancellation(error),
-                  let appleTranslator,
+                  let strictAppleTranslator,
                   let targetLanguageCode = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(
                       from: workflow.translationTargetLanguage ?? fallbackTranslationTarget ?? "en"
                   ) else {
@@ -252,14 +264,19 @@ struct WorkflowTextProcessingService {
             let sourceLanguageCode = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(
                 from: detectedLanguage ?? configuredLanguage
             )
+            let translated: String
             do {
-                return try await appleTranslator(text, targetLanguageCode, sourceLanguageCode)
+                translated = try await strictAppleTranslator(text, targetLanguageCode, sourceLanguageCode)
             } catch let appleError {
                 workflowTextProcessingLogger.error(
                     "Apple Translate fallback failed: \(appleError.localizedDescription, privacy: .public)"
                 )
                 throw error
             }
+            // Apple Translate does not stop when the task is cancelled, so a cancelled
+            // dictation must not insert the translation that arrives afterwards.
+            try Task.checkCancellation()
+            return translated
         }
     }
 

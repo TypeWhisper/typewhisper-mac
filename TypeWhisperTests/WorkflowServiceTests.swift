@@ -1741,7 +1741,11 @@ final class WorkflowServiceTests: XCTestCase {
             promptProcessor: { _, _, _, _, _ in
                 throw URLError(.cannotConnectToHost)
             },
-            appleTranslator: { text, targetLanguage, sourceLanguage in
+            appleTranslator: { _, _, _ in
+                XCTFail("The fallback must use the strict translator, which throws instead of returning the source text")
+                return ""
+            },
+            strictAppleTranslator: { text, targetLanguage, sourceLanguage in
                 capturedTargetLanguage = targetLanguage
                 capturedSourceLanguage = sourceLanguage
                 return text == "Hello world" ? "Hallo Welt" : text
