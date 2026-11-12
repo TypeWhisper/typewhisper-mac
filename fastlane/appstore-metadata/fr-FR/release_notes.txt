@@ -1,9 +1,9 @@
-TypeWhisper 1.8.2 rend les dictées avec ElevenLabs bien plus rapides, envoie moins d’audio pour l’aperçu en direct avec les moteurs dans le cloud et vous permet d’importer vos propres modèles Parakeet.
+TypeWhisper 1.8.3 transcrit avec davantage de moteurs dans le cloud pendant que vous parlez, enregistre chaque transcription du Recorder dans l’historique et ne coupe plus le dernier mot en mode appuyer pour parler.
 
-• ElevenLabs : les dictées courtes n’attendent plus environ 15 secondes après la fin de la parole. Le nouveau modèle Scribe v2 Medical et d’autres langues sont disponibles, et l’allemand comme les autres langues sont correctement mis en forme avec la détection automatique.
-• Aperçu en direct : les moteurs dans le cloud qui ne diffusent pas en continu, comme Groq ou ElevenLabs, ne renvoient plus les dernières secondes d’audio toutes les quelques secondes. L’aperçu passe par un moteur local, et le texte final vient toujours de votre moteur de dictée.
-• Parakeet : importez vos propres modèles Parakeet convertis en Core ML, par exemple un modèle affiné pour une langue.
-• Apple Speech : choisissez le cantonais de Hong Kong en caractères chinois traditionnels. Language Detection distingue le cantonais du mandarin.
-• La dictée dans les apps Flutter et dans le terminal kitty fonctionne de manière fiable.
-• L’API HTTP peut renvoyer l’horodatage de chaque mot.
-• La fenêtre « New in TypeWhisper » reste devant les réglages et n’a plus qu’un bouton « Continue ».
+• Dictée en direct : AssemblyAI, Mistral AI, Reson8 et ElevenLabs transcrivent pendant que vous parlez. L’aperçu en direct et la fenêtre Live Transcript affichent la transcription du fournisseur, et le texte final est prêt une fraction de seconde après la fin.
+• Appuyer pour parler continue d’enregistrer jusqu’à 350 ms après le relâchement de la touche si vous parlez encore, et le dernier mot n’est plus perdu.
+• Recorder : chaque enregistrement transcrit obtient une entrée dans l’historique avec sa transcription, son nom, sa durée et son moteur, ce qui l’inclut dans la recherche, la synchronisation et les exports. Lors d’appels sur haut-parleurs, les autres participants ne sont plus attribués à « Moi ».
+• Les dictées ne demandent plus d’étiquettes de locuteur aux moteurs dans le cloud, que les fournisseurs facturent en plus de la transcription.
+• Premium : utilisez des codes promotionnels de l’App Store sur la page Premium (macOS 15 ou version ultérieure).
+• Nouveaux modèles et réglages pour AssemblyAI, Mistral AI, Reson8 et Microsoft AI. Soniox utilise son nouveau STT v6.
+• Les enregistrements reprennent après avoir retiré un Mac du mode clamshell, le son des autres apps n’est plus baissé pendant les appels sur un MacBook et l’interface suit la langue choisie pour TypeWhisper dans Réglages Système.
