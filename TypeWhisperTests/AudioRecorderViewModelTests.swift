@@ -6,6 +6,16 @@ import os
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
+/// Keeps the notifications a test would post; tests never post real ones.
+@MainActor
+private final class RecordingMicrophoneIncidentNotifier: RecorderMicrophoneIncidentNotifying {
+    private(set) var incidents: [RecorderMicrophoneIncident] = []
+
+    func notify(_ incident: RecorderMicrophoneIncident) {
+        incidents.append(incident)
+    }
+}
+
 private actor RecorderStopFinalizationGate {
     private var continuation: CheckedContinuation<URL?, any Error>?
     private var started = false
@@ -213,6 +223,32 @@ final class AudioRecorderViewModelTests: XCTestCase {
 
         let error = String(localized: "Error: \("Microphone unavailable")")
         XCTAssertEqual(announcements.messages, [error, error, "No system audio", "No system audio"])
+    }
+
+    /// #1863: the warning follows every update of a frozen microphone; the notification comes
+    /// once the restart failed, and again when it worked after all.
+    func testMicrophoneIncidentIsNotifiedOncePerOutcome() throws {
+        let notifier = RecordingMicrophoneIncidentNotifier()
+        let viewModel = makeViewModel(defaults: try makeDefaults(), microphoneIncidentNotifier: notifier)
+        var incident = RecorderMicrophoneIncident(number: 1, cause: .repeatedAudio, stoppedAt: 960)
+
+        viewModel.showMicrophoneIncident(incident)
+        XCTAssertEqual(viewModel.microphoneWarningMessage, incident.warningMessage)
+        XCTAssertTrue(notifier.incidents.isEmpty, "nothing to tell while the restart runs")
+
+        incident.failedRestarts = 1
+        viewModel.showMicrophoneIncident(incident)
+        incident.failedRestarts = 2
+        viewModel.showMicrophoneIncident(incident)
+        incident.resumedAt = 975
+        viewModel.showMicrophoneIncident(incident)
+        viewModel.showMicrophoneIncident(incident)
+
+        XCTAssertEqual(viewModel.microphoneWarningMessage, incident.warningMessage)
+        XCTAssertEqual(notifier.incidents.map(\.failedRestarts), [1, 2])
+        XCTAssertEqual(notifier.incidents.map(\.resumedAt), [nil, 975])
+        XCTAssertEqual(RecorderMicrophoneIncident.formattedPosition(960), "16:00")
+        XCTAssertEqual(RecorderMicrophoneIncident.formattedPosition(3_723), "1:02:03")
     }
 
     private struct RestorableRecorderFixture {
@@ -3455,7 +3491,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
         recorderCompletionsLoader: AudioRecorderViewModel.RecorderCompletionsLoader? = nil,
         trash: URL? = nil,
         livePreviewStartObserver: (() -> Void)? = nil,
-        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil,
+        microphoneIncidentNotifier: RecorderMicrophoneIncidentNotifying? = nil
     ) -> AudioRecorderViewModel {
         setupEventBus()
         let resolvedRecorderService = recorderService ?? {
@@ -3476,7 +3513,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
             recorderCompletionsLoader: recorderCompletionsLoader,
             recordingFileTrasher: TestSupport.recordingFileTrasher(into: trash ?? makeTemporaryDirectory()),
             livePreviewStartObserver: livePreviewStartObserver,
-            accessibilityAnnouncementService: accessibilityAnnouncementService
+            accessibilityAnnouncementService: accessibilityAnnouncementService,
+            microphoneIncidentNotifier: microphoneIncidentNotifier ?? RecordingMicrophoneIncidentNotifier()
         )
     }
 
