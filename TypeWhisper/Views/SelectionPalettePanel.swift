@@ -27,6 +27,9 @@ struct SelectionPaletteConfiguration: Equatable {
     let panelWidth: CGFloat
     let panelHeight: CGFloat
     let previewText: String?
+    /// A short label above `previewText` that says where the text comes from.
+    let previewTitle: String?
+    let previewIconSystemName: String?
     let previewLineLimit: Int
     let titleLineLimit: Int
     let searchPrompt: String?
@@ -46,6 +49,8 @@ struct SelectionPaletteConfiguration: Equatable {
         panelWidth: CGFloat = 380,
         panelHeight: CGFloat = 400,
         previewText: String? = nil,
+        previewTitle: String? = nil,
+        previewIconSystemName: String? = nil,
         previewLineLimit: Int = 3,
         titleLineLimit: Int = 1,
         searchPrompt: String? = nil,
@@ -56,6 +61,8 @@ struct SelectionPaletteConfiguration: Equatable {
         self.panelWidth = panelWidth
         self.panelHeight = panelHeight
         self.previewText = previewText
+        self.previewTitle = previewTitle
+        self.previewIconSystemName = previewIconSystemName
         self.previewLineLimit = previewLineLimit
         self.titleLineLimit = titleLineLimit
         self.searchPrompt = searchPrompt
@@ -65,6 +72,7 @@ struct SelectionPaletteConfiguration: Equatable {
     }
 
     var showsSearchField: Bool { searchPrompt != nil }
+    var showsPreview: Bool { previewText != nil || previewTitle != nil }
 }
 
 @MainActor
@@ -214,15 +222,32 @@ private struct SelectionPaletteContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let previewText = model.configuration.previewText {
-                Text(previewText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(model.configuration.previewLineLimit)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
+            if model.configuration.showsPreview {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let previewTitle = model.configuration.previewTitle {
+                        HStack(spacing: 5) {
+                            if let iconSystemName = model.configuration.previewIconSystemName {
+                                Image(systemName: iconSystemName)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(previewTitle)
+                        }
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    }
+
+                    if let previewText = model.configuration.previewText {
+                        Text(previewText)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(model.configuration.previewLineLimit)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .accessibilityElement(children: .combine)
 
                 Divider()
             }
@@ -233,7 +258,7 @@ private struct SelectionPaletteContentView: View {
                     text: model.searchText
                 )
                 .padding(.horizontal, 12)
-                .padding(.top, model.configuration.previewText == nil ? 12 : 10)
+                .padding(.top, model.configuration.showsPreview ? 10 : 12)
                 .padding(.bottom, 10)
             }
 
@@ -392,7 +417,7 @@ private struct SelectionPaletteRow: View {
     }
 }
 
-private final class SelectionPalettePanel: NSPanel {
+final class SelectionPalettePanel: NSPanel {
     var keyDownHandler: ((NSEvent) -> Bool)?
 
     init() {
@@ -428,7 +453,22 @@ private final class SelectionPalettePanel: NSPanel {
         let x = screenFrame.midX - frame.width / 2
         let y = screenFrame.midY + 60
 
-        setFrameOrigin(NSPoint(x: x, y: y))
+        setFrameOrigin(Self.origin(NSPoint(x: x, y: y), size: frame.size, keptInside: screenFrame))
+    }
+
+    /// Moves the panel back inside the visible screen area after a resize, e.g.
+    /// when a taller level replaces a shorter one.
+    func keepOnScreen() {
+        guard let screenFrame = screen?.visibleFrame else { return }
+        setFrameOrigin(Self.origin(frame.origin, size: frame.size, keptInside: screenFrame))
+    }
+
+    /// `origin` shifted just enough that a panel of `size` stays inside `visibleFrame`.
+    /// The top edge wins when the panel is taller than the frame, so the header stays visible.
+    nonisolated static func origin(_ origin: NSPoint, size: NSSize, keptInside visibleFrame: NSRect) -> NSPoint {
+        let x = max(visibleFrame.minX, min(origin.x, visibleFrame.maxX - size.width))
+        let y = min(max(origin.y, visibleFrame.minY), visibleFrame.maxY - size.height)
+        return NSPoint(x: x, y: y)
     }
 
     private func activeScreen() -> NSScreen? {
@@ -499,6 +539,7 @@ final class SelectionPaletteController: SelectionPaletteControlling {
             let newSize = NSSize(width: configuration.panelWidth, height: configuration.panelHeight)
             hostingView.frame = NSRect(origin: .zero, size: newSize)
             panel.setContentSize(newSize)
+            panel.keepOnScreen()
             presentationID = UUID()
             return
         }

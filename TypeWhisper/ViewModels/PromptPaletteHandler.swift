@@ -23,6 +23,8 @@ final class PromptPaletteHandler {
         let browserInfoTask: Task<(url: String?, title: String?), Never>?
         let selectionViaCopy: Bool
         let deferredClipboardRestore: TextInsertionService.DeferredClipboardRestore?
+        /// Nothing was selected, so `text` is whatever was already on the clipboard.
+        var isFromClipboard = false
     }
     private var paletteContext: PaletteContext?
 
@@ -152,7 +154,19 @@ final class PromptPaletteHandler {
                 self?.showMissingTextFeedback(soundFeedbackEnabled: soundFeedbackEnabled)
             }
         ) { [weak self] context in
-            self?.processStandaloneWorkflow(
+            guard let self else { return }
+            guard !context.isFromClipboard else {
+                // The clipboard may hold something the user did not mean to send to
+                // the workflow's provider, so the palette shows it and waits for Return.
+                self.showPalette(
+                    context: context,
+                    workflows: [workflow],
+                    recentEntries: [],
+                    soundFeedbackEnabled: soundFeedbackEnabled
+                )
+                return
+            }
+            self.processStandaloneWorkflow(
                 workflow: workflow,
                 context: context,
                 soundFeedbackEnabled: soundFeedbackEnabled
@@ -225,7 +239,8 @@ final class PromptPaletteHandler {
                         activeApp: activeApp,
                         browserInfoTask: browserInfoTask,
                         selectionViaCopy: false,
-                        deferredClipboardRestore: nil
+                        deferredClipboardRestore: nil,
+                        isFromClipboard: true
                     ))
                 } else {
                     logger.info("[PromptPalette] No text available")
@@ -250,7 +265,11 @@ final class PromptPaletteHandler {
         entries.append(contentsOf: recentEntries.map { .recentTranscription($0) })
         guard !entries.isEmpty else { return }
 
-        promptPaletteController.show(entries: entries, sourceText: context?.text) { [weak self] entry in
+        let clipboardText = context?.isFromClipboard == true ? context?.text : nil
+        if clipboardText != nil {
+            accessibilityAnnouncementService.announce(PromptPaletteController.clipboardPreviewTitle)
+        }
+        promptPaletteController.show(entries: entries, clipboardText: clipboardText) { [weak self] entry in
             guard let self else { return }
             switch entry {
             case .workflow(let workflow):

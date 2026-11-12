@@ -178,8 +178,8 @@ enum WorkflowHotkeyBehavior: String, CaseIterable, Codable, Hashable, Sendable {
             )
         case .processSelectedText:
             localizedAppText(
-                "Pressing the shortcut transforms the current selection or clipboard without recording.",
-                de: "Der Shortcut verarbeitet die aktuelle Auswahl oder Zwischenablage ohne Aufnahme."
+                "Pressing the shortcut transforms the current selection without recording. With nothing selected, it shows the clipboard text and waits for Return.",
+                de: "Der Shortcut verarbeitet die aktuelle Auswahl ohne Aufnahme. Ist nichts markiert, zeigt er den Text aus der Zwischenablage und wartet auf Return."
             )
         }
     }
