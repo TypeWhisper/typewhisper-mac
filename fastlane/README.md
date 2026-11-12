@@ -101,7 +101,7 @@ Capture the Mac App Store edition in screenshot mode (raw window images)
 [bundle exec] fastlane mac appstore_screenshots_upload
 ```
 
-Compose the raw captures into 2880x1800 store images, replace the macOS screenshots and verify them (version:<version>)
+Replace the macOS screenshots with the rendered store images and verify them (version:<version>)
 
 ### mac appstore_screenshots_verify
 
