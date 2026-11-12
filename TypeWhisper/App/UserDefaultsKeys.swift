@@ -65,6 +65,8 @@ enum UserDefaultsKeys {
     static let selectedTask = "selectedTask"
     static let translationEnabled = "translationEnabled"
     static let translationTargetLanguage = "translationTargetLanguage"
+    /// The workflow that replaced the translation setting, so a later backup import updates it.
+    static let migratedTranslationWorkflowId = "migratedTranslationWorkflowId"
     static let preferredAppLanguage = "preferredAppLanguage"
 
     // MARK: - API Server

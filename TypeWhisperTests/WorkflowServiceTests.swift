@@ -814,11 +814,22 @@ final class WorkflowServiceTests: XCTestCase {
 
         let existing = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
         existing.addWorkflow(name: "Clean everywhere", template: .cleanedText, trigger: .global())
+        let appleTranslateToSpanish = [
+            WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+            WorkflowBehavior.targetLanguageSettingKey: "es",
+        ]
+        let ownWorkflow = try XCTUnwrap(existing.addWorkflow(
+            name: "My Spanish",
+            template: .translation,
+            trigger: .global(),
+            behavior: WorkflowBehavior(settings: appleTranslateToSpanish),
+            isEnabled: false
+        ))
         defaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
         defaults.set("de", forKey: UserDefaultsKeys.translationTargetLanguage)
 
         let migrated = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
-        let translation = try XCTUnwrap(migrated.workflows.first { $0.template == .translation })
+        let translation = try XCTUnwrap(migrated.workflows.first { $0.template == .translation && $0.id != ownWorkflow.id })
 
         XCTAssertEqual(translation.trigger, .global())
         XCTAssertTrue(translation.isEnabled)
@@ -830,15 +841,19 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.translationTargetLanguage))
 
         let relaunched = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
-        XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 1)
+        XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 2)
 
         // Importing an older backup again updates the migrated workflow instead of adding one.
         defaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
         defaults.set("fr", forKey: UserDefaultsKeys.translationTargetLanguage)
         relaunched.migrateLegacyTranslationSetting()
-        let translations = relaunched.workflows.filter { $0.template == .translation }
-        XCTAssertEqual(translations.count, 1)
-        XCTAssertEqual(translations.first?.translationTargetLanguage, "fr")
+        XCTAssertEqual(relaunched.workflows.filter { $0.template == .translation }.count, 2)
+        XCTAssertEqual(relaunched.workflow(id: translation.id)?.translationTargetLanguage, "fr")
+
+        // The user's own Always Apple Translate workflow is never taken for the migrated one.
+        let own = try XCTUnwrap(relaunched.workflow(id: ownWorkflow.id))
+        XCTAssertFalse(own.isEnabled)
+        XCTAssertEqual(own.translationTargetLanguage, "es")
     }
 
     func testWorkflowServiceClampsShortTranscriptionMinimumWords() throws {
