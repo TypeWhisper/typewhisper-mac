@@ -131,6 +131,8 @@ final class WorkflowService: ObservableObject {
                 ])
             )
         }
+        // Keep the setting when the workflow could not be saved, so the next launch retries.
+        guard !modelContext.hasChanges else { return }
         userDefaults.removeObject(forKey: UserDefaultsKeys.translationEnabled)
         userDefaults.removeObject(forKey: UserDefaultsKeys.translationTargetLanguage)
     }
@@ -139,8 +141,11 @@ final class WorkflowService: ObservableObject {
         min(max(value, shortTranscriptionMinimumWordsRange.lowerBound), shortTranscriptionMinimumWordsRange.upperBound)
     }
 
-    func shouldSkipAIProcessingForShortDictation(text: String) -> Bool {
-        guard shortTranscriptionMinimumWords > 0,
+    func shouldSkipAIProcessingForShortDictation(text: String, workflow: Workflow? = nil) -> Bool {
+        // Apple Translate is on-device translation, not an AI enhancement step, so short
+        // dictations are still translated, as the retired translation setting did.
+        guard workflow?.usesAppleTranslate != true,
+              shortTranscriptionMinimumWords > 0,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
 
         // Punctuation-only text counts as zero words and stays short.

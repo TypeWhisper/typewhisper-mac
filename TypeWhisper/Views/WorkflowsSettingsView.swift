@@ -1620,7 +1620,7 @@ private struct WorkflowEditorPage: View {
                     }
                 }
 
-                if !isRunningTest, workflowService.shouldSkipAIProcessingForShortDictation(text: testInput) {
+                if !isRunningTest, workflowService.shouldSkipAIProcessingForShortDictation(text: testInput, workflow: makeTestWorkflow()) {
                     Text(
                         localizedAppText(
                             "A real dictation this short is inserted without AI processing. The test still runs it.",

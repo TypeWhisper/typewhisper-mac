@@ -881,6 +881,15 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank\nyou!"))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open new tab"))
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open.\nnew tab!"))
+        let appleTranslate = Workflow(
+            name: "Translate",
+            template: .translation,
+            trigger: .global(),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+            ])
+        )
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "thank you", workflow: appleTranslate))
 
         service.shortTranscriptionMinimumWords = 1
         XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))

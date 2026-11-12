@@ -5132,7 +5132,7 @@ final class DictationViewModel: ObservableObject {
         let screenContextTask = workflow.usesScreenContext ? self.screenContextTask : nil
 
         return { text in
-            if workflowService.shouldSkipAIProcessingForShortDictation(text: text) {
+            if workflowService.shouldSkipAIProcessingForShortDictation(text: text, workflow: workflow) {
                 incrementalPostProcessing?.cancel()
                 logger.info("Skipping workflow AI processing for short dictation")
                 return text
