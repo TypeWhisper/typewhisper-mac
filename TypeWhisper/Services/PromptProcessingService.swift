@@ -939,17 +939,19 @@ class PromptProcessingService: ObservableObject {
         effortOverride: String? = nil
     ) async -> AskHistoryFollowUpPlan? {
         let prompt = AskHistoryFollowUpPlan.prompt(question: question, history: history)
-        let reply = try? await tryingHistoryProviders(
+        return try? await tryingHistoryProviders(
             providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
         ) { candidate, onLocalProviderUsed in
-            try await self.historyCompletion(
+            let reply = try await self.historyCompletion(
                 from: candidate,
                 instructions: AskHistoryFollowUpPlan.instructions,
                 prompt: prompt,
                 onLocalProviderUsed: onLocalProviderUsed
             )
+            // A reply that is no plan leaves the next provider to try.
+            guard let plan = AskHistoryFollowUpPlan(reply: reply) else { throw LLMFallbackAttemptError.emptyResult }
+            return plan
         }
-        return reply.flatMap(AskHistoryFollowUpPlan.init(reply:))
     }
 
     /// A provider's reply to a prompt that is answered as it is. An empty reply is a failure.

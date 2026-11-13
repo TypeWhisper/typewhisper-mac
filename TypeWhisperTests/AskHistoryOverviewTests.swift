@@ -220,6 +220,14 @@ final class AskHistoryOverviewTests: XCTestCase {
         provider.enqueue(.failure("The provider failed."))
         plan = await service.planHistoryFollowUp(question: "Und Ben?", history: history, providerOverride: "cloud-llm")
         XCTAssertNil(plan)
+
+        // A reply that is no plan leaves the next provider of the list to answer.
+        let second = AnsweringProvider(id: "second-llm", name: "Second LLM")
+        let fallback = try environment.makeService(providers: [provider, second], fallbacks: ["cloud-llm", "second-llm"])
+        provider.enqueue(.text("I cannot help with that."))
+        second.enqueue(.text(#"{"question": "Was hat Ben gesagt?", "keywords": []}"#))
+        plan = await fallback.planHistoryFollowUp(question: "Und Ben?", history: history)
+        XCTAssertEqual(plan?.question, "Was hat Ben gesagt?")
     }
 
     func testAnOverviewOnALocalModelIsTheListOfASummaryOfEachRecording() async throws {
