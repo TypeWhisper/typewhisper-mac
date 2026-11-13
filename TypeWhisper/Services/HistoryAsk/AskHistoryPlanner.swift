@@ -12,6 +12,8 @@ struct HistorySearchPlan: Equatable, Sendable {
     }
 
     var question: String
+    /// The question's language as an ISO 639 code, when it is clear enough.
+    var language: String?
     var keywords: [String] = []
     /// Speakers the question names, as it writes them.
     var names: [String] = []
@@ -26,6 +28,7 @@ struct HistorySearchPlan: Equatable, Sendable {
 /// Makes a search plan from the words of a question, without a language model.
 struct AskHistoryPlanner: Sendable {
     static let maximumKeywords = 24
+    static let languageConfidence = 0.6
 
     /// The speakers, apps and domains of the indexed records.
     var vocabulary = HistorySearchVocabulary()
@@ -33,8 +36,15 @@ struct AskHistoryPlanner: Sendable {
     var calendar = Calendar.current
 
     func plan(for question: String) -> HistorySearchPlan {
-        let language = NLLanguageRecognizer.dominantLanguage(for: question)?.rawValue
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(question)
+        let language = recognizer.dominantLanguage?.rawValue
         var plan = HistorySearchPlan(question: question)
+        // A short question can be guessed wrong, and a wrong language is worse than none.
+        if let dominant = recognizer.dominantLanguage,
+           recognizer.languageHypotheses(withMaximum: 1)[dominant, default: 0] >= Self.languageConfidence {
+            plan.language = language
+        }
         var words = Self.words(of: question, language: language)
 
         // The words of a period, a domain, an app or a device are not searched for.

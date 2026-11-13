@@ -476,6 +476,16 @@ final class PluginManager: ObservableObject {
         )
     }
 
+    /// The ID of the enabled plugin that provides this LLM provider.
+    func pluginId(ofLLMProvider provider: LLMProviderPlugin) -> String? {
+        loadedPlugins.first { plugin in
+            guard plugin.isEnabled else { return false }
+            if let own = plugin.instance as? LLMProviderPlugin, own === provider { return true }
+            return (plugin.instance as? AdditionalLLMProvidersProviding)?
+                .additionalLLMProviders.contains { $0 === provider } ?? false
+        }?.manifest.id
+    }
+
     private func llmRefusal(for provider: LLMProviderPlugin, in plugin: LoadedPlugin) -> String? {
         policyRefusals[plugin.manifest.id] ?? providerPolicy.llmRefusal(
             pluginId: plugin.manifest.id,

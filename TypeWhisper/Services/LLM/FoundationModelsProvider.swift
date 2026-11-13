@@ -27,6 +27,17 @@ enum LLMContextLimit {
         #endif
         return false
     }
+
+    /// Also true for a plugin's error that reads like an input too long for
+    /// the model. Plugins have no error of their own for it, so the text
+    /// decides: HTTP 413, or a message about the context or the token limit.
+    static func isReported(by error: any Error) -> Bool {
+        if isExceeded(error) { return true }
+        let text = (String(describing: error) + " " + error.localizedDescription).lowercased()
+        return text.contains("http 413") || text.contains("payload too large")
+            || text.contains("context length") || text.contains("context window") || text.contains("context size")
+            || text.contains("too many tokens") || (text.contains("maximum") && text.contains("token"))
+    }
 }
 
 enum TypeWhisperDictatedTextBoundary {
@@ -220,6 +231,34 @@ final class FoundationModelsProvider: LLMProvider, @unchecked Sendable {
         )
         #else
         throw LLMError.notAvailable
+        #endif
+    }
+
+    func answer(instructions: String, prompt: String) async throws -> String {
+        #if canImport(FoundationModels)
+        let model = contentTransformationModel
+        guard model.availability == .available else {
+            throw LLMError.notAvailable
+        }
+        let session = LanguageModelSession(model: model, instructions: Instructions(instructions))
+        return try await session.respond(to: Prompt(prompt)).content
+        #else
+        throw LLMError.notAvailable
+        #endif
+    }
+
+    func inputTokens(instructions: String, prompt: String) async -> (count: Int, contextSize: Int)? {
+        #if canImport(FoundationModels) && compiler(>=6.4)
+        guard #available(macOS 26.4, *) else { return nil }
+        let model = contentTransformationModel
+        // Counting throws while the model is not ready.
+        guard let instructionTokens = try? await model.tokenCount(for: Instructions(instructions)),
+              let promptTokens = try? await model.tokenCount(for: Prompt(prompt)) else { return nil }
+        // The size is 0 while the model is not ready; the smallest model has 4,096 tokens.
+        let contextSize = model.contextSize > 0 ? model.contextSize : 4_096
+        return (instructionTokens + promptTokens, contextSize)
+        #else
+        return nil
         #endif
     }
 

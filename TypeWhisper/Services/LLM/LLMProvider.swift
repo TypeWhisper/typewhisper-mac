@@ -21,10 +21,22 @@ protocol LLMProvider: Sendable {
     var isAvailable: Bool { get }
     /// Starts loading the model so a request shortly afterwards does not wait for it.
     func prewarm()
+    /// Answers a prompt as it is. `process` instead wraps its text as dictated
+    /// text that must not be answered.
+    func answer(instructions: String, prompt: String) async throws -> String
+    /// The tokens a request takes and the tokens the model's context holds.
+    /// Nil where the system cannot count them.
+    func inputTokens(instructions: String, prompt: String) async -> (count: Int, contextSize: Int)?
 }
 
 extension LLMProvider {
     func prewarm() {}
+
+    func answer(instructions: String, prompt: String) async throws -> String {
+        try await process(systemPrompt: instructions, userText: prompt)
+    }
+
+    func inputTokens(instructions: String, prompt: String) async -> (count: Int, contextSize: Int)? { nil }
 }
 
 // MARK: - Errors
