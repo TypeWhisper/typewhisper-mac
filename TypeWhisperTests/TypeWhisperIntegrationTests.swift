@@ -25203,6 +25203,23 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testADoubleTapFnAskHistoryShortcutTogglesOnItsSecondTap() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 0x00, modifierFlags: 0, isFn: true, isDoubleTap: true), for: .askHistory)
+        var toggles = 0
+        service.onAskHistoryToggle = { toggles += 1 }
+
+        _ = service.processEventForTesting(try makeFnEvent(isDown: true), source: .monitor)
+        _ = service.processEventForTesting(try makeFnEvent(isDown: false), source: .monitor)
+        XCTAssertEqual(toggles, 0)
+        _ = service.processEventForTesting(try makeFnEvent(isDown: true), source: .monitor)
+        _ = service.processEventForTesting(try makeFnEvent(isDown: false), source: .monitor)
+        XCTAssertEqual(toggles, 1)
+        XCTAssertFalse(HotkeySlotType.askHistory.startsDictation)
+    }
+
+    @MainActor
     private func controlModifierHotkey(isDoubleTap: Bool = false) -> UnifiedHotkey {
         UnifiedHotkey(
             keyCode: 0x3B,

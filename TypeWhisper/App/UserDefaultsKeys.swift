@@ -40,6 +40,7 @@ enum UserDefaultsKeys {
     static let undoLastDictationHotkey = "undoLastDictationHotkey"
     static let restoreRawTranscriptHotkey = "restoreRawTranscriptHotkey"
     static let correctLastDictationHotkey = "correctLastDictationHotkey"
+    static let askHistoryHotkey = "askHistoryHotkey"
 
     // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
     static let hybridHotkeys = "hybridHotkeys"
@@ -53,6 +54,7 @@ enum UserDefaultsKeys {
     static let undoLastDictationHotkeys = "undoLastDictationHotkeys"
     static let restoreRawTranscriptHotkeys = "restoreRawTranscriptHotkeys"
     static let correctLastDictationHotkeys = "correctLastDictationHotkeys"
+    static let askHistoryHotkeys = "askHistoryHotkeys"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -134,6 +136,8 @@ enum UserDefaultsKeys {
     static let historyRetentionDays = "historyRetentionDays"
     /// Whether History's search index is kept. Off until a feature that searches it is used.
     static let historySearchIndexEnabled = "historySearchIndexEnabled"
+    /// IDs of the cloud providers the user allowed Ask History to send excerpts to.
+    static let askHistoryCloudConsents = "askHistoryCloudConsents"
     static let saveAudioWithHistory = "saveAudioWithHistory"
 
     // MARK: - Notch Indicator

@@ -1079,7 +1079,7 @@ final class MenuBarGroupingTests: XCTestCase {
     func testMenuBarSectionsContainExpectedItems() {
         XCTAssertEqual(
             MenuBarMenuSection.general.items,
-            [.settings, .history, .errorLog]
+            [.settings, .history, .askHistory, .errorLog]
         )
         XCTAssertEqual(
             MenuBarMenuSection.transcription.items(hasRecoverableRecording: true),

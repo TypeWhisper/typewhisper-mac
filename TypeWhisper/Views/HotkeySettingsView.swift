@@ -94,6 +94,14 @@ struct HotkeySettingsView: View {
                 )
                 }
 
+                Section(String(localized: "askHistory.title")) {
+                MultiHotkeySlotRecorder(
+                    slot: .askHistory,
+                    title: String(localized: "askHistory.shortcut.title"),
+                    subtitle: String(localized: "askHistory.shortcut.description")
+                )
+                }
+
                 #if !APPSTORE
                 Section(localizedAppText("Dictation Undo", de: "Diktat rückgängig")) {
                 MultiHotkeySlotRecorder(

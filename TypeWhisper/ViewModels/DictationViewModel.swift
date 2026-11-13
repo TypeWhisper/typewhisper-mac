@@ -430,6 +430,7 @@ final class DictationViewModel: ObservableObject {
     var undoLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .undoLastDictation) }
     var restoreRawTranscriptHotkeyLabel: String { Self.loadHotkeyLabel(for: .restoreRawTranscript) }
     var correctLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .correctLastDictation) }
+    var askHistoryHotkeyLabel: String { Self.loadHotkeyLabel(for: .askHistory) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?

@@ -104,6 +104,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case undoLastDictation
     case restoreRawTranscript
     case correctLastDictation
+    case askHistory
 
     var defaultsKey: String {
         switch self {
@@ -118,6 +119,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkey
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkey
         case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkey
+        case .askHistory: return UserDefaultsKeys.askHistoryHotkey
         }
     }
 
@@ -134,6 +136,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkeys
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkeys
         case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkeys
+        case .askHistory: return UserDefaultsKeys.askHistoryHotkeys
         }
     }
 }
@@ -146,7 +149,7 @@ extension HotkeySlotType {
         case .hybrid, .pushToTalk, .toggle:
             true
         case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle,
-             .undoLastDictation, .restoreRawTranscript, .correctLastDictation:
+             .undoLastDictation, .restoreRawTranscript, .correctLastDictation, .askHistory:
             false
         }
     }
@@ -240,6 +243,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var onUndoLastDictation: (() -> Void)?
     var onRestoreRawTranscript: (() -> Void)?
     var onCorrectLastDictation: (() -> Void)?
+    var onAskHistoryToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
@@ -2106,7 +2110,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     states[index] = state
                     continue
                 }
-                let fnTriggerMode: FnTriggerMode = slotType == .toggle ? .releaseOnly : .pressThenRelease
+                // A double-tap Fn shortcut of an action fires on its second tap, not on the first press.
+                let fnTriggerMode: FnTriggerMode = slotType == .toggle || (hotkey.isDoubleTap && !slotType.startsDictation)
+                    ? .releaseOnly : .pressThenRelease
                 if shouldSuppressForCapsLockOrigin(event, hotkey: hotkey, keyWasDown: state.keyWasDown) {
                     state.resetTransientState()
                     states[index] = state
@@ -3163,6 +3169,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             onCorrectLastDictation?()
             return
         }
+        if slotType == .askHistory {
+            onAskHistoryToggle?()
+            return
+        }
         if slotType == .recorderToggle {
             onRecorderToggle?()
             return
@@ -3248,6 +3258,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .restoreRawTranscript:
             break // handled on keyDown only
         case .correctLastDictation:
+            break // handled on keyDown only
+        case .askHistory:
             break // handled on keyDown only
         case .recorderToggle:
             break // handled on keyDown only
