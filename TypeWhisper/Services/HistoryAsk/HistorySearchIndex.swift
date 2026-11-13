@@ -42,7 +42,8 @@ struct HistorySearchScope: Equatable, Sendable {
     /// Whether a hit lies in the scope. A hit does not carry its app's bundle
     /// ID, so a scope of apps includes none.
     func includes(_ hit: HistorySearchHit) -> Bool {
-        (period?.contains(hit.recordedAt) ?? true)
+        // Without the end, as the index reads a period.
+        (period.map { $0.start <= hit.recordedAt && hit.recordedAt < $0.end } ?? true)
             && (sources.isEmpty || sources.contains(hit.source))
             && bundleIDs.isEmpty
             && (domains.isEmpty || hit.domain.map(domains.contains) == true)

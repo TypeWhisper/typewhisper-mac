@@ -116,6 +116,12 @@ final class AskHistorySessionTests: XCTestCase {
         session.providerOverride = "cloud-llm"
         let preparing = Task { await session.prepare() }
         try await Task.sleep(for: .milliseconds(50))
+        // A caller that gives up stops waiting at once.
+        let started = ContinuousClock.now
+        let waiting = Task { await session.prepare() }
+        waiting.cancel()
+        await waiting.value
+        XCTAssertLessThan(ContinuousClock.now - started, .milliseconds(300))
 
         session.ask("Wie viele Plakate bestellt Anna?")
         try await Task.sleep(for: .milliseconds(50))
@@ -133,6 +139,17 @@ final class AskHistorySessionTests: XCTestCase {
         try await finish(session)
         XCTAssertEqual(session.turns.map(\.stage), [.answered])
         XCTAssertEqual(provider.calls.count, 1)
+    }
+
+    func testAScopeIncludesAPassageFromItsStartToBeforeItsEnd() {
+        let hit = HistorySearchHit(
+            recordID: UUID(), recordedAt: day(11), source: RecordingSource.mac.rawValue, ordinals: 0...0,
+            passage: HistoryPassage(kind: .transcript, text: "Text")
+        )
+        XCTAssertTrue(HistorySearchScope(period: DateInterval(start: day(11), end: day(12))).includes(hit))
+        XCTAssertFalse(HistorySearchScope(period: DateInterval(start: day(10), end: day(11))).includes(hit))
+        XCTAssertFalse(HistorySearchScope(sources: [RecordingSource.iPhone.rawValue]).includes(hit))
+        XCTAssertFalse(HistorySearchScope(bundleIDs: ["com.tinyspeck.slackmacgap"]).includes(hit))
     }
 
     func testAnOverviewOnALocalModelReportsItsProgress() async throws {

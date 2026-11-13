@@ -92,10 +92,15 @@ final class AskHistorySession: ObservableObject {
     /// question waits for it.
     func prepare() async {
         if preparation == nil {
-            preparation = Task { [prepareIndex] in await prepareIndex() }
+            preparation = Task { [weak self, prepareIndex] in
+                await prepareIndex()
+                self?.preparation = nil
+            }
         }
-        await preparation?.value
-        preparation = nil
+        // A cancelled caller stops waiting; the preparation goes on for the others.
+        while preparation != nil, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 
     /// Asks a question in the conversation. Does nothing while another runs.
