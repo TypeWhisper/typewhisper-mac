@@ -1258,6 +1258,10 @@ class PromptProcessingService: ObservableObject {
             throw LLMError.noApiKey
         }
 
+        // A local model may have taken a while to load; Ask History may be off by now.
+        if answersPrompt, !isHistoryAskAllowed() {
+            throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))
+        }
         let model = try resolvedModelId(
             for: plugin,
             providerId: providerId,
