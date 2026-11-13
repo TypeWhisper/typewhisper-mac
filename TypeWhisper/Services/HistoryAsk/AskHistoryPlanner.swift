@@ -299,7 +299,8 @@ struct AskHistoryPlanner: Sendable {
             meine meinen meinem meiner meines deine deinen deinem deiner deines seine seinen seinem seiner \
             seines ihre ihren ihrem ihrer ihres unser unsere unseren unserem unserer euer eure euren eurem \
             diese diesen diesem dieser dieses alle allen aller alles einen einem einer eines dass oder aber \
-            noch auch schon uber nach durch gegen ohne zwischen wegen damit sich mich dich euch
+            noch auch schon uber nach durch gegen ohne zwischen wegen damit sich mich dich euch \
+            dazu davon dafur dabei daruber darauf daran dann denn doch also dort jetzt
             """,
         "fr": """
             etre suis es est sommes etes sont etais etait etaient ete avoir ai as avons avez ont avais \
