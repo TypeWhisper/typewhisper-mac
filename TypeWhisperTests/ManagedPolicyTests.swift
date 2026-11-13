@@ -12,7 +12,7 @@ final class ManagedPolicyValidatorTests: XCTestCase {
             "AllowedTranscriptionProviders", "AllowedLlmProviders", "AllowedPlugins",
             "AllowCloudTranscription", "AllowCloudTextProcessing", "AllowPluginDownloads", "AllowModelDownloads",
             "UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "LaunchAtLogin",
-            "SkipOnboardingWhenReady", "SuppressOptionalPrompts", "ManagedLicenseKey",
+            "SkipOnboardingWhenReady", "SuppressOptionalPrompts", "AllowHistoryAsk", "ManagedLicenseKey",
         ])
         XCTAssertEqual(
             Set(ManagedPolicyKeys.all.filter(\.allowsRecommendation).map(\.name)),

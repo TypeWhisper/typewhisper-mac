@@ -146,9 +146,13 @@ final class ServiceContainer: ObservableObject {
                 ManagedAppWindowOpener.shared.open(id: "settings")
             },
             openPremium: { PremiumSettingsWindowManager.shared.present(.access) },
-            accessChanges: Publishers.Merge(
+            isAllowedByPolicy: { [managedPolicyService] in
+                ManagedAskHistoryPolicy.allowsAskHistory(managedPolicyService.current)
+            },
+            accessChanges: Publishers.Merge3(
                 licenseService.objectWillChange.map { _ in () },
-                premiumAccountService.objectWillChange.map { _ in () }
+                premiumAccountService.objectWillChange.map { _ in () },
+                managedPolicyService.objectWillChange.map { _ in () }
             )
             .eraseToAnyPublisher()
         )
@@ -444,9 +448,10 @@ final class ServiceContainer: ObservableObject {
         let historySearchIndexer = HistorySearchIndexer(
             historyService: historyService,
             index: historySearchIndex,
-            isEnabled: { [speakerCoordinator] in
+            isEnabled: { [speakerCoordinator, managedPolicyService] in
                 UserDefaults.standard.bool(forKey: UserDefaultsKeys.historySearchIndexEnabled)
                     && speakerCoordinator.hasPremiumAccess
+                    && ManagedAskHistoryPolicy.allowsAskHistory(managedPolicyService.current)
             },
             isBusy: { [dictationViewModel, audioRecorderViewModel] in
                 let isDictating = switch dictationViewModel.state {
@@ -461,7 +466,8 @@ final class ServiceContainer: ObservableObject {
             index: historySearchIndex,
             retriever: HistoryRetriever(index: historySearchIndex, reader: historyService.searchRecordReader),
             service: promptProcessingService,
-            prepareIndex: {
+            prepareIndex: { [managedPolicyService] in
+                guard ManagedAskHistoryPolicy.allowsAskHistory(managedPolicyService.current) else { return }
                 // Ask keeps the index from its first use on.
                 UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historySearchIndexEnabled)
                 await historySearchIndexer.reconcile()

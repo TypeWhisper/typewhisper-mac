@@ -56,6 +56,7 @@ KEYS = {
     "LaunchAtLogin": ("boolean", True, 0),
     "SkipOnboardingWhenReady": ("boolean", False, 0),
     "SuppressOptionalPrompts": ("boolean", True, 0),
+    "AllowHistoryAsk": ("boolean", False, 0),
     "ManagedLicenseKey": ("text", False, 0),
 }
 PAIRS = [("TranscriptionProviderId", "TranscriptionModelId"), ("LlmProviderId", "LlmModelId")]

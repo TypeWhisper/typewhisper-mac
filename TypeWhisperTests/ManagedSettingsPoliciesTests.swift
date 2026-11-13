@@ -217,6 +217,14 @@ final class ManagedPromptAndOnboardingPolicyTests: XCTestCase {
         XCTAssertFalse(ManagedPromptPolicy.suppressesOptionalPrompts(snapshot(both)))
     }
 
+    func testAskHistoryIsOnUnlessEnforcedOffOrUnreadable() {
+        XCTAssertTrue(ManagedAskHistoryPolicy.allowsAskHistory(snapshot([:])))
+        XCTAssertFalse(ManagedAskHistoryPolicy.allowsAskHistory(snapshot(["AllowHistoryAsk": .boolean(false)])))
+        XCTAssertFalse(ManagedAskHistoryPolicy.allowsAskHistory(snapshot(["AllowHistoryAsk": .string("no")])))
+        // Only an enforced value counts.
+        XCTAssertTrue(ManagedAskHistoryPolicy.allowsAskHistory(snapshot(recommended(["AllowHistoryAsk": .boolean(false)]))))
+    }
+
     func testSetupStaysClosedOnlyWhenEnforcedAndReady() {
         let enforced = snapshot(["SkipOnboardingWhenReady": .boolean(true)])
         XCTAssertTrue(ManagedOnboardingPolicy.skipsSetup(enforced, readiness: ready))
