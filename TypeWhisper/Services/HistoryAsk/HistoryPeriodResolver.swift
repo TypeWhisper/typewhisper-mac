@@ -65,8 +65,7 @@ struct HistoryPeriodResolver: Sendable {
                 start = index + 1
                 best = longer
             }
-            // "For last week" asks about last week; "for Friday" names a deadline.
-            guard let best, best.isPast || !Self.isDeadline(tokens, from: start, to: best.end) else {
+            guard let best, !Self.isDeadline(tokens, from: start, to: best.end, isPast: best.isPast) else {
                 index = max(best?.end ?? 0, index + 1)
                 continue
             }
@@ -149,10 +148,15 @@ struct HistoryPeriodResolver: Sendable {
     }
 
     /// "By Friday" and "next Monday" name a date in what was said, not when it was said.
-    private static func isDeadline(_ tokens: [Token], from start: Int, to end: Int) -> Bool {
-        (start > 0 && deadlineWords.contains(tokens[start - 1].text))
+    /// "For last week" asks about last week, while "for Friday" and "by last
+    /// Friday" name a deadline.
+    private static func isDeadline(_ tokens: [Token], from start: Int, to end: Int, isPast: Bool = false) -> Bool {
+        let introducers = isPast ? deadlineWords.subtracting(retrospectiveWords) : deadlineWords
+        return (start > 0 && introducers.contains(tokens[start - 1].text))
             || (end < tokens.count && nextWords.contains(tokens[end].text))
     }
+
+    private static let retrospectiveWords: Set<String> = ["for", "fur", "fuer", "pour", "para", "per"]
 
     /// "Since Monday" lasts from Monday until today.
     private func interval(

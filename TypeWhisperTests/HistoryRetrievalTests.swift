@@ -99,6 +99,7 @@ final class HistoryPeriodResolverTests: XCTestCase {
             ("Qu'est-ce qui est prévu lundi prochain ?", "fr"),
             ("Was ist am 24.12.2026 geplant?", "de"),
             ("What did Elena promise for 2026-11-04?", "en"),
+            ("What did Elena promise to deliver by last Friday?", "en"),
         ]
         for (question, language) in cases {
             XCTAssertNil(period(question, language), question)
