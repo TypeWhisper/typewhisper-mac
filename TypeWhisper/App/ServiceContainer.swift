@@ -436,6 +436,7 @@ final class ServiceContainer: ObservableObject {
                 // Ask keeps the index from its first use on.
                 UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historySearchIndexEnabled)
                 await historySearchIndexer.reconcile()
+                await historySearchIndexer.waitForQueuedWork()
             }
         )
         speakerTranscriptionViewModel = FileTranscriptionViewModel(

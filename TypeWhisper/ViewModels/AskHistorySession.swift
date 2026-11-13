@@ -3,6 +3,8 @@ import Foundation
 /// One question of a conversation about History and what became of it.
 struct AskHistorySessionTurn: Identifiable, Equatable {
     enum Stage: Equatable {
+        /// The index takes in History's records, on first use all of them.
+        case preparingIndex
         case searching
         /// An overview on Apple Intelligence or a local model summarizes
         /// recording `number` of `count`.
@@ -25,7 +27,7 @@ struct AskHistorySessionTurn: Identifiable, Equatable {
 
     var isFinished: Bool {
         switch stage {
-        case .searching, .summarizing, .answering: false
+        case .preparingIndex, .searching, .summarizing, .answering: false
         case .answered, .needsLanguageModel, .stopped, .failed: true
         }
     }
@@ -65,6 +67,9 @@ final class AskHistorySession: ObservableObject {
     private let prepareIndex: @MainActor () async -> Void
     private let now: () -> Date
     private var task: Task<Void, Never>?
+    /// Tells a question that ended after a new conversation began from the running one.
+    private var generation = UUID()
+    private var preparation: Task<Void, Never>?
 
     /// - Parameter prepareIndex: Turns the index on and brings it up to date.
     ///   Called when the panel opens.
@@ -83,9 +88,14 @@ final class AskHistorySession: ObservableObject {
         updatedAt = now()
     }
 
-    /// Brings the index up to date. The panel calls it when it opens.
+    /// Brings the index up to date. The panel calls it when it opens, and a
+    /// question waits for it.
     func prepare() async {
-        await prepareIndex()
+        if preparation == nil {
+            preparation = Task { [prepareIndex] in await prepareIndex() }
+        }
+        await preparation?.value
+        preparation = nil
     }
 
     /// Asks a question in the conversation. Does nothing while another runs.
@@ -100,10 +110,13 @@ final class AskHistorySession: ObservableObject {
         turns.append(turn)
         updatedAt = now()
         isWorking = true
+        let generation = generation
         task = Task { [weak self] in
             await self?.answer(question, turnID: turn.id, history: history, earlierCited: earlierCited)
-            self?.task = nil
-            self?.isWorking = false
+            guard let self, self.generation == generation else { return }
+            self.task = nil
+            self.isWorking = false
+            self.updatedAt = self.now()
         }
     }
 
@@ -112,8 +125,12 @@ final class AskHistorySession: ObservableObject {
         task?.cancel()
     }
 
+    /// Clears the turns. A running question stops and no longer holds up the next.
     func startNewConversation() {
         stop()
+        task = nil
+        isWorking = false
+        generation = UUID()
         turns = []
         updatedAt = now()
     }
@@ -132,6 +149,13 @@ final class AskHistorySession: ObservableObject {
         _ question: String, turnID: UUID, history: [AskHistoryTurn], earlierCited: [HistorySearchHit]
     ) async {
         do {
+            if preparation != nil {
+                update(turnID) { $0.stage = .preparingIndex }
+                while preparation != nil {
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                update(turnID) { $0.stage = .searching }
+            }
             let planner = AskHistoryPlanner(vocabulary: try await index.vocabulary(), now: now())
             var plan = planner.plan(for: question)
             if AskHistoryPlanner.needsFollowUpPlan(plan, history: history),
@@ -147,9 +171,13 @@ final class AskHistorySession: ObservableObject {
                 plan, limit: isOverview ? Self.overviewLimit : Self.lookupLimit, now: now()
             )
             if !isOverview, !earlierCited.isEmpty {
-                // What the last answer cited stays a candidate of a follow-up.
+                // What the last answer cited stays a candidate of a follow-up,
+                // unless a passage the search found covers all of it.
                 let new = earlierCited.filter { cited in
-                    !retrieval.hits.contains { $0.recordID == cited.recordID && $0.ordinals.overlaps(cited.ordinals) }
+                    !retrieval.hits.contains {
+                        $0.recordID == cited.recordID && $0.ordinals.lowerBound <= cited.ordinals.lowerBound
+                            && $0.ordinals.upperBound >= cited.ordinals.upperBound
+                    }
                 }
                 retrieval.hits += try await retriever.existing(new)
             }
@@ -180,7 +208,6 @@ final class AskHistorySession: ObservableObject {
         } catch {
             update(turnID) { $0.stage = Self.stage(after: error) }
         }
-        updatedAt = now()
     }
 
     private static func stage(after error: Error) -> AskHistorySessionTurn.Stage {

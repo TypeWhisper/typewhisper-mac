@@ -101,6 +101,31 @@ final class AskHistorySessionTests: XCTestCase {
         XCTAssertNil(session.turns.first?.answer)
     }
 
+    func testAQuestionWaitsForTheIndexAndANewConversationReleasesIt() async throws {
+        let provider = AnsweringProvider(id: "cloud-llm", name: "Cloud LLM")
+        let session = try await makeSession(providers: [provider]) {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        session.providerOverride = "cloud-llm"
+        let preparing = Task { await session.prepare() }
+        try await Task.sleep(for: .milliseconds(50))
+
+        session.ask("Wie viele Plakate bestellt Anna?")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(session.turns.first?.stage, .preparingIndex)
+
+        // Starting over frees the session at once for the next question.
+        session.startNewConversation()
+        XCTAssertFalse(session.isWorking)
+        provider.enqueue(.text("200 Plakate [1]."))
+        session.ask("Wie viele Plakate bestellt Anna?")
+        XCTAssertEqual(session.turns.count, 1)
+        await preparing.value
+        try await finish(session)
+        XCTAssertEqual(session.turns.map(\.stage), [.answered])
+        XCTAssertEqual(provider.calls.count, 1)
+    }
+
     func testAnOverviewOnALocalModelReportsItsProgress() async throws {
         let provider = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
         let session = try await makeSession(providers: [provider])

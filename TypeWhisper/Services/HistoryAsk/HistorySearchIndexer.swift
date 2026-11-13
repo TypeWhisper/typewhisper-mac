@@ -96,6 +96,14 @@ final class HistorySearchIndexer {
         }
     }
 
+    /// Waits until the queued records are written. Waits longer while a
+    /// dictation or recording runs, and returns when the caller is cancelled.
+    func waitForQueuedWork() async {
+        while worker != nil, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
     /// Ends all index work for good and waits for the running step, so nothing
     /// writes the index while the user's data is deleted.
     func stop() async {
