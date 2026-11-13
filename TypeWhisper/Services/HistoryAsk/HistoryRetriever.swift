@@ -49,7 +49,8 @@ struct HistoryRetriever: Sendable {
         }
     }
 
-    private func existing(_ hits: [HistorySearchHit]) async throws -> [HistorySearchHit] {
+    /// The hits whose records History still has.
+    func existing(_ hits: [HistorySearchHit]) async throws -> [HistorySearchHit] {
         guard !hits.isEmpty else { return [] }
         let existing = try await existingRecordIDs(Set(hits.map(\.recordID)))
         return hits.filter { existing.contains($0.recordID) }
