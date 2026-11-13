@@ -57,6 +57,8 @@ final class AskHistoryFollowUpPlanTests: XCTestCase {
         XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(own, history: history))
         XCTAssertFalse(AskHistoryPlanner.needsFollowUpPlan(own, history: []))
         XCTAssertFalse(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was kostet die Druckerei für die Plakate?"), history: history))
+        // One word and its dictionary form are one thing to search for.
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "What were their priorities?"), history: history))
 
         // The model invents a period; only the question's own counts.
         let followUp = AskHistoryFollowUpPlan(
@@ -155,6 +157,10 @@ final class AskHistoryOverviewTests: XCTestCase {
         XCTAssertTrue(provider.calls[2].userText.hasPrefix("RECORDING\nPart 2 of 3\nTeil 2: "))
         XCTAssertEqual(provider.calls[4].userText, "PARTS\n1. Erstens.\n2. Zweitens.\n3. Drittens.\nEND_PARTS")
 
+        // A passage longer than a part is cut, at a space where there is one.
+        XCTAssertEqual(AskHistoryBudget.parts(of: ["aaa bbb ccc"], maximumCharacters: 7), ["aaa", "bbb ccc"])
+        XCTAssertEqual(AskHistoryBudget.parts(of: ["abcdefghij"], maximumCharacters: 4), ["abcd", "efgh", "ij"])
+
         // Text that exceeds the context in tokens is summarized again in smaller parts.
         for reply in ["This model's maximum context length is 8192 tokens.", "A.", "B.", "A und B."] {
             provider.enqueue(reply.hasPrefix("This") ? .failure(reply) : .text(reply))
@@ -215,7 +221,7 @@ final class AskHistoryOverviewTests: XCTestCase {
         })
         let provider = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
         let service = try environment.makeService(providers: [provider])
-        XCTAssertEqual(service.historyOverviewProvider(providerOverride: "local-llm")?.usesSummaries, true)
+        XCTAssertEqual(service.historyOverviewRuns(providerOverride: "local-llm").map(\.usesSummaries), [true])
         let overview = AskHistoryOverview(index: index, service: service)
         let plan = HistorySearchPlan(question: "Fasse die Woche zusammen")
         let retrieval = try await HistoryRetriever(index: index) { $0 }.retrieve(plan, limit: 20)
@@ -283,23 +289,32 @@ final class AskHistoryOverviewTests: XCTestCase {
         XCTAssertEqual(answer.sources, [])
     }
 
-    func testAnOverviewNamesTheProviderThatWroteItsSummaries() async throws {
+    func testALocalFallbackOfACloudModelSummarizesAndOnlyItsOwnNumbersCite() async throws {
         let index = try makeIndex()
         let id = UUID()
-        try await index.upsert([indexedRecord(id, title: "Aufnahme", passages: [spoken("Text.")])])
-        let local = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
+        try await index.upsert([indexedRecord(id, title: "Aufnahme [2]", passages: [spoken("Text.")])])
         let cloud = AnsweringProvider(id: "cloud-llm", name: "Cloud LLM")
-        let service = try environment.makeService(providers: [local, cloud], fallbacks: ["local-llm", "cloud-llm"])
-        local.enqueue(.failure("The provider failed."))
-        cloud.enqueue(.text("Summe."))
+        let local = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
+        let service = try environment.makeService(providers: [cloud, local], fallbacks: ["cloud-llm", "local-llm"])
+        let overview = AskHistoryOverview(index: index, service: service)
         let plan = HistorySearchPlan(question: "Fasse die Woche zusammen")
         let retrieval = try await HistoryRetriever(index: index) { $0 }.retrieve(plan, limit: 20)
 
-        let answer = try await AskHistoryOverview(index: index, service: service).answer(plan: plan, retrieval: retrieval)
-
+        cloud.enqueue(.failure("The provider failed."))
+        local.enqueue(.text("Summe [99]."))
+        var answer = try await overview.answer(plan: plan, retrieval: retrieval)
         XCTAssertEqual(answer.text, "- Aufnahme: Summe. [1]")
-        XCTAssertEqual(answer.providerId, "cloud-llm")
-        XCTAssertEqual(answer.providerName, "Cloud LLM")
+        XCTAssertEqual(answer.providerId, "local-llm")
+        XCTAssertEqual(answer.providerName, "Local LLM")
+        XCTAssertTrue(local.calls[0].systemPrompt.hasPrefix("You summarize one recording"))
+
+        // A recording gone since the search leaves nothing to list, and the model says so.
+        try await index.remove([id])
+        cloud.enqueue(.failure("The provider failed."))
+        local.enqueue(.text("Keine Aufnahmen."))
+        answer = try await overview.answer(plan: plan, retrieval: retrieval)
+        XCTAssertEqual(answer.text, "Keine Aufnahmen.")
+        XCTAssertEqual(answer.sources, [])
     }
 
     func testAnOverviewOnACloudModelGetsTheBeginningOfEveryRecordingInOnePrompt() async throws {
@@ -309,7 +324,7 @@ final class AskHistoryOverviewTests: XCTestCase {
         })
         let provider = AnsweringProvider(id: "cloud-llm", name: "Cloud LLM")
         let service = try environment.makeService(providers: [provider])
-        XCTAssertEqual(service.historyOverviewProvider(providerOverride: "cloud-llm")?.usesSummaries, false)
+        XCTAssertEqual(service.historyOverviewRuns(providerOverride: "cloud-llm").map(\.usesSummaries), [false])
         let plan = HistorySearchPlan(question: "Fasse die Woche zusammen")
         let retrieval = try await HistoryRetriever(index: index) { $0 }.retrieve(plan, limit: 20)
 

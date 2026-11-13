@@ -21,6 +21,9 @@ struct HistorySearchPlan: Equatable, Sendable {
     var scope = HistorySearchScope()
     /// The question asks for the last time something came up.
     var prefersNewest = false
+    /// The words searched for, counted once each: `keywords` also holds their
+    /// dictionary forms.
+    var topicCount = 0
 
     var intent: Intent { keywords.isEmpty && names.isEmpty ? .overview : .lookup }
 }
@@ -89,6 +92,7 @@ struct AskHistoryPlanner: Sendable {
         let stopWords = Self.stopWords(for: language)
 
         var keywords: [String] = []
+        var topics = Set<String>()
         var name: [String] = []
         func finishName() {
             if !name.isEmpty { plan.names.append(name.joined(separator: " ")) }
@@ -123,6 +127,7 @@ struct AskHistoryPlanner: Sendable {
             guard word.isContent, !stopWords.contains(word.folded),
                   word.lemma.map({ !stopWords.contains($0) }) ?? true else { continue }
             keywords.append(word.text)
+            topics.insert(word.lemma ?? word.folded)
             if let lemma = word.lemma, lemma != word.folded { keywords.append(lemma) }
         }
         finishName()
@@ -134,8 +139,10 @@ struct AskHistoryPlanner: Sendable {
                 plan.scope.domains.insert(domain.domain)
             } else {
                 keywords.append(domain.domain)
+                topics.insert(Self.folded(domain.domain))
             }
         }
+        plan.topicCount = topics.count
 
         var seen = Set<String>()
         plan.keywords = Array(keywords.filter { seen.insert(Self.folded($0)).inserted }.prefix(Self.maximumKeywords))
@@ -147,7 +154,7 @@ struct AskHistoryPlanner: Sendable {
     /// Whether a model should read the question together with the earlier
     /// conversation: a follow-up that names fewer than two things to search for.
     static func needsFollowUpPlan(_ plan: HistorySearchPlan, history: [AskHistoryTurn]) -> Bool {
-        !history.isEmpty && plan.keywords.count + plan.names.count < 2
+        !history.isEmpty && plan.topicCount + plan.names.count < 2
     }
 
     /// The plan for a follow-up question with what a model read from the

@@ -33,17 +33,43 @@ struct AskHistoryOverview {
         effortOverride: String? = nil,
         progress: (_ number: Int, _ count: Int) -> Void = { _, _ in }
     ) async throws -> AskHistoryAnswer {
-        // Without recordings, the model says so in the question's language.
-        guard let provider = service.historyOverviewProvider(providerOverride: providerOverride),
-              provider.usesSummaries, !retrieval.hits.isEmpty else {
-            return try await service.answerHistoryQuestion(
-                AskHistoryRequest(plan: plan, retrieval: retrieval, history: history, now: now, timeZone: timeZone),
-                providerOverride: providerOverride, cloudModelOverride: cloudModelOverride,
-                effortOverride: effortOverride
-            )
+        // Each run of the provider list writes the overview its own way, so a
+        // local model that stands in for a cloud one still summarizes.
+        var failures: [LLMFallbackAttemptFailure] = []
+        for run in service.historyOverviewRuns(providerOverride: providerOverride) {
+            do {
+                if run.usesSummaries, let answer = try await summarized(
+                    plan: plan, retrieval: retrieval, candidates: run.candidates, providerOverride: providerOverride,
+                    cloudModelOverride: cloudModelOverride, effortOverride: effortOverride, progress: progress
+                ) {
+                    return answer
+                }
+                // Without recordings, the model says so in the question's language.
+                let found = run.usesSummaries ? HistoryRetrieval(hits: [], recordCount: 0) : retrieval
+                return try await service.answerHistoryQuestion(
+                    AskHistoryRequest(plan: plan, retrieval: found, history: history, now: now, timeZone: timeZone),
+                    providerOverride: providerOverride, cloudModelOverride: cloudModelOverride,
+                    effortOverride: effortOverride, candidates: run.candidates
+                )
+            } catch let error as LLMFallbackExhaustedError {
+                failures += error.failures
+            }
         }
+        throw LLMFallbackExhaustedError(failures: failures)
+    }
 
+    /// The list of a summary of each recording, or nil when no recording has text.
+    private func summarized(
+        plan: HistorySearchPlan,
+        retrieval: HistoryRetrieval,
+        candidates: Range<Int>,
+        providerOverride: String?,
+        cloudModelOverride: String?,
+        effortOverride: String?,
+        progress: (_ number: Int, _ count: Int) -> Void
+    ) async throws -> AskHistoryAnswer? {
         let hits = Array(retrieval.hits.prefix(Self.maximumSummaries))
+        guard !hits.isEmpty else { return nil }
         // In the question's language, kept apart from those in others.
         let language = plan.language ?? ""
         let languageName = plan.language.flatMap { Locale(identifier: "en_US").localizedString(forLanguageCode: $0) }
@@ -60,8 +86,8 @@ struct AskHistoryOverview {
                   !transcript.passages.isEmpty else { continue }
             let summary = try await service.summarizeHistoryRecording(
                 passages: transcript.passages.map(\.text), title: hit.title, language: languageName,
-                providerOverride: providerOverride,
-                cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
+                providerOverride: providerOverride, cloudModelOverride: cloudModelOverride,
+                effortOverride: effortOverride, candidates: candidates
             )
             try await index.setSummary(
                 summary.text, providerId: summary.providerId, ofRecord: hit.recordID,
@@ -80,18 +106,20 @@ struct AskHistoryOverview {
             source.text = summary.text
             source.startSeconds = nil
             sources.append(source)
-            let text = summary.text.split(whereSeparator: \.isNewline).joined(separator: " ")
-            lines.append("- " + (hit.title.map { "\($0): " } ?? "") + text + " [\(sources.count)]")
+            // Only the number added here cites a recording.
+            let title = hit.title.map(AskHistoryCitations.withoutCitations).flatMap { $0.isEmpty ? nil : "\($0): " } ?? ""
+            let text = AskHistoryCitations.withoutCitations(summary.text).split(whereSeparator: \.isNewline).joined(separator: " ")
+            lines.append("- " + title + text + " [\(sources.count)]")
             if !summary.providerId.isEmpty, !providerIds.contains(summary.providerId) {
                 providerIds.append(summary.providerId)
             }
         }
-        if providerIds.isEmpty { providerIds = [provider.providerId] }
+        guard let providerId = providerIds.first else { return nil }
         return AskHistoryAnswer(
             text: lines.joined(separator: "\n"),
             sources: sources,
             citedSources: Array(sources.indices.map { $0 + 1 }),
-            providerId: providerIds[0],
+            providerId: providerId,
             providerName: providerIds.map(service.displayName(for:)).joined(separator: ", "),
             omittedRecordCount: max((retrieval.recordCount ?? retrieval.hits.count) - sources.count, 0)
         )

@@ -73,10 +73,24 @@ extension AskHistoryBudget {
     }
 
     /// The passages of a recording joined into parts of at most the given
-    /// length. A longer passage is a part of its own.
+    /// length. A longer passage is cut into pieces of that length, at a space
+    /// where there is one.
     static func parts(of passages: [String], maximumCharacters: Int) -> [String] {
+        let limit = max(maximumCharacters, 1)
+        let pieces = passages.flatMap { passage -> [String] in
+            var rest = Substring(passage)
+            var pieces: [String] = []
+            while rest.count > limit {
+                let cut = rest.prefix(limit)
+                let end = cut.lastIndex(where: \.isWhitespace).flatMap { $0 > cut.startIndex ? $0 : nil } ?? cut.endIndex
+                pieces.append(String(rest[..<end]))
+                rest = rest[end...].drop(while: \.isWhitespace)
+            }
+            pieces.append(String(rest))
+            return pieces
+        }
         var parts: [String] = []
-        for passage in passages where !passage.isEmpty {
+        for passage in pieces where !passage.isEmpty {
             if let last = parts.last, last.count + 1 + passage.count <= maximumCharacters {
                 parts[parts.count - 1] = last + "\n" + passage
             } else {

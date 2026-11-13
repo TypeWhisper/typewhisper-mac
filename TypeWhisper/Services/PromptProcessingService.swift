@@ -795,14 +795,17 @@ class PromptProcessingService: ObservableObject {
     /// excerpts as its context holds, and one that reports the input as too
     /// long is asked once more with fewer. Memories are not added, and the
     /// question is not wrapped as dictated text, which must not be answered.
+    /// - Parameter candidates: The positions in the provider list to try, all by default.
     func answerHistoryQuestion(
         _ request: AskHistoryRequest,
         providerOverride: String? = nil,
         cloudModelOverride: String? = nil,
-        effortOverride: String? = nil
+        effortOverride: String? = nil,
+        candidates range: Range<Int>? = nil
     ) async throws -> AskHistoryAnswer {
         try await tryingHistoryProviders(
-            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride,
+            candidates: range
         ) { candidate, onLocalProviderUsed in
             try await self.historyAnswer(to: request, from: candidate, onLocalProviderUsed: onLocalProviderUsed)
         }
@@ -812,19 +815,25 @@ class PromptProcessingService: ObservableObject {
     /// is made from a summary of each recording. Apple Intelligence and the
     /// local models lose recordings when one prompt holds several; cloud
     /// models take them in one prompt.
-    func historyOverviewProvider(
-        providerOverride: String? = nil
-    ) -> (providerId: String, providerName: String, usesSummaries: Bool)? {
-        guard let first = candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil).first else {
-            return nil
+    /// The provider list in runs of providers that write an overview the same
+    /// way: Apple Intelligence and local models from summaries of each
+    /// recording, the others from the recordings' beginnings.
+    func historyOverviewRuns(providerOverride: String? = nil) -> [(candidates: Range<Int>, usesSummaries: Bool)] {
+        let kinds = candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil).map {
+            switch historyProviderKind(of: normalizeProviderId($0.providerId)) {
+            case .appleIntelligence, .local: true
+            case .openAICompatible, .cloud: false
+            }
         }
-        let providerId = normalizeProviderId(first.providerId)
-        let usesSummaries: Bool
-        switch historyProviderKind(of: providerId) {
-        case .appleIntelligence, .local: usesSummaries = true
-        case .openAICompatible, .cloud: usesSummaries = false
+        var runs: [(candidates: Range<Int>, usesSummaries: Bool)] = []
+        for (index, usesSummaries) in kinds.enumerated() {
+            if let last = runs.last, last.usesSummaries == usesSummaries {
+                runs[runs.count - 1].candidates = last.candidates.lowerBound..<index + 1
+            } else {
+                runs.append((index..<index + 1, usesSummaries))
+            }
         }
-        return (providerId, displayName(for: providerId), usesSummaries)
+        return runs
     }
 
     /// Summarizes one recording for an overview. `passages` hold its text in
@@ -836,10 +845,12 @@ class PromptProcessingService: ObservableObject {
         language: String? = nil,
         providerOverride: String? = nil,
         cloudModelOverride: String? = nil,
-        effortOverride: String? = nil
+        effortOverride: String? = nil,
+        candidates range: Range<Int>? = nil
     ) async throws -> (text: String, providerId: String) {
         try await tryingHistoryProviders(
-            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride,
+            candidates: range
         ) { candidate, onLocalProviderUsed in
             let providerId = self.normalizeProviderId(candidate.providerId)
             var maximumCharacters = AskHistoryBudget.summaryCharacters(for: self.historyProviderKind(of: providerId))
@@ -880,8 +891,11 @@ class PromptProcessingService: ObservableObject {
             ))
         }
         // The summaries of a very long recording are combined in batches that
-        // fit like its parts, and those again, until one is left.
+        // fit like its parts, and those again, until one is left. A summary
+        // longer than half a batch is cut, so every batch holds two or more.
+        let longest = max((maximumCharacters - 16) / 2, 1)
         while summaries.count > 1 {
+            summaries = summaries.map { $0.count > longest ? String($0.prefix(longest)) : $0 }
             var batches: [[String]] = []
             var size = 0
             for summary in summaries {
@@ -892,10 +906,6 @@ class PromptProcessingService: ObservableObject {
                     batches.append([summary])
                     size = summary.count
                 }
-            }
-            if batches.count == summaries.count {
-                // Summaries too long to share a batch are combined in pairs.
-                batches = stride(from: 0, to: summaries.count, by: 2).map { Array(summaries[$0..<min($0 + 2, summaries.count)]) }
             }
             var combined: [String] = []
             for batch in batches {
@@ -974,6 +984,7 @@ class PromptProcessingService: ObservableObject {
         providerOverride: String?,
         cloudModelOverride: String?,
         effortOverride: String?,
+        candidates range: Range<Int>? = nil,
         attempt: @MainActor (LLMFallbackPriorityItem, (any LLMProviderPlugin) -> Void) async throws -> Result
     ) async throws -> Result {
         if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
@@ -981,11 +992,14 @@ class PromptProcessingService: ObservableObject {
         }
         let usesFallbackList = Self.trimmedOrNil(providerOverride) == nil
             && PluginManager.shared?.enforcedLlmResolution == nil
-        let candidates = self.candidates(
+        var candidates = self.candidates(
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
             effortOverride: effortOverride
         )
+        if let range {
+            candidates = Array(candidates[range.clamped(to: candidates.indices)])
+        }
         guard !candidates.isEmpty else {
             throw LLMFallbackExhaustedError(failures: [])
         }
