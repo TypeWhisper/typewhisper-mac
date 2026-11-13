@@ -208,14 +208,19 @@ final class AskHistorySession: ObservableObject {
             var retrieval = try await retriever.retrieve(
                 plan, limit: isOverview ? Self.overviewLimit : Self.lookupLimit, now: now()
             )
-            if !isOverview, let recordIDs = plan.scope.recordIDs,
-               retrieval.hits.isEmpty || recordIDs.count <= Self.recordingsReadWhole {
-                // The best passages first, then the rest of a few chosen recordings
-                // in order; with no word of the question in them, all of them.
-                let rest = try await passages(ofRecordsIn: plan).filter { passage in
-                    !retrieval.hits.contains { $0.recordID == passage.recordID && $0.ordinals.overlaps(passage.ordinals) }
+            if let recordIDs = plan.scope.recordIDs {
+                if isOverview, recordIDs.count <= Self.recordingsReadWhole {
+                    // An overview of a few chosen recordings reads them whole, not
+                    // only their beginnings, as far as the budget holds.
+                    retrieval = HistoryRetrieval(hits: try await passages(ofRecordsIn: plan))
+                } else if !isOverview, retrieval.hits.isEmpty || recordIDs.count <= Self.recordingsReadWhole {
+                    // The best passages first, then the rest of a few chosen recordings
+                    // in order; with no word of the question in them, all of them.
+                    let rest = try await passages(ofRecordsIn: plan).filter { passage in
+                        !retrieval.hits.contains { $0.recordID == passage.recordID && $0.ordinals.overlaps(passage.ordinals) }
+                    }
+                    retrieval.hits += rest
                 }
-                retrieval.hits += rest
             }
             if !isOverview, isFollowUp {
                 // What the last answer cited stays a candidate of a follow-up

@@ -73,7 +73,9 @@ struct AskHistoryOverview {
         effortOverride: String?,
         progress: (_ number: Int, _ count: Int) -> Void
     ) async throws -> AskHistoryAnswer? {
-        let hits = Array(retrieval.hits.prefix(Self.maximumSummaries))
+        // One summary per recording, also when the retrieval holds several passages of one.
+        var seenRecords = Set<UUID>()
+        let hits = Array(retrieval.hits.filter { seenRecords.insert($0.recordID).inserted }.prefix(Self.maximumSummaries))
         guard !hits.isEmpty else { return nil }
         // In the question's language, kept apart from those in others.
         let language = plan.language ?? ""
@@ -126,7 +128,7 @@ struct AskHistoryOverview {
             citedSources: Array(sources.indices.map { $0 + 1 }),
             providerId: providerId,
             providerName: providerIds.map(service.displayName(for:)).joined(separator: ", "),
-            omittedRecordCount: max((retrieval.recordCount ?? retrieval.hits.count) - sources.count, 0)
+            omittedRecordCount: max((retrieval.recordCount ?? Set(retrieval.hits.map(\.recordID)).count) - sources.count, 0)
         )
     }
 }

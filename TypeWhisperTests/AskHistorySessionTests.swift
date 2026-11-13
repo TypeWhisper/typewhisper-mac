@@ -9,12 +9,12 @@ private func day(_ day: Int) -> Date {
     return calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: 12))!
 }
 
-private func askRecord(_ id: UUID, title: String, text: String) -> HistorySearchRecord {
+private func askRecord(_ id: UUID, title: String, text: String, more: [String] = []) -> HistorySearchRecord {
     HistorySearchRecord(
         id: id, recordedAt: day(10), source: RecordingSource.recorder.rawValue, originDeviceID: "device",
         language: "de", durationSeconds: 60, title: title, appName: nil, bundleID: nil, domain: nil, versionID: nil,
         fingerprint: HistorySearchFingerprint(version: "1", contentHash: "1"),
-        passages: [HistoryPassage(kind: .transcript, text: text)]
+        passages: ([text] + more).map { HistoryPassage(kind: .transcript, text: $0) }
     )
 }
 
@@ -23,6 +23,7 @@ final class AskHistorySessionTests: XCTestCase {
     private let environment = AskHistoryTestEnvironment()
     private let posters = UUID()
     private let budget = UUID()
+    private let meeting = UUID()
 
     override func tearDown() async throws {
         environment.cleanUp()
@@ -38,6 +39,9 @@ final class AskHistorySessionTests: XCTestCase {
         try await index.upsert([
             askRecord(posters, title: "Kick-off", text: "Anna: Ich bestelle 200 Plakate bei der Druckerei."),
             askRecord(budget, title: "Budget", text: "Ben: Das Budget für die Plakate steht bei 900 Euro."),
+            askRecord(meeting, title: "Planung", text: "Carla: Der Start ist am Montag.", more: [
+                "Dan: Die Pressemitteilung schreibe ich.", "Carla: Entschieden: Wir verschieben die Messe.",
+            ]),
         ])
         return AskHistorySession(
             index: index,
@@ -178,19 +182,36 @@ final class AskHistorySessionTests: XCTestCase {
         XCTAssertFalse(prompt.contains("900 Euro"), prompt)
     }
 
+    func testAnOverviewOfOneRecordingReadsAllOfIt() async throws {
+        let provider = AnsweringProvider(id: "cloud-llm", name: "Cloud LLM")
+        let session = try await makeSession(providers: [provider])
+        session.providerOverride = "cloud-llm"
+        session.scope = .records([meeting], title: "Planung")
+
+        provider.enqueue(.text("Start am Montag [1], die Messe wird verschoben [3]."))
+        session.ask("Fasse diese Aufnahme zusammen")
+        try await finish(session)
+
+        let call = try XCTUnwrap(provider.calls.last)
+        XCTAssertTrue(call.userText.contains("Wir verschieben die Messe"), call.userText)
+        XCTAssertFalse(call.userText.contains("900 Euro"), call.userText)
+        XCTAssertFalse(call.systemPrompt.contains("beginning"), call.systemPrompt)
+    }
+
     func testAnOverviewOnALocalModelReportsItsProgress() async throws {
         let provider = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
         let session = try await makeSession(providers: [provider])
         session.providerOverride = "local-llm"
         provider.enqueue(.text("Budget von 900 Euro."))
         provider.enqueue(.text("200 Plakate bestellt."))
+        provider.enqueue(.text("Messe verschoben."))
 
         session.ask("Fasse diese Woche zusammen")
         try await finish(session)
 
         let turn = try XCTUnwrap(session.turns.first)
         XCTAssertEqual(turn.stage, .answered)
-        XCTAssertEqual(turn.answer?.sources.count, 2)
+        XCTAssertEqual(turn.answer?.sources.count, 3)
         XCTAssertEqual(turn.citedPassages, [])
 
         session.startNewConversation()

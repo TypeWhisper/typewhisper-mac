@@ -468,6 +468,8 @@ final class HistoryViewModel: ObservableObject {
 
     func requestRecordSelection(_ selection: Set<UUID>) {
         guard selection != selectedRecordIDs else { return }
+        // Choosing a record by hand opens it at the top, not at an earlier citation.
+        recordTimeRequest = nil
         prepare(.recordSelection(selection))
     }
 
@@ -537,6 +539,8 @@ final class HistoryViewModel: ObservableObject {
 
     func cancelPendingTransition() {
         pendingTransition = nil
+        // A cited time belongs to the opening the user just cancelled.
+        recordTimeRequest = nil
         objectWillChange.send()
     }
 

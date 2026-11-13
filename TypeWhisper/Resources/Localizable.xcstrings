@@ -280,31 +280,31 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fragen zum Verlauf sendet bei jeder Frage deine Frage, die früheren Fragen und Antworten des Gesprächs und die passenden Auszüge aus deinem Verlauf an %@. Audio, der übrige Verlauf, das Wörterbuch, Statistiken und Gerätekennungen werden nicht gesendet."
+            "value" : "Fragen zum Verlauf sendet bei jeder Frage deine Frage, die früheren Fragen und Antworten des Gesprächs und Auszüge aus deinem Verlauf an %@: die passenden Stellen oder die der Aufnahmen, zu denen du fragst. Audio, der übrige Verlauf, das Wörterbuch, Statistiken und Gerätekennungen werden nicht gesendet."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ask History sends your question, the earlier questions and answers of the conversation, and the matching excerpts from your History to %@ for each question. Audio, the rest of your History, Dictionary, statistics, and device identifiers are not sent."
+            "value" : "Ask History sends your question, the earlier questions and answers of the conversation, and excerpts from your History to %@ for each question: the passages that match it, or those of the recordings you chose to ask about. Audio, the rest of your History, Dictionary, statistics, and device identifiers are not sent."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preguntar al historial envía tu pregunta, las preguntas y respuestas anteriores de la conversación y los fragmentos correspondientes de tu historial a %@ en cada pregunta. No se envían el audio, el resto de tu historial, el diccionario, las estadísticas ni los identificadores del dispositivo."
+            "value" : "Preguntar al historial envía tu pregunta, las preguntas y respuestas anteriores de la conversación y fragmentos de tu historial a %@ en cada pregunta: los que coinciden con ella o los de las grabaciones sobre las que preguntas. No se envían el audio, el resto de tu historial, el diccionario, las estadísticas ni los identificadores del dispositivo."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "履歴への質問では、質問ごとに質問内容、会話内のこれまでの質問と回答、履歴の該当する抜粋を %@ に送信します。音声、その他の履歴、辞書、統計、デバイス識別子は送信されません。"
+            "value" : "履歴への質問では、質問ごとに質問内容、会話内のこれまでの質問と回答、履歴の抜粋（質問に一致する箇所、または質問対象として選んだ録音の箇所）を %@ に送信します。音声、その他の履歴、辞書、統計、デバイス識別子は送信されません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每次提问时，询问历史记录会将你的问题、对话中之前的问题和回答，以及历史记录中匹配的摘录发送给 %@。音频、其余历史记录、词典、统计数据和设备标识符不会被发送。"
+            "value" : "每次提问时，询问历史记录会将你的问题、对话中之前的问题和回答，以及历史记录中的摘录（与问题匹配的段落，或你选择提问的录音中的段落）发送给 %@。音频、其余历史记录、词典、统计数据和设备标识符不会被发送。"
           }
         }
       }
