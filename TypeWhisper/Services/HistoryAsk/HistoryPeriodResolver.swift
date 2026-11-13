@@ -43,8 +43,8 @@ struct HistoryPeriodResolver: Sendable {
                 index += 1
                 continue
             }
-            func longestRule(at start: Int) -> (end: Int, interval: DateInterval)? {
-                var best: (end: Int, interval: DateInterval)?
+            func longestRule(at start: Int) -> (end: Int, interval: DateInterval, isPast: Bool)? {
+                var best: (end: Int, interval: DateInterval, isPast: Bool)?
                 for rule in Self.rules where rule.applies(to: language) {
                     guard let (end, captures) = Self.match(rule.elements[...], tokens, at: start, Captures()),
                           end > (best?.end ?? start),
@@ -53,7 +53,7 @@ struct HistoryPeriodResolver: Sendable {
                               $0.range.overlaps(tokens[start].range.lowerBound..<tokens[end - 1].range.upperBound)
                           }),
                           let interval = interval(for: rule.outcome, captures) else { continue }
-                    best = (end, interval)
+                    best = (end, interval, rule.outcome.isPast)
                 }
                 return best
             }
@@ -65,7 +65,8 @@ struct HistoryPeriodResolver: Sendable {
                 start = index + 1
                 best = longer
             }
-            guard let best, !Self.isDeadline(tokens, from: start, to: best.end) else {
+            // "For last week" asks about last week; "for Friday" names a deadline.
+            guard let best, best.isPast || !Self.isDeadline(tokens, from: start, to: best.end) else {
                 index = max(best?.end ?? 0, index + 1)
                 continue
             }
@@ -241,6 +242,16 @@ struct HistoryPeriodResolver: Sendable {
         case weekday(past: Bool)
         case date
         case calendarYear
+
+        /// Named as past by its own words, as in "last week" or "two days ago".
+        var isPast: Bool {
+            switch self {
+            case .day(let offset), .week(let offset), .month(let offset), .year(let offset): offset < 0
+            case .ago, .rolling: true
+            case .namedMonth(let past), .weekday(let past): past
+            case .date, .calendarYear: false
+            }
+        }
     }
 
     private enum Element {

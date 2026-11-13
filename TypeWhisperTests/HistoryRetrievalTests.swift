@@ -64,6 +64,7 @@ final class HistoryPeriodResolverTests: XCTestCase {
             ("What did I say on 2026-11-03?", "en", thirdOfNovember),
             ("What did I say since 2026-11-03?", "en", "2026-11-03/2026-11-13"),
             ("What did I say since November 3, 2025?", "en", "2025-11-03/2026-11-13"),
+            ("Summarize my recordings for last week", "en", lastWeek),
             ("What may I have said in March 2026?", "en", "2026-03-01/2026-04-01"),
             ("What did I say in 2025?", "en", lastYear),
             ("Qu'est-ce que j'ai dit hier ?", "fr", yesterday),
@@ -181,6 +182,14 @@ final class AskHistoryPlannerTests: XCTestCase {
         XCTAssertEqual(onGitHub.scope.domains, ["github.com"])
         XCTAssertFalse(onGitHub.keywords.contains { $0.lowercased().contains("github") }, "\(onGitHub.keywords)")
         XCTAssertEqual(plan("Was stand auf gist.github.com?", vocabulary).scope.domains, ["gist.github.com"])
+        // Next to an app, a host without "on" is what was written about.
+        let aboutGitHub = plan("What did I write in Slack about github.com?", vocabulary)
+        XCTAssertEqual(aboutGitHub.scope.domains, [])
+        XCTAssertTrue(aboutGitHub.keywords.contains("github.com"), "\(aboutGitHub.keywords)")
+        // A weekday inside a host names no day.
+        let onMonday = plan("What did I write on monday.com?", HistorySearchVocabulary(domains: ["monday.com"]))
+        XCTAssertEqual(onMonday.scope.domains, ["monday.com"])
+        XCTAssertNil(onMonday.scope.period)
 
         let onPhone = plan("What did I dictate on my iPhone about the passport?", vocabulary)
         XCTAssertEqual(onPhone.scope.sources, [RecordingSource.iPhone.rawValue, RecordingSource.keyboard.rawValue])
@@ -325,6 +334,32 @@ final class HistoryRetrievalTests: XCTestCase {
 
         let found = try await index.search(words: ["Heizung"], limit: 10, includingNewest: true)
         XCTAssertTrue(found.map(\.recordID).contains(records[99].id))
+    }
+
+    func testASearchForTheLastTimeKeepsTheNewestTitle() async throws {
+        let (index, directory) = try makeIndex()
+        defer { TestSupport.remove(directory) }
+        let records = (0..<30).map { day in
+            record(
+                at: TestClock.date(2026, 1, 1).addingTimeInterval(Double(day) * 86_400),
+                title: "Heizung", passages: [passage("Notiz")]
+            )
+        }
+        try await index.upsert(records)
+
+        let found = try await index.search(words: ["Heizung"], includingNewest: true)
+        XCTAssertTrue(found.map(\.recordID).contains(records[29].id))
+    }
+
+    func testOneLongRecordDoesNotCrowdOutTheOthersInPartsOfWords() async throws {
+        let (index, directory) = try makeIndex()
+        defer { TestSupport.remove(directory) }
+        let older = record(at: TestClock.date(2026, 11, 1), passages: [passage("Kinderzahnarzt")])
+        let newer = record(passages: (0..<25).map { _ in passage("Kinderzahnarzt") })
+        try await index.upsert([older, newer])
+
+        let found = try await index.search(words: ["Zahnarzt"])
+        XCTAssertEqual(Set(found.map(\.recordID)), [older.id, newer.id])
     }
 
     func testOneLongRecordDoesNotCrowdOutTheOthers() async throws {

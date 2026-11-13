@@ -317,17 +317,21 @@ actor HistorySearchIndex {
                 for (offset, passage) in newest.enumerated() { add(passage, rank: offset + 1) }
             }
 
-            let titled = try connection.rows(
-                """
-                SELECT rowid FROM titles_fts
-                WHERE titles_fts MATCH ?1 AND rowid BETWEEN ?2 AND ?3
-                \(scope.limitsRecords ? "AND rowid IN \(recordFilter)" : "")
-                ORDER BY bm25(titles_fts) LIMIT ?4
-                """,
-                [.text(expression), .integer(records.lowerBound), .integer(records.upperBound),
-                 .integer(Int64(Self.titleLimit))] + filter
-            ) { $0.integer(0) }
-            for (offset, record) in titled.enumerated() {
+            func titled(orderedBy order: String, limit: Int) throws -> [Int64] {
+                try connection.rows(
+                    """
+                    SELECT rowid FROM titles_fts
+                    WHERE titles_fts MATCH ?1 AND rowid BETWEEN ?2 AND ?3
+                    \(scope.limitsRecords ? "AND rowid IN \(recordFilter)" : "")
+                    ORDER BY \(order) LIMIT ?4
+                    """,
+                    [.text(expression), .integer(records.lowerBound), .integer(records.upperBound),
+                     .integer(Int64(limit))] + filter
+                ) { $0.integer(0) }
+            }
+            var titleRankings = [try titled(orderedBy: "bm25(titles_fts)", limit: Self.titleLimit)]
+            if includingNewest { titleRankings.append(try titled(orderedBy: "rowid DESC", limit: Self.newestLimit)) }
+            for (offset, record) in titleRankings.flatMap({ $0.enumerated() }) {
                 let own = Self.passageIDs(ofRecords: record...record)
                 // The record's best passage: one already found, the best match
                 // further down the ranking, or its first one.
@@ -346,9 +350,13 @@ actor HistorySearchIndex {
                 for word in words where word.count >= Self.substringLength {
                     let containing = try connection.rows(
                         """
-                        SELECT id FROM passages
-                        WHERE text LIKE ?1 AND id BETWEEN ?2 AND ?3
-                        \(scope.limitsRecords ? "AND record_id IN \(recordFilter)" : "")
+                        SELECT id FROM (
+                            SELECT id, row_number() OVER (PARTITION BY record_id ORDER BY id DESC) AS place
+                            FROM passages
+                            WHERE text LIKE ?1 AND id BETWEEN ?2 AND ?3
+                            \(scope.limitsRecords ? "AND record_id IN \(recordFilter)" : "")
+                        )
+                        WHERE place <= \(Self.candidatesPerRecord)
                         ORDER BY id DESC LIMIT ?4
                         """,
                         [.text("%\(word)%"), .integer(passages.lowerBound), .integer(passages.upperBound),

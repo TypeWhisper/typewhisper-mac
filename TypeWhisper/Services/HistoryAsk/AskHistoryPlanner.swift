@@ -34,24 +34,28 @@ struct AskHistoryPlanner: Sendable {
 
     func plan(for question: String) -> HistorySearchPlan {
         let language = NLLanguageRecognizer.dominantLanguage(for: question)?.rawValue
-        let period = HistoryPeriodResolver(now: now, calendar: calendar).period(in: question, language: language)
         var plan = HistorySearchPlan(question: question)
-        plan.scope.period = period?.interval
-
         var words = Self.words(of: question, language: language)
+
         // The words of a period, a domain, an app or a device are not searched for.
-        let source = question as NSString
-        var used = period?.utf16Ranges ?? []
+        var domains: [(domain: String, range: Range<Int>, isPlaced: Bool)] = []
+        let masked = NSMutableString(string: question)
         for domain in vocabulary.domains where !domain.isEmpty {
             // A whole host name: "example.com" is not named in "docs.example.com".
             let pattern = #"(?<![\p{L}\p{N}.-])"# + NSRegularExpression.escapedPattern(for: domain)
                 + #"(?![\p{L}\p{N}-]|\.[\p{L}\p{N}])"#
             guard let expression = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-                  let match = expression.firstMatch(in: question, range: NSRange(location: 0, length: source.length)),
+                  let match = expression.firstMatch(in: question, range: NSRange(location: 0, length: masked.length)),
                   let range = Range(match.range) else { continue }
-            plan.scope.domains.insert(domain)
-            used.append(range)
+            let before = words.filter { $0.range.upperBound <= range.lowerBound }.suffix(2)
+            domains.append((domain, range, before.contains { Self.placeWords.contains($0.folded) }))
+            // "monday.com" names no Monday.
+            masked.replaceCharacters(in: match.range, with: String(repeating: " ", count: match.range.length))
         }
+        let period = HistoryPeriodResolver(now: now, calendar: calendar)
+            .period(in: masked as String, language: language)
+        plan.scope.period = period?.interval
+        let used = (period?.utf16Ranges ?? []) + domains.map(\.range)
         words.removeAll { word in used.contains { $0.overlaps(word.range) } }
 
         let apps = vocabulary.apps
@@ -106,6 +110,16 @@ struct AskHistoryPlanner: Sendable {
             if let lemma = word.lemma, lemma != word.folded { keywords.append(lemma) }
         }
         finishName()
+
+        for domain in domains {
+            // Next to an app, a host named without "on" or "auf" is a topic:
+            // what was written in Slack about example.com.
+            if domain.isPlaced || plan.scope.bundleIDs.isEmpty {
+                plan.scope.domains.insert(domain.domain)
+            } else {
+                keywords.append(domain.domain)
+            }
+        }
 
         var seen = Set<String>()
         plan.keywords = Array(keywords.filter { seen.insert(Self.folded($0)).inserted }.prefix(Self.maximumKeywords))
