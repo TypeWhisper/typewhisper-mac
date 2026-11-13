@@ -125,6 +125,29 @@ final class ServiceContainer: ObservableObject {
     let dictationViewModel: DictationViewModel
     let historyViewModel: HistoryViewModel
     lazy var historyRetranscriptionService = HistoryRetranscriptionEnvironment.makeService(self)
+    /// Made on first use, so the launch builds no panel.
+    lazy var askHistoryPanelController = AskHistoryPanelController(
+        session: askHistorySession,
+        environment: AskHistoryPanelEnvironment(
+            hasPremiumAccess: { [licenseService, premiumAccountService] in
+                AskHistoryPremiumAccess.isGranted(
+                    hasCommercialLicense: licenseService.hasCommercialLicense,
+                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
+                )
+            },
+            cloudProviders: { [promptProcessingService] in promptProcessingService.historyCloudProviders() },
+            prewarm: { [promptProcessingService] in promptProcessingService.prewarmWorkflowLLMProvider(providerOverride: nil) },
+            openRecord: { id in
+                HistoryViewModel.shared.requestOpenRecord(withID: id)
+                ManagedAppWindowOpener.shared.open(id: "history")
+            },
+            openLanguageModelSettings: {
+                SettingsNavigationCoordinator.shared.navigate(to: .workflows)
+                ManagedAppWindowOpener.shared.open(id: "settings")
+            },
+            openPremium: { PremiumSettingsWindowManager.shared.present(.access) }
+        )
+    )
     let installedAppsViewModel: InstalledAppsViewModel
     let dictionaryViewModel: DictionaryViewModel
     let snippetsViewModel: SnippetsViewModel

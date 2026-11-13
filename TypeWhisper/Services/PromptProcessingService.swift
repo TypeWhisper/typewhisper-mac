@@ -444,6 +444,22 @@ class PromptProcessingService: ObservableObject {
         return !setupStatus.requiresExternalCredentials
     }
 
+    /// The providers Ask History would try that send text off this Mac, by ID
+    /// and name, in the order of the list. An OpenAI-compatible server counts
+    /// as one, because its address can point anywhere.
+    func historyCloudProviders(providerOverride: String? = nil) -> [(id: String, name: String)] {
+        var seen = Set<String>()
+        return candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil)
+            .map { normalizeProviderId($0.providerId) }
+            .filter { id in
+                switch historyProviderKind(of: id) {
+                case .cloud, .openAICompatible: seen.insert(id).inserted
+                case .appleIntelligence, .local: false
+                }
+            }
+            .map { ($0, displayName(for: $0)) }
+    }
+
     /// Prewarms Apple Intelligence when a workflow request with `providerOverride` tries it
     /// first, so its model loads while recording instead of after the stop.
     func prewarmWorkflowLLMProvider(providerOverride: String?) {

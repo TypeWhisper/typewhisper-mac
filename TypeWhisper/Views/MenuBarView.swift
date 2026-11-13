@@ -26,6 +26,7 @@ private final class MenuBarState: ObservableObject {
     @Published var undoLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var restoreRawTranscriptMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var correctLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    @Published var askHistoryMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     /// Configured dictation shortcuts with their mode, empty when none is set.
     @Published var dictationShortcuts: [MenuBarStatusFormatting.DictationShortcut]
     @Published var needsEngineSetup: Bool
@@ -62,6 +63,7 @@ private final class MenuBarState: ObservableObject {
         self.undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
         self.restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
         self.correctLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .correctLastDictation)
+        self.askHistoryMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .askHistory)
         self.dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
         self.needsEngineSetup = modelManager.activeModelName == nil
         self.lastDictationError = dictation.lastDictationError
@@ -250,6 +252,7 @@ private final class MenuBarState: ObservableObject {
         undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
         restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
         correctLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .correctLastDictation)
+        askHistoryMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .askHistory)
         dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
     }
 
@@ -303,6 +306,7 @@ enum MenuBarStatusFormatting {
 enum MenuBarMenuItem: Hashable {
     case settings
     case history
+    case askHistory
     case errorLog
     case toggleRecorder
     case dictationShortcut
@@ -346,7 +350,7 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
         switch self {
         case .general:
-            [.settings, .history, .errorLog]
+            [.settings, .history, .askHistory, .errorLog]
         case .transcription:
             hasRecoverableRecording
                 ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription,
@@ -528,6 +532,17 @@ struct MenuBarView: View {
             } label: {
                 Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
             }
+
+        case .askHistory:
+            Button {
+                // A key NSPanel cannot open while the menu still tracks.
+                MenuBarActionDispatcher.performAfterMenuDismissal {
+                    ServiceContainer.shared.askHistoryPanelController.show()
+                }
+            } label: {
+                Label(String(localized: "askHistory.menu"), systemImage: "text.magnifyingglass")
+            }
+            .keyboardShortcut(keyboardShortcut(from: status.askHistoryMenuShortcut))
 
         case .errorLog:
             Button {

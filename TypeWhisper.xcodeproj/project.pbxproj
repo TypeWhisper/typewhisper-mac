@@ -289,6 +289,8 @@
 		AA4A5C00000000000000000F /* AskHistoryOverview.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C00000000000000000F /* AskHistoryOverview.swift */; };
 		AA4A5C000000000000000010 /* AskHistoryOverviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000010 /* AskHistoryOverviewTests.swift */; };
 		AA4A5C000000000000000011 /* AskHistorySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000011 /* AskHistorySession.swift */; };
+		AA4A5C000000000000000013 /* AskHistoryPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000013 /* AskHistoryPanel.swift */; };
+		AA4A5C000000000000000014 /* AskHistoryPanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000014 /* AskHistoryPanelTests.swift */; };
 		AA4A5C000000000000000012 /* AskHistorySessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB4A5C000000000000000012 /* AskHistorySessionTests.swift */; };
 		AA7E11000000000000000004 /* RemoteLinkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000004 /* RemoteLinkViewModel.swift */; };
 		AA7E11000000000000000005 /* RemoteLinkSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */; };
@@ -1042,6 +1044,8 @@
 		BB4A5C00000000000000000F /* AskHistoryOverview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryOverview.swift; sourceTree = "<group>"; };
 		BB4A5C000000000000000010 /* AskHistoryOverviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryOverviewTests.swift; sourceTree = "<group>"; };
 		BB4A5C000000000000000011 /* AskHistorySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistorySession.swift; sourceTree = "<group>"; };
+		BB4A5C000000000000000013 /* AskHistoryPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryPanel.swift; sourceTree = "<group>"; };
+		BB4A5C000000000000000014 /* AskHistoryPanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistoryPanelTests.swift; sourceTree = "<group>"; };
 		BB4A5C000000000000000012 /* AskHistorySessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskHistorySessionTests.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000004 /* RemoteLinkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkViewModel.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkSettingsView.swift; sourceTree = "<group>"; };
@@ -2486,6 +2490,7 @@
 				BB00000000000000000118 /* PromptPalettePanel.swift */,
 				B91F00000000000000000001 /* SelectionPalettePanel.swift */,
 				C10200000000000000000004 /* LastDictationCorrectionPanel.swift */,
+				BB4A5C000000000000000013 /* AskHistoryPanel.swift */,
 				BB00000000000000000120 /* NotchIndicatorPanel.swift */,
 				E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */,
 				BB00000000000000000121 /* NotchIndicatorView.swift */,
@@ -3436,6 +3441,7 @@
 				BB4A5C00000000000000000D /* AskHistoryAnswerTests.swift */,
 				BB4A5C000000000000000010 /* AskHistoryOverviewTests.swift */,
 				BB4A5C000000000000000012 /* AskHistorySessionTests.swift */,
+				BB4A5C000000000000000014 /* AskHistoryPanelTests.swift */,
 				CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */,
 				DB812023194EF7026721F4F3 /* HistoryLLMUsageTests.swift */,
 				C75DC15B3FC3545BA8471BBB /* LLMUsageRecordingTests.swift */,
@@ -5535,6 +5541,7 @@
 				AA4A5C00000000000000000D /* AskHistoryAnswerTests.swift in Sources */,
 				AA4A5C000000000000000010 /* AskHistoryOverviewTests.swift in Sources */,
 				AA4A5C000000000000000012 /* AskHistorySessionTests.swift in Sources */,
+				AA4A5C000000000000000014 /* AskHistoryPanelTests.swift in Sources */,
 				1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */,
 				9DA7BD7932F43C516ABA7AC4 /* HistoryLLMUsageTests.swift in Sources */,
 				348F609D334BDF2713E83410 /* LLMUsageRecordingTests.swift in Sources */,
@@ -5836,6 +5843,7 @@
 				AA00000000000000000118 /* PromptPalettePanel.swift in Sources */,
 				A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */,
 				C10200000000000000000003 /* LastDictationCorrectionPanel.swift in Sources */,
+				AA4A5C000000000000000013 /* AskHistoryPanel.swift in Sources */,
 				AA00000000000000000217 /* IndicatorPreviewView.swift in Sources */,
 					AA00000000000000000123 /* EventBus.swift in Sources */,
 					AA00000000000000000124 /* PluginManager.swift in Sources */,
