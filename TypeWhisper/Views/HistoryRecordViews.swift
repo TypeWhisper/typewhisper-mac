@@ -213,6 +213,8 @@ struct HistoryRecordDetailView: View {
     private func revealRequestedTime() {
         guard let request = viewModel.recordTimeRequest, request.recordID == record.id else { return }
         viewModel.recordTimeRequest = nil
+        // The cited paragraph is in the speaker transcript, which the user may have hidden.
+        showsSpeakers = true
         speakers.reveal(at: request.seconds)
     }
 

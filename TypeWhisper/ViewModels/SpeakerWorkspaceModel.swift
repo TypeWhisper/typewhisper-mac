@@ -42,8 +42,14 @@ final class SpeakerWorkspaceModel: ObservableObject {
     /// Shows only this speaker's turns in the transcript.
     @Published var filteredSpeaker: String?
     @Published var followsPlayback = true
-    /// The paragraph to bring into view without playing, set by `reveal(at:)`.
-    @Published private(set) var revealedParagraphID: Int?
+    /// A paragraph to bring into view without playing, set by `reveal(at:)`.
+    /// Each request is new, also for the paragraph of the last one.
+    struct RevealRequest: Equatable {
+        let id = UUID()
+        let paragraphID: Int
+    }
+
+    @Published private(set) var revealRequest: RevealRequest?
     private var pendingRevealTime: TimeInterval?
 
     private let recordID: UUID
@@ -212,15 +218,23 @@ final class SpeakerWorkspaceModel: ObservableObject {
     /// Moves playback to `time` without playing and brings its paragraph into
     /// view, also when the transcript has not loaded yet.
     func reveal(at time: TimeInterval) {
+        // A speaker filter could hide the paragraph.
+        filteredSpeaker = nil
         playback.seek(to: time)
         pendingRevealTime = time
         applyPendingReveal()
     }
 
+    /// Called by the view once it scrolled, so a view that appears later does not scroll again.
+    func didReveal(_ request: RevealRequest) {
+        if revealRequest == request { revealRequest = nil }
+    }
+
     private func applyPendingReveal() {
         guard let time = pendingRevealTime, !rows.isEmpty else { return }
         pendingRevealTime = nil
-        revealedParagraphID = rows.last { $0.paragraph.start <= time + 0.05 }?.id ?? rows.first?.id
+        guard let id = rows.last(where: { $0.paragraph.start <= time + 0.05 })?.id ?? rows.first?.id else { return }
+        revealRequest = RevealRequest(paragraphID: id)
     }
 
     private func updateActivePosition(at time: TimeInterval) {
