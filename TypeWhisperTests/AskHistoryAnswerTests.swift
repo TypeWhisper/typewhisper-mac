@@ -187,6 +187,14 @@ final class AskHistoryPromptBuilderTests: XCTestCase {
 
         XCTAssertEqual(prompt.sources, [sources[0]])
         XCTAssertTrue(prompt.instructions.contains("the newest 1 of 3 recordings"), prompt.instructions)
+
+        // Not even the newest fits: an older one does not take its place.
+        let oversized = [source("Text", title: String(repeating: "t", count: 1_200)), source("Kurz.")]
+        let empty = AskHistoryPromptBuilder.prompt(
+            for: request(sources: oversized, overviewRecordCount: 2),
+            budget: AskHistoryBudget(sourceCharacters: 1_000, historyCharacters: 0)
+        )
+        XCTAssertEqual(empty.sources, [])
     }
 }
 

@@ -105,12 +105,14 @@ enum AskHistoryPromptBuilder {
             var text = sourceText(source.text)
             let room = budget.sourceCharacters - used - header.count - 2
             if text.count > room {
-                // An overview keeps the newest recordings without a gap, as its
-                // instructions say.
-                if request.overviewRecordCount != nil, !sources.isEmpty { break }
                 // The best source is shortened when it alone is too long. Later
-                // ones are left out, and a shorter one after them may still fit.
-                guard sources.isEmpty, room > omissionMarker.count + 1 else { continue }
+                // ones are left out, and a shorter one after them may still fit,
+                // except in an overview, which keeps the newest recordings
+                // without a gap, as its instructions say.
+                guard sources.isEmpty, room > omissionMarker.count + 1 else {
+                    if request.overviewRecordCount != nil { break }
+                    continue
+                }
                 text = shortened(text, to: room)
             }
             guard !text.isEmpty else { continue }
