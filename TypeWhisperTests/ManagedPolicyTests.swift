@@ -12,7 +12,7 @@ final class ManagedPolicyValidatorTests: XCTestCase {
             "AllowedTranscriptionProviders", "AllowedLlmProviders", "AllowedPlugins",
             "AllowCloudTranscription", "AllowCloudTextProcessing", "AllowPluginDownloads", "AllowModelDownloads",
             "UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "LaunchAtLogin",
-            "SkipOnboardingWhenReady", "SuppressOptionalPrompts", "ManagedLicenseKey",
+            "SkipOnboardingWhenReady", "SuppressOptionalPrompts", "AllowHistoryAsk", "ManagedLicenseKey",
         ])
         XCTAssertEqual(
             Set(ManagedPolicyKeys.all.filter(\.allowsRecommendation).map(\.name)),
@@ -423,6 +423,18 @@ final class ManagedPolicyServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.revision, 1)
         XCTAssertEqual(service.current.revision, 1)
         XCTAssertEqual(service.current.status, .absent)
+    }
+
+    func testAskHistoryReadsAProfileChangeBeforeTheNextRefresh() {
+        let source = FakeManagedPolicySource(.absent)
+        let service = ManagedPolicyService(source: source)
+        service.refresh()
+        XCTAssertTrue(ManagedAskHistoryPolicy.allowsAskHistoryNow(service))
+
+        source.reading = ManagedPolicyReading(forcedValues: ["AllowHistoryAsk": .boolean(false)])
+        XCTAssertFalse(ManagedAskHistoryPolicy.allowsAskHistoryNow(service))
+        // The change is published for the panel too.
+        XCTAssertFalse(ManagedAskHistoryPolicy.allowsAskHistory(service.current))
     }
 
     func testRefreshWithoutContentChangeKeepsTheSnapshot() {

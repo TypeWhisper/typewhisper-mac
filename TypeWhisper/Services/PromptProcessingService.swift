@@ -453,6 +453,10 @@ class PromptProcessingService: ObservableObject {
         return !setupStatus.requiresExternalCredentials
     }
 
+    /// Set by the app from `AllowHistoryAsk`: false stops every Ask History
+    /// request before it reaches a provider. Asked right before each request.
+    var isHistoryAskAllowed: @MainActor () -> Bool = { true }
+
     /// Set by the app: Ask History then sends nothing to a provider off this Mac
     /// that the user has not allowed, whatever the panel showed.
     var requiresHistoryConsent = false
@@ -1005,6 +1009,10 @@ class PromptProcessingService: ObservableObject {
     ) async throws -> String {
         // Measuring a prompt or an earlier step may have taken a moment.
         try Task.checkCancellation()
+        // Also between the parts of one summary and before a retry.
+        guard isHistoryAskAllowed() else {
+            throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))
+        }
         let reply = try await processSingleProvider(
             providerId: normalizeProviderId(candidate.providerId),
             requestedModelId: candidate.modelId,
@@ -1061,6 +1069,9 @@ class PromptProcessingService: ObservableObject {
         for candidate in candidates {
             try Task.checkCancellation()
             do {
+                guard isHistoryAskAllowed() else {
+                    throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))
+                }
                 let providerId = normalizeProviderId(candidate.providerId)
                 guard historyMaySend(to: providerId) else {
                     throw AskHistoryConsentMissing(providerName: displayName(for: providerId))
@@ -1247,6 +1258,10 @@ class PromptProcessingService: ObservableObject {
             throw LLMError.noApiKey
         }
 
+        // A local model may have taken a while to load; Ask History may be off by now.
+        if answersPrompt, !isHistoryAskAllowed() {
+            throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))
+        }
         let model = try resolvedModelId(
             for: plugin,
             providerId: providerId,

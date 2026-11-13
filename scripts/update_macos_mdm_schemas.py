@@ -46,6 +46,7 @@ DESCRIPTIONS = {
     "LaunchAtLogin": ("Launch at login", "Registers or removes TypeWhisper's login item and locks the setting."),
     "SkipOnboardingWhenReady": ("Skip setup when ready", "Keeps the setup wizard closed when an engine, the permissions and a dictation shortcut are ready."),
     "SuppressOptionalPrompts": ("Hide optional prompts", "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button."),
+    "AllowHistoryAsk": ("Allow Ask History", "Off turns Ask History off: the panel says so, and the search index of History takes in no recordings."),
     "ManagedLicenseKey": ("Commercial license key", "Activates a commercial license for the signed-in user."),
 }
 ENUMERATION_TITLES = {

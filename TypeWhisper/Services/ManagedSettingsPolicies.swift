@@ -154,6 +154,23 @@ enum ManagedPromptPolicy {
     }
 }
 
+/// Whether the organization allows Ask History. Off, the panel says so and the
+/// search index takes in no records and loses those it has as History changes.
+enum ManagedAskHistoryPolicy {
+    /// A value that cannot be read turns Ask History off, as for the other enforced keys.
+    static func allowsAskHistory(_ snapshot: ManagedPolicySnapshot) -> Bool {
+        guard !snapshot.isBlocked(ManagedPolicyKeys.allowHistoryAsk) else { return false }
+        return snapshot.resolveBoolean(ManagedPolicyKeys.allowHistoryAsk, applicationDefault: true).value
+    }
+
+    /// Reads the managed preferences afresh, so a profile change applies to the next
+    /// request instead of after the next periodic refresh. A changed policy is published too.
+    @MainActor
+    static func allowsAskHistoryNow(_ service: ManagedPolicyService) -> Bool {
+        allowsAskHistory(service.refresh())
+    }
+}
+
 /// What first-time setup needs before `SkipOnboardingWhenReady` may keep it closed.
 struct ManagedSetupReadiness: Equatable, Sendable {
     var engineReady: Bool

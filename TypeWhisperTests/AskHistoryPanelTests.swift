@@ -17,6 +17,7 @@ final class AskHistoryPanelTests: XCTestCase {
     private var cloudProviders = [(id: "cloud-llm", name: "Cloud LLM")]
     private let accessChanges = PassthroughSubject<Void, Never>()
     private var hasPremium = true
+    private var isAllowedByPolicy = true
 
     private func makeModel(hasPremium: Bool = true) throws -> AskHistoryPanelModel {
         self.hasPremium = hasPremium
@@ -37,6 +38,7 @@ final class AskHistoryPanelTests: XCTestCase {
                 openRecord: { _ in },
                 openLanguageModelSettings: {},
                 openPremium: {},
+                isAllowedByPolicy: { [unowned self] in self.isAllowedByPolicy },
                 accessChanges: accessChanges.eraseToAnyPublisher(),
                 defaults: try XCTUnwrap(UserDefaults(suiteName: defaultsSuite))
             )
@@ -93,6 +95,28 @@ final class AskHistoryPanelTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTAssertTrue(model.hasPremiumAccess)
+    }
+
+    func testTheOrganizationCanTurnAskHistoryOff() throws {
+        isAllowedByPolicy = false
+        let model = try makeModel()
+        model.send("Was habe ich heute diktiert?")
+
+        XCTAssertTrue(model.isTurnedOffByPolicy)
+        XCTAssertFalse(model.needsConsent)
+        XCTAssertEqual(model.session.turns, [])
+    }
+
+    func testTurningAskHistoryOffStopsTheRunningQuestion() throws {
+        cloudProviders = []
+        let model = try makeModel()
+        model.send("Was habe ich heute diktiert?")
+        XCTAssertTrue(model.session.isWorking)
+
+        isAllowedByPolicy = false
+        model.refreshAccess()
+        XCTAssertFalse(model.session.isWorking)
+        XCTAssertEqual(model.session.turns.map(\.stage), [.stopped])
     }
 
     func testWithoutPremiumNothingIsAsked() throws {

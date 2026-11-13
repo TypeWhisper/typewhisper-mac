@@ -312,10 +312,31 @@
         }
       ]
     },
+    "AllowHistoryAsk": {
+      "title": "Allow Ask History",
+      "description": "Off turns Ask History off: the panel says so, and the search index of History takes in no recordings.",
+      "property_order": 70,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "boolean"
+        }
+      ]
+    },
     "Recommended": {
       "title": "Recommended settings (users can change)",
       "description": "Defaults that apply until the user makes a choice.",
-      "property_order": 70,
+      "property_order": 75,
       "anyOf": [
         {
           "type": "null",

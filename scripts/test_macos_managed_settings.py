@@ -101,7 +101,7 @@ def check_value(test, name, value):
 
 class CatalogTests(unittest.TestCase):
     def test_reads_the_swift_catalog(self):
-        self.assertEqual(len(CATALOG), 18)
+        self.assertEqual(len(CATALOG), 19)
         self.assertEqual(CATALOG["UpdateMode"], ("enumeration", False, 2, None))
         self.assertEqual(CATALOG["ManagedLicenseKey"], ("text", False, 0, None))
         self.assertEqual(CATALOG["TranscriptionProviderId"][3], "TranscriptionModelId")

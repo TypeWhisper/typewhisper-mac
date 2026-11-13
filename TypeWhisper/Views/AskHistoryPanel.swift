@@ -19,7 +19,9 @@ struct AskHistoryPanelEnvironment {
     var openRecord: (UUID) -> Void
     var openLanguageModelSettings: () -> Void
     var openPremium: () -> Void
-    /// Fires when a license or Premium account may have changed.
+    /// False while the organization turns Ask History off (`AllowHistoryAsk`).
+    var isAllowedByPolicy: () -> Bool = { true }
+    /// Fires when a license, a Premium account or the managed policy may have changed.
     var accessChanges: AnyPublisher<Void, Never> = Empty().eraseToAnyPublisher()
     var defaults: UserDefaults = .standard
 }
@@ -32,6 +34,7 @@ final class AskHistoryPanelModel: ObservableObject {
     /// Cloud providers the question waits for the user to allow.
     @Published private(set) var consentProviders: [(id: String, name: String)] = []
     @Published private(set) var hasPremiumAccess: Bool
+    @Published private(set) var isTurnedOffByPolicy: Bool
 
     let session: AskHistorySession
     private let environment: AskHistoryPanelEnvironment
@@ -42,6 +45,7 @@ final class AskHistoryPanelModel: ObservableObject {
         self.session = session
         self.environment = environment
         hasPremiumAccess = environment.hasPremiumAccess()
+        isTurnedOffByPolicy = !environment.isAllowedByPolicy()
         // Read after the change, which the publishers announce before it happens.
         accessSubscription = environment.accessChanges
             .receive(on: DispatchQueue.main)
@@ -51,9 +55,19 @@ final class AskHistoryPanelModel: ObservableObject {
     var needsConsent: Bool { !consentProviders.isEmpty }
 
     func refreshAccess() {
+        let isTurnedOff = !environment.isAllowedByPolicy()
+        if isTurnedOff != isTurnedOffByPolicy { isTurnedOffByPolicy = isTurnedOff }
         let hasAccess = environment.hasPremiumAccess()
         if hasAccess != hasPremiumAccess { hasPremiumAccess = hasAccess }
+        // A question that has not reached a provider yet must not send anything now.
+        if !canAsk {
+            session.stop()
+            declineCloudProviders()
+        }
     }
+
+    /// Premium and the organization both allow a question.
+    var canAsk: Bool { hasPremiumAccess && !isTurnedOffByPolicy }
 
     private var allowedProviders: Set<String> {
         Set(environment.defaults.stringArray(forKey: UserDefaultsKeys.askHistoryCloudConsents) ?? [])
@@ -63,7 +77,7 @@ final class AskHistoryPanelModel: ObservableObject {
     /// have none yet.
     func send(_ text: String? = nil) {
         let question = (text ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard hasPremiumAccess, !question.isEmpty, !session.isWorking else { return }
+        guard canAsk, !question.isEmpty, !session.isWorking else { return }
         let allowed = allowedProviders
         let missing = environment.cloudProviders().filter { !allowed.contains($0.id) }
         draft = ""
@@ -145,6 +159,8 @@ final class AskHistoryPanelController {
         }
         // Also when Premium is unlocked while the panel shows the locked state.
         accessSubscription = model.$hasPremiumAccess
+            .combineLatest(model.$isTurnedOffByPolicy)
+            .map { $0 && !$1 }
             .removeDuplicates()
             .filter { $0 }
             .sink { [environment] _ in
@@ -298,7 +314,7 @@ struct AskHistoryPanelView: View {
                 .font(.title3)
                 .lineLimit(1...4)
                 .focused($isInputFocused)
-                .disabled(!model.hasPremiumAccess || model.needsConsent)
+                .disabled(!model.canAsk || model.needsConsent)
                 .onSubmit { model.send() }
             if session.isWorking {
                 Button {
@@ -317,7 +333,7 @@ struct AskHistoryPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(model.draft.isEmpty ? Color.secondary : Color.accentColor)
-                .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.hasPremiumAccess)
+                .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.canAsk)
                 .help(String(localized: "askHistory.send"))
                 .accessibilityLabel(String(localized: "askHistory.send"))
             }
@@ -328,7 +344,9 @@ struct AskHistoryPanelView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !model.hasPremiumAccess {
+        if model.isTurnedOffByPolicy {
+            AskHistoryManagedView()
+        } else if !model.hasPremiumAccess {
             AskHistoryLockedView(onUnlock: model.openPremium)
         } else if model.needsConsent {
             AskHistoryConsentView(
@@ -389,6 +407,18 @@ private struct AskHistoryEmptyView: View {
                 }
                 .buttonStyle(.link)
             }
+        }
+        .padding(16)
+    }
+}
+
+private struct AskHistoryManagedView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(String(localized: "askHistory.managed.title"), systemImage: "building.2")
+                .font(.headline)
+            Text(String(localized: "askHistory.managed.message"))
+                .foregroundStyle(.secondary)
         }
         .padding(16)
     }
