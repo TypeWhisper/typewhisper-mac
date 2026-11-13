@@ -476,6 +476,40 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(try Self.multipartValues(named: "keyterms", in: request), ["TypeWhisper"])
     }
 
+    func testMultilangModeIsOffByDefaultPersistsAndOnlyReachesScribeV3Live() throws {
+        let host = try PluginTestHostServices()
+        let plugin = ElevenLabsPlugin()
+        plugin.activate(host: host)
+        XCTAssertFalse(plugin.multilangMode)
+        XCTAssertNil(
+            Self.queryItems(in: try ElevenLabsPlugin.realtimeURL(modelId: "scribe_v3", language: nil, noVerbatim: true))["multilang_mode"]
+        )
+
+        plugin.setMultilangMode(true)
+        let reloadedPlugin = ElevenLabsPlugin()
+        reloadedPlugin.activate(host: host)
+        XCTAssertTrue(reloadedPlugin.multilangMode)
+
+        let liveURL = try ElevenLabsPlugin.realtimeURL(
+            modelId: "scribe_v3",
+            language: "de",
+            noVerbatim: true,
+            multilangMode: true
+        )
+        XCTAssertEqual(Self.queryItems(in: liveURL)["multilang_mode"], "true")
+        XCTAssertEqual(Self.queryItems(in: liveURL)["language_code"], "de")
+
+        // Scribe v2 Realtime ends the session with `invalid_request` for this parameter.
+        let v2URL = try ElevenLabsPlugin.realtimeURL(
+            modelId: "scribe_v2",
+            language: nil,
+            noVerbatim: true,
+            multilangMode: true
+        )
+        XCTAssertNil(Self.queryItems(in: v2URL)["multilang_mode"])
+        XCTAssertFalse(ElevenLabsPlugin.supportsMultilangMode(ElevenLabsPlugin.medicalModelId))
+    }
+
     func testRealtimeSessionErrorsAndScribeLanguageCodesMapToTypeWhisper() {
         // Scribe ends a realtime session for an unknown language with `invalid_request`.
         XCTAssertTrue(ElevenLabsPlugin.isRealtimeError("invalid_request"))

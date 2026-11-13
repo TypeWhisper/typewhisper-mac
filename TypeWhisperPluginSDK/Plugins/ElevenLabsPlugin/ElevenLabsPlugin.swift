@@ -103,6 +103,7 @@ enum ElevenLabsSettingsAccessibility {
     static let audioEvents = "ElevenLabsAudioEvents"
     static let speakerCount = "ElevenLabsSpeakerCount"
     static let useDictionaryTerms = "ElevenLabsUseDictionaryTerms"
+    static let multilangMode = "ElevenLabsMultilangMode"
 }
 
 enum ElevenLabsAPIKeyValidationResult: Equatable, Sendable {
@@ -149,6 +150,7 @@ final class ElevenLabsPlugin: NSObject,
     static let noVerbatimKey = "noVerbatim"
     static let speakerCountKey = "numSpeakers"
     static let useDictionaryTermsKey = "useDictionaryTerms"
+    static let multilangModeKey = "multilangMode"
     static let automaticSpeakerCount = 0
     static let defaultSpeakerCount = 1
     static let maximumSpeakerCount = 32
@@ -176,6 +178,7 @@ final class ElevenLabsPlugin: NSObject,
     fileprivate var _noVerbatim = true
     fileprivate var _speakerCount = ElevenLabsPlugin.defaultSpeakerCount
     fileprivate var _useDictionaryTerms = true
+    fileprivate var _multilangMode = false
 
     private let logger = Logger(subsystem: "com.typewhisper.elevenlabs", category: "Plugin")
 
@@ -200,6 +203,7 @@ final class ElevenLabsPlugin: NSObject,
             host.userDefault(forKey: Self.speakerCountKey) as? Int ?? Self.defaultSpeakerCount
         )
         _useDictionaryTerms = host.userDefault(forKey: Self.useDictionaryTermsKey) as? Bool ?? true
+        _multilangMode = host.userDefault(forKey: Self.multilangModeKey) as? Bool ?? false
     }
 
     func deactivate() {
@@ -247,11 +251,17 @@ final class ElevenLabsPlugin: NSObject,
         realtimeModel(for: modelId) != nil
     }
 
+    /// Only Scribe v3 Live takes `multilang_mode`; Scribe v2 Realtime rejects the session with it.
+    static func supportsMultilangMode(_ modelId: String?) -> Bool {
+        (modelId ?? defaultModelId) == scribeV3ModelId
+    }
+
     var transcriptionMode: ElevenLabsTranscriptionMode { _transcriptionMode }
     var tagAudioEvents: Bool { _tagAudioEvents }
     var noVerbatim: Bool { _noVerbatim }
     var speakerCount: Int { _speakerCount }
     var useDictionaryTerms: Bool { _useDictionaryTerms }
+    var multilangMode: Bool { _multilangMode }
 
     func setTranscriptionMode(_ mode: ElevenLabsTranscriptionMode) {
         guard _transcriptionMode != mode else { return }
@@ -277,6 +287,12 @@ final class ElevenLabsPlugin: NSObject,
         guard _speakerCount != normalized else { return }
         _speakerCount = normalized
         host?.setUserDefault(normalized, forKey: Self.speakerCountKey)
+    }
+
+    func setMultilangMode(_ enabled: Bool) {
+        guard _multilangMode != enabled else { return }
+        _multilangMode = enabled
+        host?.setUserDefault(enabled, forKey: Self.multilangModeKey)
     }
 
     func setUseDictionaryTerms(_ enabled: Bool) {
@@ -462,7 +478,12 @@ final class ElevenLabsPlugin: NSObject,
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
 
         var request = URLRequest(
-            url: try Self.realtimeURL(modelId: modelId, language: language, noVerbatim: _noVerbatim)
+            url: try Self.realtimeURL(
+                modelId: modelId,
+                language: language,
+                noVerbatim: _noVerbatim,
+                multilangMode: _multilangMode
+            )
         )
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
 
@@ -608,7 +629,12 @@ final class ElevenLabsPlugin: NSObject,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
-        let url = try Self.realtimeURL(modelId: modelId, language: language, noVerbatim: noVerbatim)
+        let url = try Self.realtimeURL(
+            modelId: modelId,
+            language: language,
+            noVerbatim: noVerbatim,
+            multilangMode: _multilangMode
+        )
 
         var request = URLRequest(url: url)
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
@@ -822,7 +848,12 @@ final class ElevenLabsPlugin: NSObject,
         )
     }
 
-    static func realtimeURL(modelId: String?, language: String?, noVerbatim: Bool) throws -> URL {
+    static func realtimeURL(
+        modelId: String?,
+        language: String?,
+        noVerbatim: Bool,
+        multilangMode: Bool = false
+    ) throws -> URL {
         guard let realtimeModel = realtimeModel(for: modelId) else {
             throw PluginTranscriptionError.apiError("\(modelId ?? "") has no realtime model")
         }
@@ -837,6 +868,10 @@ final class ElevenLabsPlugin: NSObject,
             URLQueryItem(name: "no_verbatim", value: formattedBoolean(noVerbatim)),
             URLQueryItem(name: "include_timestamps", value: "true"),
         ]
+        if multilangMode && supportsMultilangMode(modelId) {
+            // Follows switches between languages within a sentence.
+            queryItems.append(URLQueryItem(name: "multilang_mode", value: "true"))
+        }
 
         if let language, !language.isEmpty {
             queryItems.append(URLQueryItem(name: "language_code", value: language))
@@ -1027,6 +1062,7 @@ private struct ElevenLabsSettingsView: View {
     @State private var noVerbatim = true
     @State private var speakerCount = ElevenLabsPlugin.defaultSpeakerCount
     @State private var useDictionaryTerms = true
+    @State private var multilangMode = false
     private let bundle = Bundle(for: ElevenLabsPlugin.self)
     private var trimmedInputKey: String {
         apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1242,6 +1278,23 @@ private struct ElevenLabsSettingsView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    if ElevenLabsPlugin.supportsMultilangMode(selectedModel) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Toggle(isOn: $multilangMode) {
+                                Text("Mixed languages", bundle: bundle)
+                            }
+                            .accessibilityIdentifier(ElevenLabsSettingsAccessibility.multilangMode)
+                            .onChange(of: multilangMode) {
+                                plugin.setMultilangMode(multilangMode)
+                            }
+
+                            Text("For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode. Final text from batch REST, such as with dictionary terms, does not use it.", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
 
@@ -1270,6 +1323,7 @@ private struct ElevenLabsSettingsView: View {
             noVerbatim = plugin.noVerbatim
             speakerCount = plugin.speakerCount
             useDictionaryTerms = plugin.useDictionaryTerms
+            multilangMode = plugin.multilangMode
         }
     }
 

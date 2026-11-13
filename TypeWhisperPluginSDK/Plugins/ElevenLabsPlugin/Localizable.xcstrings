@@ -812,6 +812,62 @@
           }
         }
       }
+    },
+    "Mixed languages": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemischte Sprachen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idiomas mezclados"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複数言語の混在"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "混合语言"
+          }
+        }
+      }
+    },
+    "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode. Final text from batch REST, such as with dictionary terms, does not use it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für Diktate, die innerhalb eines Satzes die Sprache wechseln. Gilt für Scribe v3 Live im Modus Automatisch. Endtext von Batch-REST, etwa mit Wörterbuchbegriffen, nutzt es nicht."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para dictados que cambian de idioma dentro de una frase. Se aplica a Scribe v3 Live en modo Auto. El texto final de REST por lotes, por ejemplo con términos del diccionario, no lo usa."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文の途中で言語が切り替わる音声入力向けです。自動モードのScribe v3 Liveに適用されます。辞書の用語がある場合など、バッチRESTで作成される最終テキストには適用されません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "适用于在一句话中切换语言的听写。在自动模式下作用于 Scribe v3 Live。来自批量 REST 的最终文本（例如启用词典术语时）不使用此设置。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
