@@ -190,6 +190,8 @@ final class AskHistoryOverviewTests: XCTestCase {
         XCTAssertEqual(stepwise.text, "Alle drei.")
         XCTAssertEqual(provider.calls.count, callsBefore + 13)
         XCTAssertTrue(provider.calls[callsBefore + 12].userText.hasPrefix("PARTS\n1. Erste zwei.\n2. Satz."))
+        // Every combining request fits a part, as the prompt writes it.
+        XCTAssertEqual(provider.calls[(callsBefore + 11)...].map { $0.userText.count <= 12_000 }, [true, true])
     }
 
     func testAModelReadsAFollowUpAndAFailureLeavesTheQuestionAsItIs() async throws {

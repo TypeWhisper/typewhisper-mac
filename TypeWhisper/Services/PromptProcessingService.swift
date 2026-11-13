@@ -894,20 +894,19 @@ class PromptProcessingService: ObservableObject {
             ))
         }
         // The summaries of a very long recording are combined in batches that
-        // fit like its parts, and those again, until one is left. A summary
-        // longer than half a batch is cut, so every batch holds two or more.
-        let longest = max((maximumCharacters - 16) / 2, 1)
+        // fit like its parts, as the prompt writes them, and those again, until
+        // one is left. A summary longer than half a batch is cut, so every
+        // batch holds two or more.
+        let longest = max((maximumCharacters - AskHistoryPromptBuilder.combinedSummaryPrompt(of: ["", ""]).count) / 2, 1)
         while summaries.count > 1 {
             summaries = summaries.map { $0.count > longest ? String($0.prefix(longest)) : $0 }
             var batches: [[String]] = []
-            var size = 0
             for summary in summaries {
-                if !batches.isEmpty, size + 1 + summary.count <= maximumCharacters {
+                if let last = batches.last,
+                   AskHistoryPromptBuilder.combinedSummaryPrompt(of: last + [summary]).count <= maximumCharacters {
                     batches[batches.count - 1].append(summary)
-                    size += 1 + summary.count
                 } else {
                     batches.append([summary])
-                    size = summary.count
                 }
             }
             var combined: [String] = []
