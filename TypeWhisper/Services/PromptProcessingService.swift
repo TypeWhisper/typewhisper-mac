@@ -64,6 +64,8 @@ struct LLMFallbackAttemptFailure: Equatable, Sendable {
     let reason: String
     /// The provider rejected the input as longer than its context window.
     var exceededContext = false
+    /// The provider is missing, unavailable on this Mac or lacks its key.
+    var isNotSetUp = false
 }
 
 struct LLMFallbackExhaustedError: LocalizedError, Equatable {
@@ -1039,7 +1041,8 @@ class PromptProcessingService: ObservableObject {
                     modelId: candidate.modelId,
                     effortId: candidate.effortId,
                     reason: Self.failureReason(for: error),
-                    exceededContext: LLMContextLimit.isReported(by: error)
+                    exceededContext: LLMContextLimit.isReported(by: error),
+                    isNotSetUp: Self.isNotSetUp(error)
                 )
                 failures.append(failure)
                 logger.warning("History request failed for \(failure.providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
@@ -1628,6 +1631,13 @@ class PromptProcessingService: ObservableObject {
         if let urlError = error as? URLError, urlError.code == .cancelled { return true }
         let nsError = error as NSError
         return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    private static func isNotSetUp(_ error: Error) -> Bool {
+        switch error as? LLMError {
+        case .notAvailable, .noProviderConfigured, .noApiKey, .providerNotReady: true
+        default: false
+        }
     }
 
     private static func failureReason(for error: Error) -> String {

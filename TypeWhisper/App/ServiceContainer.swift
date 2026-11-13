@@ -63,6 +63,7 @@ final class ServiceContainer: ObservableObject {
     let historyService: HistoryService
     let historySyncPreferences: HistorySyncPreferences
     let historySearchIndexer: HistorySearchIndexer
+    let askHistorySession: AskHistorySession
     let usageStatisticsService: UsageStatisticsService
     let recentTranscriptionStore: RecentTranscriptionStore
     let textDiffService: TextDiffService
@@ -408,8 +409,12 @@ final class ServiceContainer: ObservableObject {
         watchFolderService.speakerLabeler = { [speakerCoordinator] result, samples in
             try await speakerCoordinator.labelingSpeakers(in: result, samples: samples)
         }
-        historySearchIndexer = HistorySearchIndexer(
+        // One index for writing and searching, so a search sees the indexer's
+        // last write and both share one connection.
+        let historySearchIndex = HistorySearchIndex()
+        let historySearchIndexer = HistorySearchIndexer(
             historyService: historyService,
+            index: historySearchIndex,
             isEnabled: { [speakerCoordinator] in
                 UserDefaults.standard.bool(forKey: UserDefaultsKeys.historySearchIndexEnabled)
                     && speakerCoordinator.hasPremiumAccess
@@ -420,6 +425,18 @@ final class ServiceContainer: ObservableObject {
                 case .idle, .promptSelection, .error: false
                 }
                 return isDictating || audioRecorderViewModel.state != .idle || audioRecorderViewModel.isTranscribing
+            }
+        )
+        self.historySearchIndexer = historySearchIndexer
+        askHistorySession = AskHistorySession(
+            index: historySearchIndex,
+            retriever: HistoryRetriever(index: historySearchIndex, reader: historyService.searchRecordReader),
+            service: promptProcessingService,
+            prepareIndex: {
+                // Ask keeps the index from its first use on.
+                UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historySearchIndexEnabled)
+                await historySearchIndexer.reconcile()
+                await historySearchIndexer.waitForQueuedWork()
             }
         )
         speakerTranscriptionViewModel = FileTranscriptionViewModel(

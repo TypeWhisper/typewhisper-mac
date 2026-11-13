@@ -38,6 +38,16 @@ struct HistorySearchScope: Equatable, Sendable {
     var domains: Set<String> = []
 
     fileprivate var limitsRecords: Bool { !sources.isEmpty || !bundleIDs.isEmpty || !domains.isEmpty }
+
+    /// Whether a hit lies in the scope. A hit does not carry its app's bundle
+    /// ID, so a scope of apps includes none.
+    func includes(_ hit: HistorySearchHit) -> Bool {
+        // Without the end, as the index reads a period.
+        (period.map { $0.start <= hit.recordedAt && hit.recordedAt < $0.end } ?? true)
+            && (sources.isEmpty || sources.contains(hit.source))
+            && bundleIDs.isEmpty
+            && (domains.isEmpty || hit.domain.map(domains.contains) == true)
+    }
 }
 
 /// A passage that a search found, with what a list of sources shows of its record.
