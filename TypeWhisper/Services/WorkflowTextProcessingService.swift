@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import TypeWhisperPluginSDK
 import os.log
 
@@ -33,6 +34,32 @@ struct WorkflowLLMRequest: Equatable, Sendable {
     /// Snapshot of the provider settings the request inherits, so a change to the
     /// global LLM fallback list also changes the request identity.
     var providerResolution: WorkflowLLMProviderResolution? = nil
+    /// Set when neither the engine nor the settings named the dictation's language:
+    /// each request then guesses it from the text it sends (see `DictatedTextLanguage`).
+    var inferredLanguageHintStyle: WorkflowLanguageHintStyle? = nil
+}
+
+/// Guesses the language of dictated text for a workflow prompt. Engines such as
+/// Parakeet report no language, and with Spoken Language on Auto none is configured.
+/// The prompts are English, so Apple's on-device model then often answered a German
+/// dictation in English.
+enum DictatedTextLanguage {
+    /// A wrong language is worse than none, so short or unclear text gets no guess.
+    static let minimumConfidence = 0.8
+    static let minimumWords = 3
+
+    static func identifier(of text: String) -> String? {
+        let wordCount = text.split(whereSeparator: { $0.isWhitespace }).count
+        guard wordCount >= minimumWords else { return nil }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        guard let language = recognizer.dominantLanguage,
+              language != .undetermined,
+              recognizer.languageHypotheses(withMaximum: 1)[language, default: 0] >= minimumConfidence else {
+            return nil
+        }
+        return language.rawValue
+    }
 }
 
 @MainActor
@@ -214,7 +241,8 @@ struct WorkflowTextProcessingService {
                 cloudModel: request.cloudModel,
                 temperatureDirective: request.temperatureDirective,
                 effortId: request.effortId,
-                providerResolution: request.providerResolution
+                providerResolution: request.providerResolution,
+                inferredLanguageHintStyle: request.inferredLanguageHintStyle
             )
         }
 
@@ -314,9 +342,10 @@ struct WorkflowTextProcessingService {
     /// Sends `text` through the same provider path as whole-text workflow processing,
     /// including per-workflow overrides and the global LLM fallback list.
     func process(request: WorkflowLLMRequest, text: String) async throws -> String {
+        let systemPrompt = Self.systemPrompt(of: request, for: text)
         if let effortPromptProcessor {
             return try await effortPromptProcessor(
-                request.systemPrompt,
+                systemPrompt,
                 text,
                 request.providerId,
                 request.cloudModel,
@@ -325,12 +354,22 @@ struct WorkflowTextProcessingService {
             )
         }
         return try await promptProcessor(
-            request.systemPrompt,
+            systemPrompt,
             text,
             request.providerId,
             request.cloudModel,
             request.temperatureDirective
         )
+    }
+
+    /// The request's system prompt for `text`, with the language guessed from `text`
+    /// when the request was built without one.
+    static func systemPrompt(of request: WorkflowLLMRequest, for text: String) -> String {
+        guard let style = request.inferredLanguageHintStyle,
+              let language = DictatedTextLanguage.identifier(of: text) else {
+            return request.systemPrompt
+        }
+        return request.systemPrompt + Workflow.languageHint(language, style: style)
     }
 
     /// The prompt request used for segmented processing, or nil when the workflow
@@ -376,12 +415,17 @@ struct WorkflowTextProcessingService {
         }
 
         let behavior = workflow.behavior
+        let languageIsUnknown = Workflow.languageIdentifier(detectedLanguage) == nil
+            && Workflow.languageIdentifier(configuredLanguage) == nil
         return WorkflowLLMRequest(
             systemPrompt: systemPrompt + vocabularyInstruction(),
             providerId: Self.trimmedOrNil(behavior.providerId),
             cloudModel: Self.trimmedOrNil(behavior.cloudModel),
             temperatureDirective: behavior.temperatureDirective,
-            effortId: Self.trimmedOrNil(behavior.effortId)
+            effortId: Self.trimmedOrNil(behavior.effortId),
+            inferredLanguageHintStyle: languageIsUnknown && workflow.infersLanguageFromDictation
+                ? workflow.languageHintStyle
+                : nil
         )
     }
 

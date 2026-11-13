@@ -1005,14 +1005,63 @@ extension Workflow {
         return "\nOutput requirements:\n" + lines.joined(separator: "\n")
     }
 
-    private func workflowLanguageHint(detectedLanguage: String?, configuredLanguage: String?) -> String {
-        if let detectedLanguage, !detectedLanguage.isEmpty {
-            return "\nDetected source language: \(Self.languageHintName(detectedLanguage))."
+    /// How the prompt names the dictation's language, or nil when no prompt is sent.
+    var languageHintStyle: WorkflowLanguageHintStyle? {
+        switch template {
+        case .dictation:
+            return nil
+        case .translation, .json, .custom:
+            return .sourceLanguage
+        case .cleanedText, .emailReply, .meetingNotes, .checklist, .summary:
+            // Apple's on-device model ignores fine-tuning that asks for another
+            // language once the prompt asks for the dictation's language.
+            let hasUserInstructions = !workflowFineTuningInstruction(for: behavior.fineTuning).isEmpty
+                || !workflowSettingsInstruction(for: behavior.settings).isEmpty
+            return hasUserInstructions ? .sourceLanguage : .outputLanguage
         }
-        if let configuredLanguage, !configuredLanguage.isEmpty {
-            return "\nConfigured source language: \(Self.languageHintName(configuredLanguage))."
+    }
+
+    /// Whether a request without a detected or configured language guesses it from
+    /// the dictated text. Translation keeps its prompt as it is.
+    var infersLanguageFromDictation: Bool {
+        template != .translation && languageHintStyle != nil
+    }
+
+    private func workflowLanguageHint(detectedLanguage: String?, configuredLanguage: String?) -> String {
+        let style = languageHintStyle ?? .sourceLanguage
+        if let detectedLanguage = Self.languageIdentifier(detectedLanguage) {
+            return Self.languageHint(detectedLanguage, style: style, origin: "Detected")
+        }
+        if let configuredLanguage = Self.languageIdentifier(configuredLanguage) {
+            return Self.languageHint(configuredLanguage, style: style, origin: "Configured")
         }
         return ""
+    }
+
+    /// The prompt line that names `identifier`, starting with a newline. `origin`
+    /// says where a source language came from ("Detected", "Configured").
+    static func languageHint(
+        _ identifier: String,
+        style: WorkflowLanguageHintStyle,
+        origin: String = "Detected"
+    ) -> String {
+        let name = languageHintName(identifier)
+        switch style {
+        case .outputLanguage:
+            return "\nThe dictated text is in \(name). Write the result in \(name)."
+        case .sourceLanguage:
+            return "\n\(origin) source language: \(name)."
+        }
+    }
+
+    /// `identifier` without surrounding whitespace, or nil when it names no language.
+    static func languageIdentifier(_ identifier: String?) -> String? {
+        guard let trimmed = identifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              trimmed.caseInsensitiveCompare("auto") != .orderedSame else {
+            return nil
+        }
+        return trimmed
     }
 
     /// Small local models follow "German (de)" far more reliably than a bare "de".
@@ -1023,6 +1072,16 @@ extension Workflow {
         }
         return "\(name) (\(identifier))"
     }
+}
+
+/// How a workflow prompt names the language of the dictation.
+enum WorkflowLanguageHintStyle: Equatable, Sendable {
+    /// Asks for the result in the dictation's language. The prompts are English, and
+    /// Apple's on-device model answered German dictations in English without it.
+    case outputLanguage
+    /// Only names the source language, for workflows whose instructions may ask
+    /// for another language, such as translations or custom instructions.
+    case sourceLanguage
 }
 
 private extension WorkflowTrigger {

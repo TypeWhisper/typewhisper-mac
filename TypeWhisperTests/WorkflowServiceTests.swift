@@ -1586,14 +1586,139 @@ final class WorkflowServiceTests: XCTestCase {
         assertNoAllCapsWorkflowSafetyProse(prompt)
     }
 
-    func testSystemPromptNamesTheDetectedLanguage() throws {
-        let workflow = Workflow(name: "Clean", template: .cleanedText, trigger: .manual())
+    func testLanguageKeepingWorkflowsAskForTheResultInTheDictationLanguage() throws {
+        let outputHint = "The dictated text is in German (de). Write the result in German (de)."
+        for template in [WorkflowTemplate.cleanedText, .emailReply, .meetingNotes, .checklist, .summary] {
+            let workflow = Workflow(name: "Workflow", template: template, trigger: .manual())
 
-        let detected = try XCTUnwrap(workflow.systemPrompt(detectedLanguage: "de"))
-        let unknown = try XCTUnwrap(workflow.systemPrompt(configuredLanguage: "auto"))
+            let detected = try XCTUnwrap(workflow.systemPrompt(detectedLanguage: "de"), "\(template)")
+            let configured = try XCTUnwrap(workflow.systemPrompt(configuredLanguage: "de"), "\(template)")
+            let auto = try XCTUnwrap(workflow.systemPrompt(configuredLanguage: "auto"), "\(template)")
 
-        XCTAssertTrue(detected.contains("Detected source language: German (de)."))
-        XCTAssertTrue(unknown.contains("Configured source language: auto."))
+            XCTAssertTrue(detected.contains(outputHint), "\(template)")
+            XCTAssertFalse(detected.contains("Detected source language"), "\(template)")
+            XCTAssertTrue(configured.contains(outputHint), "\(template)")
+            XCTAssertFalse(auto.contains("auto"), "\(template)")
+        }
+    }
+
+    func testFineTuningKeepsTheSourceLanguageHint() throws {
+        // A fine-tuning such as "Write in English" must still win.
+        let workflow = Workflow(
+            name: "Email",
+            template: .emailReply,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(fineTuning: "Write the email in English.")
+        )
+
+        let prompt = try XCTUnwrap(workflow.systemPrompt(detectedLanguage: "de"))
+
+        XCTAssertTrue(prompt.contains("Detected source language: German (de)."))
+        XCTAssertFalse(prompt.contains("Write the result in German"))
+    }
+
+    func testTranslationAndCustomPromptsOnlyNameTheSourceLanguage() throws {
+        let translation = Workflow(name: "Translate", template: .translation, trigger: .manual())
+        let custom = Workflow(
+            name: "Custom",
+            template: .custom,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(settings: ["instruction": "Translate the text into English."])
+        )
+
+        for workflow in [translation, custom] {
+            let prompt = try XCTUnwrap(workflow.systemPrompt(fallbackTranslationTarget: "English", detectedLanguage: "de"))
+            XCTAssertTrue(prompt.contains("Detected source language: German (de)."))
+            XCTAssertFalse(prompt.contains("Write the result in"))
+        }
+        XCTAssertFalse(translation.infersLanguageFromDictation)
+    }
+
+    func testWorkflowGuessesTheLanguageFromTheDictationWhenNoneIsKnown() async throws {
+        let workflow = Workflow(name: "Email", template: .emailReply, trigger: .manual())
+        var capturedPrompts: [String] = []
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { prompt, text, _, _, _ in
+                capturedPrompts.append(prompt)
+                return text
+            },
+            appleTranslator: nil
+        )
+        let basePrompt = try XCTUnwrap(service.systemPrompt(workflow: workflow))
+
+        // Parakeet reports no language, and Spoken Language on Auto configures none.
+        _ = try await service.process(
+            workflow: workflow,
+            text: "antwort an frau keller vielen dank für das angebot wir nehmen das gerne an"
+        )
+        // Too short to guess: no hint rather than a wrong one.
+        _ = try await service.process(workflow: workflow, text: "danke")
+        // A language from the engine is not second-guessed.
+        _ = try await service.process(
+            workflow: workflow,
+            text: "antwort an frau keller vielen dank für das angebot",
+            detectedLanguage: "en"
+        )
+
+        XCTAssertEqual(capturedPrompts.count, 3)
+        XCTAssertEqual(
+            capturedPrompts[0],
+            basePrompt + "\nThe dictated text is in German (de). Write the result in German (de)."
+        )
+        XCTAssertEqual(capturedPrompts[1], basePrompt)
+        XCTAssertTrue(capturedPrompts[2].contains("Write the result in English (en)."))
+        XCTAssertFalse(capturedPrompts[2].contains("German"))
+    }
+
+    func testSegmentedRequestGuessesTheLanguageOfEachSegment() async throws {
+        let workflow = Workflow(
+            name: "Clean",
+            template: .cleanedText,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(segmentedPostProcessingEnabled: true)
+        )
+        var capturedPrompts: [String] = []
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { prompt, text, _, _, _ in
+                capturedPrompts.append(prompt)
+                return text
+            },
+            appleTranslator: nil
+        )
+        let request = try XCTUnwrap(service.segmentedPromptRequest(workflow: workflow))
+        // Requests built while recording and at stop stay equal.
+        XCTAssertEqual(request, service.segmentedPromptRequest(workflow: workflow))
+
+        _ = try await service.process(request: request, text: "wir treffen uns morgen um zehn im büro")
+        _ = try await service.process(request: request, text: "we meet tomorrow at ten in the office")
+
+        XCTAssertEqual(capturedPrompts.count, 2)
+        XCTAssertTrue(capturedPrompts[0].hasSuffix("Write the result in German (de)."))
+        XCTAssertTrue(capturedPrompts[1].hasSuffix("Write the result in English (en)."))
+    }
+
+    func testTranslationPromptIgnoresTheDictationLanguage() async throws {
+        let workflow = Workflow(
+            name: "Translate",
+            template: .translation,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(settings: ["targetLanguage": "English"])
+        )
+        var capturedPrompt: String?
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { prompt, text, _, _, _ in
+                capturedPrompt = prompt
+                return text
+            },
+            appleTranslator: nil
+        )
+
+        _ = try await service.process(
+            workflow: workflow,
+            text: "antwort an frau keller vielen dank für das angebot wir nehmen das gerne an"
+        )
+
+        XCTAssertEqual(capturedPrompt, service.systemPrompt(workflow: workflow))
     }
 
     func testStoredTranslationWorkflowWithoutProcessorKeepsLLMPrompt() throws {
