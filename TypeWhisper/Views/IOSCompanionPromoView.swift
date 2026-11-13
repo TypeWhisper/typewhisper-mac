@@ -38,7 +38,7 @@ struct IOSCompanionPromoView: View {
 
                         Text(localizedAppText(
                             "Take private voice-to-text with you — including the voice keyboard and Apple Watch companion.",
-                            de: "Nimm privates Voice-to-Text mit – inklusive Diktier-Tastatur und Apple-Watch-App."
+                            de: "Nimm privates Voice-to-Text mit, inklusive Diktier-Tastatur und Apple-Watch-App."
                         ))
                         .font(.callout)
                         .foregroundStyle(.secondary)

@@ -348,7 +348,7 @@ struct AppStorePremiumStoreView: View {
         }
         let cancellation = localizedAppText(
             "Payment is charged to your Apple Account. Cancel at least 24 hours before the end of the current period in your App Store account settings.",
-            de: "Die Zahlung erfolgt über deinen Apple Account. Kündige spätestens 24 Stunden vor Ende des aktuellen Zeitraums in den Einstellungen deines App-Store-Kontos."
+            de: "Du bezahlst über deinen Apple Account. Kündige spätestens 24 Stunden vor Ende des aktuellen Zeitraums in den Einstellungen deines App-Store-Kontos."
         )
         return "\(renewal) \(cancellation)"
     }

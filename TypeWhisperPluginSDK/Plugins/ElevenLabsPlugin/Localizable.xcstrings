@@ -538,7 +538,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wählen Sie „Automatisch“ oder die maximale Anzahl der Sprecher (1–32). Gilt nur für die REST-Transkription."
+            "value": "Wähle „Automatisch“ oder die maximale Anzahl der Sprecher (1–32). Gilt nur für die REST-Transkription."
           }
         },
         "es": {

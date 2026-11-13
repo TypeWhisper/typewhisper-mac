@@ -622,7 +622,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Spracherkennung über Vercel AI Gateway ist in der Beta. Transkriptionsmodelle sind für Ihr Team möglicherweise noch nicht freigeschaltet."
+            "value": "Spracherkennung über Vercel AI Gateway ist in der Beta. Transkriptionsmodelle sind für dein Team möglicherweise noch nicht freigeschaltet."
           }
         },
         "es": {
@@ -734,7 +734,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfügbaren Modelle abzurufen."
+            "value": "Standardmodelle werden verwendet. Klicke auf „Aktualisieren“, um alle verfügbaren Modelle abzurufen."
           }
         },
         "es": {

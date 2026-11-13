@@ -411,7 +411,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "CTC-Modell (~100 MB) - wird automatisch beim ersten Gebrauch geladen, oder:"
+            "value": "CTC-Modell (~100 MB) wird beim ersten Gebrauch automatisch geladen, oder:"
           }
         },
         "es": {
@@ -579,7 +579,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verbessert die Erkennung von Fachbegriffen aus dem Wörterbuch mittels eines sekundären CTC-Modells."
+            "value": "Verbessert die Erkennung von Fachbegriffen aus dem Wörterbuch mit einem zusätzlichen CTC-Modell."
           }
         },
         "es": {
@@ -691,7 +691,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NVIDIA Parakeet TDT V2 - extrem schnell auf Apple Silicon. Nur Englisch, höchster Recall. Kein API-Schlüssel nötig."
+            "value": "NVIDIA Parakeet TDT V2: extrem schnell auf Apple Silicon. Nur Englisch, höchster Recall. Kein API-Schlüssel nötig."
           }
         },
         "es": {
@@ -719,7 +719,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NVIDIA Parakeet TDT - extrem schnell auf Apple Silicon. 25 europäische Sprachen, kein API-Schlüssel nötig."
+            "value": "NVIDIA Parakeet TDT: extrem schnell auf Apple Silicon. 25 europäische Sprachen, kein API-Schlüssel nötig."
           }
         },
         "es": {
@@ -747,7 +747,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NVIDIA Nemotron 3.5 ASR Streaming - transkribiert schon beim Sprechen, damit der Text beim Stoppen fertig ist. 28 Sprachen, kein API-Schlüssel nötig."
+            "value" : "NVIDIA Nemotron 3.5 ASR Streaming: transkribiert schon beim Sprechen, damit der Text beim Stoppen fertig ist. 28 Sprachen, kein API-Schlüssel nötig."
           }
         },
         "es" : {
@@ -803,7 +803,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bereit - %lld Begriffe geladen"
+            "value": "Bereit: %lld Begriffe geladen"
           }
         },
         "es": {
@@ -831,7 +831,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bereit - Begriffe in Wörterbuch-Einstellungen hinzufügen"
+            "value": "Bereit. Füge Begriffe in den Wörterbuch-Einstellungen hinzu."
           }
         },
         "es": {
@@ -1083,7 +1083,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Moondream Parakeet Ultra - weitertrainiertes Parakeet TDT v3 mit höherer Genauigkeit. 25 europäische Sprachen, kein API-Schlüssel nötig."
+            "value": "Moondream Parakeet Ultra: weitertrainiertes Parakeet TDT v3 mit höherer Genauigkeit. 25 europäische Sprachen, kein API-Schlüssel nötig."
           }
         },
         "es": {

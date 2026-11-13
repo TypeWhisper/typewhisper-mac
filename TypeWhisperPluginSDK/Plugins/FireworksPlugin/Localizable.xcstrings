@@ -510,7 +510,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beliebige Model-ID von fireworks.ai/models eingeben"
+            "value": "Beliebige Modell-ID von fireworks.ai/models eingeben"
           }
         },
         "es": {
@@ -594,7 +594,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Standardmodelle werden verwendet. Aktualisieren drücken, um alle verfügbaren Modelle zu laden."
+            "value": "Standardmodelle werden verwendet. Klicke auf „Aktualisieren“, um alle verfügbaren Modelle zu laden."
           }
         },
         "es": {

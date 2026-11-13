@@ -2220,7 +2220,7 @@ private struct WorkflowEditorPage: View {
                     )
                     : localizedAppText(
                         "Dictated text is inserted unchanged. Turn on to detect a spoken transformation instruction in the dictation.",
-                        de: "Diktierter Text wird unverändert eingefügt. Aktivieren, um eine gesprochene Umwandlungsanweisung im Diktat zu erkennen."
+                        de: "Diktierter Text wird unverändert eingefügt. Aktiviere es, um eine gesprochene Umwandlungsanweisung im Diktat zu erkennen."
                     )
             )
             .font(.caption)

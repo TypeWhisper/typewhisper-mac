@@ -3701,7 +3701,7 @@ final class DictationViewModel: ObservableObject {
                         )
                         : localizedAppText(
                             "AI post-processing failed — raw transcription inserted",
-                            de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
+                            de: "KI-Nachbearbeitung fehlgeschlagen, Rohtext eingefügt",
                             ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
                         )
                     // Without Accessibility, the paste hint below replaces this banner.
@@ -5055,7 +5055,7 @@ final class DictationViewModel: ObservableObject {
         case .manualOverride:
             base = localizedAppText(
                 "This workflow was manually triggered via its keyboard shortcut.",
-                de: "Dieser Workflow wurde manuell ueber seine Tastenkombination ausgeloest.",
+                de: "Dieser Workflow wurde manuell über seine Tastenkombination ausgelöst.",
                 ja: "このワークフローはキーボードショートカットで手動実行されました。"
             )
         }

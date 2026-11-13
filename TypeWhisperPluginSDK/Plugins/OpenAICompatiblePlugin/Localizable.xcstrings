@@ -538,7 +538,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatisch verwendet Echtzeit-Streaming nur für bekannte Echtzeit-Modell-IDs (gpt-live-transcribe, gpt-realtime-whisper) und ansonsten den Batch-Upload. Wählen Sie Echtzeit, um Streaming für jeden OpenAI-kompatiblen Server zu erzwingen, der die WebSocket-API /v1/realtime unterstützt, einschließlich benutzerdefinierter Bereitstellungsaliase (z. B. eine gpt-live-transcribe-Bereitstellung in Azure OpenAI oder Microsoft Foundry). Einige Anbieter, darunter Azure, erfordern für die Echtzeittranskription eine Vorschau-API-Version. Wählen Sie Batch, um den ausgewählten Batch-Transkriptionsendpunkt zu verwenden."
+            "value": "Automatisch verwendet Echtzeit-Streaming nur für bekannte Echtzeit-Modell-IDs (gpt-live-transcribe, gpt-realtime-whisper) und ansonsten den Batch-Upload. Wähle Echtzeit, um Streaming für jeden OpenAI-kompatiblen Server zu erzwingen, der die WebSocket-API /v1/realtime unterstützt, einschließlich benutzerdefinierter Bereitstellungsaliase (z. B. eine gpt-live-transcribe-Bereitstellung in Azure OpenAI oder Microsoft Foundry). Einige Anbieter, darunter Azure, erfordern für die Echtzeittranskription eine Vorschau-API-Version. Wähle Batch, um den ausgewählten Batch-Transkriptionsendpunkt zu verwenden."
           }
         },
         "es": {
@@ -566,7 +566,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Einige Server erfordern eine API-Version. Bereitstellungsbezogene Batch-Endpunkte benötigen eine datierte Version; Echtzeitendpunkte möglicherweise eine Vorschauversion. Leer lassen, wenn der Server keine Version erfordert."
+            "value": "Einige Server erfordern eine API-Version. Bereitstellungsbezogene Batch-Endpunkte benötigen eine datierte Version; Echtzeitendpunkte möglicherweise eine Vorschauversion. Lass das Feld leer, wenn der Server keine Version erfordert."
           }
         },
         "es": {
@@ -880,7 +880,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keine Modelle gefunden. Modellnamen manuell eingeben."
+            "value": "Keine Modelle gefunden. Gib den Modellnamen manuell ein."
           }
         },
         "es": {
@@ -1132,7 +1132,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sekunden, die auf die LLM-Antwort gewartet wird. Erhöhen Sie den Wert für lokale Server (LM Studio, Ollama), die bei großen Prompts lange brauchen. Höhere Werte warten länger, bevor die Anfrage fehlschlägt. Standard 30."
+            "value": "Sekunden, die auf die LLM-Antwort gewartet wird. Erhöhe den Wert für lokale Server (LM Studio, Ollama), die bei großen Prompts lange brauchen. Höhere Werte warten länger, bevor die Anfrage fehlschlägt. Standard 30."
           }
         },
         "es": {
@@ -1300,7 +1300,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fügt das nicht standardisierte Thinking-Feld für Chat Completions nur hinzu, wenn es aktiviert ist. Deaktiviert lassen, sofern Ihr Anbieter die Unterstützung nicht dokumentiert."
+            "value": "Fügt das nicht standardisierte Thinking-Feld für Chat Completions nur hinzu, wenn es aktiviert ist. Lass es deaktiviert, wenn dein Anbieter die Unterstützung nicht dokumentiert."
           }
         },
         "es": {

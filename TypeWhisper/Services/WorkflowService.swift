@@ -26,7 +26,7 @@ enum WorkflowMatchKind: String, Sendable {
         case .globalFallback:
             localizedAppText("Always", de: "Immer")
         case .manualOverride:
-            localizedAppText("Manually triggered", de: "Manuell ausgeloest")
+            localizedAppText("Manually triggered", de: "Manuell ausgelöst")
         }
     }
 }

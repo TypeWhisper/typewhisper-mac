@@ -734,7 +734,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Text wird über stdin übergeben. Ergebnis über stdout zurückgeben."
+            "value": "Text wird über stdin übergeben. Gib das Ergebnis über stdout zurück."
           }
         },
         "es": {
