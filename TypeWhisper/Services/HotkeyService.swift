@@ -2110,7 +2110,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     states[index] = state
                     continue
                 }
-                let fnTriggerMode: FnTriggerMode = slotType == .toggle ? .releaseOnly : .pressThenRelease
+                // A double-tap Fn shortcut of an action fires on its second tap, not on the first press.
+                let fnTriggerMode: FnTriggerMode = slotType == .toggle || (hotkey.isDoubleTap && !slotType.startsDictation)
+                    ? .releaseOnly : .pressThenRelease
                 if shouldSuppressForCapsLockOrigin(event, hotkey: hotkey, keyWasDown: state.keyWasDown) {
                     state.resetTransientState()
                     states[index] = state
