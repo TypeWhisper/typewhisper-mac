@@ -1661,12 +1661,15 @@ final class OpenAICompatiblePlugin: NSObject,
         }
     }
 
-    /// Whether a Chat Completions error rejects the `reasoning_effort` field,
-    /// such as an older Ollama that does not accept `none` or a model that
-    /// cannot think.
+    /// Whether a Chat Completions error rejects the `reasoning_effort` field.
+    /// Matches only Ollama's own rejections, `invalid reasoning value: …` (an
+    /// older Ollama that does not accept `none`) and `"<model>" does not support
+    /// thinking`, so a model name that contains "thinking" in an unrelated
+    /// error, such as `model 'custom-thinking' not found`, is not retried.
     nonisolated static func rejectsReasoningEffort(errorMessage: String) -> Bool {
-        let lowered = errorMessage.lowercased()
-        return lowered.contains("reasoning") || lowered.contains("think")
+        let message = errorMessage.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return message.hasPrefix("invalid reasoning value")
+            || message.hasSuffix("does not support thinking")
     }
 
     private func performChatCompletionRequest(
