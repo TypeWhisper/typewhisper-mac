@@ -62,6 +62,7 @@ final class HistoryPeriodResolverTests: XCTestCase {
             ("What did I say the day before yesterday?", "en", "2026-11-10/2026-11-11"),
             ("What did I say on November 3rd?", "en", thirdOfNovember),
             ("What did I say on 2026-11-03?", "en", thirdOfNovember),
+            ("What did I say since 2026-11-03?", "en", "2026-11-03/2026-11-13"),
             ("What may I have said in March 2026?", "en", "2026-03-01/2026-04-01"),
             ("What did I say in 2025?", "en", lastYear),
             ("Qu'est-ce que j'ai dit hier ?", "fr", yesterday),
@@ -95,6 +96,7 @@ final class HistoryPeriodResolverTests: XCTestCase {
             ("Was muss bis Donnerstag fertig sein?", "de"),
             ("Qu'est-ce qui est prévu lundi prochain ?", "fr"),
             ("Was ist am 24.12.2026 geplant?", "de"),
+            ("What did Elena promise for 2026-11-04?", "en"),
         ]
         for (question, language) in cases {
             XCTAssertNil(period(question, language), question)
@@ -163,7 +165,7 @@ final class AskHistoryPlannerTests: XCTestCase {
     }
 
     func testAppsDomainsAndDevicesLimitTheSearchWhereTheQuestionPlacesItThere() {
-        let vocabulary = HistorySearchVocabulary(apps: [slack], domains: ["github.com"])
+        let vocabulary = HistorySearchVocabulary(apps: [slack], domains: ["github.com", "gist.github.com"])
 
         let inSlack = plan("Was habe ich gestern in Slack geschrieben?", vocabulary)
         XCTAssertEqual(inSlack.scope.bundleIDs, [slack.bundleID])
@@ -177,6 +179,7 @@ final class AskHistoryPlannerTests: XCTestCase {
         let onGitHub = plan("Was habe ich auf github.com zum Pull Request geschrieben?", vocabulary)
         XCTAssertEqual(onGitHub.scope.domains, ["github.com"])
         XCTAssertFalse(onGitHub.keywords.contains { $0.lowercased().contains("github") }, "\(onGitHub.keywords)")
+        XCTAssertEqual(plan("Was stand auf gist.github.com?", vocabulary).scope.domains, ["gist.github.com"])
 
         let onPhone = plan("What did I dictate on my iPhone about the passport?", vocabulary)
         XCTAssertEqual(onPhone.scope.sources, [RecordingSource.iPhone.rawValue, RecordingSource.keyboard.rawValue])
@@ -298,13 +301,29 @@ final class HistoryRetrievalTests: XCTestCase {
             record(at: TestClock.date(2026, 1, 1).addingTimeInterval(Double(number)), passages: [passage("Termin Nummer \(number)")])
         }
         records.append(record(posters, passages: [passage("Termin für die Plakate")]))
-        try await index.upsert(records)
+        // Each passage counts once, however many forms of the word it holds.
+        let budget = (0..<40).map { _ in record(passages: [passage("Budget, Budgets und Budgetierung")]) }
+        try await index.upsert(records + budget)
 
         let found = try await index.search(words: ["Termin", "Plakate"])
         XCTAssertEqual(found.map(\.recordID), [posters])
+        let budgetFound = try await index.search(words: ["Budget", "Plakate"])
+        XCTAssertEqual(Set(budgetFound.map(\.recordID)), Set(budget.map(\.id) + [posters]))
         // A question that has only such words still finds something.
         let common = try await index.search(words: ["Termin"], limit: 10)
         XCTAssertEqual(common.count, 10)
+    }
+
+    func testASearchForTheLastTimeKeepsTheNewestMatch() async throws {
+        let (index, directory) = try makeIndex()
+        defer { TestSupport.remove(directory) }
+        let records = (0..<100).map { day in
+            record(at: TestClock.date(2026, 1, 1).addingTimeInterval(Double(day) * 86_400), passages: [passage("Heizung")])
+        }
+        try await index.upsert(records)
+
+        let found = try await index.search(words: ["Heizung"], limit: 10, includingNewest: true)
+        XCTAssertTrue(found.map(\.recordID).contains(records[99].id))
     }
 
     func testTheVocabularyNamesSpeakersAppsAndDomainsAndFollowsTheIndex() async throws {

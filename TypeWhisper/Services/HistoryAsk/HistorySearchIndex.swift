@@ -245,6 +245,7 @@ actor HistorySearchIndex {
     private static let commonWordShare = 0.1
     private static let passagesForCommonWords = 500
     private static let titleLimit = 20
+    private static let newestLimit = 20
     private static let substringLimit = 20
     /// With fewer hits than this, a search also looks for the words inside
     /// longer ones: "zahnarzt" in "Kinderzahnarzt".
@@ -256,11 +257,14 @@ actor HistorySearchIndex {
     /// The passages that match the words and names best, best first. A record
     /// whose title matches adds its best passage. Empty without an index and
     /// for a damaged one, which is deleted.
+    /// - Parameter includingNewest: Also the newest matching passages, which
+    ///   may rank too low to be among the best: "when did we last talk about it".
     func search(
         words: [String],
         names: [String] = [],
         in scope: HistorySearchScope = HistorySearchScope(),
-        limit: Int = 60
+        limit: Int = 60,
+        includingNewest: Bool = false
     ) throws -> [HistorySearchHit] {
         try reading([]) { connection in
             let words = try withoutCommonWords(
@@ -291,6 +295,14 @@ actor HistorySearchIndex {
                 scores[passage, default: 0] += 1 / (Self.rankOffset + Double(rank))
             }
             for (offset, passage) in found.enumerated() { add(passage, rank: offset + 1) }
+            if includingNewest {
+                let newest = try connection.rows(
+                    matching.replacingOccurrences(of: "bm25(passages_fts, 1.0, 3.0)", with: "rowid DESC"),
+                    [.text(expression), .integer(passages.lowerBound), .integer(passages.upperBound),
+                     .integer(Int64(Self.newestLimit))] + filter
+                ) { $0.integer(0) }
+                for (offset, passage) in newest.enumerated() { add(passage, rank: offset + 1) }
+            }
 
             let titled = try connection.rows(
                 """
@@ -424,15 +436,23 @@ actor HistorySearchIndex {
         try connection.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS temp.passage_words USING fts5vocab(main, passages_fts, row)"
         )
+        let maximum = Int64(Self.commonWordShare * Double(total))
         let rare = try words.filter { word in
             // As the index stores the word. A longer word also counts those that start with it.
             let stored = word.folding(options: .diacriticInsensitive, locale: nil)
             let isPrefix = word.count >= HistoryFullTextQuery.prefixLength
-            let passages = try connection.rows(
+            let sum = try connection.rows(
                 "SELECT COALESCE(SUM(doc), 0) FROM temp.passage_words WHERE term >= ?1 AND term <= ?2",
                 [.text(stored), .text(isPrefix ? stored + "\u{10FFFF}" : stored)]
             ) { $0.integer(0) }.first ?? 0
-            return Double(passages) <= Self.commonWordShare * Double(total)
+            guard isPrefix, sum > maximum else { return sum <= maximum }
+            // The sum counts a passage once for every word with the prefix it
+            // holds: "budget budgets". Counted up to the share, each passage is once.
+            let passages = try connection.rows(
+                "SELECT count(*) FROM (SELECT rowid FROM passages_fts WHERE passages_fts MATCH ?1 LIMIT ?2)",
+                [.text("\"\(stored.replacingOccurrences(of: "\"", with: "\"\""))\"*"), .integer(maximum + 1)]
+            ) { $0.integer(0) }.first ?? 0
+            return passages <= maximum
         }
         // A question made of common words only still searches for them.
         return rare.isEmpty && keepingAll ? words : rare

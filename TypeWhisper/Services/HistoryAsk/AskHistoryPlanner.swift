@@ -43,8 +43,12 @@ struct AskHistoryPlanner: Sendable {
         let source = question as NSString
         var used = period?.utf16Ranges ?? []
         for domain in vocabulary.domains where !domain.isEmpty {
-            let range = source.range(of: domain, options: [.caseInsensitive, .diacriticInsensitive])
-            guard range.location != NSNotFound, let range = Range(range) else { continue }
+            // A whole host name: "example.com" is not named in "docs.example.com".
+            let pattern = #"(?<![\p{L}\p{N}.-])"# + NSRegularExpression.escapedPattern(for: domain)
+                + #"(?![\p{L}\p{N}-]|\.[\p{L}\p{N}])"#
+            guard let expression = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+                  let match = expression.firstMatch(in: question, range: NSRange(location: 0, length: source.length)),
+                  let range = Range(match.range) else { continue }
             plan.scope.domains.insert(domain)
             used.append(range)
         }

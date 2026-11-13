@@ -40,7 +40,9 @@ struct HistoryRetriever: Sendable {
             let (hits, total) = try await index.newestRecords(in: plan.scope, limit: limit)
             return HistoryRetrieval(hits: try await existing(hits), recordCount: total)
         case .lookup:
-            let hits = try await index.search(words: plan.keywords, names: plan.names, in: plan.scope)
+            let hits = try await index.search(
+                words: plan.keywords, names: plan.names, in: plan.scope, includingNewest: plan.prefersNewest
+            )
             return HistoryRetrieval(
                 hits: Self.arranged(try await existing(hits), limit: limit, prefersNewest: plan.prefersNewest, now: now)
             )

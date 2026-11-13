@@ -28,11 +28,18 @@ struct HistoryPeriodResolver: Sendable {
     ///   is yesterday, German "hier" is "here".
     func period(in question: String, language: String? = nil) -> HistoryPeriod? {
         let tokens = Self.tokens(of: question)
-        var matches = numericDates(in: question)
+        let numeric = numericDates(in: question)
+        var matches: [Match] = []
+        for date in numeric {
+            guard let first = tokens.firstIndex(where: { $0.range.overlaps(date.range) }) else { continue }
+            let end = (tokens.lastIndex(where: { $0.range.overlaps(date.range) }) ?? first) + 1
+            guard !Self.isDeadline(tokens, from: first, to: end) else { continue }
+            matches.append(Match(range: date.range, interval: interval(date.interval, sinceIfIntroducedAt: first, in: tokens)))
+        }
         var index = 0
         while index < tokens.count {
             let range = tokens[index].range
-            if matches.contains(where: { $0.range.overlaps(range) }) {
+            if numeric.contains(where: { $0.range.overlaps(range) }) {
                 index += 1
                 continue
             }
@@ -40,13 +47,12 @@ struct HistoryPeriodResolver: Sendable {
             for rule in Self.rules where rule.applies(to: language) {
                 guard let (end, captures) = Self.match(rule.elements[...], tokens, at: index, Captures()),
                       end > (best?.end ?? index),
+                      // "Since 2026-11-03" is that day, not the year 2026.
+                      !numeric.contains(where: { $0.range.overlaps(range.lowerBound..<tokens[end - 1].range.upperBound) }),
                       let interval = interval(for: rule.outcome, captures) else { continue }
                 best = (end, interval)
             }
-            // "By Friday" and "next Monday" name a date in what was said, not when it was said.
-            let isDeadline = (index > 0 && Self.deadlineWords.contains(tokens[index - 1].text))
-                || (best.map { $0.end < tokens.count && Self.nextWords.contains(tokens[$0.end].text) } ?? false)
-            guard let best, !isDeadline else {
+            guard let best, !Self.isDeadline(tokens, from: index, to: best.end) else {
                 index = max(best?.end ?? 0, index + 1)
                 continue
             }
@@ -126,6 +132,12 @@ struct HistoryPeriodResolver: Sendable {
         guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else { return nil }
         let found = calendar.dateComponents([.year, .month, .day], from: date)
         return found.year == year && found.month == month && found.day == day ? date : nil
+    }
+
+    /// "By Friday" and "next Monday" name a date in what was said, not when it was said.
+    private static func isDeadline(_ tokens: [Token], from start: Int, to end: Int) -> Bool {
+        (start > 0 && deadlineWords.contains(tokens[start - 1].text))
+            || (end < tokens.count && nextWords.contains(tokens[end].text))
     }
 
     /// "Since Monday" lasts from Monday until today.
