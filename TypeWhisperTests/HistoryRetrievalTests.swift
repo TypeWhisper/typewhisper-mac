@@ -187,7 +187,7 @@ final class AskHistoryPlannerTests: XCTestCase {
         XCTAssertEqual(aboutGitHub.scope.domains, [])
         XCTAssertTrue(aboutGitHub.keywords.contains("github.com"), "\(aboutGitHub.keywords)")
         // A weekday inside a host names no day.
-        let onMonday = plan("What did I write on monday.com?", HistorySearchVocabulary(domains: ["monday.com"]))
+        let onMonday = plan("What did I write on monday.com about monday.com?", HistorySearchVocabulary(domains: ["monday.com"]))
         XCTAssertEqual(onMonday.scope.domains, ["monday.com"])
         XCTAssertNil(onMonday.scope.period)
 

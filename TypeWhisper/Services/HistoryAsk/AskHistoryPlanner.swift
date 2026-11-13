@@ -38,24 +38,30 @@ struct AskHistoryPlanner: Sendable {
         var words = Self.words(of: question, language: language)
 
         // The words of a period, a domain, an app or a device are not searched for.
-        var domains: [(domain: String, range: Range<Int>, isPlaced: Bool)] = []
+        var domains: [(domain: String, ranges: [Range<Int>], isPlaced: Bool)] = []
         let masked = NSMutableString(string: question)
         for domain in vocabulary.domains where !domain.isEmpty {
             // A whole host name: "example.com" is not named in "docs.example.com".
             let pattern = #"(?<![\p{L}\p{N}.-])"# + NSRegularExpression.escapedPattern(for: domain)
                 + #"(?![\p{L}\p{N}-]|\.[\p{L}\p{N}])"#
-            guard let expression = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-                  let match = expression.firstMatch(in: question, range: NSRange(location: 0, length: masked.length)),
-                  let range = Range(match.range) else { continue }
-            let before = words.filter { $0.range.upperBound <= range.lowerBound }.suffix(2)
-            domains.append((domain, range, before.contains { Self.placeWords.contains($0.folded) }))
+            guard let expression = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { continue }
+            let ranges = expression.matches(in: question, range: NSRange(location: 0, length: masked.length))
+                .compactMap { Range($0.range) }
+            guard !ranges.isEmpty else { continue }
+            let isPlaced = ranges.contains { range in
+                words.filter { $0.range.upperBound <= range.lowerBound }.suffix(2)
+                    .contains { Self.placeWords.contains($0.folded) }
+            }
+            domains.append((domain, ranges, isPlaced))
             // "monday.com" names no Monday.
-            masked.replaceCharacters(in: match.range, with: String(repeating: " ", count: match.range.length))
+            for range in ranges {
+                masked.replaceCharacters(in: NSRange(range), with: String(repeating: " ", count: range.count))
+            }
         }
         let period = HistoryPeriodResolver(now: now, calendar: calendar)
             .period(in: masked as String, language: language)
         plan.scope.period = period?.interval
-        let used = (period?.utf16Ranges ?? []) + domains.map(\.range)
+        let used = (period?.utf16Ranges ?? []) + domains.flatMap(\.ranges)
         words.removeAll { word in used.contains { $0.overlaps(word.range) } }
 
         let apps = vocabulary.apps
