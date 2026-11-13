@@ -847,7 +847,8 @@ class PromptProcessingService: ObservableObject {
                 do {
                     let text = try await self.summary(
                         of: AskHistoryBudget.parts(of: passages, maximumCharacters: maximumCharacters), title: title,
-                        language: language, from: candidate, onLocalProviderUsed: onLocalProviderUsed
+                        language: language, maximumCharacters: maximumCharacters,
+                        from: candidate, onLocalProviderUsed: onLocalProviderUsed
                     )
                     return (text, providerId)
                 } catch where !Task.isCancelled && LLMContextLimit.isReported(by: error)
@@ -864,6 +865,7 @@ class PromptProcessingService: ObservableObject {
         of parts: [String],
         title: String?,
         language: String?,
+        maximumCharacters: Int,
         from candidate: LLMFallbackPriorityItem,
         onLocalProviderUsed: (any LLMProviderPlugin) -> Void
     ) async throws -> String {
@@ -877,15 +879,41 @@ class PromptProcessingService: ObservableObject {
                 onLocalProviderUsed: onLocalProviderUsed
             ))
         }
-        guard summaries.count > 1 else {
-            return summaries.first ?? ""
+        // The summaries of a very long recording are combined in batches that
+        // fit like its parts, and those again, until one is left.
+        while summaries.count > 1 {
+            var batches: [[String]] = []
+            var size = 0
+            for summary in summaries {
+                if !batches.isEmpty, size + 1 + summary.count <= maximumCharacters {
+                    batches[batches.count - 1].append(summary)
+                    size += 1 + summary.count
+                } else {
+                    batches.append([summary])
+                    size = summary.count
+                }
+            }
+            if batches.count == summaries.count {
+                // Summaries too long to share a batch are combined in pairs.
+                batches = stride(from: 0, to: summaries.count, by: 2).map { Array(summaries[$0..<min($0 + 2, summaries.count)]) }
+            }
+            var combined: [String] = []
+            for batch in batches {
+                guard batch.count > 1 else {
+                    combined += batch
+                    continue
+                }
+                try Task.checkCancellation()
+                combined.append(try await historyCompletion(
+                    from: candidate,
+                    instructions: AskHistoryPromptBuilder.combinedSummaryInstructions(language: language),
+                    prompt: AskHistoryPromptBuilder.combinedSummaryPrompt(of: batch),
+                    onLocalProviderUsed: onLocalProviderUsed
+                ))
+            }
+            summaries = combined
         }
-        return try await historyCompletion(
-            from: candidate,
-            instructions: AskHistoryPromptBuilder.combinedSummaryInstructions(language: language),
-            prompt: AskHistoryPromptBuilder.combinedSummaryPrompt(of: summaries),
-            onLocalProviderUsed: onLocalProviderUsed
-        )
+        return summaries.first ?? ""
     }
 
     /// Asks a model to make a follow-up question stand alone and to name what

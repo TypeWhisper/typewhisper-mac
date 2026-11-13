@@ -165,6 +165,16 @@ final class AskHistoryOverviewTests: XCTestCase {
         )
         XCTAssertEqual(dense.text, "A und B.")
         XCTAssertEqual(provider.calls.count, 9)
+
+        // Summaries too long to combine at once are combined in steps.
+        let longSummary = String(repeating: "Satz. ", count: 1_200)
+        for reply in [longSummary, longSummary, longSummary, "Erste zwei.", "Alle drei."] {
+            provider.enqueue(.text(reply))
+        }
+        let stepwise = try await service.summarizeHistoryRecording(passages: passages, title: nil, providerOverride: "local-llm")
+        XCTAssertEqual(stepwise.text, "Alle drei.")
+        XCTAssertEqual(provider.calls.count, 14)
+        XCTAssertTrue(provider.calls[13].userText.hasPrefix("PARTS\n1. Erste zwei.\n2. Satz."))
     }
 
     func testAModelReadsAFollowUpAndAFailureLeavesTheQuestionAsItIs() async throws {
