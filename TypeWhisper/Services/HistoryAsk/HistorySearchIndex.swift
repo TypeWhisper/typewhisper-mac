@@ -415,9 +415,10 @@ actor HistorySearchIndex {
     /// comes from. Nil for a record the index does not hold.
     func transcript(ofRecord id: UUID) throws -> (passages: [HistoryPassage], contentHash: String)? {
         try reading(nil) { connection in
-            guard let contentHash = try connection.rows(
-                "SELECT content_hash FROM records WHERE uuid = ?1", [.text(id.uuidString)]
-            ) { $0.text(0) }.first ?? nil else { return nil }
+            let hashes = try connection.rows("SELECT content_hash FROM records WHERE uuid = ?1", [.text(id.uuidString)]) {
+                $0.text(0)
+            }
+            guard let contentHash = hashes.first ?? nil else { return nil }
             let passages = try connection.rows(
                 """
                 SELECT p.id FROM passages p JOIN records r ON r.id = p.record_id
