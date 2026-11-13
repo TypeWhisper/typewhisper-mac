@@ -486,7 +486,9 @@ final class HistorySearchIndexerTests: XCTestCase {
             index = HistorySearchIndex(directory: indexDirectory)
         }
 
-        func makeIndexer(retryDelay: Duration = .milliseconds(5), reads: Reads? = nil) -> HistorySearchIndexer {
+        func makeIndexer(
+            retryDelay: Duration = .milliseconds(5), upsertDelay: Duration = .milliseconds(5), reads: Reads? = nil
+        ) -> HistorySearchIndexer {
             var readRecords: (@Sendable ([UUID]) throws -> [HistorySearchRecord])?
             if let reads { readRecords = { try reads.read($0) } }
             return HistorySearchIndexer(
@@ -495,7 +497,7 @@ final class HistorySearchIndexerTests: XCTestCase {
                 // Weak, because a check that still runs can outlive the test.
                 isEnabled: { [weak self] in self?.isEnabled ?? false },
                 isBusy: { [weak self] in self?.isBusy ?? false },
-                upsertDelay: .milliseconds(5),
+                upsertDelay: upsertDelay,
                 busyRetryDelay: retryDelay,
                 readRecords: readRecords
             )
@@ -564,6 +566,16 @@ final class HistorySearchIndexerTests: XCTestCase {
         XCTAssertTrue(fixture.history.clearAll())
         try await eventually { !FileManager.default.fileExists(atPath: fixture.indexDirectory.path) }
         withExtendedLifetime(indexer) {}
+    }
+
+    func testWaitingForQueuedWorkAlsoWritesRecordsChangedAMomentAgo() async throws {
+        let fixture = try Fixture()
+        defer { TestSupport.remove(fixture.appSupportDirectory) }
+        let indexer = fixture.makeIndexer(upsertDelay: .seconds(60))
+
+        let id = fixture.addDictation("We ship the invoice export on Friday.")
+        await indexer.waitForQueuedWork()
+        XCTAssertEqual(try fixture.matches("invoice"), [id])
     }
 
     func testReconcileAddsMissingUpdatesChangedAndRemovesDeletedRecords() async throws {

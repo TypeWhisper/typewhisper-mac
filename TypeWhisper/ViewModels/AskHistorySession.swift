@@ -129,6 +129,10 @@ final class AskHistorySession: ObservableObject {
     /// takes the next question at once.
     func stop() {
         task?.cancel()
+        // The turn ends now, even when a provider is slow to notice.
+        if let running = turns.last, !running.isFinished {
+            update(running.id) { $0.stage = .stopped }
+        }
         task = nil
         isWorking = false
         generation = UUID()
@@ -230,8 +234,9 @@ final class AskHistorySession: ObservableObject {
         return .failed(error.localizedDescription)
     }
 
+    /// Changes a turn that has not ended yet.
     private func update(_ turnID: UUID, _ change: (inout AskHistorySessionTurn) -> Void) {
-        guard let position = turns.firstIndex(where: { $0.id == turnID }) else { return }
+        guard let position = turns.firstIndex(where: { $0.id == turnID }), !turns[position].isFinished else { return }
         change(&turns[position])
     }
 }

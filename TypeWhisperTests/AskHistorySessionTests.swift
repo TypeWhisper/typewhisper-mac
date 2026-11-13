@@ -130,6 +130,7 @@ final class AskHistorySessionTests: XCTestCase {
         // Stopping and starting over free the session at once for the next question.
         session.stop()
         XCTAssertFalse(session.isWorking)
+        XCTAssertEqual(session.turns.first?.stage, .stopped)
         session.startNewConversation()
         XCTAssertFalse(session.isWorking)
         provider.enqueue(.text("200 Plakate [1]."))

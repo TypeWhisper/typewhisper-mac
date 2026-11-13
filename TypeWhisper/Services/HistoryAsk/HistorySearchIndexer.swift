@@ -96,10 +96,17 @@ final class HistorySearchIndexer {
         }
     }
 
-    /// Waits until the queued records are written. Waits longer while a
-    /// dictation or recording runs, and returns when the caller is cancelled.
+    /// Waits until the queued records are written, also those changed a moment
+    /// ago. Waits longer while a dictation or recording runs, and returns when
+    /// the caller is cancelled.
     func waitForQueuedWork() async {
-        while worker != nil, !Task.isCancelled {
+        while worker != nil || !waitingUpserts.isEmpty, !Task.isCancelled {
+            if !waitingUpserts.isEmpty, !isStopped {
+                upsertTimer?.cancel()
+                dueUpserts.formUnion(waitingUpserts)
+                waitingUpserts = []
+                startWorker()
+            }
             try? await Task.sleep(for: .milliseconds(100))
         }
     }
