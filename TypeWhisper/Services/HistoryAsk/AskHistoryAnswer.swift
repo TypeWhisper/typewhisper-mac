@@ -9,7 +9,12 @@ struct AskHistoryAnswer: Equatable, Sendable {
     /// The numbers of the sources the answer cites, in the order they first appear.
     var citedSources: [Int]
     var providerId: String
+    /// All providers that wrote the answer, comma-separated, when an overview's
+    /// summaries come from more than one.
     var providerName: String
+    /// Recordings of an overview's part of History that the answer leaves out,
+    /// for the window to name. A cloud model names them in its text.
+    var omittedRecordCount = 0
 }
 
 /// How much a provider's context holds, as far as its kind tells.
@@ -50,6 +55,49 @@ extension AskHistoryBudget {
         case .openAICompatible: AskHistoryBudget(sourceCharacters: 5_000, historyCharacters: 1_000)
         case .appleIntelligence, .local, .cloud: halved
         }
+    }
+}
+
+extension AskHistoryBudget {
+    /// Characters of a recording one summary request holds. Apple Intelligence
+    /// gets what fits its smallest context of 4,096 tokens.
+    /// Parts are not made smaller than this after a context error.
+    static let minimumSummaryCharacters = 1_000
+
+    static func summaryCharacters(for kind: AskHistoryProviderKind) -> Int {
+        switch kind {
+        case .appleIntelligence: 8_000
+        case .local, .openAICompatible: 12_000
+        case .cloud: 30_000
+        }
+    }
+
+    /// The passages of a recording joined into parts of at most the given
+    /// length. A longer passage is cut into pieces of that length, at a space
+    /// where there is one.
+    static func parts(of passages: [String], maximumCharacters: Int) -> [String] {
+        let limit = max(maximumCharacters, 1)
+        let pieces = passages.flatMap { passage -> [String] in
+            var rest = Substring(passage)
+            var pieces: [String] = []
+            while rest.count > limit {
+                let cut = rest.prefix(limit)
+                let end = cut.lastIndex(where: \.isWhitespace).flatMap { $0 > cut.startIndex ? $0 : nil } ?? cut.endIndex
+                pieces.append(String(rest[..<end]))
+                rest = rest[end...].drop(while: \.isWhitespace)
+            }
+            pieces.append(String(rest))
+            return pieces
+        }
+        var parts: [String] = []
+        for passage in pieces where !passage.isEmpty {
+            if let last = parts.last, last.count + 1 + passage.count <= maximumCharacters {
+                parts[parts.count - 1] = last + "\n" + passage
+            } else {
+                parts.append(passage)
+            }
+        }
+        return parts
     }
 }
 

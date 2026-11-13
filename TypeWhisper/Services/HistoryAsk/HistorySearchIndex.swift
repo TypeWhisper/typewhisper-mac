@@ -408,6 +408,60 @@ actor HistorySearchIndex {
         }
     }
 
+    // MARK: - Summaries
+
+    /// The text of a record as the index holds it: what was said, in order,
+    /// without a document written from it, and the hash of the content it
+    /// comes from. Nil for a record the index does not hold.
+    func transcript(ofRecord id: UUID) throws -> (passages: [HistoryPassage], contentHash: String)? {
+        try reading(nil) { connection in
+            let hashes = try connection.rows("SELECT content_hash FROM records WHERE uuid = ?1", [.text(id.uuidString)]) {
+                $0.text(0)
+            }
+            guard let contentHash = hashes.first ?? nil else { return nil }
+            let passages = try connection.rows(
+                """
+                SELECT p.id FROM passages p JOIN records r ON r.id = p.record_id
+                WHERE r.uuid = ?1 AND p.kind = ?2 ORDER BY p.id
+                """,
+                [.text(id.uuidString), .text(HistoryPassage.Kind.transcript.rawValue)]
+            ) { $0.integer(0) }
+            .compactMap { try self.hit(forPassage: $0, in: connection)?.passage }
+            return (passages, contentHash)
+        }
+    }
+
+    /// The summary kept for a record in a language and the provider that
+    /// wrote it, unless the record changed since or is gone.
+    /// - Parameter language: An ISO 639 code, or empty for the recording's own.
+    func summary(ofRecord id: UUID, language: String = "") throws -> (text: String, providerId: String)? {
+        try reading(nil) { connection in
+            try connection.rows(
+                """
+                SELECT s.summary, s.provider_id FROM record_summaries s JOIN records r ON r.uuid = s.uuid
+                WHERE s.uuid = ?1 AND s.language = ?2 AND s.content_hash = r.content_hash
+                """,
+                [.text(id.uuidString), .text(language)]
+            ) { row in row.text(0).map { ($0, row.text(1) ?? "") } }.first ?? nil
+        }
+    }
+
+    /// Keeps a summary of a record until the record changes or is removed.
+    /// Does nothing when the record is gone or no longer has the content the
+    /// summary was written from, which can change while a model writes it.
+    func setSummary(
+        _ summary: String, providerId: String, ofRecord id: UUID, contentHash: String, language: String = ""
+    ) throws {
+        guard let connection = try open(creating: false) else { return }
+        try connection.run(
+            """
+            INSERT OR REPLACE INTO record_summaries(uuid, language, content_hash, summary, provider_id)
+            SELECT uuid, ?5, content_hash, ?2, ?3 FROM records WHERE uuid = ?1 AND content_hash = ?4
+            """,
+            [.text(id.uuidString), .text(summary), .text(providerId), .text(contentHash), .text(language)]
+        )
+    }
+
     /// The speakers, apps and domains of the indexed records.
     func vocabulary() throws -> HistorySearchVocabulary {
         if let cachedVocabulary { return cachedVocabulary }
@@ -570,6 +624,8 @@ actor HistorySearchIndex {
             )
             try connection.run("DELETE FROM records WHERE id = ?1", [.integer(rowID)])
         }
+        // A summary belongs to the text it was made from.
+        try connection.run("DELETE FROM record_summaries WHERE uuid = ?1", [.text(id.uuidString)])
     }
 
     private func freeRowID(at date: Date, in connection: SQLiteConnection) throws -> Int64 {
@@ -641,9 +697,22 @@ actor HistorySearchIndex {
                 throw HistorySearchIndexError(code: SQLITE_NOTADB, message: "not a search index: \(error.message)")
             }
         }
+        // Added after the first format without changing it: older versions ignore the table.
+        try connection.execute(Self.summariesSchema)
         self.connection = connection
         return connection
     }
+
+    private static let summariesSchema = """
+        CREATE TABLE IF NOT EXISTS record_summaries(
+          uuid TEXT NOT NULL,
+          language TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          provider_id TEXT NOT NULL,
+          PRIMARY KEY(uuid, language)
+        ) WITHOUT ROWID;
+        """
 
     private static let schema = """
         BEGIN;

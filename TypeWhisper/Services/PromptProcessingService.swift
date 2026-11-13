@@ -795,22 +795,215 @@ class PromptProcessingService: ObservableObject {
     /// excerpts as its context holds, and one that reports the input as too
     /// long is asked once more with fewer. Memories are not added, and the
     /// question is not wrapped as dictated text, which must not be answered.
+    /// - Parameter candidates: The positions in the provider list to try, all by default.
     func answerHistoryQuestion(
         _ request: AskHistoryRequest,
         providerOverride: String? = nil,
         cloudModelOverride: String? = nil,
-        effortOverride: String? = nil
+        effortOverride: String? = nil,
+        candidates range: Range<Int>? = nil
     ) async throws -> AskHistoryAnswer {
+        try await tryingHistoryProviders(
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride,
+            candidates: range
+        ) { candidate, onLocalProviderUsed in
+            try await self.historyAnswer(to: request, from: candidate, onLocalProviderUsed: onLocalProviderUsed)
+        }
+    }
+
+    /// The provider an overview is tried with first, and whether the overview
+    /// is made from a summary of each recording. Apple Intelligence and the
+    /// local models lose recordings when one prompt holds several; cloud
+    /// models take them in one prompt.
+    /// The provider list in runs of providers that write an overview the same
+    /// way: Apple Intelligence and local models from summaries of each
+    /// recording, the others from the recordings' beginnings.
+    func historyOverviewRuns(providerOverride: String? = nil) -> [(candidates: Range<Int>, usesSummaries: Bool)] {
+        let kinds = candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil).map {
+            switch historyProviderKind(of: normalizeProviderId($0.providerId)) {
+            case .appleIntelligence, .local: true
+            case .openAICompatible, .cloud: false
+            }
+        }
+        var runs: [(candidates: Range<Int>, usesSummaries: Bool)] = []
+        for (index, usesSummaries) in kinds.enumerated() {
+            if let last = runs.last, last.usesSummaries == usesSummaries {
+                runs[runs.count - 1].candidates = last.candidates.lowerBound..<index + 1
+            } else {
+                runs.append((index..<index + 1, usesSummaries))
+            }
+        }
+        return runs
+    }
+
+    /// Summarizes one recording for an overview. `passages` hold its text in
+    /// order; a recording longer than the provider's context is summarized in
+    /// parts, and the parts' summaries are then made into one.
+    func summarizeHistoryRecording(
+        passages: [String],
+        title: String?,
+        language: String? = nil,
+        providerOverride: String? = nil,
+        cloudModelOverride: String? = nil,
+        effortOverride: String? = nil,
+        candidates range: Range<Int>? = nil
+    ) async throws -> (text: String, providerId: String) {
+        try await tryingHistoryProviders(
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride,
+            candidates: range
+        ) { candidate, onLocalProviderUsed in
+            let providerId = self.normalizeProviderId(candidate.providerId)
+            var maximumCharacters = AskHistoryBudget.summaryCharacters(for: self.historyProviderKind(of: providerId))
+            while true {
+                do {
+                    let summary = try await self.summary(
+                        of: AskHistoryBudget.parts(of: passages, maximumCharacters: maximumCharacters), title: title,
+                        language: language, maximumCharacters: maximumCharacters,
+                        from: candidate, onLocalProviderUsed: onLocalProviderUsed
+                    )
+                    // A summary cites nothing; one that is only a citation is empty.
+                    let text = AskHistoryCitations.withoutCitations(summary).trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { throw LLMFallbackAttemptError.emptyResult }
+                    return (text, providerId)
+                } catch where !Task.isCancelled && LLMContextLimit.isReported(by: error)
+                    && maximumCharacters > AskHistoryBudget.minimumSummaryCharacters {
+                    // Text such as Chinese takes more tokens per character.
+                    maximumCharacters /= 2
+                    logger.info("History summary exceeded the context of \(providerId, privacy: .public); trying smaller parts")
+                }
+            }
+        }
+    }
+
+    private func summary(
+        of parts: [String],
+        title: String?,
+        language: String?,
+        maximumCharacters: Int,
+        from candidate: LLMFallbackPriorityItem,
+        onLocalProviderUsed: (any LLMProviderPlugin) -> Void
+    ) async throws -> String {
+        var summaries: [String] = []
+        for (offset, part) in parts.enumerated() {
+            try Task.checkCancellation()
+            summaries.append(try await historyCompletion(
+                from: candidate,
+                instructions: AskHistoryPromptBuilder.summaryInstructions(language: language),
+                prompt: AskHistoryPromptBuilder.summaryPrompt(of: part, title: title, part: offset + 1, partCount: parts.count),
+                onLocalProviderUsed: onLocalProviderUsed
+            ))
+        }
+        // The summaries of a very long recording are combined in batches that
+        // fit like its parts, as the prompt writes them, and those again, until
+        // one is left. A summary longer than half a batch is cut, so every
+        // batch holds two or more.
+        let longest = max((maximumCharacters - AskHistoryPromptBuilder.combinedSummaryPrompt(of: ["", ""]).count) / 2, 1)
+        while summaries.count > 1 {
+            summaries = summaries.map { $0.count > longest ? String($0.prefix(longest)) : $0 }
+            var batches: [[String]] = []
+            for summary in summaries {
+                if let last = batches.last,
+                   AskHistoryPromptBuilder.combinedSummaryPrompt(of: last + [summary]).count <= maximumCharacters {
+                    batches[batches.count - 1].append(summary)
+                } else {
+                    batches.append([summary])
+                }
+            }
+            var combined: [String] = []
+            for batch in batches {
+                guard batch.count > 1 else {
+                    combined += batch
+                    continue
+                }
+                try Task.checkCancellation()
+                combined.append(try await historyCompletion(
+                    from: candidate,
+                    instructions: AskHistoryPromptBuilder.combinedSummaryInstructions(language: language),
+                    prompt: AskHistoryPromptBuilder.combinedSummaryPrompt(of: batch),
+                    onLocalProviderUsed: onLocalProviderUsed
+                ))
+            }
+            summaries = combined
+        }
+        return summaries.first ?? ""
+    }
+
+    /// Asks a model to make a follow-up question stand alone and to name what
+    /// to search for. Nil when no provider gave a usable plan, so the search
+    /// goes on with the words of the question alone.
+    func planHistoryFollowUp(
+        question: String,
+        history: [AskHistoryTurn],
+        providerOverride: String? = nil,
+        cloudModelOverride: String? = nil,
+        effortOverride: String? = nil
+    ) async -> AskHistoryFollowUpPlan? {
+        let prompt = AskHistoryFollowUpPlan.prompt(question: question, history: history)
+        return try? await tryingHistoryProviders(
+            providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
+        ) { candidate, onLocalProviderUsed in
+            let reply = try await self.historyCompletion(
+                from: candidate,
+                instructions: AskHistoryFollowUpPlan.instructions,
+                prompt: prompt,
+                onLocalProviderUsed: onLocalProviderUsed
+            )
+            // A reply that is no plan leaves the next provider to try.
+            guard let plan = AskHistoryFollowUpPlan(reply: reply) else { throw LLMFallbackAttemptError.emptyResult }
+            return plan
+        }
+    }
+
+    /// A provider's reply to a prompt that is answered as it is. An empty reply is a failure.
+    private func historyCompletion(
+        from candidate: LLMFallbackPriorityItem,
+        instructions: String,
+        prompt: String,
+        onLocalProviderUsed: (any LLMProviderPlugin) -> Void
+    ) async throws -> String {
+        // Measuring a prompt or an earlier step may have taken a moment.
+        try Task.checkCancellation()
+        let reply = try await processSingleProvider(
+            providerId: normalizeProviderId(candidate.providerId),
+            requestedModelId: candidate.modelId,
+            requestedEffortId: candidate.effortId,
+            prompt: instructions,
+            text: prompt,
+            temperatureDirective: .inheritProviderSetting,
+            answersPrompt: true,
+            onLocalProviderUsed: onLocalProviderUsed
+        )
+        try Task.checkCancellation()
+        let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            throw LLMFallbackAttemptError.emptyResult
+        }
+        return text
+    }
+
+    /// Runs `attempt` with the providers `process` would try: the enforced
+    /// pair, the given provider, or the fallback list in its order, until one
+    /// succeeds.
+    private func tryingHistoryProviders<Result>(
+        providerOverride: String?,
+        cloudModelOverride: String?,
+        effortOverride: String?,
+        candidates range: Range<Int>? = nil,
+        attempt: @MainActor (LLMFallbackPriorityItem, (any LLMProviderPlugin) -> Void) async throws -> Result
+    ) async throws -> Result {
         if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
             throw ManagedPolicyRefusal(reason: reason)
         }
         let usesFallbackList = Self.trimmedOrNil(providerOverride) == nil
             && PluginManager.shared?.enforcedLlmResolution == nil
-        let candidates = self.candidates(
+        var candidates = self.candidates(
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
             effortOverride: effortOverride
         )
+        if let range {
+            candidates = Array(candidates[range.clamped(to: candidates.indices)])
+        }
         guard !candidates.isEmpty else {
             throw LLMFallbackExhaustedError(failures: [])
         }
@@ -826,7 +1019,7 @@ class PromptProcessingService: ObservableObject {
         for candidate in candidates {
             try Task.checkCancellation()
             do {
-                return try await historyAnswer(to: request, from: candidate) { provider in
+                return try await attempt(candidate) { provider in
                     guard !localProvidersUsed.contains(where: { $0 === provider }) else { return }
                     localProvidersUsed.append(provider)
                     modelManagerService?.beginAutoUnloadProtectedUse(of: provider)
@@ -849,7 +1042,7 @@ class PromptProcessingService: ObservableObject {
                     exceededContext: LLMContextLimit.isReported(by: error)
                 )
                 failures.append(failure)
-                logger.warning("History answer failed for \(failure.providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
+                logger.warning("History request failed for \(failure.providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
             }
         }
         if let refusal = policyRefusals.first, policyRefusals.count == failures.count {
@@ -874,19 +1067,12 @@ class PromptProcessingService: ObservableObject {
         var isRetry = false
         while true {
             do {
-                // Measuring the prompt may have taken a moment.
-                try Task.checkCancellation()
-                let reply = try await processSingleProvider(
-                    providerId: providerId,
-                    requestedModelId: candidate.modelId,
-                    requestedEffortId: candidate.effortId,
-                    prompt: prompt.instructions,
-                    text: prompt.singlePrompt,
-                    temperatureDirective: .inheritProviderSetting,
-                    answersPrompt: true,
+                let reply = try await historyCompletion(
+                    from: candidate,
+                    instructions: prompt.instructions,
+                    prompt: prompt.singlePrompt,
                     onLocalProviderUsed: onLocalProviderUsed
                 )
-                try Task.checkCancellation()
                 // An answer of nothing but a citation of a missing source is empty.
                 let text = AskHistoryCitations.withoutUnknownSources(reply, sourceCount: prompt.sources.count)
                     .trimmingCharacters(in: .whitespacesAndNewlines)

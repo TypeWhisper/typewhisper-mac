@@ -21,6 +21,9 @@ struct HistorySearchPlan: Equatable, Sendable {
     var scope = HistorySearchScope()
     /// The question asks for the last time something came up.
     var prefersNewest = false
+    /// The words searched for, counted once each: `keywords` also holds their
+    /// dictionary forms.
+    var topicCount = 0
 
     var intent: Intent { keywords.isEmpty && names.isEmpty ? .overview : .lookup }
 }
@@ -89,6 +92,7 @@ struct AskHistoryPlanner: Sendable {
         let stopWords = Self.stopWords(for: language)
 
         var keywords: [String] = []
+        var topics = Set<String>()
         var name: [String] = []
         func finishName() {
             if !name.isEmpty { plan.names.append(name.joined(separator: " ")) }
@@ -123,6 +127,7 @@ struct AskHistoryPlanner: Sendable {
             guard word.isContent, !stopWords.contains(word.folded),
                   word.lemma.map({ !stopWords.contains($0) }) ?? true else { continue }
             keywords.append(word.text)
+            topics.insert(word.lemma ?? word.folded)
             if let lemma = word.lemma, lemma != word.folded { keywords.append(lemma) }
         }
         finishName()
@@ -134,13 +139,42 @@ struct AskHistoryPlanner: Sendable {
                 plan.scope.domains.insert(domain.domain)
             } else {
                 keywords.append(domain.domain)
+                topics.insert(Self.folded(domain.domain))
             }
         }
+        plan.topicCount = topics.count
 
         var seen = Set<String>()
         plan.keywords = Array(keywords.filter { seen.insert(Self.folded($0)).inserted }.prefix(Self.maximumKeywords))
         let folded = " " + words.map(\.folded).joined(separator: " ") + " "
         plan.prefersNewest = Self.newestPhrases.contains { folded.contains(" \($0) ") }
+        return plan
+    }
+
+    /// Whether a model should read the question together with the earlier
+    /// conversation: a follow-up that names fewer than two things to search for.
+    static func needsFollowUpPlan(_ plan: HistorySearchPlan, history: [AskHistoryTurn]) -> Bool {
+        !history.isEmpty && plan.topicCount + Set(plan.names.map(folded)).count < 2
+    }
+
+    /// The plan for a follow-up question with what a model read from the
+    /// conversation. The period and the places come from the question alone,
+    /// because models invent periods.
+    func plan(for question: String, followUp: AskHistoryFollowUpPlan) -> HistorySearchPlan {
+        var plan = plan(for: question)
+        let rewritten = self.plan(for: followUp.question)
+        let stopWords = Self.stopWords(for: plan.language ?? rewritten.language)
+        var seen = Set<String>()
+        plan.keywords = (plan.keywords + rewritten.keywords + followUp.keywords)
+            .filter { !stopWords.contains(Self.folded($0)) && seen.insert(Self.folded($0)).inserted }
+            .prefix(Self.maximumKeywords)
+            .map { $0 }
+        for name in rewritten.names where !plan.names.contains(name) {
+            plan.names.append(name)
+        }
+        // Words that are names are searched as names only.
+        let names = Set(plan.names.flatMap { $0.split(separator: " ").map { Self.folded(String($0)) } })
+        plan.keywords.removeAll { names.contains(Self.folded($0)) }
         return plan
     }
 
@@ -265,7 +299,8 @@ struct AskHistoryPlanner: Sendable {
             meine meinen meinem meiner meines deine deinen deinem deiner deines seine seinen seinem seiner \
             seines ihre ihren ihrem ihrer ihres unser unsere unseren unserem unserer euer eure euren eurem \
             diese diesen diesem dieser dieses alle allen aller alles einen einem einer eines dass oder aber \
-            noch auch schon uber nach durch gegen ohne zwischen wegen damit sich mich dich euch
+            noch auch schon uber nach durch gegen ohne zwischen wegen damit sich mich dich euch \
+            dazu davon dafur dabei daruber darauf daran dann denn doch also dort jetzt
             """,
         "fr": """
             etre suis es est sommes etes sont etais etait etaient ete avoir ai as avons avez ont avais \
