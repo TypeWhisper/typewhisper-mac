@@ -1886,7 +1886,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der Download des Cohere-Modells wurde abgeschlossen, ohne dass alle erforderlichen Modelldateien vorhanden sind."
+            "value": "Der Download des Cohere-Modells ist abgeschlossen, aber es fehlen erforderliche Modelldateien."
           }
         },
         "zh-Hans": {

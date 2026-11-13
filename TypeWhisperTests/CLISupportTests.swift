@@ -726,7 +726,7 @@ final class CLISupportTests: XCTestCase {
             CommercialPurchaseOptionCopy(
                 price: "299 EUR",
                 billingLabel: localizedAppText("one-time", de: "einmalig"),
-                detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
+                detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, diese Stufe behalten")
             )
         )
 

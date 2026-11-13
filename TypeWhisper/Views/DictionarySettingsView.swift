@@ -860,7 +860,7 @@ private struct DictionaryTrainingSheet: View {
                 systemImage: "character.cursor.ibeam",
                 description: Text(localizedAppText(
                     "TypeWhisper will record three editable example sentences and inspect only the raw transcription. Nothing is saved until you confirm the review.",
-                    de: "TypeWhisper nimmt drei editierbare Beispielsätze auf und prüft nur die rohe Transkription. Bis zur Bestätigung der Prüfung wird nichts gespeichert."
+                    de: "TypeWhisper nimmt drei editierbare Beispielsätze auf und prüft nur die rohe Transkription. Bis du die Prüfung bestätigst, wird nichts gespeichert."
                 ))
             )
 
@@ -990,7 +990,7 @@ private struct DictionaryTrainingSheet: View {
                         systemImage: "checkmark.circle",
                         description: Text(localizedAppText(
                             "The target word can still be added as a dictionary term.",
-                            de: "Das Zielwort kann trotzdem als Dictionary-Begriff hinzugefügt werden."
+                            de: "Du kannst das Zielwort trotzdem als Dictionary-Begriff hinzufügen."
                         ))
                     )
                 } else {
@@ -2074,7 +2074,7 @@ private struct DictionaryEditorSheet: View {
                                 if viewModel.lockedCorrectionReplacement != nil {
                                     Text(localizedAppText(
                                         "The correct text is fixed by the selected group.",
-                                        de: "Der korrekte Text wird von der ausgewählten Gruppe vorgegeben."
+                                        de: "Die ausgewählte Gruppe gibt den korrekten Text vor."
                                     ))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)

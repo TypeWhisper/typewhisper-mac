@@ -985,7 +985,7 @@ struct AdvancedSettingsView: View {
         if result.pluginsRegistryFetchFailed {
             lines.append(localizedAppText(
                 "Could not reach the plugin marketplace — some plugins may have been skipped due to a network error, not because they're unavailable.",
-                de: "Der Plugin-Marktplatz konnte nicht erreicht werden – einige Plugins wurden möglicherweise wegen eines Netzwerkfehlers übersprungen, nicht weil sie nicht verfügbar sind."
+                de: "Der Plugin-Marktplatz konnte nicht erreicht werden. Einige Plugins wurden möglicherweise wegen eines Netzwerkfehlers übersprungen, nicht weil sie nicht verfügbar sind."
             ))
         }
         lines.append(String(format: String(localized: "History: %d imported"), result.historyImported))

@@ -734,7 +734,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Schliessen Sie den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
+            "value": "Schließe den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
           }
         },
         "es": {
@@ -818,7 +818,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beschreiben Sie Thema, Umgebung oder relevanten Kontext der Aufnahme."
+            "value": "Beschreibe Thema, Umgebung oder relevanten Kontext der Aufnahme."
           }
         },
         "es": {
@@ -1574,7 +1574,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nutzen Sie Ihren bestehenden ChatGPT-Plus-/Pro- oder Codex-Login für Prompt-Verarbeitung. Für Transkription ist weiterhin ein API-Schlüssel nötig."
+            "value": "Nutze deinen bestehenden ChatGPT-Plus-/Pro- oder Codex-Login für Prompt-Verarbeitung. Für Transkription ist weiterhin ein API-Schlüssel nötig."
           }
         },
         "es": {
@@ -1602,7 +1602,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfügbaren Modelle abzurufen."
+            "value": "Standardmodelle werden verwendet. Klicke auf „Aktualisieren“, um alle verfügbaren Modelle abzurufen."
           }
         },
         "es": {

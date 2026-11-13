@@ -142,7 +142,7 @@ struct LanguageSelectionEditor: View {
         case .detectsSpokenLanguage:
             return localizedAppText("This engine takes one language. The Language Detection plugin picks the one you speak from this list.", de: "Diese Engine nimmt nur eine Sprache. Das Plugin „Language Detection“ wählt daraus die Sprache, die du sprichst.")
         case .firstSelectedFallback:
-            return localizedAppText("This engine does not support multiple language hints. It will use #1 as the spoken language. The Language Detection plugin can pick the one you speak instead.", de: "Diese Engine unterstützt keine mehreren Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache. Das Plugin „Language Detection“ kann stattdessen die Sprache wählen, die du sprichst.")
+            return localizedAppText("This engine does not support multiple language hints. It will use #1 as the spoken language. The Language Detection plugin can pick the one you speak instead.", de: "Diese Engine unterstützt nicht mehrere Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache. Das Plugin „Language Detection“ kann stattdessen die Sprache wählen, die du sprichst.")
         case .unknown:
             return localizedAppText("Engines that support language hints use this ordered list. Other engines use #1 as the spoken language.", de: "Engines mit Sprachhinweisen verwenden diese sortierte Liste. Andere Engines verwenden Nr. 1 als gesprochene Sprache.")
         }
@@ -160,7 +160,7 @@ struct LanguageSelectionEditor: View {
 
             modeButton(
                 title: autoTitle,
-                subtitle: localizedAppText("Let the engine detect the spoken language without restrictions.", de: "Lasse die Engine die gesprochene Sprache ohne Einschränkungen erkennen."),
+                subtitle: localizedAppText("Let the engine detect the spoken language without restrictions.", de: "Lass die Engine die gesprochene Sprache ohne Einschränkungen erkennen."),
                 mode: .auto
             )
 

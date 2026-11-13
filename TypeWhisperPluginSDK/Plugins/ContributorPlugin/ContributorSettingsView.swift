@@ -57,7 +57,7 @@ struct ContributorSettingsView: View {
         } message: {
             Text(contributorText(
                 "Both complete text versions of \(locallySelectedCount) changes will be sent for review. You can delete a submission until it is included in a validated training dataset.",
-                de: "Von \(locallySelectedCount) Änderungen werden jeweils beide vollständigen Textversionen zur Prüfung gesendet. Du kannst eine Einsendung löschen, bis sie in einen validierten Trainingsdatensatz übernommen wurde.",
+                de: "Für jede der \(locallySelectedCount) Änderungen werden beide vollständigen Textversionen zur Prüfung gesendet. Du kannst eine Einsendung löschen, bis sie in einen validierten Trainingsdatensatz übernommen wurde.",
                 ja: "\(locallySelectedCount)件の変更について、修正前後の全文をレビュー用に送信します。検証済みの学習データセットに追加されるまでは削除できます。"
             ))
         }
@@ -81,7 +81,7 @@ struct ContributorSettingsView: View {
 
                 Text(contributorText(
                     "Only manually changed before/after text is kept locally. Audio, target app, URL, and unchanged dictations are excluded.",
-                    de: "Nur manuell geänderte Vorher-/Nachher-Texte bleiben lokal. Audio, Ziel-App, URL und unveränderte Diktate sind ausgeschlossen.",
+                    de: "Lokal gespeichert werden nur manuell geänderte Vorher-/Nachher-Texte. Audio, Ziel-App, URL und unveränderte Diktate sind ausgeschlossen.",
                     ja: "手動で変更した修正前後のテキストのみローカルに保存します。音声、対象アプリ、URL、未変更の音声入力は除外されます。"
                 ))
                 .font(.caption)

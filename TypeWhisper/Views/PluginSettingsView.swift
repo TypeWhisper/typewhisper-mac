@@ -1068,7 +1068,7 @@ struct PluginSettingsView: View {
             .disabled(!modelManager.canPrepareForTranscription(engine))
             .help(localizedAppText(
                 "Use this plugin for dictation. Set it up first if the button is disabled.",
-                de: "Dieses Plugin für das Diktat verwenden. Richte es zuerst ein, falls der Button deaktiviert ist.",
+                de: "Verwende dieses Plugin fürs Diktat. Richte es zuerst ein, falls der Button deaktiviert ist.",
                 ja: "このプラグインを音声入力に使用します。ボタンが無効な場合は先に設定してください。"
             ))
         }

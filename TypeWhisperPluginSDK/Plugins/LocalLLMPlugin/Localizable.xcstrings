@@ -734,7 +734,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der Download des Modells von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhöhen."
+            "value": "Der Download des Modells von Hugging Face hat zu lange gedauert. Versuche es erneut. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhöhen."
           }
         },
         "es": {
@@ -846,7 +846,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "HuggingFace Token"
+            "value": "HuggingFace-Token"
           }
         },
         "es": {
@@ -1490,7 +1490,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Etwas genauer als die 4-bit-Version, braucht aber mehr Arbeitsspeicher und ist langsamer."
+            "value": "Etwas genauer als die 4-Bit-Version, braucht aber mehr Arbeitsspeicher und ist langsamer."
           }
         },
         "es": {

@@ -113,7 +113,7 @@ struct LicenseSettingsView: View {
                 headline: localizedAppText("Managed by your organization", de: "Von deiner Organisation verwaltet"),
                 lede: localizedAppText(
                     "Your administrator provides the license. TypeWhisper activates it automatically without manual key entry.",
-                    de: "Deine Administration stellt die Lizenz bereit. TypeWhisper aktiviert sie automatisch ohne manuelle Schlüsseleingabe."
+                    de: "Deine Administration stellt die Lizenz bereit. TypeWhisper aktiviert sie automatisch, ohne dass du einen Schlüssel eingibst."
                 ),
                 statusSymbol: "building.2",
                 statusColor: .secondary
@@ -689,7 +689,7 @@ struct LicenseSettingsView: View {
 
                 Text(localizedAppText(
                     "Finish the Discord authorization flow in your browser, then refresh the status here.",
-                    de: "Schließe den Discord-Autorisierungsablauf im Browser ab und aktualisiere den Status dann hier."
+                    de: "Schließe die Discord-Autorisierung im Browser ab und aktualisiere dann hier den Status."
                 ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1135,7 +1135,7 @@ func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurc
     let yearly = localizedAppText("per year", de: "pro Jahr")
     let oneTime = localizedAppText("one-time", de: "einmalig")
     let twoMonthsFree = localizedAppText("Two months free", de: "Zwei Monate gratis")
-    let payOnce = localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
+    let payOnce = localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, diese Stufe behalten")
 
     switch (tier, cadence) {
     case (.individual, .monthly):

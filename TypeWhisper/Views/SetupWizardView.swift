@@ -1696,11 +1696,11 @@ struct SetupWizardView: View {
         if !hasEngineReadyForSetupTest {
             return localizedAppText(
                 "Apple Speech or another engine still needs to be enabled before dictation can run.",
-                de: "Apple Speech oder eine andere Engine muss noch aktiviert werden, bevor Diktieren funktioniert."
+                de: "Aktiviere noch Apple Speech oder eine andere Engine, damit Diktieren funktioniert."
             )
         }
         if !hasAnyTriggerHotkey {
-            return localizedAppText("A hotkey still needs to be set before dictation can start.", de: "Ein Hotkey muss noch gesetzt werden, bevor Diktieren starten kann.")
+            return localizedAppText("A hotkey still needs to be set before dictation can start.", de: "Lege noch einen Hotkey fest, damit Diktieren starten kann.")
         }
         return localizedAppText("Press your hotkey and say something.", de: "Drücke deinen Hotkey und sag etwas.")
     }

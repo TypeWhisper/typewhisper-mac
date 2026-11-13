@@ -3673,7 +3673,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gespeichertes Audio erneut transkribieren oder Versionen vergleichen. Offene Änderungen zuerst speichern."
+            "value" : "Gespeichertes Audio erneut transkribieren oder Versionen vergleichen. Speichere offene Änderungen zuerst."
           }
         },
         "es" : {
@@ -4093,7 +4093,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abbruch läuft – der Anbieter wird noch beendet…"
+            "value" : "Abbruch läuft, der Anbieter wird noch beendet…"
           }
         },
         "es" : {
@@ -16674,7 +16674,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "API-Key erforderlich - in Integrationen konfigurieren"
+            "value" : "API-Schlüssel nötig. Richte ihn unter Integrationen ein."
           }
         },
         "es" : {
@@ -17291,7 +17291,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Audio %1$@s – verarbeitet in %2$@s"
+            "value" : "Audio %1$@s, verarbeitet in %2$@s"
           }
         },
         "en" : {
@@ -17923,7 +17923,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pausiert automatisch Musik und Videos während der Aufnahme und setzt die Wiedergabe fort, wenn fertig. Verwendet macOS-Systemsteuerung - funktioniert möglicherweise nicht mit allen Apps."
+            "value" : "Pausiert während der Aufnahme automatisch Musik und Videos und setzt sie danach fort. Verwendet die macOS-Systemsteuerung, funktioniert möglicherweise nicht mit allen Apps."
           }
         },
         "es" : {
@@ -20804,7 +20804,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Begriff-Paket-JSON-Datei zum Importieren auswählen."
+            "value" : "Wähle eine Begriff-Paket-JSON-Datei zum Importieren aus."
           }
         },
         "es" : {
@@ -25720,7 +25720,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fehler - %1$@"
+            "value" : "Fehler: %1$@"
           }
         },
         "es" : {
@@ -29772,7 +29772,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Installiere..."
+            "value" : "Wird installiert..."
           }
         },
         "es" : {
@@ -29884,7 +29884,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Anstatt das LLM-Ergebnis als Text einzufügen, wird es an ein Action-Plugin gesendet."
+            "value" : "Sendet das LLM-Ergebnis an ein Action-Plugin, statt es als Text einzufügen."
           }
         },
         "es" : {
@@ -30949,7 +30949,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lasse die Engine die gesprochene Sprache ohne Einschränkungen erkennen."
+            "value" : "Lass die Engine die gesprochene Sprache ohne Einschränkungen erkennen."
           }
         },
         "es" : {
@@ -34950,7 +34950,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine Transkriptions-Engines installiert. Engines über Integrationen installieren."
+            "value" : "Keine Transkriptions-Engines installiert. Installiere Engines unter Integrationen."
           }
         },
         "es" : {
@@ -35185,7 +35185,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nicht verfügbar - Apple Intelligence muss in den Systemeinstellungen aktiviert werden"
+            "value" : "Nicht verfügbar: Aktiviere Apple Intelligence in den Systemeinstellungen"
           }
         },
         "es" : {
@@ -35613,7 +35613,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "KI-Verarbeitung auf dem Gerät. Kein API-Key nötig."
+            "value" : "KI-Verarbeitung auf dem Gerät. Kein API-Schlüssel nötig."
           }
         },
         "es" : {
@@ -36365,7 +36365,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Den Standard-Anbieter für diesen Prompt überschreiben. Auf „Standard“ lassen, um die globale Einstellung zu verwenden."
+            "value" : "Überschreibt den Standard-Anbieter für diesen Prompt. Lass es auf „Standard“, um die globale Einstellung zu verwenden."
           }
         },
         "es" : {
@@ -38900,7 +38900,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verarbeite diktierten Text mit KI - übersetzen, formatieren, zusammenfassen und mehr."
+            "value" : "Verarbeite diktierten Text mit KI: übersetzen, formatieren, zusammenfassen und mehr."
           }
         },
         "es" : {
@@ -39031,7 +39031,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verarbeite..."
+            "value" : "Wird verarbeitet..."
           }
         },
         "es" : {
@@ -39652,7 +39652,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Liest den finalen transkribierten Text nach jeder Diktation über den ausgewählten Sprachprovider vor. Aufnahme-, Fehler- und Prompt-Ansagen werden nur über die VoiceOver-Bedienungshilfen gesprochen."
+            "value" : "Liest den finalen transkribierten Text nach jedem Diktat über den ausgewählten Sprachanbieter vor. Aufnahme-, Fehler- und Prompt-Ansagen werden nur über die VoiceOver-Bedienungshilfen gesprochen."
           }
         },
         "es" : {
@@ -41274,7 +41274,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Installiere das Live Transcript Plugin unter Integrations für ein Live-Transkript-Fenster."
+            "value" : "Installiere das Live Transcript Plugin unter Integrationen für ein Live-Transkript-Fenster."
           }
         },
         "en" : {
@@ -42057,7 +42057,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transkribiere..."
+            "value" : "Wird transkribiert..."
           }
         },
         "en" : {
@@ -42443,7 +42443,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tastenkürzel wird aufgezeichnet – drücke eine Taste oder Escape zum Abbrechen"
+            "value" : "Tastenkürzel wird aufgezeichnet. Drücke eine Taste oder Escape zum Abbrechen"
           }
         },
         "es" : {
@@ -43552,7 +43552,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zweites Drücken von Esc zum Abbrechen erforderlich"
+            "value" : "Zum Abbrechen der Aufnahme zweimal Esc drücken"
           }
         },
         "es" : {
@@ -43752,7 +43752,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Jetzt neustarten"
+            "value" : "Jetzt neu starten"
           }
         },
         "es" : {
@@ -45041,7 +45041,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wörterbuch-JSON-Datei zum Importieren auswählen."
+            "value" : "Wähle eine Wörterbuch-JSON-Datei zum Importieren aus."
           }
         },
         "es" : {
@@ -47290,7 +47290,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unterstützte Textfelder werden während des Sprechens aktualisiert. Das beim Aufnahmestart fokussierte Feld bleibt das endgültige Einfügeziel – auch in Apps, die Einfügen benötigen. Wenn es nicht mehr sicher wiederhergestellt werden kann, bleibt das endgültige Transkript unter „Letzte Transkriptionen“ verfügbar."
+            "value" : "Unterstützte Textfelder werden während des Sprechens aktualisiert. Das beim Aufnahmestart fokussierte Feld bleibt das endgültige Einfügeziel, auch in Apps, die Einfügen benötigen. Wenn es nicht mehr sicher wiederhergestellt werden kann, bleibt das endgültige Transkript unter „Letzte Transkriptionen“ verfügbar."
           }
         },
         "es" : {
@@ -47976,7 +47976,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ausgabe"
+            "value" : "Aufgabe"
           }
         },
         "es" : {
@@ -49921,7 +49921,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diese Engine unterstützt keine mehreren Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache. Das Plugin „Language Detection“ kann stattdessen die Sprache wählen, die du sprichst."
+            "value" : "Diese Engine unterstützt nicht mehrere Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache. Das Plugin „Language Detection“ kann stattdessen die Sprache wählen, die du sprichst."
           }
         },
         "es" : {
@@ -51511,7 +51511,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transkribiere..."
+            "value" : "Wird transkribiert..."
           }
         },
         "es" : {
@@ -52499,7 +52499,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper kann jetzt in jeder App verwendet werden."
+            "value" : "Du kannst TypeWhisper jetzt in jeder App verwenden."
           }
         },
         "es" : {
@@ -53129,7 +53129,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unbegrenzt Geräte"
+            "value" : "Unbegrenzt viele Geräte"
           }
         },
         "es" : {
@@ -53430,7 +53430,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aktualisiere %1$lld von %2$lld …"
+            "value" : "%1$lld von %2$lld wird aktualisiert …"
           }
         },
         "es" : {
@@ -56130,7 +56130,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Du hast eine Transkriptions-Engine, die einsatzbereit ist."
+            "value" : "Eine Transkriptions-Engine ist bereit."
           }
         },
         "es" : {
@@ -56662,7 +56662,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Meeting erkannt – Aufnahme starten?"
+            "value" : "Meeting erkannt. Aufnahme starten?"
           }
         },
         "en" : {
@@ -62748,7 +62748,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ausgeschaltet starten und stoppen Aufnahmen nach denselben Countdowns, ohne dass etwas auf dem Bildschirm erscheint. Du kannst dann keinen Start abbrechen und keine Aufnahme fortsetzen. Die Anzeige beim Diktieren folgt weiter ihrer eigenen Einstellung, und macOS zeigt weiterhin, dass das Mikrofon benutzt wird."
+            "value" : "Ist die Option aus, starten und stoppen Aufnahmen nach denselben Countdowns, ohne dass etwas auf dem Bildschirm erscheint. Du kannst dann keinen Start abbrechen und keine Aufnahme fortsetzen. Die Anzeige beim Diktieren folgt weiter ihrer eigenen Einstellung, und macOS zeigt weiterhin, dass das Mikrofon benutzt wird."
           }
         },
         "en" : {

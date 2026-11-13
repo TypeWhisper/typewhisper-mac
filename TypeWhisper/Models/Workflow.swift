@@ -35,7 +35,7 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
                 name: localizedAppText("Cleaned Text", de: "Bereinigter Text"),
                 description: localizedAppText(
                     "Clean up dictated text for readability and punctuation.",
-                    de: "Bereinigt diktierten Text fuer bessere Lesbarkeit und Zeichensetzung."
+                    de: "Bereinigt diktierten Text für bessere Lesbarkeit und Zeichensetzung."
                 ),
                 systemImage: "text.badge.checkmark"
             )
@@ -45,7 +45,7 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
                 name: localizedAppText("Translation", de: "Übersetzung"),
                 description: localizedAppText(
                     "Translate dictated text into the target language.",
-                    de: "Uebersetzt diktierten Text in die Zielsprache."
+                    de: "Übersetzt diktierten Text in die Zielsprache."
                 ),
                 systemImage: "globe"
             )

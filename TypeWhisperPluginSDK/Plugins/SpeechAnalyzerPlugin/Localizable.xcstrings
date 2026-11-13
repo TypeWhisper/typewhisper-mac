@@ -230,7 +230,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gerätebasierte Spracherkennung über Apples Speech-Framework mit Streaming-Unterstützung. Wähle unten ein Sprachmodell - es kann jeweils nur eines aktiv sein."
+            "value": "Gerätebasierte Spracherkennung über Apples Speech-Framework mit Streaming-Unterstützung. Wähle unten ein Sprachmodell. Es kann jeweils nur eines aktiv sein."
           }
         },
         "es": {
