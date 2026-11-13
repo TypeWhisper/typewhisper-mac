@@ -212,7 +212,11 @@ final class AskHistorySession: ObservableObject {
                 if isOverview, recordIDs.count <= Self.recordingsReadWhole {
                     // An overview of a few chosen recordings reads them whole, not
                     // only their beginnings, as far as the budget holds.
-                    retrieval = HistoryRetrieval(hits: try await passages(ofRecordsIn: plan))
+                    // Still an overview: its budget, and a note on recordings left out.
+                    let passages = try await passages(ofRecordsIn: plan)
+                    retrieval = HistoryRetrieval(
+                        hits: passages, recordCount: Set(passages.map(\.recordID)).count, readsWholeRecords: true
+                    )
                 } else if !isOverview, retrieval.hits.isEmpty || recordIDs.count <= Self.recordingsReadWhole {
                     // The best passages first, then the rest of a few chosen recordings
                     // in order; with no word of the question in them, all of them.

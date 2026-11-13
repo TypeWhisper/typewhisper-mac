@@ -195,7 +195,9 @@ final class AskHistorySessionTests: XCTestCase {
         let call = try XCTUnwrap(provider.calls.last)
         XCTAssertTrue(call.userText.contains("Wir verschieben die Messe"), call.userText)
         XCTAssertFalse(call.userText.contains("900 Euro"), call.userText)
+        // Still an overview, with its budget, but of whole recordings.
         XCTAssertFalse(call.systemPrompt.contains("beginning"), call.systemPrompt)
+        XCTAssertTrue(call.systemPrompt.contains("SOURCES hold every recording the question is about, each from its start"), call.systemPrompt)
     }
 
     func testAnOverviewOnALocalModelReportsItsProgress() async throws {
