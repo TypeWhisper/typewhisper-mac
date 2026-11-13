@@ -43,6 +43,27 @@ struct AskHistorySessionTurn: Identifiable, Equatable {
     }
 }
 
+/// What part of History a conversation asks about.
+enum AskHistoryConversationScope: Equatable, Sendable {
+    case all
+    /// Recordings chosen in History: one, or a selection of up to
+    /// `AskHistorySession.maximumScopedRecords`. The title names them in the panel.
+    case records([UUID], title: String)
+
+    var recordIDs: Set<UUID>? {
+        if case .records(let ids, _) = self { Set(ids) } else { nil }
+    }
+}
+
+extension AskHistoryConversationScope {
+    /// The scope of recordings chosen in History, titled by the first one's name.
+    @MainActor
+    init(_ records: [TranscriptionRecord]) {
+        let title = records.first.map { $0.appName ?? $0.source.displayName } ?? ""
+        self = .records(records.map(\.id), title: title)
+    }
+}
+
 /// A conversation about History: plans each question, searches the index and
 /// has a language model answer from what it found.
 @MainActor
@@ -53,6 +74,11 @@ final class AskHistorySession: ObservableObject {
     /// Recordings an overview reads at most. A cloud model's budget holds the
     /// beginning of about this many; the others summarize the newest 20.
     static let overviewLimit = 100
+    /// Recordings a selection in History may hold for a question about them.
+    static let maximumScopedRecords = 50
+    /// Up to this many chosen recordings are read whole after the passages the
+    /// search found, so a question about one meeting sees all of it the budget holds.
+    static let recordingsReadWhole = 3
 
     @Published private(set) var turns: [AskHistorySessionTurn] = []
     @Published private(set) var isWorking = false
@@ -60,6 +86,8 @@ final class AskHistorySession: ObservableObject {
     @Published private(set) var updatedAt: Date
     /// The provider the panel chose for Ask, or nil for the global list.
     var providerOverride: String?
+    /// The part of History the conversation asks about. Set it on a new conversation.
+    var scope = AskHistoryConversationScope.all
 
     private let index: HistorySearchIndex
     private let retriever: HistoryRetriever
@@ -174,11 +202,21 @@ final class AskHistorySession: ObservableObject {
                 plan = planner.plan(for: question, followUp: followUp)
             }
             try Task.checkCancellation()
+            plan.scope.recordIDs = scope.recordIDs
 
             let isOverview = plan.intent == .overview
             var retrieval = try await retriever.retrieve(
                 plan, limit: isOverview ? Self.overviewLimit : Self.lookupLimit, now: now()
             )
+            if !isOverview, let recordIDs = plan.scope.recordIDs,
+               retrieval.hits.isEmpty || recordIDs.count <= Self.recordingsReadWhole {
+                // The best passages first, then the rest of a few chosen recordings
+                // in order; with no word of the question in them, all of them.
+                let rest = try await passages(ofRecordsIn: plan).filter { passage in
+                    !retrieval.hits.contains { $0.recordID == passage.recordID && $0.ordinals.overlaps(passage.ordinals) }
+                }
+                retrieval.hits += rest
+            }
             if !isOverview, isFollowUp {
                 // What the last answer cited stays a candidate of a follow-up
                 // within the question's scope, unless a passage the search
@@ -218,6 +256,26 @@ final class AskHistorySession: ObservableObject {
         } catch {
             update(turnID) { $0.stage = Self.stage(after: error) }
         }
+    }
+
+    /// Every passage of the scoped recordings, newest recording first, in order.
+    /// The prompt keeps as many as its budget holds.
+    private func passages(ofRecordsIn plan: HistorySearchPlan) async throws -> [HistorySearchHit] {
+        var overview = plan
+        overview.keywords = []
+        overview.names = []
+        let firsts = try await retriever.retrieve(overview, limit: Self.maximumScopedRecords, now: now()).hits
+        var hits: [HistorySearchHit] = []
+        for first in firsts {
+            guard let transcript = try await index.transcript(ofRecord: first.recordID) else { continue }
+            for (ordinal, passage) in transcript.passages.enumerated() {
+                var hit = first
+                hit.passage = passage
+                hit.ordinals = ordinal...ordinal
+                hits.append(hit)
+            }
+        }
+        return hits
     }
 
     private static func stage(after error: Error) -> AskHistorySessionTurn.Stage {

@@ -36,8 +36,13 @@ struct HistorySearchScope: Equatable, Sendable {
     var sources: Set<String> = []
     var bundleIDs: Set<String> = []
     var domains: Set<String> = []
+    /// The records a question is limited to, such as the one it was asked
+    /// about. Nil for no such limit.
+    var recordIDs: Set<UUID>?
 
-    fileprivate var limitsRecords: Bool { !sources.isEmpty || !bundleIDs.isEmpty || !domains.isEmpty }
+    fileprivate var limitsRecords: Bool {
+        !sources.isEmpty || !bundleIDs.isEmpty || !domains.isEmpty || recordIDs != nil
+    }
 
     /// Whether a hit lies in the scope. A hit does not carry its app's bundle
     /// ID, so a scope of apps includes none.
@@ -47,6 +52,7 @@ struct HistorySearchScope: Equatable, Sendable {
             && (sources.isEmpty || sources.contains(hit.source))
             && bundleIDs.isEmpty
             && (domains.isEmpty || hit.domain.map(domains.contains) == true)
+            && (recordIDs?.contains(hit.recordID) ?? true)
     }
 }
 
@@ -564,19 +570,23 @@ actor HistorySearchIndex {
     /// The records of a scope's sources, apps and domains, as a subquery that
     /// takes the values of `filterValues(of:)` from the given parameter on.
     private static func recordFilter(firstParameter: Int) -> String {
-        let (sources, apps, domains) = (firstParameter, firstParameter + 1, firstParameter + 2)
+        let (sources, apps, domains, uuids) = (firstParameter, firstParameter + 1, firstParameter + 2, firstParameter + 3)
         return """
             (SELECT id FROM records
              WHERE (?\(sources) IS NULL OR source IN (SELECT value FROM json_each(?\(sources))))
                AND (?\(apps) IS NULL OR bundle_id IN (SELECT value FROM json_each(?\(apps))))
-               AND (?\(domains) IS NULL OR domain IN (SELECT value FROM json_each(?\(domains)))))
+               AND (?\(domains) IS NULL OR domain IN (SELECT value FROM json_each(?\(domains))))
+               AND (?\(uuids) IS NULL OR uuid IN (SELECT value FROM json_each(?\(uuids)))))
             """
     }
 
     private static func filterValues(of scope: HistorySearchScope) -> [SQLiteConnection.Value] {
         guard scope.limitsRecords else { return [] }
-        return [scope.sources, scope.bundleIDs, scope.domains].map { values in
-            guard !values.isEmpty, let data = try? JSONEncoder().encode(values.sorted()) else { return .text(nil) }
+        let sets = [scope.sources, scope.bundleIDs, scope.domains].map { $0.isEmpty ? nil : $0 }
+            + [scope.recordIDs.map { Set($0.map(\.uuidString)) }]
+        return sets.map { values in
+            // An empty set of records matches none.
+            guard let values, let data = try? JSONEncoder().encode(values.sorted()) else { return .text(nil) }
             return .text(String(decoding: data, as: UTF8.self))
         }
     }

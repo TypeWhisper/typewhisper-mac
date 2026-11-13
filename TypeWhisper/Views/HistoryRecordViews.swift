@@ -209,6 +209,13 @@ struct HistoryRecordDetailView: View {
         ))
     }
 
+    /// Brings the time a source cited into view, once the record is shown.
+    private func revealRequestedTime() {
+        guard let request = viewModel.recordTimeRequest, request.recordID == record.id else { return }
+        viewModel.recordTimeRequest = nil
+        speakers.reveal(at: request.seconds)
+    }
+
     var body: some View {
         let audioURL = viewModel.audioFileURL(for: record)
         VStack(spacing: 0) {
@@ -253,7 +260,9 @@ struct HistoryRecordDetailView: View {
         .background(Color(nsColor: .textBackgroundColor))
         .onAppear {
             if let audioURL { speakers.playback.load(url: audioURL) }
+            revealRequestedTime()
         }
+        .onChange(of: viewModel.recordTimeRequest) { revealRequestedTime() }
         .onDisappear { speakers.playback.unload() }
         .onChange(of: audioURL) { _, url in
             if let url { speakers.playback.load(url: url) } else { speakers.playback.unload() }
@@ -424,6 +433,15 @@ struct HistoryRecordDetailView: View {
     /// text, and the speaker actions.
     private var headerControls: some View {
         HStack(spacing: 10) {
+            Button {
+                ServiceContainer.shared.askHistoryPanelController.show(scope: AskHistoryConversationScope([record]))
+            } label: {
+                Label(String(localized: "askHistory.askAboutRecording"), systemImage: "text.magnifyingglass")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .help(String(localized: "askHistory.askAboutRecording"))
+
             if record.wasPostProcessed, !showsSpeakerTranscript {
                 Picker(String(localized: "Text Version"), selection: $viewModel.detailViewMode) {
                     Text(String(localized: "Final")).tag(HistoryDetailViewMode.final)

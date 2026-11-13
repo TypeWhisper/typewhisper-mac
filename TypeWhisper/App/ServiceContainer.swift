@@ -137,8 +137,8 @@ final class ServiceContainer: ObservableObject {
             },
             cloudProviders: { [promptProcessingService] in promptProcessingService.historyCloudProviders() },
             prewarm: { [promptProcessingService] in promptProcessingService.prewarmWorkflowLLMProvider(providerOverride: nil) },
-            openRecord: { id in
-                HistoryViewModel.shared.requestOpenRecord(withID: id)
+            openRecord: { id, seconds in
+                HistoryViewModel.shared.requestOpenRecord(withID: id, at: seconds)
                 ManagedAppWindowOpener.shared.open(id: "history")
             },
             openLanguageModelSettings: {

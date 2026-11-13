@@ -35,7 +35,7 @@ final class AskHistoryPanelTests: XCTestCase {
                 hasPremiumAccess: { [unowned self] in self.hasPremium },
                 cloudProviders: { [unowned self] in self.cloudProviders },
                 prewarm: {},
-                openRecord: { _ in },
+                openRecord: { _, _ in },
                 openLanguageModelSettings: {},
                 openPremium: {},
                 isAllowedByPolicy: { [unowned self] in self.isAllowedByPolicy },
@@ -117,6 +117,24 @@ final class AskHistoryPanelTests: XCTestCase {
         model.refreshAccess()
         XCTAssertFalse(model.session.isWorking)
         XCTAssertEqual(model.session.turns.map(\.stage), [.stopped])
+    }
+
+    func testAskingAboutRecordingsStartsANewConversationOnce() throws {
+        cloudProviders = []
+        let model = try makeModel()
+        model.send("Was habe ich heute diktiert?")
+        model.session.stop()
+        let scope = AskHistoryConversationScope.records([UUID()], title: "Kick-off")
+
+        model.ask(about: scope)
+        XCTAssertEqual(model.session.scope, scope)
+        XCTAssertEqual(model.session.turns, [])
+
+        // The same recording again keeps the conversation about it.
+        model.send("Was wurde beschlossen?")
+        model.session.stop()
+        model.ask(about: scope)
+        XCTAssertEqual(model.session.turns.count, 1)
     }
 
     func testWithoutPremiumNothingIsAsked() throws {

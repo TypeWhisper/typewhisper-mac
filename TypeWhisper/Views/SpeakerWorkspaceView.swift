@@ -69,6 +69,11 @@ struct SpeakerWorkspaceView: View {
                 guard model.followsPlayback, model.playback.isPlaying, let id else { return }
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
             }
+            // A source of Ask History opens the recording at the cited passage.
+            .onChange(of: model.revealedParagraphID) { _, id in
+                guard let id else { return }
+                proxy.scrollTo(id, anchor: .center)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

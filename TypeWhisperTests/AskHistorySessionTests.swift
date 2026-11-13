@@ -153,6 +153,31 @@ final class AskHistorySessionTests: XCTestCase {
         XCTAssertFalse(HistorySearchScope(bundleIDs: ["com.tinyspeck.slackmacgap"]).includes(hit))
     }
 
+    func testAQuestionAboutOneRecordingSearchesOnlyItAndReadsItWhenNoWordMatches() async throws {
+        let provider = AnsweringProvider(id: "cloud-llm", name: "Cloud LLM")
+        let session = try await makeSession(providers: [provider])
+        session.providerOverride = "cloud-llm"
+        session.scope = .records([budget], title: "Budget")
+
+        // "Plakate" is in both recordings; only the scoped one is a source.
+        provider.enqueue(.text("900 Euro [1]."))
+        session.ask("Was kosten die Plakate?")
+        try await finish(session)
+        var prompt = try XCTUnwrap(provider.calls.last?.userText)
+        XCTAssertTrue(prompt.contains("900 Euro"), prompt)
+        XCTAssertFalse(prompt.contains("200 Plakate"), prompt)
+
+        // No word of the question is in it: the model reads the recording itself.
+        session.startNewConversation()
+        session.scope = .records([posters], title: "Kick-off")
+        provider.enqueue(.text("Anna bestellt Plakate [1]."))
+        session.ask("Was wurde vereinbart?")
+        try await finish(session)
+        prompt = try XCTUnwrap(provider.calls.last?.userText)
+        XCTAssertTrue(prompt.contains("200 Plakate"), prompt)
+        XCTAssertFalse(prompt.contains("900 Euro"), prompt)
+    }
+
     func testAnOverviewOnALocalModelReportsItsProgress() async throws {
         let provider = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
         let session = try await makeSession(providers: [provider])

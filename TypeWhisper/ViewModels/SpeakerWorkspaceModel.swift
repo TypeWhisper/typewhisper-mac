@@ -42,6 +42,9 @@ final class SpeakerWorkspaceModel: ObservableObject {
     /// Shows only this speaker's turns in the transcript.
     @Published var filteredSpeaker: String?
     @Published var followsPlayback = true
+    /// The paragraph to bring into view without playing, set by `reveal(at:)`.
+    @Published private(set) var revealedParagraphID: Int?
+    private var pendingRevealTime: TimeInterval?
 
     private let recordID: UUID
     private let historyService: HistoryService
@@ -153,6 +156,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
                 Row(paragraph: $1, startsTurn: $0 == 0)
             }
         }
+        applyPendingReveal()
         shares = SpeakerTranscriptPresentation.shares(of: turns)
         speakerIDs = transcript?.speakerIDs ?? []
         let known = Set(speakerIDs)
@@ -203,6 +207,20 @@ final class SpeakerWorkspaceModel: ObservableObject {
             skipsSilence: skipsSilence,
             duration: playback.duration
         )
+    }
+
+    /// Moves playback to `time` without playing and brings its paragraph into
+    /// view, also when the transcript has not loaded yet.
+    func reveal(at time: TimeInterval) {
+        playback.seek(to: time)
+        pendingRevealTime = time
+        applyPendingReveal()
+    }
+
+    private func applyPendingReveal() {
+        guard let time = pendingRevealTime, !rows.isEmpty else { return }
+        pendingRevealTime = nil
+        revealedParagraphID = rows.last { $0.paragraph.start <= time + 0.05 }?.id ?? rows.first?.id
     }
 
     private func updateActivePosition(at time: TimeInterval) {
