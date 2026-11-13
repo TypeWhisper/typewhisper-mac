@@ -453,6 +453,10 @@ class PromptProcessingService: ObservableObject {
         return !setupStatus.requiresExternalCredentials
     }
 
+    /// Set by the app from `AllowHistoryAsk`: false stops every Ask History
+    /// request before it reaches a provider.
+    var isHistoryAskAllowed: () -> Bool = { true }
+
     /// Set by the app: Ask History then sends nothing to a provider off this Mac
     /// that the user has not allowed, whatever the panel showed.
     var requiresHistoryConsent = false
@@ -1061,6 +1065,9 @@ class PromptProcessingService: ObservableObject {
         for candidate in candidates {
             try Task.checkCancellation()
             do {
+                guard isHistoryAskAllowed() else {
+                    throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))
+                }
                 let providerId = normalizeProviderId(candidate.providerId)
                 guard historyMaySend(to: providerId) else {
                     throw AskHistoryConsentMissing(providerName: displayName(for: providerId))

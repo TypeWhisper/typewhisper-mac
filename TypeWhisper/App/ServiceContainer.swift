@@ -257,6 +257,9 @@ final class ServiceContainer: ObservableObject {
         )
         promptProcessingService.memoryService = memoryService
         promptProcessingService.requiresHistoryConsent = true
+        promptProcessingService.isHistoryAskAllowed = { [managedPolicyService] in
+            ManagedAskHistoryPolicy.allowsAskHistory(managedPolicyService.current)
+        }
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()

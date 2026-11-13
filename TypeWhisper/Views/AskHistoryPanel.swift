@@ -59,6 +59,11 @@ final class AskHistoryPanelModel: ObservableObject {
         if isTurnedOff != isTurnedOffByPolicy { isTurnedOffByPolicy = isTurnedOff }
         let hasAccess = environment.hasPremiumAccess()
         if hasAccess != hasPremiumAccess { hasPremiumAccess = hasAccess }
+        // A question that has not reached a provider yet must not send anything now.
+        if !canAsk {
+            session.stop()
+            declineCloudProviders()
+        }
     }
 
     /// Premium and the organization both allow a question.

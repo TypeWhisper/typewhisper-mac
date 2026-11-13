@@ -380,6 +380,18 @@ final class AskHistoryAnswerTests: XCTestCase {
         XCTAssertEqual(answer.providerId, "cloud-llm")
     }
 
+    func testNothingReachesAProviderWhileTheOrganizationTurnsAskHistoryOff() async throws {
+        let provider = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
+        let service = try makeService(providers: [provider])
+        service.isHistoryAskAllowed = { false }
+
+        do {
+            _ = try await service.answerHistoryQuestion(request(sources: [source("Text")]), providerOverride: "local-llm")
+            XCTFail("A turned-off Ask History should refuse")
+        } catch is ManagedPolicyRefusal {}
+        XCTAssertEqual(provider.calls.count, 0)
+    }
+
     func testTheNextProviderOfTheFallbackListAnswersWhenTheFirstFails() async throws {
         let first = AnsweringProvider(id: "first-llm", name: "First LLM")
         first.enqueue(.failure("The provider failed."))

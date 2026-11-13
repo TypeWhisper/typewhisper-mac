@@ -107,6 +107,18 @@ final class AskHistoryPanelTests: XCTestCase {
         XCTAssertEqual(model.session.turns, [])
     }
 
+    func testTurningAskHistoryOffStopsTheRunningQuestion() throws {
+        cloudProviders = []
+        let model = try makeModel()
+        model.send("Was habe ich heute diktiert?")
+        XCTAssertTrue(model.session.isWorking)
+
+        isAllowedByPolicy = false
+        model.refreshAccess()
+        XCTAssertFalse(model.session.isWorking)
+        XCTAssertEqual(model.session.turns.map(\.stage), [.stopped])
+    }
+
     func testWithoutPremiumNothingIsAsked() throws {
         let model = try makeModel(hasPremium: false)
         model.send("Was habe ich heute diktiert?")
