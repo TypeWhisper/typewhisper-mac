@@ -246,6 +246,8 @@ actor HistorySearchIndex {
     private static let passagesForCommonWords = 500
     private static let titleLimit = 20
     private static let newestLimit = 20
+    /// Passages of one record a search keeps. Neighbours among them are joined later.
+    private static let candidatesPerRecord = 6
     private static let substringLimit = 20
     /// With fewer hits than this, a search also looks for the words inside
     /// longer ones: "zahnarzt" in "Kinderzahnarzt".
@@ -277,13 +279,24 @@ actor HistorySearchIndex {
 
             let recordFilter = Self.recordFilter(firstParameter: 5)
             let filtered = scope.limitsRecords ? "AND rowid / \(Self.passagesPerRecord) IN \(recordFilter)" : ""
-            let matching = """
-                SELECT rowid FROM passages_fts
-                WHERE passages_fts MATCH ?1 AND rowid BETWEEN ?2 AND ?3 \(filtered)
-                ORDER BY bm25(passages_fts, 1.0, 3.0) LIMIT ?4
+            // At most a few passages of each record, so one long recording
+            // cannot take every place.
+            func matching(orderedBy order: String) -> String {
                 """
+                SELECT id FROM (
+                    SELECT id, score,
+                        row_number() OVER (PARTITION BY id / \(Self.passagesPerRecord) ORDER BY score) AS place
+                    FROM (
+                        SELECT rowid AS id, \(order) AS score FROM passages_fts
+                        WHERE passages_fts MATCH ?1 AND rowid BETWEEN ?2 AND ?3 \(filtered)
+                    )
+                )
+                WHERE place <= \(Self.candidatesPerRecord)
+                ORDER BY score LIMIT ?4
+                """
+            }
             let found = try connection.rows(
-                matching,
+                matching(orderedBy: "bm25(passages_fts, 1.0, 3.0)"),
                 [.text(expression), .integer(passages.lowerBound), .integer(passages.upperBound),
                  .integer(Int64(limit))] + filter
             ) { $0.integer(0) }
@@ -297,7 +310,7 @@ actor HistorySearchIndex {
             for (offset, passage) in found.enumerated() { add(passage, rank: offset + 1) }
             if includingNewest {
                 let newest = try connection.rows(
-                    matching.replacingOccurrences(of: "bm25(passages_fts, 1.0, 3.0)", with: "rowid DESC"),
+                    matching(orderedBy: "-rowid"),
                     [.text(expression), .integer(passages.lowerBound), .integer(passages.upperBound),
                      .integer(Int64(Self.newestLimit))] + filter
                 ) { $0.integer(0) }

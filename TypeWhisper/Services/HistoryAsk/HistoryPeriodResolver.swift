@@ -43,22 +43,35 @@ struct HistoryPeriodResolver: Sendable {
                 index += 1
                 continue
             }
-            var best: (end: Int, interval: DateInterval)?
-            for rule in Self.rules where rule.applies(to: language) {
-                guard let (end, captures) = Self.match(rule.elements[...], tokens, at: index, Captures()),
-                      end > (best?.end ?? index),
-                      // "Since 2026-11-03" is that day, not the year 2026.
-                      !numeric.contains(where: { $0.range.overlaps(range.lowerBound..<tokens[end - 1].range.upperBound) }),
-                      let interval = interval(for: rule.outcome, captures) else { continue }
-                best = (end, interval)
+            func longestRule(at start: Int) -> (end: Int, interval: DateInterval)? {
+                var best: (end: Int, interval: DateInterval)?
+                for rule in Self.rules where rule.applies(to: language) {
+                    guard let (end, captures) = Self.match(rule.elements[...], tokens, at: start, Captures()),
+                          end > (best?.end ?? start),
+                          // "Since 2026-11-03" is that day, not the year 2026.
+                          !numeric.contains(where: {
+                              $0.range.overlaps(tokens[start].range.lowerBound..<tokens[end - 1].range.upperBound)
+                          }),
+                          let interval = interval(for: rule.outcome, captures) else { continue }
+                    best = (end, interval)
+                }
+                return best
             }
-            guard let best, !Self.isDeadline(tokens, from: index, to: best.end) else {
+            var start = index
+            var best = longestRule(at: index)
+            // "Since November 3, 2025" is that day, not "since November".
+            if let found = best, Self.sinceWords.contains(tokens[index].text), index + 1 < tokens.count,
+               let longer = longestRule(at: index + 1), longer.end > found.end {
+                start = index + 1
+                best = longer
+            }
+            guard let best, !Self.isDeadline(tokens, from: start, to: best.end) else {
                 index = max(best?.end ?? 0, index + 1)
                 continue
             }
             matches.append(Match(
                 range: range.lowerBound..<tokens[best.end - 1].range.upperBound,
-                interval: interval(best.interval, sinceIfIntroducedAt: index, in: tokens)
+                interval: interval(best.interval, sinceIfIntroducedAt: start, in: tokens)
             ))
             index = best.end
         }

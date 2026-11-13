@@ -63,6 +63,7 @@ final class HistoryPeriodResolverTests: XCTestCase {
             ("What did I say on November 3rd?", "en", thirdOfNovember),
             ("What did I say on 2026-11-03?", "en", thirdOfNovember),
             ("What did I say since 2026-11-03?", "en", "2026-11-03/2026-11-13"),
+            ("What did I say since November 3, 2025?", "en", "2025-11-03/2026-11-13"),
             ("What may I have said in March 2026?", "en", "2026-03-01/2026-04-01"),
             ("What did I say in 2025?", "en", lastYear),
             ("Qu'est-ce que j'ai dit hier ?", "fr", yesterday),
@@ -324,6 +325,17 @@ final class HistoryRetrievalTests: XCTestCase {
 
         let found = try await index.search(words: ["Heizung"], limit: 10, includingNewest: true)
         XCTAssertTrue(found.map(\.recordID).contains(records[99].id))
+    }
+
+    func testOneLongRecordDoesNotCrowdOutTheOthers() async throws {
+        let (index, directory) = try makeIndex()
+        defer { TestSupport.remove(directory) }
+        let long = record(passages: (0..<80).map { _ in passage("Heizung Heizung") })
+        let others = (0..<15).map { _ in record(passages: [passage("Die Heizung und noch einiges mehr")]) }
+        try await index.upsert([long] + others)
+
+        let found = try await index.search(words: ["Heizung"])
+        XCTAssertEqual(Set(found.map(\.recordID)), Set(([long] + others).map(\.id)))
     }
 
     func testTheVocabularyNamesSpeakersAppsAndDomainsAndFollowsTheIndex() async throws {
