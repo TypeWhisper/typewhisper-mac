@@ -343,9 +343,10 @@ final class AskHistoryAnswerTests: XCTestCase {
         XCTAssertEqual(answer.providerId, "second-llm")
         XCTAssertEqual(first.calls.count, 1)
 
-        // Without a working provider the failures of all are reported.
+        // Without a working provider the failures of all are reported. An
+        // answer that only cites a missing source is empty.
         first.enqueue(.failure("The provider failed."))
-        second.enqueue(.text("  "))
+        second.enqueue(.text(" [9] "))
         do {
             _ = try await service.answerHistoryQuestion(request(sources: [source("Text")]))
             XCTFail("An empty answer of the last provider should fail the request")

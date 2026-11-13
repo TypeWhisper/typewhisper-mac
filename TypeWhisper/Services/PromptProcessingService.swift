@@ -874,7 +874,9 @@ class PromptProcessingService: ObservableObject {
         var isRetry = false
         while true {
             do {
-                let text = try await processSingleProvider(
+                // Measuring the prompt may have taken a moment.
+                try Task.checkCancellation()
+                let reply = try await processSingleProvider(
                     providerId: providerId,
                     requestedModelId: candidate.modelId,
                     requestedEffortId: candidate.effortId,
@@ -883,12 +885,16 @@ class PromptProcessingService: ObservableObject {
                     temperatureDirective: .inheritProviderSetting,
                     answersPrompt: true,
                     onLocalProviderUsed: onLocalProviderUsed
-                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                try Task.checkCancellation()
+                // An answer of nothing but a citation of a missing source is empty.
+                let text = AskHistoryCitations.withoutUnknownSources(reply, sourceCount: prompt.sources.count)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else {
                     throw LLMFallbackAttemptError.emptyResult
                 }
                 return AskHistoryAnswer(
-                    text: AskHistoryCitations.withoutUnknownSources(text, sourceCount: prompt.sources.count),
+                    text: text,
                     sources: prompt.sources,
                     citedSources: AskHistoryCitations.numbers(in: text, sourceCount: prompt.sources.count),
                     providerId: providerId,
