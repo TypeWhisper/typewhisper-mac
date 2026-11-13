@@ -374,6 +374,24 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         return SpeakerWorkspaceModel(recordID: recordID, historyService: history, defaults: defaults)
     }
 
+    func testRevealingATimeAsksForItsParagraphEachTimeAndClearsTheFilter() throws {
+        let model = try makeModel()
+        model.filteredSpeaker = "S2"
+
+        model.reveal(at: 6.5)
+        let first = try XCTUnwrap(model.revealRequest)
+        XCTAssertEqual(model.rows.first { $0.id == first.paragraphID }?.paragraph.speakerID, "S2")
+        XCTAssertNil(model.filteredSpeaker)
+        XCTAssertFalse(model.playback.isPlaying)
+
+        // The same passage again is a new request, so the view scrolls again.
+        model.didReveal(first)
+        XCTAssertNil(model.revealRequest)
+        model.reveal(at: 6.5)
+        XCTAssertNotEqual(model.revealRequest, first)
+        XCTAssertEqual(model.revealRequest?.paragraphID, first.paragraphID)
+    }
+
     func testAssignMergeAndEditAreStoredAndUndone() throws {
         let model = try makeModel()
         let undoManager = UndoManager()

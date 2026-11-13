@@ -69,6 +69,18 @@ struct SpeakerWorkspaceView: View {
                 guard model.followsPlayback, model.playback.isPlaying, let id else { return }
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
             }
+            // A source of Ask History opens the recording at the cited passage.
+            .onChange(of: model.revealRequest) { _, request in
+                guard let request else { return }
+                proxy.scrollTo(request.paragraphID, anchor: .center)
+                model.didReveal(request)
+            }
+            // The transcript may appear only because a source asked for it.
+            .onAppear {
+                guard let request = model.revealRequest else { return }
+                proxy.scrollTo(request.paragraphID, anchor: .center)
+                model.didReveal(request)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

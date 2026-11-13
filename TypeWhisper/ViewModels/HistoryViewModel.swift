@@ -29,6 +29,13 @@ struct HistoryRecordScrollRequest: Equatable {
     let recordID: UUID
 }
 
+/// A time in a record that its detail view brings into view once it shows the record.
+struct HistoryRecordTimeRequest: Equatable {
+    let id = UUID()
+    let recordID: UUID
+    let seconds: TimeInterval
+}
+
 enum HistoryTimeRange: Int, CaseIterable, Identifiable {
     case sevenDays, thirtyDays, ninetyDays, all
 
@@ -201,6 +208,8 @@ final class HistoryViewModel: ObservableObject {
     }
 
     @Published var records: [TranscriptionRecord] = []
+    /// Set by a source of Ask History, consumed by the record's detail view.
+    @Published var recordTimeRequest: HistoryRecordTimeRequest?
     @Published var selectedRecordIDs: Set<UUID> = [] {
         didSet {
             guard selectedRecordIDs != oldValue else { return }
@@ -459,7 +468,15 @@ final class HistoryViewModel: ObservableObject {
 
     func requestRecordSelection(_ selection: Set<UUID>) {
         guard selection != selectedRecordIDs else { return }
+        // Choosing a record by hand opens it at the top, not at an earlier citation.
+        recordTimeRequest = nil
         prepare(.recordSelection(selection))
+    }
+
+    /// Opens a record, at `seconds` into its speaker transcript when given.
+    func requestOpenRecord(withID id: UUID, at seconds: TimeInterval?) {
+        recordTimeRequest = seconds.map { HistoryRecordTimeRequest(recordID: id, seconds: $0) }
+        requestOpenRecord(withID: id)
     }
 
     func requestOpenRecord(withID id: UUID) {
@@ -522,6 +539,8 @@ final class HistoryViewModel: ObservableObject {
 
     func cancelPendingTransition() {
         pendingTransition = nil
+        // A cited time belongs to the opening the user just cancelled.
+        recordTimeRequest = nil
         objectWillChange.send()
     }
 

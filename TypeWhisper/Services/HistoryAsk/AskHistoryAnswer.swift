@@ -115,6 +115,7 @@ extension AskHistoryRequest {
             sources: retrieval.hits.map(AskHistorySource.init),
             history: history,
             overviewRecordCount: retrieval.recordCount,
+            overviewReadsWholeRecordings: retrieval.readsWholeRecords,
             answerLanguage: plan.language.flatMap { Locale(identifier: "en_US").localizedString(forLanguageCode: $0) },
             now: now,
             timeZone: timeZone

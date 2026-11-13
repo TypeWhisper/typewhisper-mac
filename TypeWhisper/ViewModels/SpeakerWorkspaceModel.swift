@@ -42,6 +42,15 @@ final class SpeakerWorkspaceModel: ObservableObject {
     /// Shows only this speaker's turns in the transcript.
     @Published var filteredSpeaker: String?
     @Published var followsPlayback = true
+    /// A paragraph to bring into view without playing, set by `reveal(at:)`.
+    /// Each request is new, also for the paragraph of the last one.
+    struct RevealRequest: Equatable {
+        let id = UUID()
+        let paragraphID: Int
+    }
+
+    @Published private(set) var revealRequest: RevealRequest?
+    private var pendingRevealTime: TimeInterval?
 
     private let recordID: UUID
     private let historyService: HistoryService
@@ -153,6 +162,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
                 Row(paragraph: $1, startsTurn: $0 == 0)
             }
         }
+        applyPendingReveal()
         shares = SpeakerTranscriptPresentation.shares(of: turns)
         speakerIDs = transcript?.speakerIDs ?? []
         let known = Set(speakerIDs)
@@ -203,6 +213,28 @@ final class SpeakerWorkspaceModel: ObservableObject {
             skipsSilence: skipsSilence,
             duration: playback.duration
         )
+    }
+
+    /// Moves playback to `time` without playing and brings its paragraph into
+    /// view, also when the transcript has not loaded yet.
+    func reveal(at time: TimeInterval) {
+        // A speaker filter could hide the paragraph.
+        filteredSpeaker = nil
+        playback.seek(to: time)
+        pendingRevealTime = time
+        applyPendingReveal()
+    }
+
+    /// Called by the view once it scrolled, so a view that appears later does not scroll again.
+    func didReveal(_ request: RevealRequest) {
+        if revealRequest == request { revealRequest = nil }
+    }
+
+    private func applyPendingReveal() {
+        guard let time = pendingRevealTime, !rows.isEmpty else { return }
+        pendingRevealTime = nil
+        guard let id = rows.last(where: { $0.paragraph.start <= time + 0.05 })?.id ?? rows.first?.id else { return }
+        revealRequest = RevealRequest(paragraphID: id)
     }
 
     private func updateActivePosition(at time: TimeInterval) {

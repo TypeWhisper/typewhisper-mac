@@ -4,21 +4,57 @@
     "askHistory.answer.omitted" : {
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld weitere Aufnahmen sind nicht enthalten."
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weitere Aufnahme ist nicht enthalten."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weitere Aufnahmen sind nicht enthalten."
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld more recordings are not included."
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more recording is not included."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more recordings are not included."
+                }
+              }
+            }
           }
         },
         "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se incluyen %lld grabaciones más."
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No se incluye %lld grabación más."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No se incluyen %lld grabaciones más."
+                }
+              }
+            }
           }
         },
         "ja" : {
@@ -65,6 +101,108 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "由 %@ 回答"
+          }
+        }
+      }
+    },
+    "askHistory.askAboutRecording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragen zu dieser Aufnahme"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask About This Recording"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preguntar sobre esta grabación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この録音について質問"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "询问这条录音"
+          }
+        }
+      }
+    },
+    "askHistory.askAboutRecordings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragen zu diesen Aufnahmen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask About These Recordings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preguntar sobre estas grabaciones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらの録音について質問"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "询问这些录音"
+          }
+        }
+      }
+    },
+    "askHistory.askAboutRecordings.tooMany" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle bis zu %lld Aufnahmen aus, um Fragen zu ihnen zu stellen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select up to %lld recordings to ask about them."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selecciona hasta %lld grabaciones para preguntar sobre ellas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "質問するには %lld 件までの録音を選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多选择 %lld 条录音即可就其提问。"
           }
         }
       }
@@ -142,31 +280,31 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fragen zum Verlauf sendet bei jeder Frage deine Frage, die früheren Fragen und Antworten des Gesprächs und die passenden Auszüge aus deinem Verlauf an %@. Audio, der übrige Verlauf, das Wörterbuch, Statistiken und Gerätekennungen werden nicht gesendet."
+            "value" : "Fragen zum Verlauf sendet bei jeder Frage deine Frage, die früheren Fragen und Antworten des Gesprächs und Auszüge aus deinem Verlauf an %@: die passenden Stellen oder die der Aufnahmen, zu denen du fragst. Audio, der übrige Verlauf, das Wörterbuch, Statistiken und Gerätekennungen werden nicht gesendet."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ask History sends your question, the earlier questions and answers of the conversation, and the matching excerpts from your History to %@ for each question. Audio, the rest of your History, Dictionary, statistics, and device identifiers are not sent."
+            "value" : "Ask History sends your question, the earlier questions and answers of the conversation, and excerpts from your History to %@ for each question: the passages that match it, or those of the recordings you chose to ask about. Audio, the rest of your History, Dictionary, statistics, and device identifiers are not sent."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preguntar al historial envía tu pregunta, las preguntas y respuestas anteriores de la conversación y los fragmentos correspondientes de tu historial a %@ en cada pregunta. No se envían el audio, el resto de tu historial, el diccionario, las estadísticas ni los identificadores del dispositivo."
+            "value" : "Preguntar al historial envía tu pregunta, las preguntas y respuestas anteriores de la conversación y fragmentos de tu historial a %@ en cada pregunta: los que coinciden con ella o los de las grabaciones sobre las que preguntas. No se envían el audio, el resto de tu historial, el diccionario, las estadísticas ni los identificadores del dispositivo."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "履歴への質問では、質問ごとに質問内容、会話内のこれまでの質問と回答、履歴の該当する抜粋を %@ に送信します。音声、その他の履歴、辞書、統計、デバイス識別子は送信されません。"
+            "value" : "履歴への質問では、質問ごとに質問内容、会話内のこれまでの質問と回答、履歴の抜粋（質問に一致する箇所、または質問対象として選んだ録音の箇所）を %@ に送信します。音声、その他の履歴、辞書、統計、デバイス識別子は送信されません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每次提问时，询问历史记录会将你的问题、对话中之前的问题和回答，以及历史记录中匹配的摘录发送给 %@。音频、其余历史记录、词典、统计数据和设备标识符不会被发送。"
+            "value" : "每次提问时，询问历史记录会将你的问题、对话中之前的问题和回答，以及历史记录中的摘录（与问题匹配的段落，或你选择提问的录音中的段落）发送给 %@。音频、其余历史记录、词典、统计数据和设备标识符不会被发送。"
           }
         }
       }
@@ -647,6 +785,74 @@
         }
       }
     },
+    "askHistory.scope.clear" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Den ganzen Verlauf fragen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask All of History"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preguntar a todo el historial"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "履歴全体に質問"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "询问全部历史记录"
+          }
+        }
+      }
+    },
+    "askHistory.scope.records" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld ausgewählte Aufnahmen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Selected Recordings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld grabaciones seleccionadas"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択した %lld 件の録音"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择 %lld 条录音"
+          }
+        }
+      }
+    },
     "askHistory.send" : {
       "localizations" : {
         "de" : {
@@ -820,21 +1026,57 @@
     "askHistory.sources.more" : {
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld weitere Stellen durchsucht"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weitere Stelle durchsucht"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weitere Stellen durchsucht"
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld more passages searched"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more passage searched"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more passages searched"
+                }
+              }
+            }
           }
         },
         "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld fragmentos más revisados"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld fragmento más revisado"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld fragmentos más revisados"
+                }
+              }
+            }
           }
         },
         "ja" : {

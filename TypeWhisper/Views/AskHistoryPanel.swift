@@ -16,7 +16,8 @@ struct AskHistoryPanelEnvironment {
     /// Cloud providers Ask History would try, by ID and name.
     var cloudProviders: () -> [(id: String, name: String)]
     var prewarm: () -> Void
-    var openRecord: (UUID) -> Void
+    /// Opens a record in History, at a time in its speaker transcript when given.
+    var openRecord: (UUID, TimeInterval?) -> Void
     var openLanguageModelSettings: () -> Void
     var openPremium: () -> Void
     /// False while the organization turns Ask History off (`AllowHistoryAsk`).
@@ -118,7 +119,16 @@ final class AskHistoryPanelModel: ObservableObject {
         session.startNewConversation()
     }
 
-    func openRecord(_ id: UUID) { environment.openRecord(id) }
+    /// Starts a new conversation about another part of History, unless the
+    /// current one already asks about it.
+    func ask(about scope: AskHistoryConversationScope) {
+        guard scope != session.scope else { return }
+        startNewConversation()
+        session.scope = scope
+        objectWillChange.send()
+    }
+
+    func openRecord(_ id: UUID, at seconds: TimeInterval?) { environment.openRecord(id, seconds) }
     func openLanguageModelSettings() { environment.openLanguageModelSettings() }
     func openPremium() { environment.openPremium() }
 }
@@ -149,6 +159,12 @@ final class AskHistoryPanelController {
 
     func toggle() {
         isVisible ? hide() : show()
+    }
+
+    /// Opens the panel for a conversation about `scope`, such as one recording.
+    func show(scope: AskHistoryConversationScope) {
+        model.ask(about: scope)
+        show()
     }
 
     func show() {
@@ -290,6 +306,9 @@ struct AskHistoryPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             inputBar
+            if case .records(let ids, let title) = session.scope {
+                AskHistoryScopeChip(title: title, count: ids.count) { model.ask(about: .all) }
+            }
             Divider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -386,6 +405,37 @@ struct AskHistoryPanelView: View {
     }
 }
 
+/// The recordings a conversation asks about, with a button back to all of History.
+private struct AskHistoryScopeChip: View {
+    let title: String
+    let count: Int
+    let onClear: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: count == 1 ? "waveform" : "square.stack")
+                .accessibilityHidden(true)
+            Text(count == 1 ? title : String(format: String(localized: "askHistory.scope.records"), count))
+                .lineLimit(1)
+            Button(action: onClear) {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .help(String(localized: "askHistory.scope.clear"))
+            .accessibilityLabel(String(localized: "askHistory.scope.clear"))
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Color.primary.opacity(0.08)))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct AskHistoryEmptyView: View {
     let onAsk: (String) -> Void
 
@@ -472,6 +522,7 @@ private struct AskHistorySourceRow: Identifiable {
     let title: String
     let date: Date
     let excerpt: String
+    let startSeconds: Double?
     let isCited: Bool
 }
 
@@ -490,7 +541,7 @@ private struct AskHistoryTurnView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 if answer.omittedRecordCount > 0 {
-                    Text(String(format: String(localized: "askHistory.answer.omitted"), answer.omittedRecordCount))
+                    Text(String.localizedStringWithFormat(String(localized: "askHistory.answer.omitted"), Int64(answer.omittedRecordCount)))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -549,7 +600,7 @@ private struct AskHistoryTurnView: View {
                 return AskHistorySourceRow(
                     id: number, number: number, recordID: source.recordID,
                     title: source.title ?? source.origin ?? String(localized: "askHistory.source.untitled"),
-                    date: source.recordedAt, excerpt: source.text,
+                    date: source.recordedAt, excerpt: source.text, startSeconds: source.startSeconds,
                     isCited: answer.citedSources.contains(number)
                 )
             }
@@ -558,7 +609,8 @@ private struct AskHistoryTurnView: View {
             AskHistorySourceRow(
                 id: offset, number: nil, recordID: hit.recordID,
                 title: hit.title ?? hit.appName ?? String(localized: "askHistory.source.untitled"),
-                date: hit.recordedAt, excerpt: hit.passage.text, isCited: false
+                date: hit.recordedAt, excerpt: hit.passage.text, startSeconds: hit.passage.startSeconds,
+                isCited: false
             )
         }
     }
@@ -573,7 +625,7 @@ private struct AskHistoryTurnView: View {
                     .foregroundStyle(.secondary)
                 ForEach(rows) { row in
                     Button {
-                        model.openRecord(row.recordID)
+                        model.openRecord(row.recordID, at: row.startSeconds)
                     } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             if let number = row.number {
@@ -601,7 +653,7 @@ private struct AskHistoryTurnView: View {
                 }
                 let more = turn.found.count - rows.count
                 if more > 0 {
-                    Text(String(format: String(localized: "askHistory.sources.more"), more))
+                    Text(String.localizedStringWithFormat(String(localized: "askHistory.sources.more"), Int64(more)))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }

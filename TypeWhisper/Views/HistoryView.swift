@@ -322,6 +322,7 @@ struct HistoryView: View {
                             viewModel.markComplete(viewModel.selectedRecords)
                         }
                     }
+                    askHistoryButton(about: viewModel.selectedRecords)
                 }
             }
         } else if let record = viewModel.selectedRecord {
@@ -472,6 +473,7 @@ struct HistoryView: View {
             Button(comparisonActionTitle(record)) { comparisonRecord = record }
                 .disabled(viewModel.isDirty || !canCompare(record))
         }
+        askHistoryButton(about: selected)
 
         Menu(String(localized: "Export as…")) {
             Button(String(localized: "Markdown (.md)")) { export(selected, as: .markdown) }
@@ -492,6 +494,19 @@ struct HistoryView: View {
         Button(String(localized: "Delete"), role: .destructive) {
             viewModel.requestDeletion(of: Set(selected.map(\.id)))
         }
+    }
+
+    /// Opens Ask History for one recording or a selection of up to 50.
+    private func askHistoryButton(about records: [TranscriptionRecord]) -> some View {
+        Button(records.count == 1
+            ? String(localized: "askHistory.askAboutRecording")
+            : String(localized: "askHistory.askAboutRecordings")) {
+            ServiceContainer.shared.askHistoryPanelController.show(scope: AskHistoryConversationScope(records))
+        }
+        .disabled(records.isEmpty || records.count > AskHistorySession.maximumScopedRecords)
+        .help(records.count > AskHistorySession.maximumScopedRecords
+            ? String(format: String(localized: "askHistory.askAboutRecordings.tooMany"), AskHistorySession.maximumScopedRecords)
+            : "")
     }
 
     private func copy(_ text: String) {

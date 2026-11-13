@@ -7,6 +7,9 @@ struct HistoryRetrieval: Equatable, Sendable {
     /// For an overview, the number of records in its scope, of which `hits`
     /// holds the newest.
     var recordCount: Int?
+    /// For an overview of chosen recordings: `hits` holds their passages in
+    /// order, not only each one's first.
+    var readsWholeRecords = false
 }
 
 /// Finds the passages of History that a search plan asks for.
