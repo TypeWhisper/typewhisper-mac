@@ -207,8 +207,12 @@ final class HistoryService: ObservableObject {
 
     private(set) var totalRecords: Int = 0
 
-    /// Sends each change after it was saved, on the main actor.
+    /// Sends each change on the main actor, after the save. A failed save is only
+    /// logged and its change is still sent, so code that reads records on a context
+    /// of its own may not find the change there.
     let changes = PassthroughSubject<HistoryRecordChange, Never>()
+    /// Reads records for the search index off the main actor.
+    var searchRecordReader: HistorySearchRecordReader { HistorySearchRecordReader(container: modelContainer) }
     /// Preserve local enrollment evidence before a name or speaker correction.
     var onSpeakerNamesWillChange: ((TranscriptionRecord) throws -> Void)?
     /// A pending detector must finish before a version replaces the text it captured.

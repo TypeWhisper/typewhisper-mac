@@ -62,6 +62,7 @@ final class ServiceContainer: ObservableObject {
     let textInsertionService: TextInsertionService
     let historyService: HistoryService
     let historySyncPreferences: HistorySyncPreferences
+    let historySearchIndexer: HistorySearchIndexer
     let usageStatisticsService: UsageStatisticsService
     let recentTranscriptionStore: RecentTranscriptionStore
     let textDiffService: TextDiffService
@@ -407,6 +408,20 @@ final class ServiceContainer: ObservableObject {
         watchFolderService.speakerLabeler = { [speakerCoordinator] result, samples in
             try await speakerCoordinator.labelingSpeakers(in: result, samples: samples)
         }
+        historySearchIndexer = HistorySearchIndexer(
+            historyService: historyService,
+            isEnabled: { [speakerCoordinator] in
+                UserDefaults.standard.bool(forKey: UserDefaultsKeys.historySearchIndexEnabled)
+                    && speakerCoordinator.hasPremiumAccess
+            },
+            isBusy: { [dictationViewModel, audioRecorderViewModel] in
+                let isDictating = switch dictationViewModel.state {
+                case .recording, .processing, .inserting, .promptProcessing: true
+                case .idle, .promptSelection, .error: false
+                }
+                return isDictating || audioRecorderViewModel.state != .idle || audioRecorderViewModel.isTranscribing
+            }
+        )
         speakerTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
             audioFileService: audioFileService,
@@ -638,6 +653,7 @@ final class ServiceContainer: ObservableObject {
         calendarMeetingAutomationController.initialize()
         historyService.failInterruptedSpeakerTranscripts()
         speakerVoiceProfileService.removeEmbeddingsOfDeletedRecordings()
+        historySearchIndexer.checkAfterLaunch()
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()

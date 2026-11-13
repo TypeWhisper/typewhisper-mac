@@ -126,10 +126,12 @@ enum UserDataExportService {
 
     /// Top-level entries of the Application Support folder that are not
     /// exported: installed plugin bundles, the marketplace cache, legacy model
-    /// downloads, the local API port/token files, and voice profiles, which
-    /// are biometric data that stays on this Mac.
+    /// downloads, the local API port/token files, voice profiles, which are
+    /// biometric data that stays on this Mac, and History's search index, which
+    /// is built again from the exported History.
     static let excludedTopLevelNames: Set<String> = [
         "Plugins", "MarketplaceCache", "models", "api-port", "api-discovery.json", "VoiceProfiles",
+        HistorySearchIndex.directoryName,
     ]
 
     /// Model download folders inside `PluginData/<pluginId>/`, compared

@@ -132,6 +132,8 @@ enum UserDefaultsKeys {
     // MARK: - History
     static let historyEnabled = "historyEnabled"
     static let historyRetentionDays = "historyRetentionDays"
+    /// Whether History's search index is kept. Off until a feature that searches it is used.
+    static let historySearchIndexEnabled = "historySearchIndexEnabled"
     static let saveAudioWithHistory = "saveAudioWithHistory"
 
     // MARK: - Notch Indicator
