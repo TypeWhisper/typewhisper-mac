@@ -1,0 +1,717 @@
+[
+ {
+  "question": "Wie viele Plakate bestellt Anna bei der Druckerei?",
+  "expected": [
+   "r001"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Was kostet die Klassenfahrt nach Lüneburg?",
+  "expected": [
+   "r005"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wann ist der Kuchenbasar?",
+  "expected": [
+   "r005"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wie hoch ist das Umsatzziel für das erste Quartal?",
+  "expected": [
+   "r007"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Bis wann muss das CRM auf HubSpot umgestellt sein?",
+  "expected": [
+   "r007"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Was hat Dr. Hoffmann empfohlen?",
+  "expected": [
+   "r010"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wie war mein Blutdruck?",
+  "expected": [
+   "r010"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Was kostet die Sanierung vom Dach des Bootshauses?",
+  "expected": [
+   "r012"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Welche Zutaten gehören in die Rouladen von Oma Gerda?",
+  "expected": [
+   "r014"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wo steht das Auto im Parkhaus?",
+  "expected": [
+   "r023"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Welche Belege braucht die Steuerberaterin?",
+  "expected": [
+   "r024"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Was kostet die Ferienwohnung in Meran?",
+  "expected": [
+   "r025"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wie lautet die Rechnungsnummer der Waschmaschine?",
+  "expected": [
+   "r026"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wie viele Gäste passen in den Saal von Gut Sonnenhof?",
+  "expected": [
+   "r021"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Was kostet die Fotografin für die Hochzeit?",
+  "expected": [
+   "r021"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Welches Buch hat Katrin empfohlen?",
+  "expected": [
+   "r033"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wo muss ich den Schlüssel für den Heizungsableser abgeben?",
+  "expected": [
+   "r032"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Mit welchem Stück starten wir im Jazzkeller?",
+  "expected": [
+   "r031"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wie viele Tagessätze stehen im Angebot an Firma Seidel?",
+  "expected": [
+   "r009"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wann ist die Aufzeichnung der Podcast-Folge?",
+  "expected": [
+   "r035"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Welche Schadennummer hat der Fall mit dem Rotweinglas?",
+  "expected": [
+   "r040"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wo ist das Speicherleck im Audio-Puffer?",
+  "expected": [
+   "r015"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Ab wann gilt das Barrierefreiheitsstärkungsgesetz für Onlineshops?",
+  "expected": [
+   "r041"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Was muss ich zum Kinderzahnarzt mitbringen?",
+  "expected": [
+   "r008"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Wie viel bekommen wir aus der Nebenkostenabrechnung zurück?",
+  "expected": [
+   "r017"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Auf welche Zeit wird die Kernarbeitszeit verkürzt?",
+  "expected": [
+   "r022"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Why will the staging server be down tonight?",
+  "expected": [
+   "r043"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Where do users drop out of the onboarding flow?",
+  "expected": [
+   "r044"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "When does the passport need to be renewed?",
+  "expected": [
+   "r045"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "How long is our runway?",
+  "expected": [
+   "r047"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "How many seats are in the annual plan for Tom?",
+  "expected": [
+   "r049"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "What should the waveform view be throttled to?",
+  "expected": [
+   "r048"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "What were the gift ideas for Dad's seventieth?",
+  "expected": [
+   "r051"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Where does the Calvin cycle happen?",
+  "expected": [
+   "r052"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "When does the Windows beta ship?",
+  "expected": [
+   "r053"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "What is the claim number for the late suitcase?",
+  "expected": [
+   "r059"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "How long does the lemon drizzle cake bake?",
+  "expected": [
+   "r056"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "What student discount does Sophie want to test?",
+  "expected": [
+   "r060"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Combien coûte le billet de train pour Lyon ?",
+  "expected": [
+   "r061"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Pourquoi la livraison des pièces détachées est-elle repoussée ?",
+  "expected": [
+   "r062"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Perché devo chiamare l'idraulico?",
+  "expected": [
+   "r064"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Di quanto è cresciuto il fatturato?",
+  "expected": [
+   "r065"
+  ],
+  "kind": "lookup"
+ },
+ {
+  "question": "Was wurde zu den Plakaten und Flyern beschlossen?",
+  "expected": [
+   "r001"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Wann ist der Zahnarzttermin von Emil?",
+  "expected": [
+   "r008"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Was stand im Kommentar zur Wiederholung bei Ausfällen?",
+  "expected": [
+   "r011"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Was habe ich dem Moebelhaendler geschrieben?",
+  "expected": [
+   "r020"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Wer vertritt Anna waehrend ihres Urlaubs?",
+  "expected": [
+   "r042"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Welche Mitgliedsnummer hat mein Fitnessstudio-Vertrag?",
+  "expected": [
+   "r030"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Was mache ich mit den Tomaten und Himbeeren im Garten?",
+  "expected": [
+   "r039"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Wann kann ich das Rad aus der Werkstatt holen?",
+  "expected": [
+   "r038"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Was steht auf der Liste für den Umzug?",
+  "expected": [
+   "r037"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Wie lange wartet der Teilnehmer auf Arzttermine?",
+  "expected": [
+   "r018"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Which tests were flaky in the sprint?",
+  "expected": [
+   "r050"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "What did the landlord need to repair in the flat?",
+  "expected": [
+   "r054"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "What were my takeaways from the conference keynote?",
+  "expected": [
+   "r058"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "How far was my long run by the river?",
+  "expected": [
+   "r055"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "What is blocking Priya in the App Store review?",
+  "expected": [
+   "r057"
+  ],
+  "kind": "forms"
+ },
+ {
+  "question": "Was habe ich über höhenverstellbare Tische notiert?",
+  "expected": [
+   "r006"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Warum gehe ich nicht zum Sport?",
+  "expected": [
+   "r013"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Was soll ich aus dem Supermarkt für das Baby mitbringen?",
+  "expected": [
+   "r029"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Welche Rückmeldung habe ich dem Werkstudenten zu seinen Folien gegeben?",
+  "expected": [
+   "r034"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Wann kommt jemand wegen der kaputten Wärme im Wohnzimmer?",
+  "expected": [
+   "r003"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "What did we decide about the price of yearly subscriptions?",
+  "expected": [
+   "r060"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Who is going to redo the tablet images for the store?",
+  "expected": [
+   "r057"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "What did I write about fixing the kitchen appliance?",
+  "expected": [
+   "r054"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "What was decided about posters for the trade fair?",
+  "expected": [
+   "r001"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Which book should I read on holiday?",
+  "expected": [
+   "r033"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Wie viel Geld gibt die Chefetage für Drucksachen frei?",
+  "expected": [
+   "r001"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Wann fahren die Drittklässler weg und wie teuer wird das?",
+  "expected": [
+   "r005"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Was hat der Arzt zu meiner Ernährung und Bewegung gesagt?",
+  "expected": [
+   "r010"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Wann läuft mein Sportvertrag aus?",
+  "expected": [
+   "r030"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Wo habe ich mein Fahrzeug abgestellt?",
+  "expected": [
+   "r023"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Was brauche ich für das Schmorgericht meiner Großmutter?",
+  "expected": [
+   "r014"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "How long does our money last according to the investor update?",
+  "expected": [
+   "r047"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Which part of the sign-up loses the most people?",
+  "expected": [
+   "r044"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "From when on may nothing be shipped?",
+  "expected": [
+   "r050"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "How much does the trip to South Tyrol cost?",
+  "expected": [
+   "r025"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "What did Anna order from the print shop?",
+  "expected": [
+   "r001"
+  ],
+  "kind": "meaning"
+ },
+ {
+  "question": "Was habe ich gestern in Slack geschrieben?",
+  "expected": [
+   "r002"
+  ],
+  "kind": "period",
+  "platform": "mac"
+ },
+ {
+  "question": "Was habe ich gestern über den Release gesagt?",
+  "expected": [
+   "r002"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "Was wurde letzte Woche beim Elternabend besprochen?",
+  "expected": [
+   "r005"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "Welche Termine habe ich letzte Woche notiert?",
+  "expected": [
+   "r008"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "Was wurde am Montag über das Budget gesagt?",
+  "expected": [
+   "r001"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "Was haben wir vorgestern zum Newsletter entschieden?",
+  "expected": [
+   "r027"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "Was habe ich im Oktober über ein Angebot diktiert?",
+  "expected": [
+   "r009"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "What did Marcus say yesterday?",
+  "expected": [
+   "r057"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "What did we discuss about onboarding last week?",
+  "expected": [
+   "r044"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "What did I note about the server two days ago?",
+  "expected": [
+   "r043"
+  ],
+  "kind": "period"
+ },
+ {
+  "question": "Was hat Carla zum Budget gesagt?",
+  "expected": [
+   "r001",
+   "r027"
+  ],
+  "kind": "people"
+ },
+ {
+  "question": "Was hat Farid zu den Abstürzen gesagt?",
+  "expected": [
+   "r015"
+  ],
+  "kind": "people"
+ },
+ {
+  "question": "Was hat Frau Keller über die Lesepaten gesagt?",
+  "expected": [
+   "r005"
+  ],
+  "kind": "people"
+ },
+ {
+  "question": "Was schlägt Tobias zur Provision vor?",
+  "expected": [
+   "r007"
+  ],
+  "kind": "people"
+ },
+ {
+  "question": "What did Elena promise for Wednesday?",
+  "expected": [
+   "r044"
+  ],
+  "kind": "people"
+ },
+ {
+  "question": "What did Chloe say about the deploy freeze?",
+  "expected": [
+   "r050"
+  ],
+  "kind": "people"
+ },
+ {
+  "question": "What did Daniel say about hiring?",
+  "expected": [
+   "r047"
+  ],
+  "kind": "people"
+ },
+ {
+  "question": "Was habe ich auf github.com zum Pull Request geschrieben?",
+  "expected": [
+   "r011"
+  ],
+  "kind": "place",
+  "platform": "mac"
+ },
+ {
+  "question": "What did I dictate in Xcode about redrawing?",
+  "expected": [
+   "r048"
+  ],
+  "kind": "place",
+  "platform": "mac"
+ },
+ {
+  "question": "Was habe ich auf der Watch zum Parkhaus notiert?",
+  "expected": [
+   "r023"
+  ],
+  "kind": "place",
+  "platform": "mac"
+ },
+ {
+  "question": "Was habe ich in Mail an Herrn Brandt geschrieben?",
+  "expected": [
+   "r003"
+  ],
+  "kind": "place",
+  "platform": "mac"
+ },
+ {
+  "question": "What did I write on notion.so about the roadmap?",
+  "expected": [
+   "r053"
+  ],
+  "kind": "place",
+  "platform": "mac"
+ },
+ {
+  "question": "Was steht im Protokoll, das ich unter Windows diktiert habe?",
+  "expected": [
+   "r022"
+  ],
+  "kind": "place",
+  "platform": "mac"
+ }
+]
