@@ -1009,6 +1009,10 @@ class PromptProcessingService: ObservableObject {
     ) async throws -> String {
         // Measuring a prompt or an earlier step may have taken a moment.
         try Task.checkCancellation()
+        // Also between the parts of one summary and before a retry.
+        guard isHistoryAskAllowed() else {
+            throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))
+        }
         let reply = try await processSingleProvider(
             providerId: normalizeProviderId(candidate.providerId),
             requestedModelId: candidate.modelId,
