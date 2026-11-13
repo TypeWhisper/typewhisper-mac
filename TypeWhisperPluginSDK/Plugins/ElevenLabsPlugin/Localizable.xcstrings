@@ -309,30 +309,30 @@
         }
       }
     },
-    "REST only (Batch Scribe v2)": {
+    "REST only (Batch)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nur REST (Batch Scribe v2)"
+            "value": "Nur REST (Batch)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Solo REST (Scribe v2 por lotes)"
+            "value": "Solo REST (por lotes)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "RESTのみ（バッチScribe v2）"
+            "value": "RESTのみ（バッチ）"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仅 REST（批量 Scribe v2）"
+            "value": "仅 REST（批量）"
           }
         }
       }
@@ -781,6 +781,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "针对临床音频优化，价格与 Scribe v2 相同。仅支持批处理，不支持实时流式转写。"
+          }
+        }
+      }
+    },
+    "In Auto mode, dictations stream with %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Modus Automatisch streamen Diktate mit %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En modo Auto, los dictados se transmiten con %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動モードでは、音声入力を%@でストリーミングします。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在自动模式下，听写使用 %@ 进行流式传输。"
           }
         }
       }
