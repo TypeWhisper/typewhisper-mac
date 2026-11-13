@@ -60,7 +60,7 @@ final class AskHistoryPromptBuilderTests: XCTestCase {
             CONVERSATION
             User: Wer war beim Kick-off?
 
-            Assistant: Anna, Ben und Carla [1].
+            Assistant: Anna, Ben und Carla.
             END_CONVERSATION
 
             QUESTION
@@ -135,6 +135,16 @@ final class AskHistoryPromptBuilderTests: XCTestCase {
         XCTAssertEqual(prompt.history.first?.text, "Frage 2")
     }
 
+    func testEarlierAnswersLoseTheirCitationsBecauseTheSourcesAreNumberedAnew() {
+        let turns = [
+            AskHistoryTurn(role: .user, text: "Was bestellt Anna [1]?"),
+            AskHistoryTurn(role: .assistant, text: "Anna bestellt 200 Plakate [1] bei Müller [1, 3]."),
+        ]
+        let prompt = AskHistoryPromptBuilder.prompt(for: request(sources: [source("Text")], history: turns), budget: wideBudget)
+
+        XCTAssertEqual(prompt.history.map(\.text), ["Was bestellt Anna [1]?", "Anna bestellt 200 Plakate bei Müller."])
+    }
+
     func testARequestFromASearchNamesTheQuestionsLanguageAndItsSources() {
         let plan = AskHistoryPlanner(now: date(12), calendar: Calendar(identifier: .gregorian))
             .plan(for: "Wie viele Plakate bestellt Anna bei der Druckerei Müller in dieser Woche?")
@@ -166,6 +176,17 @@ final class AskHistoryPromptBuilderTests: XCTestCase {
 
         let whole = AskHistoryPromptBuilder.prompt(for: request(sources: sources, overviewRecordCount: 2), budget: wideBudget)
         XCTAssertTrue(whole.instructions.contains("the beginning of every recording"), whole.instructions)
+    }
+
+    func testAnOverviewKeepsTheNewestRecordingsWithoutAGap() {
+        let sources = [source(String(repeating: "a", count: 600)), source(String(repeating: "b", count: 600)), source("Kurz.")]
+        let prompt = AskHistoryPromptBuilder.prompt(
+            for: request(sources: sources, overviewRecordCount: 3),
+            budget: AskHistoryBudget(sourceCharacters: 1_000, historyCharacters: 0)
+        )
+
+        XCTAssertEqual(prompt.sources, [sources[0]])
+        XCTAssertTrue(prompt.instructions.contains("the newest 1 of 3 recordings"), prompt.instructions)
     }
 }
 

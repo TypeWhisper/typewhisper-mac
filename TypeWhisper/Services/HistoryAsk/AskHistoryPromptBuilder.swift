@@ -105,6 +105,9 @@ enum AskHistoryPromptBuilder {
             var text = sourceText(source.text)
             let room = budget.sourceCharacters - used - header.count - 2
             if text.count > room {
+                // An overview keeps the newest recordings without a gap, as its
+                // instructions say.
+                if request.overviewRecordCount != nil, !sources.isEmpty { break }
                 // The best source is shortened when it alone is too long. Later
                 // ones are left out, and a shorter one after them may still fit.
                 guard sources.isEmpty, room > omissionMarker.count + 1 else { continue }
@@ -121,7 +124,12 @@ enum AskHistoryPromptBuilder {
             sources: sources,
             sourcesSection: (["SOURCES"] + entries + ["END_SOURCES"]).joined(separator: "\n"),
             history: trimmedHistory(
-                request.history.map { AskHistoryTurn(role: $0.role, text: neutralized($0.text)) },
+                // An earlier answer's numbers name the sources of its own
+                // request, which the current numbers may not match.
+                request.history.map { turn in
+                    let text = turn.role == .assistant ? AskHistoryCitations.withoutCitations(turn.text) : turn.text
+                    return AskHistoryTurn(role: turn.role, text: neutralized(text))
+                },
                 maximumCharacters: budget.historyCharacters
             ),
             question: neutralized(request.question)

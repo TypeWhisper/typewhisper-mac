@@ -37,6 +37,19 @@ enum AskHistoryCitations {
         return result as String
     }
 
+    /// The answer without any citation, for a conversation whose sources have changed.
+    static func withoutCitations(_ answer: String) -> String {
+        var result = answer as NSString
+        for match in matches(in: answer).reversed() {
+            var range = match.range
+            if range.location > 0, result.substring(with: NSRange(location: range.location - 1, length: 1)) == " " {
+                range = NSRange(location: range.location - 1, length: range.length + 1)
+            }
+            result = result.replacingCharacters(in: range, with: "") as NSString
+        }
+        return result as String
+    }
+
     private static func matches(in answer: String) -> [(range: NSRange, numbers: [Int])] {
         let source = answer as NSString
         let whole = NSRange(location: 0, length: source.length)
