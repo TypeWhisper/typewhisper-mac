@@ -258,7 +258,9 @@ final class ServiceContainer: ObservableObject {
         promptProcessingService.memoryService = memoryService
         promptProcessingService.requiresHistoryConsent = true
         promptProcessingService.isHistoryAskAllowed = { [managedPolicyService] in
-            ManagedAskHistoryPolicy.allowsAskHistory(managedPolicyService.current)
+            // A profile change would reach the snapshot only on the next refresh, up to
+            // 30 seconds later. A changed policy is also published, which stops the panel.
+            ManagedAskHistoryPolicy.allowsAskHistoryNow(managedPolicyService)
         }
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)

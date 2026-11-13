@@ -162,6 +162,13 @@ enum ManagedAskHistoryPolicy {
         guard !snapshot.isBlocked(ManagedPolicyKeys.allowHistoryAsk) else { return false }
         return snapshot.resolveBoolean(ManagedPolicyKeys.allowHistoryAsk, applicationDefault: true).value
     }
+
+    /// Reads the managed preferences afresh, so a profile change applies to the next
+    /// request instead of after the next periodic refresh. A changed policy is published too.
+    @MainActor
+    static func allowsAskHistoryNow(_ service: ManagedPolicyService) -> Bool {
+        allowsAskHistory(service.refresh())
+    }
 }
 
 /// What first-time setup needs before `SkipOnboardingWhenReady` may keep it closed.

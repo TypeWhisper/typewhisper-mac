@@ -454,8 +454,8 @@ class PromptProcessingService: ObservableObject {
     }
 
     /// Set by the app from `AllowHistoryAsk`: false stops every Ask History
-    /// request before it reaches a provider.
-    var isHistoryAskAllowed: () -> Bool = { true }
+    /// request before it reaches a provider. Asked right before each request.
+    var isHistoryAskAllowed: @MainActor () -> Bool = { true }
 
     /// Set by the app: Ask History then sends nothing to a provider off this Mac
     /// that the user has not allowed, whatever the panel showed.
