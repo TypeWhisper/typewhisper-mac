@@ -422,6 +422,8 @@ final class AnsweringProvider: NSObject, LLMProviderPlugin, LLMProviderIdentityP
     enum Reply {
         case text(String)
         case failure(String)
+        /// As if a managed policy refused the provider.
+        case refusal(String)
     }
 
     struct Failure: LocalizedError {
@@ -475,6 +477,7 @@ final class AnsweringProvider: NSObject, LLMProviderPlugin, LLMProviderIdentityP
         switch reply {
         case .text(let text): return text
         case .failure(let message): throw Failure(message: message)
+        case .refusal(let reason): throw ManagedPolicyRefusal(reason: reason)
         }
     }
 }

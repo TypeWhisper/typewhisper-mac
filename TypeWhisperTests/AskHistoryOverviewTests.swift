@@ -308,9 +308,10 @@ final class AskHistoryOverviewTests: XCTestCase {
         XCTAssertEqual(answer.providerName, "Local LLM")
         XCTAssertTrue(local.calls[0].systemPrompt.hasPrefix("You summarize one recording"))
 
-        // A recording gone since the search leaves nothing to list, and the model says so.
+        // A recording gone since the search leaves nothing to list, and the model
+        // says so. A policy that refuses the cloud provider leaves the local one.
         try await index.remove([id])
-        cloud.enqueue(.failure("The provider failed."))
+        cloud.enqueue(.refusal("Cloud providers are not allowed."))
         local.enqueue(.text("Keine Aufnahmen."))
         answer = try await overview.answer(plan: plan, retrieval: retrieval)
         XCTAssertEqual(answer.text, "Keine Aufnahmen.")

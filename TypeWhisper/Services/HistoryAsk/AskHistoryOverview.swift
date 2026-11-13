@@ -36,6 +36,7 @@ struct AskHistoryOverview {
         // Each run of the provider list writes the overview its own way, so a
         // local model that stands in for a cloud one still summarizes.
         var failures: [LLMFallbackAttemptFailure] = []
+        var refusal: ManagedPolicyRefusal?
         for run in service.historyOverviewRuns(providerOverride: providerOverride) {
             do {
                 if run.usesSummaries, let answer = try await summarized(
@@ -53,8 +54,12 @@ struct AskHistoryOverview {
                 )
             } catch let error as LLMFallbackExhaustedError {
                 failures += error.failures
+            } catch let error as ManagedPolicyRefusal {
+                // A run the policy refuses whole; a later one may be allowed.
+                refusal = refusal ?? error
             }
         }
+        if failures.isEmpty, let refusal { throw refusal }
         throw LLMFallbackExhaustedError(failures: failures)
     }
 
