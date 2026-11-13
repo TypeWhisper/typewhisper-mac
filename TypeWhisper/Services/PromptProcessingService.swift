@@ -836,34 +836,54 @@ class PromptProcessingService: ObservableObject {
         providerOverride: String? = nil,
         cloudModelOverride: String? = nil,
         effortOverride: String? = nil
-    ) async throws -> String {
+    ) async throws -> (text: String, providerId: String) {
         try await tryingHistoryProviders(
             providerOverride: providerOverride, cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
         ) { candidate, onLocalProviderUsed in
-            let kind = self.historyProviderKind(of: self.normalizeProviderId(candidate.providerId))
-            var summaries: [String] = []
-            let parts = AskHistoryBudget.parts(of: passages, maximumCharacters: AskHistoryBudget.summaryCharacters(for: kind))
-            for (offset, part) in parts.enumerated() {
-                try Task.checkCancellation()
-                summaries.append(try await self.historyCompletion(
-                    from: candidate,
-                    instructions: AskHistoryPromptBuilder.summaryInstructions,
-                    prompt: AskHistoryPromptBuilder.summaryPrompt(
-                        of: part, title: title, part: offset + 1, partCount: parts.count
-                    ),
-                    onLocalProviderUsed: onLocalProviderUsed
-                ))
+            let providerId = self.normalizeProviderId(candidate.providerId)
+            var maximumCharacters = AskHistoryBudget.summaryCharacters(for: self.historyProviderKind(of: providerId))
+            while true {
+                do {
+                    let text = try await self.summary(
+                        of: AskHistoryBudget.parts(of: passages, maximumCharacters: maximumCharacters), title: title,
+                        from: candidate, onLocalProviderUsed: onLocalProviderUsed
+                    )
+                    return (text, providerId)
+                } catch where !Task.isCancelled && LLMContextLimit.isReported(by: error)
+                    && maximumCharacters > AskHistoryBudget.minimumSummaryCharacters {
+                    // Text such as Chinese takes more tokens per character.
+                    maximumCharacters /= 2
+                    logger.info("History summary exceeded the context of \(providerId, privacy: .public); trying smaller parts")
+                }
             }
-            guard summaries.count > 1 else {
-                return summaries.first ?? ""
-            }
-            return try await self.historyCompletion(
-                from: candidate,
-                instructions: AskHistoryPromptBuilder.combinedSummaryInstructions,
-                prompt: AskHistoryPromptBuilder.combinedSummaryPrompt(of: summaries),
-                onLocalProviderUsed: onLocalProviderUsed
-            )
         }
+    }
+
+    private func summary(
+        of parts: [String],
+        title: String?,
+        from candidate: LLMFallbackPriorityItem,
+        onLocalProviderUsed: (any LLMProviderPlugin) -> Void
+    ) async throws -> String {
+        var summaries: [String] = []
+        for (offset, part) in parts.enumerated() {
+            try Task.checkCancellation()
+            summaries.append(try await historyCompletion(
+                from: candidate,
+                instructions: AskHistoryPromptBuilder.summaryInstructions,
+                prompt: AskHistoryPromptBuilder.summaryPrompt(of: part, title: title, part: offset + 1, partCount: parts.count),
+                onLocalProviderUsed: onLocalProviderUsed
+            ))
+        }
+        guard summaries.count > 1 else {
+            return summaries.first ?? ""
+        }
+        return try await historyCompletion(
+            from: candidate,
+            instructions: AskHistoryPromptBuilder.combinedSummaryInstructions,
+            prompt: AskHistoryPromptBuilder.combinedSummaryPrompt(of: summaries),
+            onLocalProviderUsed: onLocalProviderUsed
+        )
     }
 
     /// Asks a model to make a follow-up question stand alone and to name what

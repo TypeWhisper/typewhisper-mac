@@ -98,23 +98,29 @@ final class AskHistoryOverviewTests: XCTestCase {
 
         // Only what was said, in order.
         let transcript = try await index.transcript(ofRecord: meeting)
-        XCTAssertEqual(transcript.map(\.text), ["Anna: Erster Teil.", "Ben: Zweiter Teil."])
-        var summary = try await index.summary(ofRecord: meeting)
+        XCTAssertEqual(transcript?.passages.map(\.text), ["Anna: Erster Teil.", "Ben: Zweiter Teil."])
+        XCTAssertEqual(transcript?.contentHash, "1")
+        var summary = try await index.summary(ofRecord: meeting)?.text
         XCTAssertNil(summary)
 
-        try await index.setSummary("Zwei Teile.", ofRecord: meeting)
-        try await index.setSummary("Notiz.", ofRecord: note)
-        try await index.setSummary("Unbekannt.", ofRecord: UUID())
-        summary = try await index.summary(ofRecord: meeting)
-        XCTAssertEqual(summary, "Zwei Teile.")
+        try await index.setSummary("Zwei Teile.", providerId: "local-llm", ofRecord: meeting, contentHash: "1")
+        try await index.setSummary("Notiz.", providerId: "local-llm", ofRecord: note, contentHash: "1")
+        try await index.setSummary("Unbekannt.", providerId: "local-llm", ofRecord: UUID(), contentHash: "1")
+        let kept = try await index.summary(ofRecord: meeting)
+        XCTAssertEqual(kept?.text, "Zwei Teile.")
+        XCTAssertEqual(kept?.providerId, "local-llm")
 
         // A changed record loses its summary, a removed one too.
         try await index.upsert([indexedRecord(meeting, hash: "2", passages: [spoken("Anna: Neuer Text.")])])
-        summary = try await index.summary(ofRecord: meeting)
+        summary = try await index.summary(ofRecord: meeting)?.text
+        XCTAssertNil(summary)
+        // A summary of the text before the change, finished after it, is not kept.
+        try await index.setSummary("Zwei Teile.", providerId: "local-llm", ofRecord: meeting, contentHash: "1")
+        summary = try await index.summary(ofRecord: meeting)?.text
         XCTAssertNil(summary)
         try await index.remove([note])
         try await index.upsert([indexedRecord(note, passages: [spoken("Eine Notiz.")])])
-        summary = try await index.summary(ofRecord: note)
+        summary = try await index.summary(ofRecord: note)?.text
         XCTAssertNil(summary)
     }
 
@@ -126,7 +132,8 @@ final class AskHistoryOverviewTests: XCTestCase {
         let short = try await service.summarizeHistoryRecording(
             passages: ["Anna: Ich bestelle 200 Plakate.", "Ben: Gut."], title: "Kick-off", providerOverride: "local-llm"
         )
-        XCTAssertEqual(short, "Anna bestellt Plakate.")
+        XCTAssertEqual(short.text, "Anna bestellt Plakate.")
+        XCTAssertEqual(short.providerId, "local-llm")
         XCTAssertEqual(provider.calls.count, 1)
         XCTAssertTrue(provider.calls[0].systemPrompt.hasPrefix("You summarize one recording of the user"))
         XCTAssertEqual(provider.calls[0].userText, """
@@ -143,10 +150,21 @@ final class AskHistoryOverviewTests: XCTestCase {
             provider.enqueue(.text(reply))
         }
         let long = try await service.summarizeHistoryRecording(passages: passages, title: nil, providerOverride: "local-llm")
-        XCTAssertEqual(long, "Alles zusammen.")
+        XCTAssertEqual(long.text, "Alles zusammen.")
         XCTAssertEqual(provider.calls.count, 5)
         XCTAssertTrue(provider.calls[2].userText.hasPrefix("RECORDING\nPart 2 of 3\nTeil 2: "))
         XCTAssertEqual(provider.calls[4].userText, "PARTS\n1. Erstens.\n2. Zweitens.\n3. Drittens.\nEND_PARTS")
+
+        // Text that exceeds the context in tokens is summarized again in smaller parts.
+        for reply in ["This model's maximum context length is 8192 tokens.", "A.", "B.", "A und B."] {
+            provider.enqueue(reply.hasPrefix("This") ? .failure(reply) : .text(reply))
+        }
+        let dense = try await service.summarizeHistoryRecording(
+            passages: [String(repeating: "字", count: 5_000), String(repeating: "词", count: 5_000)],
+            title: nil, providerOverride: "local-llm"
+        )
+        XCTAssertEqual(dense.text, "A und B.")
+        XCTAssertEqual(provider.calls.count, 9)
     }
 
     func testAModelReadsAFollowUpAndAFailureLeavesTheQuestionAsItIs() async throws {
@@ -220,12 +238,33 @@ final class AskHistoryOverviewTests: XCTestCase {
         try await index.upsert([indexedRecord(ids[0], on: day(9), title: "Aufnahme 1", hash: "2", passages: [spoken("Neuer Text.")])])
         provider.enqueue(.text("Neue Summe 1."))
         progress = []
-        answer = try await overview.answer(plan: plan, retrieval: retrieval, providerOverride: "local-llm") {
+        let partial = HistoryRetrieval(hits: retrieval.hits, recordCount: 5)
+        answer = try await overview.answer(plan: plan, retrieval: partial, providerOverride: "local-llm") {
             progress.append("\($0) of \($1)")
         }
         XCTAssertEqual(answer.sources.map(\.text), ["Summe 3.", "Summe 2.\nMit Zusatz.", "Neue Summe 1."])
+        XCTAssertEqual(answer.omittedRecordCount, 2)
         XCTAssertEqual(progress, ["1 of 1"])
         XCTAssertEqual(provider.calls.count, 4)
+    }
+
+    func testAnOverviewNamesTheProviderThatWroteItsSummaries() async throws {
+        let index = try makeIndex()
+        let id = UUID()
+        try await index.upsert([indexedRecord(id, title: "Aufnahme", passages: [spoken("Text.")])])
+        let local = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
+        let cloud = AnsweringProvider(id: "cloud-llm", name: "Cloud LLM")
+        let service = try environment.makeService(providers: [local, cloud], fallbacks: ["local-llm", "cloud-llm"])
+        local.enqueue(.failure("The provider failed."))
+        cloud.enqueue(.text("Summe."))
+        let plan = HistorySearchPlan(question: "Fasse die Woche zusammen")
+        let retrieval = try await HistoryRetriever(index: index) { $0 }.retrieve(plan, limit: 20)
+
+        let answer = try await AskHistoryOverview(index: index, service: service).answer(plan: plan, retrieval: retrieval)
+
+        XCTAssertEqual(answer.text, "- Aufnahme: Summe. [1]")
+        XCTAssertEqual(answer.providerId, "cloud-llm")
+        XCTAssertEqual(answer.providerName, "Cloud LLM")
     }
 
     func testAnOverviewOnACloudModelGetsTheBeginningOfEveryRecordingInOnePrompt() async throws {

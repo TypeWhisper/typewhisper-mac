@@ -43,7 +43,7 @@ struct AskHistoryOverview {
         }
 
         let hits = Array(retrieval.hits.prefix(Self.maximumSummaries))
-        var summaries: [UUID: String] = [:]
+        var summaries: [UUID: (text: String, providerId: String)] = [:]
         for hit in hits {
             summaries[hit.recordID] = try await index.summary(ofRecord: hit.recordID)
         }
@@ -51,34 +51,43 @@ struct AskHistoryOverview {
         for (offset, hit) in missing.enumerated() {
             try Task.checkCancellation()
             progress(offset + 1, missing.count)
-            let passages = try await index.transcript(ofRecord: hit.recordID).map(\.text)
             // Deleted since the search.
-            guard !passages.isEmpty else { continue }
+            guard let transcript = try await index.transcript(ofRecord: hit.recordID),
+                  !transcript.passages.isEmpty else { continue }
             let summary = try await service.summarizeHistoryRecording(
-                passages: passages, title: hit.title, providerOverride: providerOverride,
+                passages: transcript.passages.map(\.text), title: hit.title, providerOverride: providerOverride,
                 cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
             )
-            try await index.setSummary(summary, ofRecord: hit.recordID)
+            try await index.setSummary(
+                summary.text, providerId: summary.providerId, ofRecord: hit.recordID, contentHash: transcript.contentHash
+            )
             summaries[hit.recordID] = summary
         }
 
         var sources: [AskHistorySource] = []
         var lines: [String] = []
+        // The providers that wrote the listed summaries, a fallback among them.
+        var providerIds: [String] = []
         for hit in hits {
             guard let summary = summaries[hit.recordID] else { continue }
             var source = AskHistorySource(hit)
-            source.text = summary
+            source.text = summary.text
             source.startSeconds = nil
             sources.append(source)
-            let text = summary.split(whereSeparator: \.isNewline).joined(separator: " ")
+            let text = summary.text.split(whereSeparator: \.isNewline).joined(separator: " ")
             lines.append("- " + (hit.title.map { "\($0): " } ?? "") + text + " [\(sources.count)]")
+            if !summary.providerId.isEmpty, !providerIds.contains(summary.providerId) {
+                providerIds.append(summary.providerId)
+            }
         }
+        if providerIds.isEmpty { providerIds = [provider.providerId] }
         return AskHistoryAnswer(
             text: lines.joined(separator: "\n"),
             sources: sources,
             citedSources: Array(sources.indices.map { $0 + 1 }),
-            providerId: provider.providerId,
-            providerName: provider.providerName
+            providerId: providerIds[0],
+            providerName: providerIds.map(service.displayName(for:)).joined(separator: ", "),
+            omittedRecordCount: max((retrieval.recordCount ?? retrieval.hits.count) - sources.count, 0)
         )
     }
 }

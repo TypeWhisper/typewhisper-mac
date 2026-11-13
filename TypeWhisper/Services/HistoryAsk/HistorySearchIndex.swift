@@ -411,10 +411,14 @@ actor HistorySearchIndex {
     // MARK: - Summaries
 
     /// The text of a record as the index holds it: what was said, in order,
-    /// without a document written from it. Empty for a record it does not hold.
-    func transcript(ofRecord id: UUID) throws -> [HistoryPassage] {
-        try reading([]) { connection in
-            try connection.rows(
+    /// without a document written from it, and the hash of the content it
+    /// comes from. Nil for a record the index does not hold.
+    func transcript(ofRecord id: UUID) throws -> (passages: [HistoryPassage], contentHash: String)? {
+        try reading(nil) { connection in
+            guard let contentHash = try connection.rows(
+                "SELECT content_hash FROM records WHERE uuid = ?1", [.text(id.uuidString)]
+            ) { $0.text(0) }.first ?? nil else { return nil }
+            let passages = try connection.rows(
                 """
                 SELECT p.id FROM passages p JOIN records r ON r.id = p.record_id
                 WHERE r.uuid = ?1 AND p.kind = ?2 ORDER BY p.id
@@ -422,32 +426,35 @@ actor HistorySearchIndex {
                 [.text(id.uuidString), .text(HistoryPassage.Kind.transcript.rawValue)]
             ) { $0.integer(0) }
             .compactMap { try self.hit(forPassage: $0, in: connection)?.passage }
+            return (passages, contentHash)
         }
     }
 
-    /// The summary kept for a record, unless the record changed since or is gone.
-    func summary(ofRecord id: UUID) throws -> String? {
+    /// The summary kept for a record and the provider that wrote it, unless
+    /// the record changed since or is gone.
+    func summary(ofRecord id: UUID) throws -> (text: String, providerId: String)? {
         try reading(nil) { connection in
             try connection.rows(
                 """
-                SELECT s.summary FROM summaries s JOIN records r ON r.uuid = s.uuid
+                SELECT s.summary, s.provider_id FROM record_summaries s JOIN records r ON r.uuid = s.uuid
                 WHERE s.uuid = ?1 AND s.content_hash = r.content_hash
                 """,
                 [.text(id.uuidString)]
-            ) { $0.text(0) }.first ?? nil
+            ) { row in row.text(0).map { ($0, row.text(1) ?? "") } }.first ?? nil
         }
     }
 
     /// Keeps a summary of a record until the record changes or is removed.
-    /// Does nothing for a record the index does not hold.
-    func setSummary(_ summary: String, ofRecord id: UUID) throws {
+    /// Does nothing when the record is gone or no longer has the content the
+    /// summary was written from, which can change while a model writes it.
+    func setSummary(_ summary: String, providerId: String, ofRecord id: UUID, contentHash: String) throws {
         guard let connection = try open(creating: false) else { return }
         try connection.run(
             """
-            INSERT OR REPLACE INTO summaries(uuid, content_hash, summary)
-            SELECT uuid, content_hash, ?2 FROM records WHERE uuid = ?1
+            INSERT OR REPLACE INTO record_summaries(uuid, content_hash, summary, provider_id)
+            SELECT uuid, content_hash, ?2, ?3 FROM records WHERE uuid = ?1 AND content_hash = ?4
             """,
-            [.text(id.uuidString), .text(summary)]
+            [.text(id.uuidString), .text(summary), .text(providerId), .text(contentHash)]
         )
     }
 
@@ -614,7 +621,7 @@ actor HistorySearchIndex {
             try connection.run("DELETE FROM records WHERE id = ?1", [.integer(rowID)])
         }
         // A summary belongs to the text it was made from.
-        try connection.run("DELETE FROM summaries WHERE uuid = ?1", [.text(id.uuidString)])
+        try connection.run("DELETE FROM record_summaries WHERE uuid = ?1", [.text(id.uuidString)])
     }
 
     private func freeRowID(at date: Date, in connection: SQLiteConnection) throws -> Int64 {
@@ -693,10 +700,11 @@ actor HistorySearchIndex {
     }
 
     private static let summariesSchema = """
-        CREATE TABLE IF NOT EXISTS summaries(
+        CREATE TABLE IF NOT EXISTS record_summaries(
           uuid TEXT PRIMARY KEY,
           content_hash TEXT NOT NULL,
-          summary TEXT NOT NULL
+          summary TEXT NOT NULL,
+          provider_id TEXT NOT NULL
         ) WITHOUT ROWID;
         """
 

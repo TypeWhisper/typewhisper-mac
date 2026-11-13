@@ -9,7 +9,12 @@ struct AskHistoryAnswer: Equatable, Sendable {
     /// The numbers of the sources the answer cites, in the order they first appear.
     var citedSources: [Int]
     var providerId: String
+    /// All providers that wrote the answer, comma-separated, when an overview's
+    /// summaries come from more than one.
     var providerName: String
+    /// Recordings of an overview's part of History that the answer leaves out,
+    /// for the window to name. A cloud model names them in its text.
+    var omittedRecordCount = 0
 }
 
 /// How much a provider's context holds, as far as its kind tells.
@@ -56,6 +61,9 @@ extension AskHistoryBudget {
 extension AskHistoryBudget {
     /// Characters of a recording one summary request holds. Apple Intelligence
     /// gets what fits its smallest context of 4,096 tokens.
+    /// Parts are not made smaller than this after a context error.
+    static let minimumSummaryCharacters = 1_000
+
     static func summaryCharacters(for kind: AskHistoryProviderKind) -> Int {
         switch kind {
         case .appleIntelligence: 8_000
