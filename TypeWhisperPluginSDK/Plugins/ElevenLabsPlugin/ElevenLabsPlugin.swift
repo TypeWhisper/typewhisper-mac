@@ -103,6 +103,7 @@ enum ElevenLabsSettingsAccessibility {
     static let audioEvents = "ElevenLabsAudioEvents"
     static let speakerCount = "ElevenLabsSpeakerCount"
     static let useDictionaryTerms = "ElevenLabsUseDictionaryTerms"
+    static let multilangMode = "ElevenLabsMultilangMode"
 }
 
 enum ElevenLabsAPIKeyValidationResult: Equatable, Sendable {
@@ -149,14 +150,18 @@ final class ElevenLabsPlugin: NSObject,
     static let noVerbatimKey = "noVerbatim"
     static let speakerCountKey = "numSpeakers"
     static let useDictionaryTermsKey = "useDictionaryTerms"
+    static let multilangModeKey = "multilangMode"
     static let automaticSpeakerCount = 0
     static let defaultSpeakerCount = 1
     static let maximumSpeakerCount = 32
     static let maximumKeytermCount = 1_000
     static let maximumKeytermCharacterCount = 49
     static let maximumKeytermWordCount = 5
-    static let defaultModelId = "scribe_v2"
+    static let scribeV3ModelId = "scribe_v3"
+    static let scribeV2ModelId = "scribe_v2"
     static let medicalModelId = "scribe_v2_medical"
+    /// Scribe v3 costs the same as Scribe v2 and makes fewer errors.
+    static let defaultModelId = scribeV3ModelId
     /// The realtime API commits on its own after about 36 seconds of audio,
     /// and no message marks the transcript of the final commit. A recording
     /// sent as one stream ends one second after the first committed
@@ -173,6 +178,7 @@ final class ElevenLabsPlugin: NSObject,
     fileprivate var _noVerbatim = true
     fileprivate var _speakerCount = ElevenLabsPlugin.defaultSpeakerCount
     fileprivate var _useDictionaryTerms = true
+    fileprivate var _multilangMode = false
 
     private let logger = Logger(subsystem: "com.typewhisper.elevenlabs", category: "Plugin")
 
@@ -183,7 +189,8 @@ final class ElevenLabsPlugin: NSObject,
     func activate(host: HostServices) {
         self.host = host
         _apiKey = host.loadSecret(key: "api-key")
-        // Selections of retired models, such as the deprecated Scribe v1, move to Scribe v2.
+        // Selections of retired models, such as the deprecated Scribe v1, move to the
+        // default model. A saved Scribe v2 selection stays.
         _selectedModelId = (host.userDefault(forKey: "selectedModel") as? String)
             .flatMap { id in transcriptionModels.contains { $0.id == id } ? id : nil }
             ?? Self.defaultModelId
@@ -196,6 +203,7 @@ final class ElevenLabsPlugin: NSObject,
             host.userDefault(forKey: Self.speakerCountKey) as? Int ?? Self.defaultSpeakerCount
         )
         _useDictionaryTerms = host.userDefault(forKey: Self.useDictionaryTermsKey) as? Bool ?? true
+        _multilangMode = host.userDefault(forKey: Self.multilangModeKey) as? Bool ?? false
     }
 
     func deactivate() {
@@ -212,7 +220,8 @@ final class ElevenLabsPlugin: NSObject,
 
     var transcriptionModels: [PluginModelInfo] {
         [
-            PluginModelInfo(id: Self.defaultModelId, displayName: "Scribe v2"),
+            PluginModelInfo(id: Self.scribeV3ModelId, displayName: "Scribe v3"),
+            PluginModelInfo(id: Self.scribeV2ModelId, displayName: "Scribe v2"),
             PluginModelInfo(id: Self.medicalModelId, displayName: "Scribe v2 Medical"),
         ]
     }
@@ -228,9 +237,23 @@ final class ElevenLabsPlugin: NSObject,
         }
     }
 
-    /// Scribe v2 Medical is a batch model; only Scribe v2 has a realtime variant.
+    /// The realtime model that streams for a batch model on the same WebSocket endpoint.
+    /// Scribe v2 Medical is a batch model without one. Without a model, the default applies.
+    static func realtimeModel(for modelId: String?) -> (id: String, displayName: String)? {
+        switch modelId ?? defaultModelId {
+        case scribeV3ModelId: ("scribe_v3_live", "Scribe v3 Live")
+        case scribeV2ModelId: ("scribe_v2_realtime", "Scribe v2 Realtime")
+        default: nil
+        }
+    }
+
     static func modelStreams(_ modelId: String?) -> Bool {
-        modelId != medicalModelId
+        realtimeModel(for: modelId) != nil
+    }
+
+    /// Only Scribe v3 Live takes `multilang_mode`; Scribe v2 Realtime rejects the session with it.
+    static func supportsMultilangMode(_ modelId: String?) -> Bool {
+        (modelId ?? defaultModelId) == scribeV3ModelId
     }
 
     var transcriptionMode: ElevenLabsTranscriptionMode { _transcriptionMode }
@@ -238,6 +261,7 @@ final class ElevenLabsPlugin: NSObject,
     var noVerbatim: Bool { _noVerbatim }
     var speakerCount: Int { _speakerCount }
     var useDictionaryTerms: Bool { _useDictionaryTerms }
+    var multilangMode: Bool { _multilangMode }
 
     func setTranscriptionMode(_ mode: ElevenLabsTranscriptionMode) {
         guard _transcriptionMode != mode else { return }
@@ -263,6 +287,12 @@ final class ElevenLabsPlugin: NSObject,
         guard _speakerCount != normalized else { return }
         _speakerCount = normalized
         host?.setUserDefault(normalized, forKey: Self.speakerCountKey)
+    }
+
+    func setMultilangMode(_ enabled: Bool) {
+        guard _multilangMode != enabled else { return }
+        _multilangMode = enabled
+        host?.setUserDefault(enabled, forKey: Self.multilangModeKey)
     }
 
     func setUseDictionaryTerms(_ enabled: Bool) {
@@ -376,6 +406,7 @@ final class ElevenLabsPlugin: NSObject,
                 try await self.transcribeWebSocket(
                     audio: audio,
                     language: language,
+                    modelId: modelId,
                     apiKey: apiKey,
                     noVerbatim: self._noVerbatim,
                     onProgress: onProgress
@@ -398,7 +429,7 @@ final class ElevenLabsPlugin: NSObject,
 
     // MARK: Live Sessions
 
-    /// Scribe v2 streams in Auto mode; Scribe v2 Medical and REST only transcribe after
+    /// Scribe v3 and Scribe v2 stream in Auto mode; Scribe v2 Medical and REST only transcribe after
     /// the recording, so TypeWhisper previews those on a local engine instead.
     func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
         _transcriptionMode == .automatic && Self.modelStreams(modelId ?? _selectedModelId)
@@ -446,7 +477,14 @@ final class ElevenLabsPlugin: NSObject,
         }
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
 
-        var request = URLRequest(url: try Self.realtimeURL(language: language, noVerbatim: _noVerbatim))
+        var request = URLRequest(
+            url: try Self.realtimeURL(
+                modelId: modelId,
+                language: language,
+                noVerbatim: _noVerbatim,
+                multilangMode: _multilangMode
+            )
+        )
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
 
         // The realtime API wraps transcripts in quotation marks with keyterms, so the
@@ -537,7 +575,7 @@ final class ElevenLabsPlugin: NSObject,
                     value: String(_speakerCount)
                 )
             }
-            // Scribe v2 and Scribe v2 Medical both take keyterms.
+            // Every Scribe model takes keyterms.
             for term in keyterms {
                 body.appendMultipartField(boundary: boundary, name: "keyterms", value: term)
             }
@@ -585,12 +623,18 @@ final class ElevenLabsPlugin: NSObject,
     private func transcribeWebSocket(
         audio: AudioData,
         language: String?,
+        modelId: String,
         apiKey: String,
         noVerbatim: Bool,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
-        let url = try Self.realtimeURL(language: language, noVerbatim: noVerbatim)
+        let url = try Self.realtimeURL(
+            modelId: modelId,
+            language: language,
+            noVerbatim: noVerbatim,
+            multilangMode: _multilangMode
+        )
 
         var request = URLRequest(url: url)
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
@@ -804,18 +848,30 @@ final class ElevenLabsPlugin: NSObject,
         )
     }
 
-    static func realtimeURL(language: String?, noVerbatim: Bool) throws -> URL {
+    static func realtimeURL(
+        modelId: String?,
+        language: String?,
+        noVerbatim: Bool,
+        multilangMode: Bool = false
+    ) throws -> URL {
+        guard let realtimeModel = realtimeModel(for: modelId) else {
+            throw PluginTranscriptionError.apiError("\(modelId ?? "") has no realtime model")
+        }
         guard var components = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime") else {
             throw PluginTranscriptionError.apiError("Invalid realtime URL")
         }
 
         var queryItems = [
-            URLQueryItem(name: "model_id", value: "scribe_v2_realtime"),
+            URLQueryItem(name: "model_id", value: realtimeModel.id),
             URLQueryItem(name: "audio_format", value: "pcm_16000"),
             URLQueryItem(name: "commit_strategy", value: "manual"),
             URLQueryItem(name: "no_verbatim", value: formattedBoolean(noVerbatim)),
             URLQueryItem(name: "include_timestamps", value: "true"),
         ]
+        if multilangMode && supportsMultilangMode(modelId) {
+            // Follows switches between languages within a sentence.
+            queryItems.append(URLQueryItem(name: "multilang_mode", value: "true"))
+        }
 
         if let language, !language.isEmpty {
             queryItems.append(URLQueryItem(name: "language_code", value: language))
@@ -1006,6 +1062,7 @@ private struct ElevenLabsSettingsView: View {
     @State private var noVerbatim = true
     @State private var speakerCount = ElevenLabsPlugin.defaultSpeakerCount
     @State private var useDictionaryTerms = true
+    @State private var multilangMode = false
     private let bundle = Bundle(for: ElevenLabsPlugin.self)
     private var trimmedInputKey: String {
         apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1112,6 +1169,11 @@ private struct ElevenLabsSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+                    } else if let realtimeModel = ElevenLabsPlugin.realtimeModel(for: selectedModel) {
+                        Text("In Auto mode, dictations stream with \(realtimeModel.displayName).", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -1122,7 +1184,7 @@ private struct ElevenLabsSettingsView: View {
                     Picker(String(localized: "Transcription mode", bundle: bundle), selection: $transcriptionMode) {
                         Text("Auto (Realtime with REST fallback)", bundle: bundle)
                             .tag(ElevenLabsTranscriptionMode.automatic)
-                        Text("REST only (Batch Scribe v2)", bundle: bundle)
+                        Text("REST only (Batch)", bundle: bundle)
                             .tag(ElevenLabsTranscriptionMode.restOnly)
                     }
                     .labelsHidden()
@@ -1216,6 +1278,23 @@ private struct ElevenLabsSettingsView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    if ElevenLabsPlugin.supportsMultilangMode(selectedModel) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Toggle(isOn: $multilangMode) {
+                                Text("Mixed languages", bundle: bundle)
+                            }
+                            .accessibilityIdentifier(ElevenLabsSettingsAccessibility.multilangMode)
+                            .onChange(of: multilangMode) {
+                                plugin.setMultilangMode(multilangMode)
+                            }
+
+                            Text("For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode. Final text from batch REST, such as with dictionary terms, does not use it.", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
 
@@ -1244,6 +1323,7 @@ private struct ElevenLabsSettingsView: View {
             noVerbatim = plugin.noVerbatim
             speakerCount = plugin.speakerCount
             useDictionaryTerms = plugin.useDictionaryTerms
+            multilangMode = plugin.multilangMode
         }
     }
 

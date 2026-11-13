@@ -288,11 +288,11 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(try Self.multipartValues(named: "num_speakers", in: request), ["12"])
     }
 
-    func testMedicalModelTranscribesInBatchWithKeytermsAndRetiredModelsMoveToScribeV2() async throws {
+    func testMedicalModelTranscribesInBatchWithKeytermsAndRetiredModelsMoveToScribeV3() async throws {
         let legacyHost = try PluginTestHostServices(defaults: ["selectedModel": "scribe_v1"])
         let legacyPlugin = ElevenLabsPlugin()
         legacyPlugin.activate(host: legacyHost)
-        XCTAssertEqual(legacyPlugin.selectedModelId, "scribe_v2")
+        XCTAssertEqual(legacyPlugin.selectedModelId, "scribe_v3")
 
         let request = try await captureRESTRequest(
             dictionaryTermHints: [PluginDictionaryTermHint(text: "Metoprolol")]
@@ -421,10 +421,12 @@ final class ElevenLabsPluginTests: XCTestCase {
 
     func testRealtimeURLAppliesNoVerbatimWithoutRESTOnlyOptions() throws {
         let cleanURL = try ElevenLabsPlugin.realtimeURL(
+            modelId: ElevenLabsPlugin.scribeV2ModelId,
             language: "zh",
             noVerbatim: true
         )
         let verbatimURL = try ElevenLabsPlugin.realtimeURL(
+            modelId: ElevenLabsPlugin.scribeV2ModelId,
             language: nil,
             noVerbatim: false
         )
@@ -447,6 +449,65 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(verbatimItems["no_verbatim"], "false")
         XCTAssertNil(verbatimItems["language_code"])
         XCTAssertEqual(verbatimItems["include_language_detection"], "true")
+    }
+
+    func testScribeV3IsTheDefaultTranscribesInBatchAndStreamsWithScribeV3Live() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = ElevenLabsPlugin()
+        plugin.activate(host: host)
+        XCTAssertEqual(plugin.selectedModelId, "scribe_v3")
+        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["scribe_v3", "scribe_v2", "scribe_v2_medical"])
+        XCTAssertTrue(plugin.supportsStreaming)
+        XCTAssertNotNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+
+        let liveURL = try ElevenLabsPlugin.realtimeURL(modelId: "scribe_v3", language: "de", noVerbatim: true)
+        XCTAssertEqual(Self.queryItems(in: liveURL)["model_id"], "scribe_v3_live")
+        XCTAssertEqual(Self.queryItems(in: liveURL)["commit_strategy"], "manual")
+        XCTAssertThrowsError(
+            try ElevenLabsPlugin.realtimeURL(modelId: ElevenLabsPlugin.medicalModelId, language: nil, noVerbatim: true)
+        )
+
+        let request = try await captureRESTRequest(
+            dictionaryTermHints: [PluginDictionaryTermHint(text: "TypeWhisper")]
+        ) { plugin in
+            plugin.selectModel(ElevenLabsPlugin.scribeV3ModelId)
+        }
+        XCTAssertEqual(try Self.multipartValues(named: "model_id", in: request), ["scribe_v3"])
+        XCTAssertEqual(try Self.multipartValues(named: "keyterms", in: request), ["TypeWhisper"])
+    }
+
+    func testMultilangModeIsOffByDefaultPersistsAndOnlyReachesScribeV3Live() throws {
+        let host = try PluginTestHostServices()
+        let plugin = ElevenLabsPlugin()
+        plugin.activate(host: host)
+        XCTAssertFalse(plugin.multilangMode)
+        XCTAssertNil(
+            Self.queryItems(in: try ElevenLabsPlugin.realtimeURL(modelId: "scribe_v3", language: nil, noVerbatim: true))["multilang_mode"]
+        )
+
+        plugin.setMultilangMode(true)
+        let reloadedPlugin = ElevenLabsPlugin()
+        reloadedPlugin.activate(host: host)
+        XCTAssertTrue(reloadedPlugin.multilangMode)
+
+        let liveURL = try ElevenLabsPlugin.realtimeURL(
+            modelId: "scribe_v3",
+            language: "de",
+            noVerbatim: true,
+            multilangMode: true
+        )
+        XCTAssertEqual(Self.queryItems(in: liveURL)["multilang_mode"], "true")
+        XCTAssertEqual(Self.queryItems(in: liveURL)["language_code"], "de")
+
+        // Scribe v2 Realtime ends the session with `invalid_request` for this parameter.
+        let v2URL = try ElevenLabsPlugin.realtimeURL(
+            modelId: "scribe_v2",
+            language: nil,
+            noVerbatim: true,
+            multilangMode: true
+        )
+        XCTAssertNil(Self.queryItems(in: v2URL)["multilang_mode"])
+        XCTAssertFalse(ElevenLabsPlugin.supportsMultilangMode(ElevenLabsPlugin.medicalModelId))
     }
 
     func testRealtimeSessionErrorsAndScribeLanguageCodesMapToTypeWhisper() {
