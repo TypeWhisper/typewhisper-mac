@@ -57,7 +57,7 @@ requests always use `/v1/realtime` and ignore the Batch Transcription Endpoint
 setting. A separate profile is recommended when batch and realtime endpoints
 require different API versions.
 
-## Ollama model discovery
+## Ollama servers
 
 Set **Server Kind** to `Ollama` on a profile pointing at an Ollama server
 (e.g. `http://localhost:11434`) to list installed models through the server's
@@ -65,6 +65,13 @@ native `/api/tags` endpoint. Model names are shown exactly as reported,
 including tags (`llama3.1:8b`). If native discovery fails, the profile falls
 back to the OpenAI-compatible `/v1/models` endpoint, and manual model entry
 remains available. Generic profiles never send Ollama-specific requests.
+
+Ollama reasons by default with thinking-capable models and ignores the
+`thinking` field. An Ollama profile that uses Chat Completions with
+**Thinking Mode** off therefore sends `reasoning_effort: "none"`, which turns
+reasoning off. If the server rejects that field, for example an older Ollama
+release, the request is sent again without it. With Thinking Mode on, Ollama
+keeps its default.
 
 ## Reasoning effort
 
@@ -75,5 +82,6 @@ setting. **Provider Default** omits `reasoning`; the other levels send
 A workflow or an entry in the global LLM fallback list can pick its own effort
 for a Responses profile (Low, Medium, High, X High or Max). Its **Provider
 Default** uses the profile's setting. Each profile is a separate provider with
-its own setting. Chat Completions profiles never send an effort, whatever the
-server kind, so workflows show no effort picker for them.
+its own setting. Chat Completions profiles never send a workflow's effort,
+whatever the server kind, so workflows show no effort picker for them. The only
+effort they send is the `none` described under Ollama servers.
