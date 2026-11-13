@@ -84,6 +84,13 @@ final class AskHistorySessionTests: XCTestCase {
         // The passage the first answer cited is still a source.
         XCTAssertTrue(prompt.contains("200 Plakate"), prompt)
         XCTAssertTrue(prompt.contains("Assistant: Anna bestellt 200 Plakate."), prompt)
+
+        // A follow-up about another day keeps no earlier passage from outside it.
+        provider.enqueue(.text(#"{"question": "Was wurde gestern zum Budget gesagt?", "keywords": ["Budget"]}"#))
+        provider.enqueue(.text("Dazu gibt es nichts."))
+        session.ask("Und gestern?")
+        try await finish(session)
+        XCTAssertTrue(provider.calls.last?.userText.hasPrefix("SOURCES\nEND_SOURCES") == true, provider.calls.last?.userText ?? "")
     }
 
     func testWithoutALanguageModelTheTurnKeepsWhatTheSearchFound() async throws {
@@ -114,7 +121,9 @@ final class AskHistorySessionTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(session.turns.first?.stage, .preparingIndex)
 
-        // Starting over frees the session at once for the next question.
+        // Stopping and starting over free the session at once for the next question.
+        session.stop()
+        XCTAssertFalse(session.isWorking)
         session.startNewConversation()
         XCTAssertFalse(session.isWorking)
         provider.enqueue(.text("200 Plakate [1]."))

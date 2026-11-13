@@ -120,17 +120,17 @@ final class AskHistorySession: ObservableObject {
         }
     }
 
-    /// Stops the running question. Its turn keeps what it had found.
+    /// Stops the running question, which keeps what it had found. The session
+    /// takes the next question at once.
     func stop() {
         task?.cancel()
-    }
-
-    /// Clears the turns. A running question stops and no longer holds up the next.
-    func startNewConversation() {
-        stop()
         task = nil
         isWorking = false
         generation = UUID()
+    }
+
+    func startNewConversation() {
+        stop()
         turns = []
         updatedAt = now()
     }
@@ -158,10 +158,10 @@ final class AskHistorySession: ObservableObject {
             }
             let planner = AskHistoryPlanner(vocabulary: try await index.vocabulary(), now: now())
             var plan = planner.plan(for: question)
-            if AskHistoryPlanner.needsFollowUpPlan(plan, history: history),
-               let followUp = await service.planHistoryFollowUp(
-                   question: question, history: history, providerOverride: providerOverride
-               ) {
+            let isFollowUp = AskHistoryPlanner.needsFollowUpPlan(plan, history: history)
+            if isFollowUp, let followUp = await service.planHistoryFollowUp(
+                question: question, history: history, providerOverride: providerOverride
+            ) {
                 plan = planner.plan(for: question, followUp: followUp)
             }
             try Task.checkCancellation()
@@ -170,11 +170,12 @@ final class AskHistorySession: ObservableObject {
             var retrieval = try await retriever.retrieve(
                 plan, limit: isOverview ? Self.overviewLimit : Self.lookupLimit, now: now()
             )
-            if !isOverview, !earlierCited.isEmpty {
-                // What the last answer cited stays a candidate of a follow-up,
-                // unless a passage the search found covers all of it.
+            if !isOverview, isFollowUp {
+                // What the last answer cited stays a candidate of a follow-up
+                // within the question's scope, unless a passage the search
+                // found covers all of it.
                 let new = earlierCited.filter { cited in
-                    !retrieval.hits.contains {
+                    plan.scope.includes(cited) && !retrieval.hits.contains {
                         $0.recordID == cited.recordID && $0.ordinals.lowerBound <= cited.ordinals.lowerBound
                             && $0.ordinals.upperBound >= cited.ordinals.upperBound
                     }
