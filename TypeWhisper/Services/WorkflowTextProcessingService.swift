@@ -49,8 +49,10 @@ enum DictatedTextLanguage {
     static let minimumWords = 3
 
     static func identifier(of text: String) -> String? {
-        let wordCount = text.split(whereSeparator: { $0.isWhitespace }).count
-        guard wordCount >= minimumWords else { return nil }
+        // A tokenizer also counts the words of Chinese or Japanese text without spaces.
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = text
+        guard tokenizer.tokens(for: text.startIndex..<text.endIndex).count >= minimumWords else { return nil }
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(text)
         guard let language = recognizer.dominantLanguage,

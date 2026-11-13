@@ -1670,6 +1670,13 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(capturedPrompts[2].contains("German"))
     }
 
+    func testDictatedTextLanguageCountsWordsOfTextWithoutSpaces() throws {
+        let language = try XCTUnwrap(DictatedTextLanguage.identifier(of: "我们明天上午十点在办公室见面讨论预算"))
+
+        XCTAssertTrue(language.hasPrefix("zh"), language)
+        XCTAssertNil(DictatedTextLanguage.identifier(of: "danke"))
+    }
+
     func testSegmentedRequestGuessesTheLanguageOfEachSegment() async throws {
         let workflow = Workflow(
             name: "Clean",
