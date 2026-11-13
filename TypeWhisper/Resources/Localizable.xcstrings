@@ -171,6 +171,40 @@
         }
       }
     },
+    "askHistory.consent.missing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fragen zum Verlauf darf noch keine Auszüge an %@ senden. Erlaube es zuerst im Fenster."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask History may not send excerpts to %@ yet. Allow it in the panel first."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preguntar al historial aún no puede enviar fragmentos a %@. Permítelo primero en el panel."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "履歴への質問はまだ %@ に抜粋を送信できません。先にパネルで許可してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "询问历史记录尚不能向 %@ 发送摘录。请先在面板中允许。"
+          }
+        }
+      }
+    },
     "askHistory.consent.title" : {
       "localizations" : {
         "de" : {

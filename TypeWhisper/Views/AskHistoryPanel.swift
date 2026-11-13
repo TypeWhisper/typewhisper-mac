@@ -19,6 +19,8 @@ struct AskHistoryPanelEnvironment {
     var openRecord: (UUID) -> Void
     var openLanguageModelSettings: () -> Void
     var openPremium: () -> Void
+    /// Fires when a license or Premium account may have changed.
+    var accessChanges: AnyPublisher<Void, Never> = Empty().eraseToAnyPublisher()
     var defaults: UserDefaults = .standard
 }
 
@@ -34,17 +36,27 @@ final class AskHistoryPanelModel: ObservableObject {
     let session: AskHistorySession
     private let environment: AskHistoryPanelEnvironment
     private var pendingQuestion: String?
+    private var accessSubscription: AnyCancellable?
 
     init(session: AskHistorySession, environment: AskHistoryPanelEnvironment) {
         self.session = session
         self.environment = environment
         hasPremiumAccess = environment.hasPremiumAccess()
+        // Read after the change, which the publishers announce before it happens.
+        accessSubscription = environment.accessChanges
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.refreshAccess() }
     }
 
     var needsConsent: Bool { !consentProviders.isEmpty }
 
     func refreshAccess() {
-        hasPremiumAccess = environment.hasPremiumAccess()
+        let hasAccess = environment.hasPremiumAccess()
+        if hasAccess != hasPremiumAccess { hasPremiumAccess = hasAccess }
+    }
+
+    private var allowedProviders: Set<String> {
+        Set(environment.defaults.stringArray(forKey: UserDefaultsKeys.askHistoryCloudConsents) ?? [])
     }
 
     /// Sends the typed question, after the consent for cloud providers that
@@ -52,7 +64,7 @@ final class AskHistoryPanelModel: ObservableObject {
     func send(_ text: String? = nil) {
         let question = (text ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard hasPremiumAccess, !question.isEmpty, !session.isWorking else { return }
-        let allowed = Set(environment.defaults.stringArray(forKey: UserDefaultsKeys.askHistoryCloudConsents) ?? [])
+        let allowed = allowedProviders
         let missing = environment.cloudProviders().filter { !allowed.contains($0.id) }
         draft = ""
         guard missing.isEmpty else {
@@ -67,6 +79,12 @@ final class AskHistoryPanelModel: ObservableObject {
         var allowed = environment.defaults.stringArray(forKey: UserDefaultsKeys.askHistoryCloudConsents) ?? []
         allowed += consentProviders.map(\.id).filter { !allowed.contains($0) }
         environment.defaults.set(allowed, forKey: UserDefaultsKeys.askHistoryCloudConsents)
+        // The list may have changed while the user read the prompt.
+        let stillMissing = environment.cloudProviders().filter { !allowedProviders.contains($0.id) }
+        guard stillMissing.isEmpty else {
+            consentProviders = stillMissing
+            return
+        }
         consentProviders = []
         if let pendingQuestion {
             self.pendingQuestion = nil
@@ -105,6 +123,7 @@ final class AskHistoryPanelController {
     private let now: () -> Date
     private var panel: AskHistoryPanel?
     private var turnsSubscription: AnyCancellable?
+    private var accessSubscription: AnyCancellable?
 
     init(session: AskHistorySession, environment: AskHistoryPanelEnvironment, now: @escaping () -> Date = Date.init) {
         model = AskHistoryPanelModel(session: session, environment: environment)
@@ -124,10 +143,14 @@ final class AskHistoryPanelController {
         if !session.turns.isEmpty, now().timeIntervalSince(session.updatedAt) > Self.conversationTimeout {
             model.startNewConversation()
         }
-        if model.hasPremiumAccess {
-            environment.prewarm()
-            Task { await session.prepare() }
-        }
+        // Also when Premium is unlocked while the panel shows the locked state.
+        accessSubscription = model.$hasPremiumAccess
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { [environment] _ in
+                environment.prewarm()
+                Task { await session.prepare() }
+            }
 
         let panel = panel ?? makePanel()
         self.panel = panel
@@ -145,6 +168,7 @@ final class AskHistoryPanelController {
     /// Hides the panel and keeps the conversation.
     func hide() {
         turnsSubscription = nil
+        accessSubscription = nil
         panel?.orderOut(nil)
     }
 

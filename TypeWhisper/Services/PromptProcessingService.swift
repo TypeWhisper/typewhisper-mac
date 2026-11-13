@@ -68,6 +68,15 @@ struct LLMFallbackAttemptFailure: Equatable, Sendable {
     var isNotSetUp = false
 }
 
+/// Ask History skipped a provider the user has not allowed to receive excerpts.
+struct AskHistoryConsentMissing: LocalizedError, Equatable {
+    let providerName: String
+
+    var errorDescription: String? {
+        String(format: String(localized: "askHistory.consent.missing"), providerName)
+    }
+}
+
 struct LLMFallbackExhaustedError: LocalizedError, Equatable {
     let failures: [LLMFallbackAttemptFailure]
 
@@ -442,6 +451,21 @@ class PromptProcessingService: ObservableObject {
             return false
         }
         return !setupStatus.requiresExternalCredentials
+    }
+
+    /// Set by the app: Ask History then sends nothing to a provider off this Mac
+    /// that the user has not allowed, whatever the panel showed.
+    var requiresHistoryConsent = false
+
+    /// Whether Ask History may send excerpts to a provider.
+    func historyMaySend(to providerId: String) -> Bool {
+        guard requiresHistoryConsent else { return true }
+        switch historyProviderKind(of: providerId) {
+        case .appleIntelligence, .local:
+            return true
+        case .cloud, .openAICompatible:
+            return (userDefaults.stringArray(forKey: UserDefaultsKeys.askHistoryCloudConsents) ?? []).contains(providerId)
+        }
     }
 
     /// The providers Ask History would try that send text off this Mac, by ID
@@ -1037,6 +1061,10 @@ class PromptProcessingService: ObservableObject {
         for candidate in candidates {
             try Task.checkCancellation()
             do {
+                let providerId = normalizeProviderId(candidate.providerId)
+                guard historyMaySend(to: providerId) else {
+                    throw AskHistoryConsentMissing(providerName: displayName(for: providerId))
+                }
                 return try await attempt(candidate) { provider in
                     guard !localProvidersUsed.contains(where: { $0 === provider }) else { return }
                     localProvidersUsed.append(provider)

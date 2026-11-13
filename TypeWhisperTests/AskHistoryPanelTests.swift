@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import TypeWhisper
@@ -13,7 +14,12 @@ final class AskHistoryPanelTests: XCTestCase {
         try await super.tearDown()
     }
 
+    private var cloudProviders = [(id: "cloud-llm", name: "Cloud LLM")]
+    private let accessChanges = PassthroughSubject<Void, Never>()
+    private var hasPremium = true
+
     private func makeModel(hasPremium: Bool = true) throws -> AskHistoryPanelModel {
+        self.hasPremium = hasPremium
         let index = HistorySearchIndex(
             directory: try environment.makeDirectory().appendingPathComponent("index", isDirectory: true)
         )
@@ -25,12 +31,13 @@ final class AskHistoryPanelTests: XCTestCase {
         return AskHistoryPanelModel(
             session: session,
             environment: AskHistoryPanelEnvironment(
-                hasPremiumAccess: { hasPremium },
-                cloudProviders: { [(id: "cloud-llm", name: "Cloud LLM")] },
+                hasPremiumAccess: { [unowned self] in self.hasPremium },
+                cloudProviders: { [unowned self] in self.cloudProviders },
                 prewarm: {},
                 openRecord: { _ in },
                 openLanguageModelSettings: {},
                 openPremium: {},
+                accessChanges: accessChanges.eraseToAnyPublisher(),
                 defaults: try XCTUnwrap(UserDefaults(suiteName: defaultsSuite))
             )
         )
@@ -65,6 +72,27 @@ final class AskHistoryPanelTests: XCTestCase {
         XCTAssertFalse(model.needsConsent)
         XCTAssertEqual(model.draft, "Was habe ich heute diktiert?")
         XCTAssertEqual(model.session.turns, [])
+    }
+
+    func testAProviderAddedWhileTheConsentShowsIsAskedForToo() throws {
+        let model = try makeModel()
+        model.send("Was habe ich heute diktiert?")
+        cloudProviders.append((id: "other-llm", name: "Other LLM"))
+
+        model.allowCloudProviders()
+        XCTAssertEqual(model.consentProviders.map(\.name), ["Other LLM"])
+        XCTAssertEqual(model.session.turns, [])
+    }
+
+    func testUnlockingPremiumUnlocksTheOpenPanel() async throws {
+        let model = try makeModel(hasPremium: false)
+        hasPremium = true
+        accessChanges.send()
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !model.hasPremiumAccess, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(model.hasPremiumAccess)
     }
 
     func testWithoutPremiumNothingIsAsked() throws {

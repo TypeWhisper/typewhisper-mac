@@ -220,6 +220,8 @@ final class AskHistoryCitationsTests: XCTestCase {
 final class AskHistoryTestEnvironment {
     private var directories: [URL] = []
     private var defaultsSuites: [String] = []
+    /// The defaults of the service made last.
+    private(set) var lastDefaults: UserDefaults?
 
     func makeDirectory() throws -> URL {
         let directory = try TestSupport.makeTemporaryDirectory()
@@ -249,6 +251,7 @@ final class AskHistoryTestEnvironment {
         let suite = "AskHistoryTests-\(UUID().uuidString)"
         defaultsSuites.append(suite)
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        lastDefaults = defaults
         if !fallbacks.isEmpty {
             defaults.set(
                 try JSONEncoder().encode(fallbacks.map { LLMFallbackPriorityItem(providerId: $0) }),
@@ -358,6 +361,23 @@ final class AskHistoryAnswerTests: XCTestCase {
         } catch {
             XCTAssertEqual(provider.calls.count, 4)
         }
+    }
+
+    func testACloudProviderWithoutConsentGetsNothingAndTheListMovesOn() async throws {
+        let cloud = AnsweringProvider(id: "cloud-llm", name: "Cloud LLM")
+        let local = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
+        let service = try makeService(providers: [cloud, local], fallbacks: ["cloud-llm", "local-llm"])
+        service.requiresHistoryConsent = true
+
+        local.enqueue(.text("Antwort [1]."))
+        var answer = try await service.answerHistoryQuestion(request(sources: [source("Text")]))
+        XCTAssertEqual(answer.providerId, "local-llm")
+        XCTAssertEqual(cloud.calls.count, 0)
+
+        environment.lastDefaults?.set(["cloud-llm"], forKey: UserDefaultsKeys.askHistoryCloudConsents)
+        cloud.enqueue(.text("Antwort [1]."))
+        answer = try await service.answerHistoryQuestion(request(sources: [source("Text")]))
+        XCTAssertEqual(answer.providerId, "cloud-llm")
     }
 
     func testTheNextProviderOfTheFallbackListAnswersWhenTheFirstFails() async throws {

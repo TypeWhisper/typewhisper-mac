@@ -145,7 +145,12 @@ final class ServiceContainer: ObservableObject {
                 SettingsNavigationCoordinator.shared.navigate(to: .workflows)
                 ManagedAppWindowOpener.shared.open(id: "settings")
             },
-            openPremium: { PremiumSettingsWindowManager.shared.present(.access) }
+            openPremium: { PremiumSettingsWindowManager.shared.present(.access) },
+            accessChanges: Publishers.Merge(
+                licenseService.objectWillChange.map { _ in () },
+                premiumAccountService.objectWillChange.map { _ in () }
+            )
+            .eraseToAnyPublisher()
         )
     )
     let installedAppsViewModel: InstalledAppsViewModel
@@ -247,6 +252,7 @@ final class ServiceContainer: ObservableObject {
             folderStore: recorderFolderStore
         )
         promptProcessingService.memoryService = memoryService
+        promptProcessingService.requiresHistoryConsent = true
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
