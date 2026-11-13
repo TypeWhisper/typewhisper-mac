@@ -33,8 +33,9 @@ struct AskHistoryOverview {
         effortOverride: String? = nil,
         progress: (_ number: Int, _ count: Int) -> Void = { _, _ in }
     ) async throws -> AskHistoryAnswer {
+        // Without recordings, the model says so in the question's language.
         guard let provider = service.historyOverviewProvider(providerOverride: providerOverride),
-              provider.usesSummaries else {
+              provider.usesSummaries, !retrieval.hits.isEmpty else {
             return try await service.answerHistoryQuestion(
                 AskHistoryRequest(plan: plan, retrieval: retrieval, history: history, now: now, timeZone: timeZone),
                 providerOverride: providerOverride, cloudModelOverride: cloudModelOverride,
@@ -43,9 +44,12 @@ struct AskHistoryOverview {
         }
 
         let hits = Array(retrieval.hits.prefix(Self.maximumSummaries))
+        // In the question's language, kept apart from those in others.
+        let language = plan.language ?? ""
+        let languageName = plan.language.flatMap { Locale(identifier: "en_US").localizedString(forLanguageCode: $0) }
         var summaries: [UUID: (text: String, providerId: String)] = [:]
         for hit in hits {
-            summaries[hit.recordID] = try await index.summary(ofRecord: hit.recordID)
+            summaries[hit.recordID] = try await index.summary(ofRecord: hit.recordID, language: language)
         }
         let missing = hits.filter { summaries[$0.recordID] == nil }
         for (offset, hit) in missing.enumerated() {
@@ -55,11 +59,13 @@ struct AskHistoryOverview {
             guard let transcript = try await index.transcript(ofRecord: hit.recordID),
                   !transcript.passages.isEmpty else { continue }
             let summary = try await service.summarizeHistoryRecording(
-                passages: transcript.passages.map(\.text), title: hit.title, providerOverride: providerOverride,
+                passages: transcript.passages.map(\.text), title: hit.title, language: languageName,
+                providerOverride: providerOverride,
                 cloudModelOverride: cloudModelOverride, effortOverride: effortOverride
             )
             try await index.setSummary(
-                summary.text, providerId: summary.providerId, ofRecord: hit.recordID, contentHash: transcript.contentHash
+                summary.text, providerId: summary.providerId, ofRecord: hit.recordID,
+                contentHash: transcript.contentHash, language: language
             )
             summaries[hit.recordID] = summary
         }

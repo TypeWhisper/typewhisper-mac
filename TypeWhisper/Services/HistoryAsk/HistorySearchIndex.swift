@@ -430,16 +430,17 @@ actor HistorySearchIndex {
         }
     }
 
-    /// The summary kept for a record and the provider that wrote it, unless
-    /// the record changed since or is gone.
-    func summary(ofRecord id: UUID) throws -> (text: String, providerId: String)? {
+    /// The summary kept for a record in a language and the provider that
+    /// wrote it, unless the record changed since or is gone.
+    /// - Parameter language: An ISO 639 code, or empty for the recording's own.
+    func summary(ofRecord id: UUID, language: String = "") throws -> (text: String, providerId: String)? {
         try reading(nil) { connection in
             try connection.rows(
                 """
                 SELECT s.summary, s.provider_id FROM record_summaries s JOIN records r ON r.uuid = s.uuid
-                WHERE s.uuid = ?1 AND s.content_hash = r.content_hash
+                WHERE s.uuid = ?1 AND s.language = ?2 AND s.content_hash = r.content_hash
                 """,
-                [.text(id.uuidString)]
+                [.text(id.uuidString), .text(language)]
             ) { row in row.text(0).map { ($0, row.text(1) ?? "") } }.first ?? nil
         }
     }
@@ -447,14 +448,16 @@ actor HistorySearchIndex {
     /// Keeps a summary of a record until the record changes or is removed.
     /// Does nothing when the record is gone or no longer has the content the
     /// summary was written from, which can change while a model writes it.
-    func setSummary(_ summary: String, providerId: String, ofRecord id: UUID, contentHash: String) throws {
+    func setSummary(
+        _ summary: String, providerId: String, ofRecord id: UUID, contentHash: String, language: String = ""
+    ) throws {
         guard let connection = try open(creating: false) else { return }
         try connection.run(
             """
-            INSERT OR REPLACE INTO record_summaries(uuid, content_hash, summary, provider_id)
-            SELECT uuid, content_hash, ?2, ?3 FROM records WHERE uuid = ?1 AND content_hash = ?4
+            INSERT OR REPLACE INTO record_summaries(uuid, language, content_hash, summary, provider_id)
+            SELECT uuid, ?5, content_hash, ?2, ?3 FROM records WHERE uuid = ?1 AND content_hash = ?4
             """,
-            [.text(id.uuidString), .text(summary), .text(providerId), .text(contentHash)]
+            [.text(id.uuidString), .text(summary), .text(providerId), .text(contentHash), .text(language)]
         )
     }
 
@@ -701,10 +704,12 @@ actor HistorySearchIndex {
 
     private static let summariesSchema = """
         CREATE TABLE IF NOT EXISTS record_summaries(
-          uuid TEXT PRIMARY KEY,
+          uuid TEXT NOT NULL,
+          language TEXT NOT NULL,
           content_hash TEXT NOT NULL,
           summary TEXT NOT NULL,
-          provider_id TEXT NOT NULL
+          provider_id TEXT NOT NULL,
+          PRIMARY KEY(uuid, language)
         ) WITHOUT ROWID;
         """
 

@@ -248,6 +248,31 @@ final class AskHistoryOverviewTests: XCTestCase {
         XCTAssertEqual(provider.calls.count, 4)
     }
 
+    func testAnOverviewIsWrittenInTheQuestionsLanguageAndSaysWhenItHasNoRecordings() async throws {
+        let index = try makeIndex()
+        let id = UUID()
+        try await index.upsert([indexedRecord(id, title: "Aufnahme", passages: [spoken("Anna bestellt Plakate.")])])
+        try await index.setSummary("Anna bestellt Plakate.", providerId: "local-llm", ofRecord: id, contentHash: "1")
+        let provider = AnsweringProvider(id: "local-llm", name: "Local LLM", isLocal: true)
+        let service = try environment.makeService(providers: [provider])
+        let overview = AskHistoryOverview(index: index, service: service)
+        var plan = HistorySearchPlan(question: "Summarize this week")
+        plan.language = "en"
+        let retrieval = try await HistoryRetriever(index: index) { $0 }.retrieve(plan, limit: 20)
+
+        // A summary in the recording's language is not reused for an English question.
+        provider.enqueue(.text("Anna orders posters."))
+        var answer = try await overview.answer(plan: plan, retrieval: retrieval, providerOverride: "local-llm")
+        XCTAssertEqual(answer.text, "- Aufnahme: Anna orders posters. [1]")
+        XCTAssertTrue(provider.calls[0].systemPrompt.contains("Write one to three sentences in English:"))
+
+        // Without recordings the model answers that there are none.
+        provider.enqueue(.text("There are no recordings this week."))
+        answer = try await overview.answer(plan: plan, retrieval: HistoryRetrieval(hits: [], recordCount: 0), providerOverride: "local-llm")
+        XCTAssertEqual(answer.text, "There are no recordings this week.")
+        XCTAssertEqual(answer.sources, [])
+    }
+
     func testAnOverviewNamesTheProviderThatWroteItsSummaries() async throws {
         let index = try makeIndex()
         let id = UUID()

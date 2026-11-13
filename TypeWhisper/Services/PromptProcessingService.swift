@@ -833,6 +833,7 @@ class PromptProcessingService: ObservableObject {
     func summarizeHistoryRecording(
         passages: [String],
         title: String?,
+        language: String? = nil,
         providerOverride: String? = nil,
         cloudModelOverride: String? = nil,
         effortOverride: String? = nil
@@ -846,7 +847,7 @@ class PromptProcessingService: ObservableObject {
                 do {
                     let text = try await self.summary(
                         of: AskHistoryBudget.parts(of: passages, maximumCharacters: maximumCharacters), title: title,
-                        from: candidate, onLocalProviderUsed: onLocalProviderUsed
+                        language: language, from: candidate, onLocalProviderUsed: onLocalProviderUsed
                     )
                     return (text, providerId)
                 } catch where !Task.isCancelled && LLMContextLimit.isReported(by: error)
@@ -862,6 +863,7 @@ class PromptProcessingService: ObservableObject {
     private func summary(
         of parts: [String],
         title: String?,
+        language: String?,
         from candidate: LLMFallbackPriorityItem,
         onLocalProviderUsed: (any LLMProviderPlugin) -> Void
     ) async throws -> String {
@@ -870,7 +872,7 @@ class PromptProcessingService: ObservableObject {
             try Task.checkCancellation()
             summaries.append(try await historyCompletion(
                 from: candidate,
-                instructions: AskHistoryPromptBuilder.summaryInstructions,
+                instructions: AskHistoryPromptBuilder.summaryInstructions(language: language),
                 prompt: AskHistoryPromptBuilder.summaryPrompt(of: part, title: title, part: offset + 1, partCount: parts.count),
                 onLocalProviderUsed: onLocalProviderUsed
             ))
@@ -880,7 +882,7 @@ class PromptProcessingService: ObservableObject {
         }
         return try await historyCompletion(
             from: candidate,
-            instructions: AskHistoryPromptBuilder.combinedSummaryInstructions,
+            instructions: AskHistoryPromptBuilder.combinedSummaryInstructions(language: language),
             prompt: AskHistoryPromptBuilder.combinedSummaryPrompt(of: summaries),
             onLocalProviderUsed: onLocalProviderUsed
         )
