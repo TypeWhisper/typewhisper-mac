@@ -154,7 +154,7 @@ struct AskHistoryPlanner: Sendable {
     /// Whether a model should read the question together with the earlier
     /// conversation: a follow-up that names fewer than two things to search for.
     static func needsFollowUpPlan(_ plan: HistorySearchPlan, history: [AskHistoryTurn]) -> Bool {
-        !history.isEmpty && plan.topicCount + plan.names.count < 2
+        !history.isEmpty && plan.topicCount + Set(plan.names.map(folded)).count < 2
     }
 
     /// The plan for a follow-up question with what a model read from the

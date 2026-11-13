@@ -856,11 +856,14 @@ class PromptProcessingService: ObservableObject {
             var maximumCharacters = AskHistoryBudget.summaryCharacters(for: self.historyProviderKind(of: providerId))
             while true {
                 do {
-                    let text = try await self.summary(
+                    let summary = try await self.summary(
                         of: AskHistoryBudget.parts(of: passages, maximumCharacters: maximumCharacters), title: title,
                         language: language, maximumCharacters: maximumCharacters,
                         from: candidate, onLocalProviderUsed: onLocalProviderUsed
                     )
+                    // A summary cites nothing; one that is only a citation is empty.
+                    let text = AskHistoryCitations.withoutCitations(summary).trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { throw LLMFallbackAttemptError.emptyResult }
                     return (text, providerId)
                 } catch where !Task.isCancelled && LLMContextLimit.isReported(by: error)
                     && maximumCharacters > AskHistoryBudget.minimumSummaryCharacters {

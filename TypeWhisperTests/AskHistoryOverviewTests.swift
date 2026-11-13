@@ -57,8 +57,9 @@ final class AskHistoryFollowUpPlanTests: XCTestCase {
         XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(own, history: history))
         XCTAssertFalse(AskHistoryPlanner.needsFollowUpPlan(own, history: []))
         XCTAssertFalse(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was kostet die Druckerei für die Plakate?"), history: history))
-        // One word and its dictionary form are one thing to search for.
+        // One word and its dictionary form are one thing to search for, a name named twice one person.
         XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "What were their priorities?"), history: history))
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was hat Ben gesagt, als Ben da war?"), history: history))
 
         // The model invents a period; only the question's own counts.
         let followUp = AskHistoryFollowUpPlan(
@@ -146,6 +147,14 @@ final class AskHistoryOverviewTests: XCTestCase {
             END_RECORDING
             """)
 
+        // A reply that is only a citation is no summary.
+        provider.enqueue(.text("[99]"))
+        do {
+            _ = try await service.summarizeHistoryRecording(passages: ["Text."], title: nil, providerOverride: "local-llm")
+            XCTFail("A summary of only a citation should fail")
+        } catch {}
+        let callsBefore = provider.calls.count
+
         // A local model takes 12,000 characters at a time: three parts and one request for the whole.
         let passages = (1...3).map { "Teil \($0): " + String(repeating: "Wort ", count: 1_700) }
         for reply in ["Erstens.", "Zweitens.", "Drittens.", "Alles zusammen."] {
@@ -153,9 +162,9 @@ final class AskHistoryOverviewTests: XCTestCase {
         }
         let long = try await service.summarizeHistoryRecording(passages: passages, title: nil, providerOverride: "local-llm")
         XCTAssertEqual(long.text, "Alles zusammen.")
-        XCTAssertEqual(provider.calls.count, 5)
-        XCTAssertTrue(provider.calls[2].userText.hasPrefix("RECORDING\nPart 2 of 3\nTeil 2: "))
-        XCTAssertEqual(provider.calls[4].userText, "PARTS\n1. Erstens.\n2. Zweitens.\n3. Drittens.\nEND_PARTS")
+        XCTAssertEqual(provider.calls.count, callsBefore + 4)
+        XCTAssertTrue(provider.calls[callsBefore + 1].userText.hasPrefix("RECORDING\nPart 2 of 3\nTeil 2: "))
+        XCTAssertEqual(provider.calls[callsBefore + 3].userText, "PARTS\n1. Erstens.\n2. Zweitens.\n3. Drittens.\nEND_PARTS")
 
         // A passage longer than a part is cut, at a space where there is one.
         XCTAssertEqual(AskHistoryBudget.parts(of: ["aaa bbb ccc"], maximumCharacters: 7), ["aaa", "bbb ccc"])
@@ -170,7 +179,7 @@ final class AskHistoryOverviewTests: XCTestCase {
             title: nil, providerOverride: "local-llm"
         )
         XCTAssertEqual(dense.text, "A und B.")
-        XCTAssertEqual(provider.calls.count, 9)
+        XCTAssertEqual(provider.calls.count, callsBefore + 8)
 
         // Summaries too long to combine at once are combined in steps.
         let longSummary = String(repeating: "Satz. ", count: 1_200)
@@ -179,8 +188,8 @@ final class AskHistoryOverviewTests: XCTestCase {
         }
         let stepwise = try await service.summarizeHistoryRecording(passages: passages, title: nil, providerOverride: "local-llm")
         XCTAssertEqual(stepwise.text, "Alle drei.")
-        XCTAssertEqual(provider.calls.count, 14)
-        XCTAssertTrue(provider.calls[13].userText.hasPrefix("PARTS\n1. Erste zwei.\n2. Satz."))
+        XCTAssertEqual(provider.calls.count, callsBefore + 13)
+        XCTAssertTrue(provider.calls[callsBefore + 12].userText.hasPrefix("PARTS\n1. Erste zwei.\n2. Satz."))
     }
 
     func testAModelReadsAFollowUpAndAFailureLeavesTheQuestionAsItIs() async throws {
