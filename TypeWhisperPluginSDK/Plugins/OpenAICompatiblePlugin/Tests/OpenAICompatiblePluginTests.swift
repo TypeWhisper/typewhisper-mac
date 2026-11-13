@@ -1526,8 +1526,177 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
         )
         XCTAssertNil(json["reasoning"])
-        XCTAssertNil(json["reasoning_effort"])
+        // The workflow's effort is ignored; Thinking Mode off still turns Ollama's reasoning off.
+        XCTAssertEqual(json["reasoning_effort"] as? String, "none")
         XCTAssertEqual(json["temperature"] as? Double, 0.4)
+    }
+
+    func testOllamaChatCompletionsFollowThinkingMode() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "http://localhost:11434",
+                "selectedLLMModel": "gemma4:e2b-mlx",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setServerKind(.ollama, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"off"}}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:11434/v1/chat/completions", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"on"}}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:11434/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        _ = try await plugin.process(systemPrompt: "Fix", userText: "hello", model: nil, temperatureDirective: .inheritProviderSetting)
+        plugin.setThinkingEnabled(true)
+        _ = try await plugin.process(systemPrompt: "Fix", userText: "hello", model: nil, temperatureDirective: .inheritProviderSetting)
+
+        let bodies = try store.sessions.flatMap(\.requestedRequests).map {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap($0.httpBody)) as? [String: Any])
+        }
+        XCTAssertEqual(bodies.count, 2)
+        XCTAssertEqual(bodies[0]["reasoning_effort"] as? String, "none")
+        XCTAssertNil(bodies[0]["thinking"])
+        XCTAssertNil(bodies[1]["reasoning_effort"])
+        XCTAssertEqual((bodies[1]["thinking"] as? [String: String])?["type"], "enabled")
+    }
+
+    func testGenericChatCompletionsNeverSendReasoningEffort() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "http://localhost:1234",
+                "selectedLLMModel": "qwen3",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:1234/v1/chat/completions", statusCode: 200)
+                )
+            ])
+        }
+
+        _ = try await plugin.process(systemPrompt: "Fix", userText: "hello", model: nil, temperatureDirective: .inheritProviderSetting)
+
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
+        )
+        XCTAssertNil(json["reasoning_effort"])
+        XCTAssertNil(json["thinking"])
+    }
+
+    func testOllamaChatCompletionsRetryWithoutReasoningEffortWhenRejected() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "http://localhost:11434",
+                "selectedLLMModel": "llama3.1:8b",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setServerKind(.ollama, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        #"{"error":{"message":"invalid reasoning value: 'none' (must be \"high\", \"medium\", or \"low\")","type":"invalid_request_error"}}"#.utf8
+                    ),
+                    Self.httpResponse(url: "http://localhost:11434/v1/chat/completions", statusCode: 400)
+                ),
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"processed"}}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:11434/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.process(
+            systemPrompt: "Fix",
+            userText: "hello",
+            model: nil,
+            temperatureDirective: .inheritProviderSetting
+        )
+
+        XCTAssertEqual(result, "processed")
+        let bodies = try store.sessions.flatMap(\.requestedRequests).map {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap($0.httpBody)) as? [String: Any])
+        }
+        XCTAssertEqual(bodies.count, 2)
+        XCTAssertEqual(bodies[0]["reasoning_effort"] as? String, "none")
+        XCTAssertNil(bodies[1]["reasoning_effort"])
+        XCTAssertEqual(bodies[1]["max_tokens"] as? Int, 4096)
+    }
+
+    func testRejectsReasoningEffortMatchesOnlyOllamaReasoningRejections() {
+        XCTAssertTrue(OpenAICompatiblePlugin.rejectsReasoningEffort(
+            errorMessage: "invalid reasoning value: \"none\" (must be \"high\", \"medium\", or \"low\")"
+        ))
+        XCTAssertTrue(OpenAICompatiblePlugin.rejectsReasoningEffort(
+            errorMessage: "\"llama3.1:8b\" does not support thinking"
+        ))
+        XCTAssertFalse(OpenAICompatiblePlugin.rejectsReasoningEffort(errorMessage: "model not found"))
+        XCTAssertFalse(OpenAICompatiblePlugin.rejectsReasoningEffort(
+            errorMessage: "model 'custom-thinking:latest' not found"
+        ))
+        XCTAssertFalse(OpenAICompatiblePlugin.rejectsReasoningEffort(
+            errorMessage: "model 'deepseek-reasoning:7b' not found"
+        ))
+    }
+
+    func testOllamaChatCompletionsDoNotRetryAMissingModelNamedThinking() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "http://localhost:11434",
+                "selectedLLMModel": "custom-thinking:latest",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setServerKind(.ollama, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        #"{"error":{"message":"model 'custom-thinking:latest' not found","type":"not_found_error"}}"#.utf8
+                    ),
+                    Self.httpResponse(url: "http://localhost:11434/v1/chat/completions", statusCode: 404)
+                ),
+            ])
+        }
+
+        do {
+            _ = try await plugin.process(
+                systemPrompt: "Fix",
+                userText: "hello",
+                model: nil,
+                temperatureDirective: .inheritProviderSetting
+            )
+            XCTFail("Expected the missing model error")
+        } catch {
+            XCTAssertTrue("\(error)".contains("custom-thinking:latest"))
+        }
+
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
     }
 
     func testAdditionalProfileSendsTheWorkflowEffortWithItsOwnFallback() async throws {

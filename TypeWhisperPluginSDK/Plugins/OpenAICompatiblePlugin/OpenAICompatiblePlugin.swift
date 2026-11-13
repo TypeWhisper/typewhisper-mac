@@ -1169,8 +1169,16 @@ final class OpenAICompatiblePlugin: NSObject,
         return profile.reasoningEffort.requestValue
     }
 
+    /// The `reasoning_effort` a Chat Completions request sends. Ollama thinks by
+    /// default on its OpenAI-compatible endpoints and ignores the `thinking`
+    /// field, so an Ollama profile with Thinking Mode off sends `none`, which
+    /// Ollama maps to `think: false`. Everything else sends no effort.
+    nonisolated static func chatCompletionsReasoningEffort(for profile: OpenAICompatibleProfile) -> String? {
+        profile.serverKind == .ollama && !profile.thinkingEnabled ? "none" : nil
+    }
+
     /// A nil `effort` uses the profile's Reasoning Effort. Chat Completions
-    /// requests never send an effort.
+    /// requests never send a workflow's effort.
     func process(
         systemPrompt: String,
         userText: String,
@@ -1201,6 +1209,7 @@ final class OpenAICompatiblePlugin: NSObject,
                 temperature: temperature,
                 requestTimeout: profile.resolvedChatRequestTimeout,
                 thinkingEnabled: profile.thinkingEnabled,
+                reasoningEffort: Self.chatCompletionsReasoningEffort(for: profile),
                 apiVersion: profile.apiVersion
             )
         case .responses:
@@ -1608,6 +1617,7 @@ final class OpenAICompatiblePlugin: NSObject,
         temperature: Double?,
         requestTimeout: TimeInterval,
         thinkingEnabled: Bool,
+        reasoningEffort: String?,
         apiVersion: String
     ) async throws -> String {
         let path = OpenAICompatibleLLMAPI.chatCompletions.path
@@ -1615,39 +1625,51 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginChatError.apiError("Invalid URL: \(baseURL)\(path)")
         }
 
-        let outputTokenParameter = OutputTokenParameter.maxTokens
-        do {
-            return try await performChatCompletionRequest(
-                url: url,
-                apiKey: apiKey,
-                model: model,
-                systemPrompt: systemPrompt,
-                userText: userText,
-                temperature: temperature,
-                requestTimeout: requestTimeout,
-                thinkingEnabled: thinkingEnabled,
-                outputTokenParameter: outputTokenParameter
-            )
-        } catch let error as PluginChatError {
-            guard case .apiError(let message) = error,
-                  let fallback = Self.fallbackOutputTokenParameter(
+        var outputTokenParameter = OutputTokenParameter.maxTokens
+        var reasoningEffort = reasoningEffort
+        while true {
+            do {
+                return try await performChatCompletionRequest(
+                    url: url,
+                    apiKey: apiKey,
+                    model: model,
+                    systemPrompt: systemPrompt,
+                    userText: userText,
+                    temperature: temperature,
+                    requestTimeout: requestTimeout,
+                    thinkingEnabled: thinkingEnabled,
+                    reasoningEffort: reasoningEffort,
+                    outputTokenParameter: outputTokenParameter
+                )
+            } catch let error as PluginChatError {
+                // Each fallback is tried at most once: the other output token
+                // parameter, and leaving out an effort the server rejects.
+                guard case .apiError(let message) = error else { throw error }
+                if outputTokenParameter == .maxTokens,
+                   let fallback = Self.fallbackOutputTokenParameter(
                     after: outputTokenParameter,
                     errorMessage: message
-                  ) else {
-                throw error
+                   ) {
+                    outputTokenParameter = fallback
+                } else if reasoningEffort != nil,
+                          Self.rejectsReasoningEffort(errorMessage: message) {
+                    reasoningEffort = nil
+                } else {
+                    throw error
+                }
             }
-            return try await performChatCompletionRequest(
-                url: url,
-                apiKey: apiKey,
-                model: model,
-                systemPrompt: systemPrompt,
-                userText: userText,
-                temperature: temperature,
-                requestTimeout: requestTimeout,
-                thinkingEnabled: thinkingEnabled,
-                outputTokenParameter: fallback
-            )
         }
+    }
+
+    /// Whether a Chat Completions error rejects the `reasoning_effort` field.
+    /// Matches only Ollama's own rejections, `invalid reasoning value: …` (an
+    /// older Ollama that does not accept `none`) and `"<model>" does not support
+    /// thinking`, so a model name that contains "thinking" in an unrelated
+    /// error, such as `model 'custom-thinking' not found`, is not retried.
+    nonisolated static func rejectsReasoningEffort(errorMessage: String) -> Bool {
+        let message = errorMessage.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return message.hasPrefix("invalid reasoning value")
+            || message.hasSuffix("does not support thinking")
     }
 
     private func performChatCompletionRequest(
@@ -1659,6 +1681,7 @@ final class OpenAICompatiblePlugin: NSObject,
         temperature: Double?,
         requestTimeout: TimeInterval,
         thinkingEnabled: Bool,
+        reasoningEffort: String?,
         outputTokenParameter: OutputTokenParameter
     ) async throws -> String {
         var requestBody: [String: Any] = [
@@ -1674,6 +1697,9 @@ final class OpenAICompatiblePlugin: NSObject,
         }
         if thinkingEnabled {
             requestBody["thinking"] = ["type": "enabled"]
+        }
+        if let reasoningEffort {
+            requestBody["reasoning_effort"] = reasoningEffort
         }
 
         var request = URLRequest(url: url)
