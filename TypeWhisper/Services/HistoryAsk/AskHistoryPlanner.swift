@@ -198,7 +198,8 @@ struct AskHistoryPlanner: Sendable {
 
     /// Words that frame a question about recordings and name no topic: forms of
     /// "be" and "have", "say", "recording", "summarize". The tagger already
-    /// leaves out articles, pronouns and prepositions.
+    /// leaves out articles, pronouns and prepositions; the longer ones are also
+    /// listed for a Mac whose tagger has no word classes for the language.
     private static func stopWords(for language: String?) -> Set<String> {
         guard let language, let words = stopWordsByLanguage[language] else {
             return stopWordsByLanguage.values.reduce(into: Set()) { $0.formUnion($1) }
@@ -215,7 +216,9 @@ struct AskHistoryPlanner: Sendable {
             meeting meetings conversation conversations call calls history summarize summarise summary \
             overview recap give show find know remember happen happened thing things something anything \
             time times last latest recent recently not much many more most go going get got make made \
-            what when where which who whom whose why how
+            what when where which who whom whose why how \
+            this that these those their theirs them they your yours ours mine with from about into over \
+            some there then than also just only very
             """,
         "de": """
             sein bin bist ist sind seid war waren wart gewesen haben habe hast hat habt hatte hatten gehabt \
@@ -228,7 +231,11 @@ struct AskHistoryPlanner: Sendable {
             uberblick ubersicht zeig zeige zeigen gib geben finde finden weiss wissen erinnern passiert \
             sache sachen etwas mal zuletzt letzte letzten letztes neueste neuesten kurzlich nicht viel viele mehr \
             kommen kommt gehen geht gehe machen macht gemacht was wer wen wem \
-            wann warum wieso weshalb welche welcher welches welchen wofur woruber
+            wann warum wieso weshalb welche welcher welches welchen wofur woruber \
+            meine meinen meinem meiner meines deine deinen deinem deiner deines seine seinen seinem seiner \
+            seines ihre ihren ihrem ihrer ihres unser unsere unseren unserem unserer euer eure euren eurem \
+            diese diesen diesem dieser dieses alle allen aller alles einen einem einer eines dass oder aber \
+            noch auch schon uber nach durch gegen ohne zwischen wegen damit sich mich dich euch
             """,
         "fr": """
             etre suis es est sommes etes sont etais etait etaient ete avoir ai as avons avez ont avais \
@@ -236,7 +243,8 @@ struct AskHistoryPlanner: Sendable {
             ecrire ecrit dicter dicte noter note enregistrer enregistre enregistrement enregistrements \
             transcription transcriptions dictee dictees reunion reunions conversation conversations \
             historique resume resumer resumes apercu montre montrer donne donner trouve trouver chose \
-            choses fois dernier derniere recemment quoi quel quelle quels quelles quand pourquoi comment
+            choses fois dernier derniere recemment quoi quel quelle quels quelles quand pourquoi comment \
+            notre votre leur leurs nous vous elle elles cette ces avec pour dans sans sous chez entre
             """,
         "es": """
             ser soy eres es somos son era eran sido estar estoy esta estan estaba haber he has ha hemos han \
@@ -244,7 +252,9 @@ struct AskHistoryPlanner: Sendable {
             escribir escribi escrito dictar dicte dictado anotar grabar grabacion grabaciones \
             transcripcion transcripciones reunion reuniones conversacion conversaciones historial resume \
             resumir resumen muestra mostrar dame dar encuentra encontrar cosa cosas vez ultima ultimo \
-            recientemente que cual cuales cuando donde como quien porque
+            recientemente que cual cuales cuando donde como quien porque \
+            nuestro nuestra nuestros nuestras vuestro vuestra ellos ellas este estos estas para \
+            sobre entre desde hacia
             """,
         "it": """
             essere sono sei siamo siete era erano stato stata avere ho hai ha abbiamo avete hanno aveva \
@@ -252,7 +262,9 @@ struct AskHistoryPlanner: Sendable {
             scrivere scritto dettare dettato annotare registrare registrato registrazione registrazioni \
             trascrizione trascrizioni dettatura riunione riunioni conversazione conversazioni cronologia \
             riassumi riassumere riassunto panoramica mostra mostrare dammi dare trova trovare cosa cose \
-            volta ultima ultimo recentemente che quale quali quando dove come perche chi
+            volta ultima ultimo recentemente che quale quali quando dove come perche chi \
+            mio mia miei mie tuoi tue suoi sue nostro nostra nostri nostre vostro vostra loro questo \
+            questa questi queste quello quella sopra senza tra fra
             """,
     ].mapValues { Set($0.split(separator: " ").map(String.init)) }
 }
