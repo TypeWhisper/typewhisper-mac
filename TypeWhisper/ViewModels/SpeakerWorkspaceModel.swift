@@ -566,7 +566,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         panel.nameFieldStringValue = "\(baseName).\(format.fileExtension)"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        SubtitleExporter.writeContent(content, to: url, suggestedName: baseName)
+        TranscriptExporter.writeContent(content, to: url, suggestedName: baseName)
     }
 }
 

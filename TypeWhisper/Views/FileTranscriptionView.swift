@@ -17,8 +17,8 @@ struct FileTranscriptionView: View {
             SettingsPageHeader(String(localized: "File Transcription"))
             Divider()
 
-            ScrollView {
-                VStack(spacing: SettingsLayoutMetrics.sectionSpacing) {
+            Form {
+                Section {
                     if viewModel.files.isEmpty {
                         dropZone
                     } else {
@@ -26,15 +26,14 @@ struct FileTranscriptionView: View {
                         controls
                     }
                 }
-                .padding(SettingsLayoutMetrics.pagePadding)
 
-                Divider()
-                    .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                Section(String(localized: "Auto-Save")) {
+                    autoSaveSettings
+                }
 
                 // MARK: - Watch Folder
 
-                Form {
-                Section(String(localized: "watchFolder.folders")) {
+                Section(String(localized: "watchFolder.watchFolder")) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(String(localized: "watchFolder.watchFolder"))
@@ -234,11 +233,10 @@ struct FileTranscriptionView: View {
                         }
                     }
                 }
-                }
-                .formStyle(.grouped)
-                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
-                .padding(.bottom, SettingsLayoutMetrics.pagePadding)
             }
+            .formStyle(.grouped)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
         .frame(minWidth: 500, minHeight: 400)
         .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
@@ -311,7 +309,7 @@ struct FileTranscriptionView: View {
 
     @ViewBuilder
     private var fileList: some View {
-        LazyVStack(spacing: SettingsLayoutMetrics.cardSpacing) {
+        VStack(spacing: SettingsLayoutMetrics.cardSpacing) {
             ForEach(viewModel.files) { item in
                 fileRow(item)
             }
@@ -338,6 +336,22 @@ struct FileTranscriptionView: View {
                         Text(String(localized: "Audio \(String(format: "%.1f", result.duration))s - processed in \(String(format: "%.1f", result.processingTime))s"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if item.hasEmptyTranscript {
+                            Text(String(localized: "No text found"))
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        } else if let savedURL = item.autoSavedURL {
+                            Text(String(localized: "Saved as \(savedURL.lastPathComponent)"))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else if let autoSaveError = item.autoSaveErrorMessage {
+                            Text(autoSaveError)
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                                .lineLimit(2)
+                        }
                     } else if let phase = item.phaseDescription {
                         Text(statusSummary(for: item, phase: phase))
                             .font(.caption)
@@ -467,40 +481,77 @@ struct FileTranscriptionView: View {
     @ViewBuilder
     private func fileActionButtons(_ item: FileTranscriptionViewModel.FileItem) -> some View {
         HStack(spacing: 4) {
-            Button {
-                viewModel.copyText(for: item)
-            } label: {
-                Image(systemName: "doc.on.doc")
-            }
-            .buttonStyle(.plain)
-            .help(String(localized: "Copy"))
-            .accessibilityLabel(localizedAppText(
-                "Copy transcript of \(item.fileName)",
-                de: "Transkript von \(item.fileName) kopieren",
-                ja: "\(item.fileName)の文字起こしをコピー",
-                zh: "复制\(item.fileName)的转录",
-                es: "Copiar la transcripción de \(item.fileName)"
-            ))
-
-            if let result = item.result, !result.segments.isEmpty {
-                Menu {
-                    Button(String(localized: "SRT")) { viewModel.exportSubtitles(for: item, format: .srt) }
-                    Button(String(localized: "VTT")) { viewModel.exportSubtitles(for: item, format: .vtt) }
+            if item.autoSavedURL != nil {
+                Button {
+                    viewModel.revealAutoSavedTranscript(for: item)
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Image(systemName: "folder")
                 }
                 .buttonStyle(.plain)
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .frame(width: 20)
-                .help(String(localized: "Export Subtitles"))
+                .help(String(localized: "Show in Finder"))
                 .accessibilityLabel(localizedAppText(
-                    "Export subtitles for \(item.fileName)",
-                    de: "Untertitel für \(item.fileName) exportieren",
-                    ja: "\(item.fileName)の字幕を書き出し",
-                    zh: "导出\(item.fileName)的字幕",
-                    es: "Exportar subtítulos de \(item.fileName)"
+                    "Show saved transcript of \(item.fileName) in Finder",
+                    de: "Gespeichertes Transkript von \(item.fileName) im Finder zeigen",
+                    ja: "\(item.fileName)の保存済み文字起こしをFinderで表示",
+                    zh: "在访达中显示\(item.fileName)已保存的转录",
+                    es: "Mostrar en Finder la transcripción guardada de \(item.fileName)"
                 ))
+            }
+
+            if !item.hasEmptyTranscript {
+                Button {
+                    viewModel.copyText(for: item)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "Copy"))
+                .accessibilityLabel(localizedAppText(
+                    "Copy transcript of \(item.fileName)",
+                    de: "Transkript von \(item.fileName) kopieren",
+                    ja: "\(item.fileName)の文字起こしをコピー",
+                    zh: "复制\(item.fileName)的转录",
+                    es: "Copiar la transcripción de \(item.fileName)"
+                ))
+            }
+
+            if let result = item.result {
+                let hasText = !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                let hasSegments = !result.segments.isEmpty
+
+                if hasText || hasSegments {
+                    Menu {
+                        if hasText {
+                            Button(String(localized: "Plain Text (.txt)")) {
+                                viewModel.exportTranscript(for: item, format: .plainText)
+                            }
+                            Button(String(localized: "Markdown (.md)")) {
+                                viewModel.exportTranscript(for: item, format: .markdown)
+                            }
+                        }
+                        if hasText && hasSegments {
+                            Divider()
+                        }
+                        if hasSegments {
+                            Button(String(localized: "SRT")) { viewModel.exportTranscript(for: item, format: .srt) }
+                            Button(String(localized: "VTT")) { viewModel.exportTranscript(for: item, format: .vtt) }
+                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(width: 20)
+                    .help(String(localized: "Export Transcript"))
+                    .accessibilityLabel(localizedAppText(
+                        "Export transcript of \(item.fileName)",
+                        de: "Transkript von \(item.fileName) exportieren",
+                        ja: "\(item.fileName)の文字起こしを書き出し",
+                        zh: "导出\(item.fileName)的转录",
+                        es: "Exportar la transcripción de \(item.fileName)"
+                    ))
+                }
             }
         }
     }
@@ -553,8 +604,11 @@ struct FileTranscriptionView: View {
                     Menu(String(localized: "Export All")) {
                         Button(String(localized: "Copy All Text")) { viewModel.copyAllText() }
                         Divider()
-                        Button(String(localized: "Export All as SRT")) { viewModel.exportAllSubtitles(format: .srt) }
-                        Button(String(localized: "Export All as VTT")) { viewModel.exportAllSubtitles(format: .vtt) }
+                        Button(String(localized: "Export All as Text")) { viewModel.exportAllTranscripts(format: .plainText) }
+                        Button(String(localized: "Export All as Markdown")) { viewModel.exportAllTranscripts(format: .markdown) }
+                        Divider()
+                        Button(String(localized: "Export All as SRT")) { viewModel.exportAllTranscripts(format: .srt) }
+                        Button(String(localized: "Export All as VTT")) { viewModel.exportAllTranscripts(format: .vtt) }
                     }
                     .controlSize(.small)
                     .fixedSize(horizontal: true, vertical: false)
@@ -643,6 +697,16 @@ struct FileTranscriptionView: View {
         )
     }
 
+    private var clearAutoSaveFolderLabel: String {
+        localizedAppText(
+            "Save Next to the Original File",
+            de: "Neben der Originaldatei speichern",
+            ja: "元のファイルと同じ場所に保存",
+            zh: "保存到原始文件旁边",
+            es: "Guardar junto al archivo original"
+        )
+    }
+
     private var clearOutputFolderLabel: String {
         localizedAppText(
             "Clear Output Folder",
@@ -684,6 +748,58 @@ struct FileTranscriptionView: View {
                     .controlSize(.small)
                     .disabled(viewModel.batchState == .processing)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var autoSaveSettings: some View {
+        Toggle(isOn: $viewModel.autoSaveTranscripts) {
+            Text(String(localized: "Auto-save transcripts"))
+            Text(String(localized: "Saves each file transcribed at the top of this page when it finishes."))
+        }
+
+        if viewModel.autoSaveTranscripts {
+            Picker(String(localized: "Auto-save format"), selection: $viewModel.autoSaveFormat) {
+                ForEach(TranscriptExportFormat.allCases, id: \.self) { format in
+                    Text(format.displayName).tag(format)
+                }
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "Auto-save folder"))
+                        .font(.body)
+                    Text(viewModel.autoSaveFolderPath ?? (FileTranscriptionViewModel.canAutoSaveNextToOriginal
+                        ? String(localized: "Next to the original file")
+                        : String(localized: "watchFolder.noFolder")))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+                if viewModel.autoSaveFolderPath != nil {
+                    Button {
+                        viewModel.clearAutoSaveFolder()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(clearAutoSaveFolderLabel)
+                    .accessibilityLabel(clearAutoSaveFolderLabel)
+                }
+                Button(String(localized: "watchFolder.selectFolder")) {
+                    viewModel.chooseAutoSaveFolder()
+                }
+                .accessibilityLabel(localizedAppText(
+                    "Select Auto-Save Folder…",
+                    de: "Ordner für automatisches Speichern auswählen …",
+                    ja: "自動保存フォルダを選択…",
+                    zh: "选择自动保存文件夹…",
+                    es: "Seleccionar carpeta de guardado automático…"
+                ))
             }
         }
     }

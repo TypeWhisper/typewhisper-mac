@@ -204,6 +204,9 @@ enum UserDefaultsKeys {
     static let fileTranscriptionModel = "fileTranscriptionModel"
     static let fileTranscriptionLanguage = "fileTranscriptionLanguage"
     static let fileTranscriptionTranslationTarget = "fileTranscriptionTranslationTarget"
+    static let fileTranscriptionAutoSave = "fileTranscriptionAutoSave"
+    static let fileTranscriptionAutoSaveFormat = "fileTranscriptionAutoSaveFormat"
+    static let fileTranscriptionAutoSaveFolderBookmark = "fileTranscriptionAutoSaveFolderBookmark"
 
     // MARK: - Dictation Recovery
     static let dictationRecoveryEngine = "dictationRecoveryEngine"

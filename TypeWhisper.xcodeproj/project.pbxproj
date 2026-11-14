@@ -308,6 +308,7 @@
 		AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000046 /* AdvancedSettingsView.swift */; };
 		AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */; };
 		AA00000000000000000050 /* SubtitleExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000050 /* SubtitleExporter.swift */; };
+		7E5C00000000000000000002 /* TranscriptExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5C00000000000000000001 /* TranscriptExporter.swift */; };
 		5CE409C0AEA314FD01618C82 /* SpeakerAlignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A2B487A798EB62AA4116C7 /* SpeakerAlignment.swift */; };
 		92EAA19836C01760FDD524B9 /* SpeakerTranscriptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2CA9E7E9C79CF5DC92AB80 /* SpeakerTranscriptCoordinator.swift */; };
 		9BD021FDA7532FB8F4BED577 /* SpeakerChannelAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD82E08C9E72006C3E69EB21 /* SpeakerChannelAttribution.swift */; };
@@ -1069,6 +1070,7 @@
 		BB00000000000000000046 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenPunctuationSettingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000050 /* SubtitleExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleExporter.swift; sourceTree = "<group>"; };
+		7E5C00000000000000000001 /* TranscriptExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptExporter.swift; sourceTree = "<group>"; };
 		81A2B487A798EB62AA4116C7 /* SpeakerAlignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerAlignment.swift; sourceTree = "<group>"; };
 		AA2CA9E7E9C79CF5DC92AB80 /* SpeakerTranscriptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerTranscriptCoordinator.swift; sourceTree = "<group>"; };
 		DD82E08C9E72006C3E69EB21 /* SpeakerChannelAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerChannelAttribution.swift; sourceTree = "<group>"; };
@@ -2318,6 +2320,7 @@
 				CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */,
 				CA1F00000000000000000009 /* CalendarMeetingRecordingFilename.swift */,
 				BB00000000000000000050 /* SubtitleExporter.swift */,
+				7E5C00000000000000000001 /* TranscriptExporter.swift */,
 				81A2B487A798EB62AA4116C7 /* SpeakerAlignment.swift */,
 				AA2CA9E7E9C79CF5DC92AB80 /* SpeakerTranscriptCoordinator.swift */,
 				DD82E08C9E72006C3E69EB21 /* SpeakerChannelAttribution.swift */,
@@ -5795,6 +5798,7 @@
 				AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */,
 				AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */,
 				AA00000000000000000050 /* SubtitleExporter.swift in Sources */,
+				7E5C00000000000000000002 /* TranscriptExporter.swift in Sources */,
 				5CE409C0AEA314FD01618C82 /* SpeakerAlignment.swift in Sources */,
 				92EAA19836C01760FDD524B9 /* SpeakerTranscriptCoordinator.swift in Sources */,
 				9BD021FDA7532FB8F4BED577 /* SpeakerChannelAttribution.swift in Sources */,
