@@ -13,6 +13,9 @@ enum AssemblyAITranscriptionMode: String, CaseIterable, Sendable {
     case live
     /// Recordings go to the Sync API ($0.30/h); no live preview from AssemblyAI.
     case sync
+    /// Recordings go to the Dictation API ($0.62/h), which returns the text
+    /// cleaned up; no live preview from AssemblyAI.
+    case dictation
     /// Recordings go to the async API ($0.21/h); no live preview from AssemblyAI.
     case async
 }
@@ -290,7 +293,12 @@ final class AssemblyAIPlugin: NSObject,
             audioDuration: audio.duration
         ) {
             do {
-                return try await transcribeSync(audio: audio, request: syncRequest, apiKey: apiKey)
+                return try await transcribeSync(
+                    audio: audio,
+                    request: syncRequest,
+                    apiKey: apiKey,
+                    cleanedUp: _transcriptionMode == .dictation
+                )
             } catch {
                 if error is CancellationError || Task.isCancelled {
                     throw error
@@ -367,13 +375,17 @@ final class AssemblyAIPlugin: NSObject,
         return SyncRequest(modelId: sync.modelId, language: syncLanguage, keyterms: keyterms)
     }
 
+    /// With `cleanedUp`, the recording goes to the Dictation API instead, which takes the
+    /// same request, always runs Universal-3.6 Pro and returns the text cleaned up. When
+    /// `makeSyncRequest` returns nil or this throws, the async fallback has no cleanup.
     private func transcribeSync(
         audio: AudioData,
         request syncRequest: SyncRequest,
-        apiKey: String
+        apiKey: String,
+        cleanedUp: Bool
     ) async throws -> PluginStructuredTranscriptionResult {
         let text = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await sendSyncRequest(syncRequest, uploadFile: uploadFile, apiKey: apiKey)
+            try await sendSyncRequest(syncRequest, uploadFile: uploadFile, apiKey: apiKey, cleanedUp: cleanedUp)
         }
         // The sync response carries no detected language.
         return PluginStructuredTranscriptionResult(text: text, detectedLanguage: syncRequest.language)
@@ -382,9 +394,13 @@ final class AssemblyAIPlugin: NSObject,
     private func sendSyncRequest(
         _ syncRequest: SyncRequest,
         uploadFile: PluginAudioUploadFile,
-        apiKey: String
+        apiKey: String,
+        cleanedUp: Bool
     ) async throws -> String {
-        guard let url = URL(string: "https://sync.assemblyai.com/v1/transcribe") else {
+        let endpoint = cleanedUp
+            ? "https://dictation.assemblyai.com/v1/transcribe"
+            : "https://sync.assemblyai.com/v1/transcribe"
+        guard let url = URL(string: endpoint) else {
             throw PluginTranscriptionError.apiError("Invalid sync URL")
         }
 
@@ -392,7 +408,10 @@ final class AssemblyAIPlugin: NSObject,
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
-        request.setValue(syncRequest.modelId, forHTTPHeaderField: "X-AAI-Model")
+        // The Dictation API always runs Universal-3.6 Pro and takes no model header.
+        if !cleanedUp {
+            request.setValue(syncRequest.modelId, forHTTPHeaderField: "X-AAI-Model")
+        }
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = try Self.makeSyncRequestBody(
             config: syncRequest.config,
@@ -433,6 +452,12 @@ final class AssemblyAIPlugin: NSObject,
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let text = json["text"] as? String else {
             throw PluginTranscriptionError.apiError("Invalid sync transcription response")
+        }
+        // The Dictation API returns the verbatim transcript in `text` and the cleaned-up
+        // text in `llm_response`; without a rewrite, the transcript is still usable.
+        if cleanedUp, let cleanedText = json["llm_response"] as? String,
+           !cleanedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return cleanedText
         }
         return text
     }
@@ -1551,6 +1576,8 @@ private struct AssemblyAISettingsView: View {
                     .tag(AssemblyAITranscriptionMode.live)
                 Text("Sync – $0.30/h", bundle: bundle)
                     .tag(AssemblyAITranscriptionMode.sync)
+                Text("Dictation – $0.62/h", bundle: bundle)
+                    .tag(AssemblyAITranscriptionMode.dictation)
                 Text("Async – $0.21/h", bundle: bundle)
                     .tag(AssemblyAITranscriptionMode.async)
             }
@@ -1570,6 +1597,8 @@ private struct AssemblyAISettingsView: View {
                         Text("Streams dictations that show a live preview: the preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings, files and dictations without a preview use the Sync API. With more than 100 dictionary terms or a term longer than 50 characters, the recording is also transcribed with all of them, which is billed in addition.", bundle: bundle)
                     case .sync:
                         Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
+                    case .dictation:
+                        Text("Uploads the recording when you stop and returns it cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings over 20 minutes, more than 100 dictionary terms, speaker diarization, a language it doesn't support, or a failed request use the async API with the selected model instead, without cleanup.", bundle: bundle)
                     case .async:
                         Text("Lowest price; the text takes a few seconds after you stop. No live preview from AssemblyAI.", bundle: bundle)
                     }
