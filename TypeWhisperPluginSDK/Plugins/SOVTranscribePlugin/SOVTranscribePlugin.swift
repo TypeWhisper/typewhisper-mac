@@ -797,6 +797,8 @@ private struct SOVTranscribeSettingsView: View {
     @State private var showHfToken = false
     @State private var isValidatingToken = false
     @State private var tokenValidationResult: Bool?
+    /// The token whose check is running. Clearing it discards that check's result.
+    @State private var tokenBeingValidated: String?
 
     private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
@@ -858,6 +860,7 @@ private struct SOVTranscribeSettingsView: View {
 
                     if hasStoredHfToken {
                         Button(String(localized: "Remove", bundle: bundle)) {
+                            tokenBeingValidated = nil
                             hfTokenInput = ""
                             tokenValidationResult = nil
                             isValidatingToken = false
@@ -956,6 +959,10 @@ private struct SOVTranscribeSettingsView: View {
         }
         .onChange(of: hfTokenInput) { _, newValue in
             let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let pending = tokenBeingValidated, pending != trimmedValue {
+                tokenBeingValidated = nil
+                isValidatingToken = false
+            }
             if trimmedValue != storedHfToken {
                 tokenValidationResult = nil
             }
@@ -1034,10 +1041,14 @@ private struct SOVTranscribeSettingsView: View {
 
         isValidatingToken = true
         tokenValidationResult = nil
+        tokenBeingValidated = trimmedToken
 
         Task {
             let isValid = await plugin.validateHuggingFaceToken(trimmedToken)
             await MainActor.run {
+                // Remove or an edit while the check ran makes its result stale.
+                guard tokenBeingValidated == trimmedToken, trimmedHfTokenInput == trimmedToken else { return }
+                tokenBeingValidated = nil
                 isValidatingToken = false
                 tokenValidationResult = isValid
                 if isValid {
