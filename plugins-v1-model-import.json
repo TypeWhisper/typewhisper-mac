@@ -389,6 +389,17 @@
       "locality": "local",
       "releases": [
         {
+          "version": "1.8.0",
+          "minHostVersion": "1.8.2",
+          "sdkCompatibilityVersion": "v1-model-import",
+          "size": 7803786,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-parakeet-v1.8.0/ParakeetPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.7.0",
           "minHostVersion": "1.8.2",
           "sdkCompatibilityVersion": "v1-model-import",
