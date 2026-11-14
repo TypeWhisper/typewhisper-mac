@@ -11,8 +11,8 @@ final class SOVTranscribePluginTests: XCTestCase {
 
     func testModelIsPinnedToOneCommit() {
         let model = SOVTranscribePlugin.availableModels[0]
-        XCTAssertEqual(model.repoId, "nativ-community/SOV-Transcribe-1-4bit")
-        XCTAssertEqual(model.revision, "8a2f46d85735e55c0b6d1c8d882c570ed20d4d5c")
+        XCTAssertEqual(model.repoId, "TypeWhisper/SOV-Transcribe-1-4bit")
+        XCTAssertEqual(model.revision, "eb6a7fe512832ef16e6c5e83e6904540ec601618")
     }
 
     func testInstructionNamesTheLanguageOrAsksForAnyLanguage() {

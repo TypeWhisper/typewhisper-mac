@@ -592,7 +592,7 @@ final class SOVTranscribePlugin: NSObject, TranscriptionEnginePlugin, Transcript
         return modelId
     }
 
-    private func hasDownloadedModel(_ modelDef: SOVTranscribeModelDef) -> Bool {
+    fileprivate func hasDownloadedModel(_ modelDef: SOVTranscribeModelDef) -> Bool {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
         return usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) != nil
     }
@@ -651,10 +651,10 @@ final class SOVTranscribePlugin: NSObject, TranscriptionEnginePlugin, Transcript
 
     // MARK: - Model Definitions
 
-    /// The 4-bit MLX weights, pinned to one commit. Moving them to another repository
-    /// with the same files changes only these two lines.
-    static let modelRepoId = "nativ-community/SOV-Transcribe-1-4bit"
-    static let modelRevision = "8a2f46d85735e55c0b6d1c8d882c570ed20d4d5c"
+    /// TypeWhisper's 4-bit MLX export, converted from Salesforce's BF16 checkpoint
+    /// and pinned to one commit.
+    static let modelRepoId = "TypeWhisper/SOV-Transcribe-1-4bit"
+    static let modelRevision = "eb6a7fe512832ef16e6c5e83e6904540ec601618"
 
     static let availableModels: [SOVTranscribeModelDef] = [
         SOVTranscribeModelDef(
@@ -992,9 +992,10 @@ private struct SOVTranscribeSettingsView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .accessibilityLabel(Text("Loaded", bundle: bundle))
+                    // Unloading frees memory only. The 15.6 GB of weights stay on disk
+                    // until they are deleted from the downloaded models list.
                     Button(String(localized: "Unload", bundle: bundle)) {
                         plugin.unloadModel()
-                        try? plugin.deleteModelFiles(modelDef)
                         modelState = plugin.modelState
                     }
                     .buttonStyle(.bordered)
@@ -1004,7 +1005,9 @@ private struct SOVTranscribeSettingsView: View {
             } else if modelDef.id == onDemandModelId, modelState == .notLoaded {
                 PluginModelLoadsOnDemandStatus(bundle: bundle)
             } else {
-                Button(String(localized: "Download & Load", bundle: bundle)) {
+                Button(plugin.hasDownloadedModel(modelDef)
+                    ? String(localized: "Load", bundle: bundle)
+                    : String(localized: "Download & Load", bundle: bundle)) {
                     selectedModelId = modelDef.id
                     modelState = .loading
                     isPolling = true
@@ -1017,7 +1020,9 @@ private struct SOVTranscribeSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(modelState == .loading || !isSupported)
-                .accessibilityLabel(Text("Download and load \(modelDef.displayName)", bundle: bundle))
+                .accessibilityLabel(plugin.hasDownloadedModel(modelDef)
+                    ? Text("Load \(modelDef.displayName)", bundle: bundle)
+                    : Text("Download and load \(modelDef.displayName)", bundle: bundle))
             }
         }
         .padding(.vertical, 4)
