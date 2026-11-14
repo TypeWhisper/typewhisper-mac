@@ -718,11 +718,14 @@ final class TextInsertionService {
         if isLiveFieldTextRole(element) {
             return (element, true)
         }
-        if let descendant = findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout) {
+        let descendantSearch = findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout)
+        if let descendant = descendantSearch.element {
             return (descendant, true)
         }
         return (nil, Self.focusedElementShowsKeyboardTarget(
-            role: stringAttribute(kAXRoleAttribute as CFString, from: element)
+            role: stringAttribute(kAXRoleAttribute as CFString, from: element),
+            hostsWebContent: descendantSearch.foundWebArea,
+            liesInEditableWebContent: axElementAttribute("AXEditableAncestor" as CFString, from: element) != nil
         ))
     }
 
@@ -730,8 +733,19 @@ final class TextInsertionService {
     /// focus a control inside the window, such as a list in Finder. Apps that draw their own
     /// content name the window itself: GNU Emacs, Qt apps such as OBS, and remote desktop
     /// clients such as Parsec. A paste can still land there (#1750).
-    nonisolated static func focusedElementShowsKeyboardTarget(role: String?) -> Bool {
-        role != kAXWindowRole
+    ///
+    /// Apps that show a web view, such as Meta's Muse, can name the view or one of its
+    /// containers while a field deep inside the web content has focus, beyond the reach of the
+    /// descendant search. Web editors can also focus an element inside their editable region
+    /// that has no text role. Neither shows that the paste missed a text field (#1937). A
+    /// focused link or button on a web page contains no web area and lies outside editable
+    /// content, so it still does.
+    nonisolated static func focusedElementShowsKeyboardTarget(
+        role: String?,
+        hostsWebContent: Bool = false,
+        liesInEditableWebContent: Bool = false
+    ) -> Bool {
+        role != kAXWindowRole && !hostsWebContent && !liesInEditableWebContent
     }
 
     /// Apps that build their accessibility tree on demand, such as Chromium browsers and Electron
@@ -2131,21 +2145,28 @@ final class TextInsertionService {
         findSelectionInDescendants(of: root, maxDepth: 6, maxNodes: 80)
     }
 
+    /// The first editable text element below `root`, and whether the search passed a web area,
+    /// whose focused field can lie beyond the search limits.
     private func findEditableTextDescendant(
         of root: AXUIElement,
         messagingTimeout: Float? = nil
-    ) -> AXUIElement? {
+    ) -> (element: AXUIElement?, foundWebArea: Bool) {
         var queue: [(element: AXUIElement, depth: Int)] = childElements(of: root).map { ($0, 1) }
         var visited = 0
+        var foundWebArea = false
 
         while !queue.isEmpty && visited < 80 {
             let current = queue.removeFirst()
             visited += 1
             applyMessagingTimeout(messagingTimeout, to: current.element)
 
-            if isLiveFieldTextRole(current.element),
+            let role = stringAttribute(kAXRoleAttribute as CFString, from: current.element)
+            if role == "AXWebArea" {
+                foundWebArea = true
+            }
+            if let role, Self.liveFieldTextRoles.contains(role),
                selectedRangeAttribute(from: current.element) != nil {
-                return current.element
+                return (current.element, foundWebArea)
             }
 
             if current.depth < 6 {
@@ -2155,7 +2176,7 @@ final class TextInsertionService {
             }
         }
 
-        return nil
+        return (nil, foundWebArea)
     }
 
     private func findSelectionInDescendants(
@@ -2702,9 +2723,12 @@ final class TextInsertionService {
         let role = roleValue as? String else {
             return false
         }
-        return ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"]
-            .contains(role)
+        return Self.liveFieldTextRoles.contains(role)
     }
+
+    private static let liveFieldTextRoles: Set<String> = [
+        "AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"
+    ]
 
     private enum TextFieldAncestry {
         case web
