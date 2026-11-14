@@ -963,6 +963,15 @@ final class ParakeetPluginTests: XCTestCase {
             ("is the 'pay amolai<unk>, bred with olive oil", "is the 'pay amolai, bred with olive oil"),
             ("<unk>Hello there<unk>", "Hello there"),
             ("Le spectacle <unk>Son et Lumière<unk> à la pyramide", "Le spectacle Son et Lumière à la pyramide"),
+            // Greek final sigma, quotes before a capital and Maltese apostrophes (FLEURS, typewhisper-win#780).
+            ("Η δέκα τη καταιγίδα τη<unk> εποχή<unk> των Ατλαντικών", "Η δέκα τη καταιγίδα της εποχής των Ατλαντικών"),
+            ("Επίση<unk>, μετά την επανάσταση", "Επίσης, μετά την επανάσταση"),
+            ("εναντίον του<unk>.", "εναντίον τους."),
+            ("Se avete visto il film<unk>Il mistero dei Templari<unk>, potreste", "Se avete visto il film Il mistero dei Templari, potreste"),
+            ("Se avete visto il film,<unk>Il mistero dei Templari<unk>, potreste", "Se avete visto il film, Il mistero dei Templari, potreste"),
+            ("hakati nimetama<unk>Kopersiooniks Dragoon.", "hakati nimetama Kopersiooniks Dragoon."),
+            ("Karpaneto kompeta f<unk>żewġ triela", "Karpaneto kompeta f'żewġ triela"),
+            ("ħafna mezzi oħra ta<unk> trasport.", "ħafna mezzi oħra ta trasport."),
             ("no markers here", "no markers here"),
         ]
         for (input, expected) in cases {
@@ -1001,6 +1010,25 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(words.map(\.text), ["hello,", "world."])
         XCTAssertEqual(words.first?.end, 0.5)
         XCTAssertEqual(ParakeetPlugin.groupWordsIntoSegments(words).map(\.text), ["hello, world."])
+    }
+
+    func testMarkersThatBecomeLettersStayOnTheirWordAndQuotesSplitWords() {
+        let tokens = ["▁τη", "<unk>", "▁εποχή", "<unk>", "▁f", "<unk>", "ż", "ewġ", "▁film", "<unk>", "Il", "▁mistero", "▁M", "<unk>", "A"]
+        let timings = tokens.enumerated().map { index, token in
+            TokenTiming(token: token, tokenId: token == "<unk>" ? 0 : index + 1,
+                        startTime: Double(index) * 0.1, endTime: Double(index) * 0.1 + 0.1, confidence: 1)
+        }
+
+        let words = ParakeetPlugin.groupTokensIntoWords(timings)
+
+        XCTAssertEqual(words.map(\.text), ["της", "εποχής", "f'żewġ", "film", "Il", "mistero", "M&A"])
+        XCTAssertEqual(words[0].end, 0.2, accuracy: 0.0001, "ς keeps the marker's time")
+        XCTAssertEqual(words[3].end, 1.0, accuracy: 0.0001, "The word before the quote ends with the marker")
+        XCTAssertEqual(words[4].start, 1.0, accuracy: 0.0001, "The quoted word starts with its own token")
+        XCTAssertEqual(
+            ParakeetPlugin.groupWordsIntoSegments(words).map(\.text),
+            ["της εποχής f'żewġ film Il mistero M&A"]
+        )
     }
 
     func testOpeningPunctuationLeftByADroppedMarkerJoinsTheNextWord() {

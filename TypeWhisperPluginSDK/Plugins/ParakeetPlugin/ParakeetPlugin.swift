@@ -625,15 +625,25 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         )
     }
 
-    /// Parakeet's vocabulary has no token for a few characters, mostly "&", brackets and some
-    /// quotes. v3 never writes them, but Ultra learned to and emits "<unk>" in their place
-    /// ("M<unk>A", "spectroscopy <unk> FTIR"). Between capitals it stands for "&" (M&A, P&L,
-    /// R&D); elsewhere it is dropped, so the marker never reaches the user's text.
+    /// Parakeet's vocabulary has no token for a few characters: "&", brackets, dashes, typographic
+    /// quotes and apostrophes, and the Greek final sigma "ς". v3 leaves them out, but Ultra and
+    /// Fluid Speech Pro learned to write them and emit "<unk>" in their place. The context tells
+    /// which character it stands for most of the time:
+    /// - between capitals "&" (M&A, P&L, R&D);
+    /// - at the end of a lowercase Greek word "ς" ("τη<unk> εποχή<unk>" is "της εποχής");
+    /// - before a capital an opening quote, so a space keeps the words apart ("film<unk>Il mistero");
+    /// - between lowercase letters an apostrophe (Maltese "f<unk>żewġ" is "f'żewġ").
+    /// Anywhere else it is dropped, so the marker never reaches the user's text. The Windows
+    /// sherpa-onnx plugin applies the same rules in `UnknownTokens.cs`.
     static func removingUnknownTokens(from text: String) -> String {
         let marker = "<unk>"
         guard text.contains(marker) else { return text }
         var cleaned = text
             .replacingOccurrences(of: "(?<=\\p{Lu})<unk>(?=\\p{Lu})", with: "&", options: .regularExpression)
+            // Lowercase Greek and Greek Extended, then the end of the word.
+            .replacingOccurrences(of: "(?<=[\\u03AC-\\u03CE\\u1F00-\\u1FFF])<unk>(?![\\p{L}\\p{N}])", with: "ς", options: .regularExpression)
+            .replacingOccurrences(of: "(?<=[\\p{L}\\p{N}])<unk>(?=\\p{Lu})", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "(?<=\\p{Ll})<unk>(?=\\p{Ll})", with: "'", options: .regularExpression)
             .replacingOccurrences(of: "(?<=\\w)<unk>(?=\\w)", with: "", options: .regularExpression)
             .replacingOccurrences(of: marker, with: " ")
         cleaned = cleaned
@@ -774,6 +784,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             if token.isEmpty || token == "<blank>" || token == "<pad>" { continue }
 
             let startsNewWord = isWordBoundary(token) || currentWord.isEmpty
+                || markerSeparatesWords(currentWord, nextToken: token)
 
             if startsNewWord && !currentWord.isEmpty {
                 let trimmed = currentWord.trimmingCharacters(in: .whitespaces)
@@ -823,6 +834,17 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
         if let opening { cleaned.append(opening) }
         return cleaned
+    }
+
+    /// The "<unk>" token never carries a word boundary, so it joins the word before it. That
+    /// keeps a marker that becomes "ς" or "'" on its word. Before a capital it becomes a space
+    /// ("film<unk>Il" is "film Il"), so the capital starts a new word. Between two capitals it
+    /// is "&" and the word stays whole (M&A).
+    private static func markerSeparatesWords(_ currentWord: String, nextToken: String) -> Bool {
+        let marker = "<unk>"
+        guard currentWord.hasSuffix(marker), nextToken.first?.isUppercase == true,
+              let before = currentWord.dropLast(marker.count).last else { return false }
+        return (before.isLetter || before.isNumber) && !before.isUppercase
     }
 
     /// Same characters as the spacing rule in `removingUnknownTokens(from:)`.
