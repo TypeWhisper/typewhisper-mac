@@ -74,18 +74,38 @@ enum TranscriptExporter {
         }
     }
 
-    /// `baseName.fileExtension` in `folder`, or `baseName 2.fileExtension` and so
-    /// on when that file exists, so an automatic save never replaces a file.
-    static func availableURL(in folder: URL, baseName: String, fileExtension: String) -> URL {
-        let fileManager = FileManager.default
-        var candidate = folder.appendingPathComponent("\(baseName).\(fileExtension)")
-        var number = 2
-        while fileManager.fileExists(atPath: candidate.path) {
-            candidate = folder.appendingPathComponent("\(baseName) \(number).\(fileExtension)")
-            number += 1
+    /// Writes `content` to `baseName.fileExtension` in `folder`, or to
+    /// `baseName 2.fileExtension` and so on, and returns the file written, or nil.
+    /// Each name is only created when no file has it yet, so no file is ever
+    /// replaced, also not one another app creates while this one writes.
+    @discardableResult
+    static func writeNewFile(
+        _ content: String,
+        in folder: URL,
+        baseName: String,
+        fileExtension: String
+    ) -> URL? {
+        let data = Data(content.utf8)
+        for number in 1...maximumFileNumber {
+            let name = number == 1 ? "\(baseName).\(fileExtension)" : "\(baseName) \(number).\(fileExtension)"
+            let url = folder.appendingPathComponent(name)
+            do {
+                try data.write(to: url, options: .withoutOverwriting)
+                return url
+            } catch CocoaError.fileWriteFileExists {
+                continue
+            } catch {
+                transcriptExporterLogger.error(
+                    "Failed to export transcript '\(baseName, privacy: .private(mask: .hash))' to \(url.path, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .public)"
+                )
+                return nil
+            }
         }
-        return candidate
+        return nil
     }
+
+    /// Stops `writeNewFile` in a folder that already holds this many files of one name.
+    private static let maximumFileNumber = 10_000
 
     @MainActor
     @discardableResult

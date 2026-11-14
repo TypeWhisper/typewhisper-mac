@@ -254,7 +254,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         self.autoSaveFormat = TranscriptExportFormat(
             rawValue: defaults.string(forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFormat) ?? ""
         ) ?? .markdown
-        self.autoSaveFolderPath = resolvedAutoSaveFolder()?.path
+        self.autoSaveFolderPath = configuredAutoSaveFolderPath()
         self.isInitialized = true
         HistoryRetranscriptionActivity.recordIDPublisher
             .map { $0 != nil }
@@ -690,10 +690,15 @@ final class FileTranscriptionViewModel: ObservableObject {
         // For multiple files, choose a folder
         guard let folder = transcriptFolderPicker() else { return }
 
+        // Files with the same name, from different folders or already in the
+        // chosen one, get numbered names instead of replacing each other.
         for export in exports {
-            let name = export.item.url.deletingPathExtension().lastPathComponent
-            let fileURL = folder.appendingPathComponent("\(name).\(format.fileExtension)")
-            TranscriptExporter.writeContent(export.content, to: fileURL, suggestedName: name)
+            TranscriptExporter.writeNewFile(
+                export.content,
+                in: folder,
+                baseName: export.item.url.deletingPathExtension().lastPathComponent,
+                fileExtension: format.fileExtension
+            )
         }
     }
 
@@ -726,6 +731,24 @@ final class FileTranscriptionViewModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    /// The sandboxed App Store edition may only write into a folder the user chose.
+    static var canAutoSaveNextToOriginal: Bool {
+        #if APPSTORE
+        false
+        #else
+        true
+        #endif
+    }
+
+    /// The chosen folder's path, also when the folder can no longer be found.
+    private func configuredAutoSaveFolderPath() -> String? {
+        if let folder = resolvedAutoSaveFolder() { return folder.path }
+        guard let bookmark = defaults.data(forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark) else {
+            return nil
+        }
+        return URL.resourceValues(forKeys: [.pathKey], fromBookmarkData: bookmark)?.path
+    }
+
     private func resolvedAutoSaveFolder() -> URL? {
         guard let bookmark = defaults.data(forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark) else {
             return nil
@@ -744,17 +767,20 @@ final class FileTranscriptionViewModel: ObservableObject {
 
     /// Saves a finished file's transcript to the chosen folder, or next to the
     /// original file. Media imported by a plugin lives in a temporary folder, so
-    /// it is saved only to a chosen folder. An empty transcript is not saved.
+    /// it is saved only to a chosen folder, as is everything in the App Store
+    /// edition. A chosen folder that can no longer be found is reported, not
+    /// replaced by the original file's folder. An empty transcript is not saved.
     private func autoSaveTranscriptIfEnabled(at index: Int) {
         guard autoSaveTranscripts, files.indices.contains(index) else { return }
         let item = files[index]
         guard let content = exportContent(for: item, format: autoSaveFormat) else { return }
 
-        let customFolder = resolvedAutoSaveFolder()
+        let hasChosenFolder = defaults.data(forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark) != nil
+        let customFolder = hasChosenFolder ? resolvedAutoSaveFolder() : nil
         let folder: URL
         if let customFolder {
             folder = customFolder
-        } else if item.importedMedia == nil {
+        } else if !hasChosenFolder, item.importedMedia == nil, Self.canAutoSaveNextToOriginal {
             folder = item.url.deletingLastPathComponent()
         } else {
             files[index].autoSaveErrorMessage = String(localized: "fileTranscription.autoSave.failed")
@@ -764,13 +790,12 @@ final class FileTranscriptionViewModel: ObservableObject {
         let isAccessing = customFolder?.startAccessingSecurityScopedResource() ?? false
         defer { if isAccessing { customFolder?.stopAccessingSecurityScopedResource() } }
 
-        let baseName = item.url.deletingPathExtension().lastPathComponent
-        let url = TranscriptExporter.availableURL(
+        if let url = TranscriptExporter.writeNewFile(
+            content,
             in: folder,
-            baseName: baseName,
+            baseName: item.url.deletingPathExtension().lastPathComponent,
             fileExtension: autoSaveFormat.fileExtension
-        )
-        if TranscriptExporter.writeContent(content, to: url, suggestedName: baseName) {
+        ) {
             files[index].autoSavedURL = url
             files[index].autoSaveErrorMessage = nil
         } else {

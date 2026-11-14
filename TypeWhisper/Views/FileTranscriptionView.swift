@@ -770,7 +770,9 @@ struct FileTranscriptionView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "Auto-save folder"))
                         .font(.body)
-                    Text(viewModel.autoSaveFolderPath ?? String(localized: "Next to the original file"))
+                    Text(viewModel.autoSaveFolderPath ?? (FileTranscriptionViewModel.canAutoSaveNextToOriginal
+                        ? String(localized: "Next to the original file")
+                        : String(localized: "watchFolder.noFolder")))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

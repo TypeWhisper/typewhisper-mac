@@ -846,6 +846,25 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(reloaded.autoSaveFolderPath)
     }
 
+    func testAutoSaveReportsAChosenFolderThatCannotBeFound() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        defaults.set(Data("not a bookmark".utf8), forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark)
+        let fileURL = makeTemporaryFile(named: "interview.wav")
+        let viewModel = makeAutoSaveViewModel(defaults: defaults, text: "Interview transcript")
+        viewModel.autoSaveTranscripts = true
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertNil(viewModel.files.first?.autoSavedURL)
+        XCTAssertNotNil(viewModel.files.first?.autoSaveErrorMessage)
+        let folderContents = try FileManager.default.contentsOfDirectory(atPath: fileURL.deletingLastPathComponent().path)
+        XCTAssertEqual(folderContents, ["interview.wav"])
+    }
+
     func testAutoSaveIsOffByDefault() async throws {
         try registerEngines(["whisper"])
         let defaults = try makeDefaults()
@@ -1250,6 +1269,40 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(firstContent.contains("\nengine: \"test\"\n"))
         XCTAssertTrue(firstContent.hasSuffix("# Transcription: standup.wav\n\nStandup notes\n"))
         XCTAssertTrue(secondContent.hasSuffix("# Transcription: retro.wav\n\nRetro notes\n"))
+    }
+
+    func testExportAllTranscriptsKeepsFilesWithTheSameName() throws {
+        let defaults = try makeDefaults()
+        let firstURL = makeTemporaryFile(named: "meeting.wav")
+        let secondURL = makeTemporaryFile(named: "meeting.mp3")
+        let exportFolder = makeTemporaryDirectory()
+        let existingURL = exportFolder.appendingPathComponent("meeting.txt")
+        try "keep me".write(to: existingURL, atomically: true, encoding: .utf8)
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            transcriptFolderPicker: { exportFolder }
+        )
+
+        viewModel.addFiles([firstURL, secondURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(text: "First meeting", duration: 1)
+        viewModel.files[1].state = .done
+        viewModel.files[1].result = makeTranscriptionResult(text: "Second meeting", duration: 1)
+
+        viewModel.exportAllTranscripts(format: .plainText)
+
+        XCTAssertEqual(try String(contentsOf: existingURL, encoding: .utf8), "keep me")
+        XCTAssertEqual(
+            try String(contentsOf: exportFolder.appendingPathComponent("meeting 2.txt"), encoding: .utf8),
+            "First meeting"
+        )
+        XCTAssertEqual(
+            try String(contentsOf: exportFolder.appendingPathComponent("meeting 3.txt"), encoding: .utf8),
+            "Second meeting"
+        )
     }
 
     func testTranscriptExporterBuildsMarkdownLikeWatchFolderExports() throws {
