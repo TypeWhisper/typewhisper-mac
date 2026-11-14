@@ -16,9 +16,10 @@ let package = Package(
         // No NemoTextProcessing trait: its text normalization is only used by FluidAudio's TTS
         // and adds about 8 MB per architecture to every plugin that links FluidAudio.
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.5", traits: []),
-        // TypeWhisper's fork (branch typewhisper/granite5-on-0.31): upstream 01dec7c9 plus the
-        // Granite Speech 5.0 backports, kept on mlx-swift 0.31 (see the mlx-swift pin below).
-        .package(url: "https://github.com/TypeWhisper/mlx-audio-swift.git", revision: "1fb13b441c1ad8aae4a23f6a2223e03e5e5b1738"),
+        // TypeWhisper's fork (branch seofood/sov-transcribe-on-0.31): upstream 01dec7c9 plus the
+        // Granite Speech 5.0 and SOV-Transcribe-1 backports, kept on mlx-swift 0.31 (see the
+        // mlx-swift pin below).
+        .package(url: "https://github.com/TypeWhisper/mlx-audio-swift.git", revision: "56abd969a481b909efbb0a20fc762d701df196aa"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.10.1"),
         .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.5.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.6"),

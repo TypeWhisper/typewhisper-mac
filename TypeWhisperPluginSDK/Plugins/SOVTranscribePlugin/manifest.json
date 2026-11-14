@@ -1,0 +1,23 @@
+{
+    "id": "com.typewhisper.sov-transcribe",
+    "name": "SOV-Transcribe",
+    "version": "1.0.0",
+    "minHostVersion": "1.8.3",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "author": "TypeWhisper",
+    "description": "Local speech-to-text by Salesforce, powered by MLX on Apple Silicon. Transcribes English, German, French, Spanish, Italian, Portuguese and Dutch with punctuation. Needs a Mac with 32 GB of memory or more.",
+    "descriptions": {
+        "de": "Lokale Spracherkennung von Salesforce mit MLX auf Apple Silicon. Erkennt Englisch, Deutsch, Französisch, Spanisch, Italienisch, Portugiesisch und Niederländisch mit Satzzeichen. Benötigt einen Mac mit mindestens 32 GB Arbeitsspeicher.",
+        "es": "Voz a texto local de Salesforce, con MLX en Apple Silicon. Transcribe inglés, alemán, francés, español, italiano, portugués y neerlandés con puntuación. Requiere un Mac con 32 GB de memoria o más.",
+        "ja": "Apple Silicon上のMLXで動作するSalesforceのローカル音声認識です。英語、ドイツ語、フランス語、スペイン語、イタリア語、ポルトガル語、オランダ語を句読点付きで書き起こします。32 GB以上のメモリを搭載したMacが必要です。"
+    },
+    "category": "transcription",
+    "iconSystemName": "cpu",
+    "principalClass": "SOVTranscribePlugin",
+    "locality": "local",
+    "detailsURL": "https://www.typewhisper.com/addons/sov-transcribe/"
+}

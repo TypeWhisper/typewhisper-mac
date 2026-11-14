@@ -180,7 +180,7 @@ is managed on the Speakers page and is not listed in the marketplace.
 | Status | Plugins |
 |---|---|
 | Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Speaker Detection, Apple Speech, Qwen3, Local LLM, GigaAM, Supertonic, System TTS, Filler Words, Language Detection, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
-| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions) and the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB) |
+| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions) and the niche local models Canary, Granite, Voxtral and SOV-Transcribe (each adds its own MLX copy, about 46 MB; SOV-Transcribe also needs 32 GB of memory) |
 | Not possible | Authenticated CLI, Script, File Job Script, Web Link, R2T2, Cohere Transcribe (Local), Local LLM (llama.cpp): they run external programs or downloaded binaries |
 
 GigaAM and Supertonic share one ONNX Runtime. The `onnxruntime` package is a

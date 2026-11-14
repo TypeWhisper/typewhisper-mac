@@ -113,6 +113,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "script-runner", target: "ScriptPlugin", id: "com.typewhisper.script" },
   { slug: "smallest-pulse", target: "SmallestAIPlugin", id: "com.typewhisper.smallest-pulse", size: [534, 414] },
   { slug: "soniox", target: "SonioxPlugin", id: "com.typewhisper.soniox" },
+  { slug: "sov-transcribe", target: "SOVTranscribePlugin", id: "com.typewhisper.sov-transcribe" },
   { slug: "speechmatics", target: "SpeechmaticsPlugin", id: "com.typewhisper.speechmatics" },
   { slug: "supertonic", target: "SupertonicPlugin", id: "com.typewhisper.tts.supertonic", size: [560, 536] },
   { slug: "vercel-ai-gateway", target: "VercelAIGatewayPlugin", id: "com.typewhisper.vercel-ai-gateway" },
