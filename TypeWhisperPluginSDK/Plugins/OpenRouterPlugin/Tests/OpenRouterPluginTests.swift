@@ -345,6 +345,102 @@ final class OpenRouterPluginTests: XCTestCase {
         }
     }
 
+    func testElevenLabsRequestSendsCleanTranscriptOptionByDefault() throws {
+        for modelId in ["elevenlabs/scribe-v2", "elevenlabs/scribe-v2-medical", "ElevenLabs/Scribe-v2"] {
+            let request = try OpenRouterPlugin.makeTranscriptionRequest(
+                uploadFile: Self.m4aUpload(),
+                apiKey: "openrouter-key",
+                modelId: modelId,
+                language: nil,
+                timeout: 120
+            )
+
+            let body = try Self.jsonBody(from: request)
+            XCTAssertEqual(Self.elevenLabsNoVerbatim(in: body), true, modelId)
+            XCTAssertNil(body["response_format"], modelId)
+        }
+    }
+
+    func testElevenLabsRequestSendsVerbatimWhenCleanTranscriptIsOff() throws {
+        let request = try OpenRouterPlugin.makeTranscriptionRequest(
+            uploadFile: Self.m4aUpload(),
+            apiKey: "openrouter-key",
+            modelId: "elevenlabs/scribe-v2",
+            language: "pl",
+            cleanTranscript: false,
+            timeout: 120
+        )
+
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(Self.elevenLabsNoVerbatim(in: body), false)
+        XCTAssertEqual(body["language"] as? String, "pl")
+    }
+
+    func testOtherModelsSendNoProviderOptions() throws {
+        for modelId in ["openai/whisper-1", "deepgram/nova-3", "microsoft/mai-transcribe-2", "assemblyai/universal-3-6-pro"] {
+            for cleanTranscript in [true, false] {
+                let request = try OpenRouterPlugin.makeTranscriptionRequest(
+                    uploadFile: Self.m4aUpload(),
+                    apiKey: "openrouter-key",
+                    modelId: modelId,
+                    language: nil,
+                    cleanTranscript: cleanTranscript,
+                    timeout: 120
+                )
+
+                let body = try Self.jsonBody(from: request)
+                XCTAssertNil(body["provider"], modelId)
+            }
+        }
+    }
+
+    func testCleanTranscriptDefaultsOnAndPersistsAcrossActivation() throws {
+        let host = try PluginTestHostServices()
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.elevenLabsCleanTranscript)
+        XCTAssertNil(host.userDefault(forKey: "elevenLabsCleanTranscript"))
+
+        plugin.setElevenLabsCleanTranscript(false)
+        plugin.deactivate()
+
+        let reloaded = OpenRouterPlugin()
+        reloaded.activate(host: host)
+
+        XCTAssertEqual(host.userDefault(forKey: "elevenLabsCleanTranscript") as? Bool, false)
+        XCTAssertFalse(reloaded.elevenLabsCleanTranscript)
+    }
+
+    func testTranscribeWithElevenLabsModelSendsStoredCleanTranscriptSetting() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        plugin.setFetchedTranscriptionModels([
+            OpenRouterFetchedModel(id: "elevenlabs/scribe-v2", name: "ElevenLabs: Scribe v2", promptPrice: "0", completionPrice: "0"),
+        ])
+        plugin.selectModel("elevenlabs/scribe-v2")
+        plugin.setElevenLabsCleanTranscript(false)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"um so uh hello","usage":{"seconds":1.0}}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(audio: Self.audio(), language: nil, translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "um so uh hello")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(body["model"] as? String, "elevenlabs/scribe-v2")
+        XCTAssertEqual(Self.elevenLabsNoVerbatim(in: body), false)
+    }
+
     func testTranscribeRequestsAndParsesTimedSegments() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedModel": "openai/whisper-1"],
@@ -808,6 +904,13 @@ final class OpenRouterPluginTests: XCTestCase {
     private static func audio(duration: TimeInterval) -> AudioData {
         let samples = [Float](repeating: 0.1, count: Int(16_000 * duration))
         return AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: duration)
+    }
+
+    private static func elevenLabsNoVerbatim(in body: [String: Any]) -> Bool? {
+        let provider = body["provider"] as? [String: Any]
+        let options = provider?["options"] as? [String: Any]
+        let elevenLabs = options?["elevenlabs"] as? [String: Any]
+        return elevenLabs?["no_verbatim"] as? Bool
     }
 
     private static func m4aUpload() -> PluginAudioUploadFile {
