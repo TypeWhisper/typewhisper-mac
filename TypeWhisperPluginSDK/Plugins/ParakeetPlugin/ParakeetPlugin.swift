@@ -783,8 +783,14 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             let token = timing.token
             if token.isEmpty || token == "<blank>" || token == "<pad>" { continue }
 
-            let startsNewWord = isWordBoundary(token) || currentWord.isEmpty
-                || markerSeparatesWords(currentWord, nextToken: token)
+            let markerSplit = markerSeparatesWords(currentWord, nextToken: token)
+            let startsNewWord = isWordBoundary(token) || currentWord.isEmpty || markerSplit
+
+            if markerSplit {
+                // In the full text this marker is the space between the words ("film<unk>Il" reads
+                // "film Il"). Cleaned on its own, "ταινία<unk>" would end in a Greek final sigma.
+                currentWord.removeLast(unknownTokenMarker.count)
+            }
 
             if startsNewWord && !currentWord.isEmpty {
                 let trimmed = currentWord.trimmingCharacters(in: .whitespaces)
@@ -841,11 +847,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// ("film<unk>Il" is "film Il"), so the capital starts a new word. Between two capitals it
     /// is "&" and the word stays whole (M&A).
     private static func markerSeparatesWords(_ currentWord: String, nextToken: String) -> Bool {
-        let marker = "<unk>"
-        guard currentWord.hasSuffix(marker), nextToken.first?.isUppercase == true,
-              let before = currentWord.dropLast(marker.count).last else { return false }
+        guard currentWord.hasSuffix(unknownTokenMarker), nextToken.first?.isUppercase == true,
+              let before = currentWord.dropLast(unknownTokenMarker.count).last else { return false }
         return (before.isLetter || before.isNumber) && !before.isUppercase
     }
+
+    private static let unknownTokenMarker = "<unk>"
 
     /// Same characters as the spacing rule in `removingUnknownTokens(from:)`.
     private static let closingPunctuation: Set<Character> = [",", ".", ";", ":", "!", "?", ")", "]", "}", "…"]

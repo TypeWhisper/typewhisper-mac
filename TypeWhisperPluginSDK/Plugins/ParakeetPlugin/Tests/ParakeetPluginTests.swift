@@ -1013,7 +1013,8 @@ final class ParakeetPluginTests: XCTestCase {
     }
 
     func testMarkersThatBecomeLettersStayOnTheirWordAndQuotesSplitWords() {
-        let tokens = ["▁τη", "<unk>", "▁εποχή", "<unk>", "▁f", "<unk>", "ż", "ewġ", "▁film", "<unk>", "Il", "▁mistero", "▁M", "<unk>", "A"]
+        let tokens = ["▁τη", "<unk>", "▁εποχή", "<unk>", "▁f", "<unk>", "ż", "ewġ", "▁film", "<unk>", "Il", "▁mistero", "▁M", "<unk>", "A",
+                      "▁ταινία", "<unk>", "Το"]
         let timings = tokens.enumerated().map { index, token in
             TokenTiming(token: token, tokenId: token == "<unk>" ? 0 : index + 1,
                         startTime: Double(index) * 0.1, endTime: Double(index) * 0.1 + 0.1, confidence: 1)
@@ -1021,13 +1022,13 @@ final class ParakeetPluginTests: XCTestCase {
 
         let words = ParakeetPlugin.groupTokensIntoWords(timings)
 
-        XCTAssertEqual(words.map(\.text), ["της", "εποχής", "f'żewġ", "film", "Il", "mistero", "M&A"])
+        XCTAssertEqual(words.map(\.text), ["της", "εποχής", "f'żewġ", "film", "Il", "mistero", "M&A", "ταινία", "Το"])
         XCTAssertEqual(words[0].end, 0.2, accuracy: 0.0001, "ς keeps the marker's time")
         XCTAssertEqual(words[3].end, 1.0, accuracy: 0.0001, "The word before the quote ends with the marker")
         XCTAssertEqual(words[4].start, 1.0, accuracy: 0.0001, "The quoted word starts with its own token")
         XCTAssertEqual(
             ParakeetPlugin.groupWordsIntoSegments(words).map(\.text),
-            ["της εποχής f'żewġ film Il mistero M&A"]
+            ["της εποχής f'żewġ film Il mistero M&A ταινία Το"]
         )
     }
 
