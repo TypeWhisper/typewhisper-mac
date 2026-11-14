@@ -1078,6 +1078,34 @@
         }
       }
     },
+    "Fluid Speech Pro by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Most accurate in English, 25 European languages, no API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fluid Speech Pro von FluidVoice, basiert auf NVIDIA Parakeet TDT 0.6B v3 und Moondream Parakeet Ultra. Am genauesten auf Englisch, 25 europäische Sprachen, kein API-Schlüssel nötig."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fluid Speech Pro de FluidVoice, basado en NVIDIA Parakeet TDT 0.6B v3 y Moondream Parakeet Ultra. El más preciso en inglés, 25 idiomas europeos, no necesita clave de API."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FluidVoiceのFluid Speech Pro。NVIDIA Parakeet TDT 0.6B v3とMoondream Parakeet Ultraをベースにしています。英語で最も高精度、ヨーロッパの25言語に対応、APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FluidVoice 的 Fluid Speech Pro，基于 NVIDIA Parakeet TDT 0.6B v3 和 Moondream Parakeet Ultra。英语识别最准确，支持 25 种欧洲语言，无需 API 密钥。"
+          }
+        }
+      }
+    },
     "Moondream Parakeet Ultra - Parakeet TDT v3 trained further for higher accuracy. 25 European languages, no API key required.": {
       "localizations": {
         "de": {

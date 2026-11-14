@@ -37,7 +37,7 @@ final class ParakeetNemotronStreamingTests: XCTestCase {
         XCTAssertEqual(Set(directories).count, directories.count, "Every model has its own folder")
         XCTAssertEqual(
             ParakeetVersion.nemotronStreaming.installDirectory.deletingLastPathComponent(),
-            FluidSpeechMini.directory.deletingLastPathComponent()
+            FluidSpeechModel.mini.directory.deletingLastPathComponent()
         )
     }
 
