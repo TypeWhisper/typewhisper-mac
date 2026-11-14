@@ -6802,6 +6802,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertTrue(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXOutline"))
     }
 
+    func testFocusedWebContentWithoutTextElementDoesNotShowKeyboardTarget() {
+        // Muse names a container of its web view while the chat field deep inside has focus
+        // (#1937), and web editors can focus an element without a text role in their content.
+        XCTAssertFalse(TextInsertionService.focusedElementShowsKeyboardTarget(
+            role: "AXGroup",
+            hostsWebContent: true
+        ))
+        XCTAssertFalse(TextInsertionService.focusedElementShowsKeyboardTarget(
+            role: "AXGroup",
+            liesInEditableWebContent: true
+        ))
+        // A focused link on a web page still shows that the paste missed a text field.
+        XCTAssertTrue(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXLink"))
+    }
+
     @MainActor
     func testDetectMissedTextFieldIgnoresAppThatHidesFocusedElement() async throws {
         // Chromium and Electron apps name no focused element until their accessibility tree is
