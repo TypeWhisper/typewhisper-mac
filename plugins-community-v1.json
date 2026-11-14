@@ -4861,6 +4861,35 @@
           "downloadCount": 19
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.sov-transcribe",
+      "name": "SOV-Transcribe",
+      "author": "TypeWhisper",
+      "description": "Local speech-to-text by Salesforce, powered by MLX on Apple Silicon. Transcribes English, German, French, Spanish, Italian, Portuguese and Dutch with punctuation. Needs a Mac with 32 GB of memory or more.",
+      "category": "transcription",
+      "downloadCount": 0,
+      "descriptions": {
+        "de": "Lokale Spracherkennung von Salesforce mit MLX auf Apple Silicon. Erkennt Englisch, Deutsch, Franz\u00f6sisch, Spanisch, Italienisch, Portugiesisch und Niederl\u00e4ndisch mit Satzzeichen. Ben\u00f6tigt einen Mac mit mindestens 32 GB Arbeitsspeicher.",
+        "es": "Voz a texto local de Salesforce, con MLX en Apple Silicon. Transcribe ingl\u00e9s, alem\u00e1n, franc\u00e9s, espa\u00f1ol, italiano, portugu\u00e9s y neerland\u00e9s con puntuaci\u00f3n. Requiere un Mac con 32 GB de memoria o m\u00e1s.",
+        "ja": "Apple Silicon\u4e0a\u306eMLX\u3067\u52d5\u4f5c\u3059\u308bSalesforce\u306e\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u82f1\u8a9e\u3001\u30c9\u30a4\u30c4\u8a9e\u3001\u30d5\u30e9\u30f3\u30b9\u8a9e\u3001\u30b9\u30da\u30a4\u30f3\u8a9e\u3001\u30a4\u30bf\u30ea\u30a2\u8a9e\u3001\u30dd\u30eb\u30c8\u30ac\u30eb\u8a9e\u3001\u30aa\u30e9\u30f3\u30c0\u8a9e\u3092\u53e5\u8aad\u70b9\u4ed8\u304d\u3067\u66f8\u304d\u8d77\u3053\u3057\u307e\u3059\u300232 GB\u4ee5\u4e0a\u306e\u30e1\u30e2\u30ea\u3092\u642d\u8f09\u3057\u305fMac\u304c\u5fc5\u8981\u3067\u3059\u3002"
+      },
+      "iconSystemName": "cpu",
+      "detailsURL": "https://www.typewhisper.com/addons/sov-transcribe/",
+      "locality": "local",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.8.3",
+          "sdkCompatibilityVersion": "v1",
+          "size": 20222943,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-sov-transcribe-v1.0.0/SOVTranscribePlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ]
     }
   ]
 }
