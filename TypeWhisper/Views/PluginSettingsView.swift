@@ -1739,6 +1739,7 @@ private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.script": "script-runner",
     "com.typewhisper.smallest-pulse": "smallest-pulse",
     "com.typewhisper.soniox": "soniox",
+    "com.typewhisper.sov-transcribe": "sov-transcribe",
     "com.typewhisper.speechanalyzer": "apple-speech",
     "com.typewhisper.speechmatics": "speechmatics",
     "com.typewhisper.tts.supertonic": "supertonic",

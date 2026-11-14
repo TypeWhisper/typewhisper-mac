@@ -380,7 +380,7 @@ The app itself contacts these hosts over HTTPS, using the system proxy settings.
 | `app.typewhisper.com` | Premium account sign-in and status, and the Improve TypeWhisper plugin. |
 | `typewhisper.github.io` | App updates (`/typewhisper-mac/appcast.xml`, unless `UpdateMode` is 0), the plugin catalog and term packs. |
 | `github.com` and `release-assets.githubusercontent.com` | App update and plugin downloads. |
-| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels) | Model downloads of the local plugins: Parakeet, WhisperKit, Qwen3, Canary, Granite, Voxtral, Cohere Transcribe, Local LLM, Supertonic, Speaker Detection and Hugging Face imports. |
+| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels) | Model downloads of the local plugins: Parakeet, WhisperKit, Qwen3, Canary, Granite, Voxtral, SOV-Transcribe, Cohere Transcribe, Local LLM, Supertonic, Speaker Detection and Hugging Face imports. |
 | `www.typewhisper.com` | Documentation opened in the browser. |
 
 The Remote Link for paired iPhones and iPads listens on the local network when a user
