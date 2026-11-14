@@ -756,6 +756,62 @@
           }
         }
       }
+    },
+    "Clean transcript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereinigtes Transkript"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripción limpia"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリーンな文字起こし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清理转录"
+          }
+        }
+      }
+    },
+    "Removes filler words, false starts, and other speech disfluencies using ElevenLabs' native non-verbatim mode.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt Füllwörter, Fehlstarts und andere Sprechunflüssigkeiten mit dem nativen Nicht-Verbatim-Modus von ElevenLabs."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina muletillas, falsos comienzos y otras disfluencias del habla con el modo no literal nativo de ElevenLabs."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabsのネイティブ非逐語モードを使用して、フィラーワード、言い直し、その他の発話の乱れを除去します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 ElevenLabs 原生非逐字模式移除填充词、错误开头和其他言语不流畅内容。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

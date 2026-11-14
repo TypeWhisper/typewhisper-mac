@@ -25,6 +25,7 @@ final class OpenRouterPlugin: NSObject,
     fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedLLMModels: [OpenRouterFetchedModel] = []
     fileprivate var _fetchedTranscriptionModels: [OpenRouterFetchedModel] = []
+    fileprivate var _elevenLabsCleanTranscript = true
 
     private static let chatRequestTimeout: TimeInterval = 30
     private static let transcriptionRequestTimeout: TimeInterval = 120
@@ -37,6 +38,7 @@ final class OpenRouterPlugin: NSObject,
         static let llmTemperatureValue = "llmTemperatureValue"
         static let fetchedModels = "fetchedModels"
         static let fetchedTranscriptionModels = "fetchedTranscriptionModels"
+        static let elevenLabsCleanTranscript = "elevenLabsCleanTranscript"
     }
 
     required override init() {
@@ -70,6 +72,8 @@ final class OpenRouterPlugin: NSObject,
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: Self.StorageKeys.llmTemperatureValue) as? Double
             ?? 0.3
+        _elevenLabsCleanTranscript = host.userDefault(forKey: Self.StorageKeys.elevenLabsCleanTranscript) as? Bool
+            ?? true
     }
 
     private static func resolvedStoredModelId(
@@ -129,6 +133,18 @@ final class OpenRouterPlugin: NSObject,
 
     var supportsTranslation: Bool { false }
     var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
+
+    /// ElevenLabs' non-verbatim mode, on by default as in the ElevenLabs plugin.
+    var elevenLabsCleanTranscript: Bool { _elevenLabsCleanTranscript }
+
+    func setElevenLabsCleanTranscript(_ enabled: Bool) {
+        _elevenLabsCleanTranscript = enabled
+        host?.setUserDefault(enabled, forKey: Self.StorageKeys.elevenLabsCleanTranscript)
+    }
+
+    static func isElevenLabsModel(_ modelId: String) -> Bool {
+        modelId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().hasPrefix("elevenlabs/")
+    }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
@@ -195,6 +211,7 @@ final class OpenRouterPlugin: NSObject,
             apiKey: apiKey,
             modelId: modelId,
             language: language,
+            cleanTranscript: _elevenLabsCleanTranscript,
             timeout: Self.transcriptionRequestTimeout
         )
         var (data, response) = try await PluginHTTPClient.data(for: request)
@@ -209,6 +226,7 @@ final class OpenRouterPlugin: NSObject,
                 apiKey: apiKey,
                 modelId: modelId,
                 language: language,
+                cleanTranscript: _elevenLabsCleanTranscript,
                 timeout: Self.transcriptionRequestTimeout
             )
             (data, response) = try await PluginHTTPClient.data(for: request)
@@ -308,6 +326,7 @@ final class OpenRouterPlugin: NSObject,
         apiKey: String,
         modelId: String,
         language: String?,
+        cleanTranscript: Bool = true,
         timeout: TimeInterval
     ) throws -> URLRequest {
         guard let url = URL(string: "https://openrouter.ai/api/v1/audio/transcriptions") else {
@@ -328,6 +347,11 @@ final class OpenRouterPlugin: NSObject,
         let trimmedLanguage = language?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedLanguage, !trimmedLanguage.isEmpty {
             body["language"] = trimmedLanguage
+        }
+        // OpenRouter forwards provider options only to the matching provider and
+        // drops keys it does not know, so other models never see this.
+        if Self.isElevenLabsModel(modelId) {
+            body["provider"] = ["options": ["elevenlabs": ["no_verbatim": cleanTranscript]]]
         }
 
         var request = URLRequest(url: url)
@@ -789,6 +813,7 @@ private struct OpenRouterSettingsView: View {
     @State private var showApiKey = false
     @State private var selectedLLMModel = ""
     @State private var selectedTranscriptionModel = ""
+    @State private var elevenLabsCleanTranscript = true
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedLLMModels: [OpenRouterFetchedModel] = []
@@ -942,6 +967,20 @@ private struct OpenRouterSettingsView: View {
                         plugin.selectModel(selectedTranscriptionModel)
                     }
 
+                    if OpenRouterPlugin.isElevenLabsModel(selectedTranscriptionModel) {
+                        Toggle(isOn: $elevenLabsCleanTranscript) {
+                            Text("Clean transcript", bundle: bundle)
+                        }
+                        .onChange(of: elevenLabsCleanTranscript) {
+                            plugin.setElevenLabsCleanTranscript(elevenLabsCleanTranscript)
+                        }
+
+                        Text("Removes filler words, false starts, and other speech disfluencies using ElevenLabs' native non-verbatim mode.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     if fetchedTranscriptionModels.isEmpty {
                         Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
                             .font(.caption)
@@ -1038,6 +1077,7 @@ private struct OpenRouterSettingsView: View {
             fetchedTranscriptionModels = plugin._fetchedTranscriptionModels
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
             selectedTranscriptionModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
+            elevenLabsCleanTranscript = plugin.elevenLabsCleanTranscript
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
 
