@@ -1256,8 +1256,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                     ? nil
                     : try await reserveDownloadSpace(for: version)
                 defer { spaceReservation?.release() }
-                if version == .fluidSpeechMini {
-                    try await installFluidSpeechMini()
+                if let fluidSpeechModel = version.fluidSpeechModel {
+                    try await installFluidSpeech(fluidSpeechModel)
                     models = try Self.loadInstalledModels(version: version)
                 } else if version == .nemotronStreaming {
                     try await installNemotronStreaming()
@@ -1349,15 +1349,15 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         return max(current, 0.1 + fraction * 0.6)
     }
 
-    private func installFluidSpeechMini() async throws {
+    private func installFluidSpeech(_ model: FluidSpeechModel) async throws {
         let token = Self.currentHuggingFaceToken()
-        let listFiles: FluidSpeechMini.FileLister = {
-            try await FluidSpeechMini.listRemoteFiles(token: token)
+        let listFiles: FluidSpeechModel.FileLister = {
+            try await model.listRemoteFiles(token: token)
         }
-        let downloadFile: FluidSpeechMini.FileDownloader = { remotePath, destination in
-            try await FluidSpeechMini.downloadRemoteFile(remotePath, to: destination, token: token)
+        let downloadFile: FluidSpeechModel.FileDownloader = { remotePath, destination in
+            try await model.downloadRemoteFile(remotePath, to: destination, token: token)
         }
-        try await FluidSpeechMini.install(listFiles: listFiles, downloadFile: downloadFile) { [weak self] fraction in
+        try await model.install(listFiles: listFiles, downloadFile: downloadFile) { [weak self] fraction in
             self?.reportPinnedDownloadProgress(fraction)
         }
     }
@@ -1410,7 +1410,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     static func vocabularyAssetURL(for version: ParakeetVersion) -> URL {
-        let revision = version == .fluidSpeechMini ? FluidSpeechMini.revision : "main"
+        let revision = version.fluidSpeechModel?.revision ?? "main"
         return URL(string: "https://huggingface.co/\(version.huggingFaceRepository)/resolve/\(revision)/\(vocabularyAssetFileName)")!
     }
 
@@ -1623,8 +1623,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// directory, so those bytes count toward the download instead of being deleted.
     private func reserveDownloadSpace(for version: ParakeetVersion) async throws -> PluginDownloadSpaceReservation? {
         let cacheDir = version.installDirectory
-        if version == .fluidSpeechMini {
-            return try await FluidSpeechMini.download.reserveDiskSpace(token: _hfToken)
+        if let fluidSpeechModel = version.fluidSpeechModel {
+            return try await fluidSpeechModel.download.reserveDiskSpace(token: _hfToken)
         }
         if version == .nemotronStreaming {
             return try await NemotronStreaming.download.reserveDiskSpace(token: _hfToken)
@@ -1656,8 +1656,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {
         switch version {
-        case .fluidSpeechMini:
-            return FluidSpeechMini.isInstalled(at: version.installDirectory)
+        case .fluidSpeechMini, .fluidSpeechPro:
+            return FluidSpeechModel.isInstalled(at: version.installDirectory)
         case .nemotronStreaming:
             return NemotronStreaming.isInstalled(at: version.installDirectory)
         case .ultra, .v3, .v2:
@@ -1964,11 +1964,14 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 // MARK: - Model Version
 
 /// Ordered as offered: Ultra is the default because it is more accurate than v3 and keeps
-/// transcribing the person dictating when someone else talks in the background. Nemotron
-/// comes last: it transcribes while the user speaks, but less accurately than the TDT models.
+/// transcribing the person dictating when someone else talks in the background. Fluid Speech
+/// Pro is a little more accurate in English and a little less in other languages, so it stays
+/// an option. Nemotron comes last: it transcribes while the user speaks, but less accurately
+/// than the TDT models.
 enum ParakeetVersion: Hashable, CaseIterable {
     case ultra
     case v3
+    case fluidSpeechPro
     case fluidSpeechMini
     case v2
     case nemotronStreaming
@@ -1976,13 +1979,14 @@ enum ParakeetVersion: Hashable, CaseIterable {
     case imported(ParakeetImportedModel)
 
     /// The built-in models, in the order they are offered.
-    static let allCases: [ParakeetVersion] = [.ultra, .v3, .fluidSpeechMini, .v2, .nemotronStreaming]
+    static let allCases: [ParakeetVersion] = [.ultra, .v3, .fluidSpeechPro, .fluidSpeechMini, .v2, .nemotronStreaming]
 
     /// Saved as the selected version; an imported model saves its model ID.
     var rawValue: String {
         switch self {
         case .ultra: "ultra"
         case .v3: "v3"
+        case .fluidSpeechPro: "fluidSpeechPro"
         case .fluidSpeechMini: "fluidSpeechMini"
         case .v2: "v2"
         case .nemotronStreaming: "nemotronStreaming"
@@ -2001,13 +2005,22 @@ enum ParakeetVersion: Hashable, CaseIterable {
         return nil
     }
 
+    /// The Fluid Speech model the plugin downloads itself; nil for every other model.
+    var fluidSpeechModel: FluidSpeechModel? {
+        switch self {
+        case .fluidSpeechMini: return .mini
+        case .fluidSpeechPro: return .pro
+        default: return nil
+        }
+    }
+
     /// The Parakeet TDT decode contract; nil for Nemotron, which decodes in FluidAudio streams.
     var asrModelVersion: AsrModelVersion? {
         switch self {
         case .v2: return .v2
         case .v3: return .v3
-        // Fluid Speech Mini keeps Ultra's decoder, joint network and decode contract.
-        case .ultra, .fluidSpeechMini: return .ultra
+        // Fluid Speech keeps Ultra's decoder, joint network and decode contract.
+        case .ultra, .fluidSpeechMini, .fluidSpeechPro: return .ultra
         case .nemotronStreaming: return nil
         case .imported(let model): return model.asrModelVersion
         }
@@ -2036,7 +2049,8 @@ enum ParakeetVersion: Hashable, CaseIterable {
         case .v2: return Repo.parakeetV2.remotePath
         case .v3: return Repo.parakeetV3.remotePath
         case .ultra: return Repo.parakeetUltra.remotePath
-        case .fluidSpeechMini: return FluidSpeechMini.repository
+        case .fluidSpeechMini: return FluidSpeechModel.mini.repository
+        case .fluidSpeechPro: return FluidSpeechModel.pro.repository
         case .nemotronStreaming: return NemotronStreaming.repository
         // Imported models load from their own folder and never download.
         case .imported(let model): return model.origin
@@ -2049,28 +2063,29 @@ enum ParakeetVersion: Hashable, CaseIterable {
         case .v2: return AsrModels.defaultCacheDirectory(for: .v2)
         case .v3: return AsrModels.defaultCacheDirectory(for: .v3)
         case .ultra: return AsrModels.defaultCacheDirectory(for: .ultra)
-        case .fluidSpeechMini: return FluidSpeechMini.directory
+        case .fluidSpeechMini: return FluidSpeechModel.mini.directory
+        case .fluidSpeechPro: return FluidSpeechModel.pro.directory
         case .nemotronStreaming: return NemotronStreaming.directory
         case .imported(let model): return model.directory
         }
     }
 
     /// Model folders `AsrModels.download` fetches with its default int8 encoder, or that
-    /// the plugin downloads itself for Fluid Speech Mini and Nemotron.
+    /// the plugin downloads itself for Fluid Speech and Nemotron.
     var requiredModelFiles: Set<String> {
         switch self {
         case .v2: return ModelNames.ASR.requiredModels
         case .v3, .ultra: return ModelNames.ASR.requiredModelsV3()
-        case .fluidSpeechMini: return FluidSpeechMini.modelFolders
+        case .fluidSpeechMini, .fluidSpeechPro: return FluidSpeechModel.modelFolders
         case .nemotronStreaming: return NemotronStreaming.modelFolders
         case .imported: return Set(ParakeetModelImport.Role.allCases.map(\.installedName))
         }
     }
 
-    /// Fluid Speech Mini's joint network has no top-K outputs, so it keeps the plain name.
+    /// Fluid Speech's joint network has no top-K outputs, so it keeps the plain name.
     var jointFileName: String {
         switch self {
-        case .v2, .fluidSpeechMini: return ModelNames.ASR.jointFile
+        case .v2, .fluidSpeechMini, .fluidSpeechPro: return ModelNames.ASR.jointFile
         case .v3, .ultra: return ModelNames.ASR.jointV3File
         case .nemotronStreaming: return ModelNames.NemotronMultilingualStreaming.jointFile
         case .imported: return ParakeetModelImport.jointFileName
@@ -2078,11 +2093,11 @@ enum ParakeetVersion: Hashable, CaseIterable {
     }
 
     /// FluidAudio filters tokens by a language's script through the joint network's top-K
-    /// outputs, which Fluid Speech Mini does not have; v2 ignores the hint. Nemotron takes
-    /// the language as its prompt.
+    /// outputs, which Fluid Speech does not have; Fluid Speech Pro detects the language itself
+    /// and v2 ignores the hint. Nemotron takes the language as its prompt.
     var acceptsLanguageHint: Bool {
         if case .imported(let model) = self { return model.settings.hasTopK }
-        return self != .fluidSpeechMini
+        return fluidSpeechModel == nil
     }
 
     var modelDef: ParakeetModelDef {
@@ -2106,6 +2121,13 @@ enum ParakeetVersion: Hashable, CaseIterable {
                 id: "parakeet-ultra",
                 displayName: "Parakeet Ultra",
                 sizeDescription: "~630 MB",
+                ramRequirement: "8 GB+"
+            )
+        case .fluidSpeechPro:
+            return ParakeetModelDef(
+                id: "fluid-speech-pro",
+                displayName: "Fluid Speech Pro",
+                sizeDescription: "~650 MB",
                 ramRequirement: "8 GB+"
             )
         case .fluidSpeechMini:
@@ -2138,7 +2160,7 @@ enum ParakeetVersion: Hashable, CaseIterable {
             return ["en"]
         case .imported(let model) where model.asrModelVersion == .v2:
             return ["en"]
-        case .v3, .ultra, .imported:
+        case .v3, .ultra, .fluidSpeechPro, .imported:
             return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
         case .nemotronStreaming:
             return NemotronStreaming.supportedLanguages
@@ -2157,6 +2179,9 @@ enum ParakeetVersion: Hashable, CaseIterable {
             return String(localized: "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required.", bundle: bundle)
         case .ultra:
             return String(localized: "Moondream Parakeet Ultra - Parakeet TDT v3 trained further for higher accuracy. 25 European languages, no API key required.", bundle: bundle)
+        case .fluidSpeechPro:
+            // CC BY 4.0 asks for this attribution wherever the model is offered.
+            return String(localized: "Fluid Speech Pro by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Most accurate in English, 25 European languages, no API key required.", bundle: bundle)
         case .fluidSpeechMini:
             // CC BY 4.0 asks for this attribution wherever the model is offered.
             return String(localized: "Fluid Speech Mini by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Smallest download, English only, no API key required.", bundle: bundle)
@@ -2321,14 +2346,28 @@ struct PinnedModelDownload: Sendable {
     }
 }
 
-// MARK: - Fluid Speech Mini
+// MARK: - Fluid Speech
 
-/// Fluid Speech Mini (FluidVoice-Labs, CC BY 4.0) is a Parakeet fine-tune that FluidAudio's
-/// model registry does not list, so the plugin downloads its Core ML folders itself, pinned to
-/// a reviewed revision, next to FluidAudio's own Parakeet folders.
-enum FluidSpeechMini {
-    static let repository = "FluidVoice-Labs/fluid-speech-mini-coreml"
-    static let revision = "d81c3160dfe5a5e1f8f7267164a07d30617a3a1a"
+/// Fluid Speech Mini and Pro (FluidVoice-Labs, CC BY 4.0) are Parakeet fine-tunes that FluidAudio's
+/// model registry does not list, so the plugin downloads their Core ML folders itself, pinned to
+/// a reviewed revision, next to FluidAudio's own Parakeet folders. Both share Ultra's decoder and
+/// decode contract and the same folder layout.
+struct FluidSpeechModel: Sendable, Equatable {
+    let name: String
+    let repository: String
+    let revision: String
+
+    static let mini = FluidSpeechModel(
+        name: "Fluid Speech Mini",
+        repository: "FluidVoice-Labs/fluid-speech-mini-coreml",
+        revision: "d81c3160dfe5a5e1f8f7267164a07d30617a3a1a"
+    )
+    static let pro = FluidSpeechModel(
+        name: "Fluid Speech Pro",
+        repository: "FluidVoice-Labs/fluid-speech-pro-coreml",
+        revision: "3b9d38a93d606f84011e5a0a669b7ea146375a22"
+    )
+
     static let modelFolders: Set<String> = [
         ModelNames.ASR.preprocessorFile,
         ModelNames.ASR.encoderFile,
@@ -2337,25 +2376,26 @@ enum FluidSpeechMini {
     ]
     static let filePatterns = modelFolders.sorted().map { "\($0)/*" } + [ModelNames.ASR.vocabularyFile]
 
-    static var directory: URL {
+    /// Named after the repository, such as "fluid-speech-mini-coreml".
+    var directory: URL {
         AsrModels.defaultCacheDirectory(for: .v3)
             .deletingLastPathComponent()
-            .appendingPathComponent("fluid-speech-mini-coreml", isDirectory: true)
+            .appendingPathComponent(String(repository.split(separator: "/").last!), isDirectory: true)
     }
 
-    static var download: PinnedModelDownload {
+    var download: PinnedModelDownload {
         download(into: directory)
     }
 
-    static func download(into directory: URL) -> PinnedModelDownload {
+    func download(into directory: URL) -> PinnedModelDownload {
         PinnedModelDownload(
-            modelName: "Fluid Speech Mini",
+            modelName: name,
             repository: repository,
             revision: revision,
             repositoryFolder: nil,
-            filePatterns: filePatterns,
+            filePatterns: Self.filePatterns,
             directory: directory,
-            isInstalled: { FluidSpeechMini.isInstalled(at: $0) }
+            isInstalled: { FluidSpeechModel.isInstalled(at: $0) }
         )
     }
 
@@ -2379,25 +2419,22 @@ enum FluidSpeechMini {
     typealias DownloadError = PinnedModelDownload.DownloadError
 
     /// Downloads the pinned revision into `directory`, skipping files a previous attempt finished.
-    static func install(
-        into directory: URL = FluidSpeechMini.directory,
+    func install(
+        into directory: URL? = nil,
         listFiles: FileLister,
         downloadFile: FileDownloader,
         progress: @Sendable (Double) -> Void
     ) async throws {
-        try await download(into: directory).install(listFiles: listFiles, downloadFile: downloadFile, progress: progress)
+        try await download(into: directory ?? self.directory)
+            .install(listFiles: listFiles, downloadFile: downloadFile, progress: progress)
     }
 
-    static func listRemoteFiles(token: String?) async throws -> [PluginHuggingFaceDownloadSize.RemoteFile] {
+    func listRemoteFiles(token: String?) async throws -> [PluginHuggingFaceDownloadSize.RemoteFile] {
         try await download.listRemoteFiles(token: token)
     }
 
-    static func downloadRemoteFile(_ remotePath: String, to destination: URL, token: String?) async throws {
+    func downloadRemoteFile(_ remotePath: String, to destination: URL, token: String?) async throws {
         try await download.downloadRemoteFile(remotePath, to: destination, token: token)
-    }
-
-    static func isSafeRelativePath(_ path: String) -> Bool {
-        PinnedModelDownload.isSafeRelativePath(path)
     }
 }
 

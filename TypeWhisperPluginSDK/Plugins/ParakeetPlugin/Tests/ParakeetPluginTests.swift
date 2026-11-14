@@ -811,7 +811,7 @@ final class ParakeetPluginTests: XCTestCase {
         let plugin = makePlugin()
         XCTAssertEqual(
             plugin.transcriptionModels.map(\.id),
-            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "fluid-speech-mini", "parakeet-tdt-0.6b-v2", "nemotron-3.5-asr-streaming-0.6b"]
+            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "fluid-speech-pro", "fluid-speech-mini", "parakeet-tdt-0.6b-v2", "nemotron-3.5-asr-streaming-0.6b"]
         )
         XCTAssertEqual(ParakeetVersion.from(modelId: "parakeet-ultra"), .ultra)
         XCTAssertEqual(ParakeetVersion.ultra.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
@@ -962,6 +962,7 @@ final class ParakeetPluginTests: XCTestCase {
             ("alongside the word <unk>say<unk> for you", "alongside the word say for you"),
             ("is the 'pay amolai<unk>, bred with olive oil", "is the 'pay amolai, bred with olive oil"),
             ("<unk>Hello there<unk>", "Hello there"),
+            ("Le spectacle <unk>Son et Lumière<unk> à la pyramide", "Le spectacle Son et Lumière à la pyramide"),
             ("no markers here", "no markers here"),
         ]
         for (input, expected) in cases {
@@ -1059,12 +1060,37 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(version.jointFileName, ModelNames.ASR.jointFile)
         XCTAssertEqual(ParakeetVersion.ultra.jointFileName, ModelNames.ASR.jointV3File)
         XCTAssertEqual(version.huggingFaceRepository, "FluidVoice-Labs/fluid-speech-mini-coreml")
-        XCTAssertNotNil(FluidSpeechMini.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression))
+        XCTAssertNotNil(FluidSpeechModel.mini.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression))
         XCTAssertEqual(version.installDirectory.lastPathComponent, "fluid-speech-mini-coreml")
         XCTAssertNotEqual(version.installDirectory, ParakeetVersion.ultra.installDirectory)
         XCTAssertTrue(
             version.settingsDescription(bundle: Bundle(for: ParakeetPlugin.self))
                 .contains("Fluid Speech Mini by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra"),
+            "CC BY 4.0 attribution"
+        )
+    }
+
+    func testFluidSpeechProIsAMultilingualUltraFineTuneWithoutLanguageHint() {
+        let version = ParakeetVersion.fluidSpeechPro
+        XCTAssertEqual(ParakeetVersion.from(modelId: "fluid-speech-pro"), version)
+        XCTAssertEqual(ParakeetVersion(rawValue: "fluidSpeechPro"), version)
+        XCTAssertEqual(version.supportedLanguages, ParakeetVersion.ultra.supportedLanguages)
+        XCTAssertEqual(version.asrModelVersion, .ultra)
+        XCTAssertFalse(version.acceptsLanguageHint, "Its joint network has no top-K outputs")
+        XCTAssertEqual(version.jointFileName, ModelNames.ASR.jointFile)
+        XCTAssertEqual(version.requiredModelFiles, ParakeetVersion.fluidSpeechMini.requiredModelFiles)
+        XCTAssertEqual(version.huggingFaceRepository, "FluidVoice-Labs/fluid-speech-pro-coreml")
+        XCTAssertEqual(FluidSpeechModel.pro.revision, "3b9d38a93d606f84011e5a0a669b7ea146375a22")
+        XCTAssertEqual(
+            ParakeetPlugin.vocabularyAssetURL(for: version).absoluteString,
+            "https://huggingface.co/FluidVoice-Labs/fluid-speech-pro-coreml/resolve/3b9d38a93d606f84011e5a0a669b7ea146375a22/parakeet_vocab.json"
+        )
+        XCTAssertEqual(version.installDirectory.lastPathComponent, "fluid-speech-pro-coreml")
+        XCTAssertNotEqual(version.installDirectory, ParakeetVersion.fluidSpeechMini.installDirectory)
+        XCTAssertNotEqual(version.installDirectory, ParakeetVersion.ultra.installDirectory)
+        XCTAssertTrue(
+            version.settingsDescription(bundle: Bundle(for: ParakeetPlugin.self))
+                .contains("Fluid Speech Pro by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra"),
             "CC BY 4.0 attribution"
         )
     }
@@ -1075,7 +1101,7 @@ final class ParakeetPluginTests: XCTestCase {
         let downloads = FluidSpeechMiniTransfers()
         let progress = ProgressValues()
 
-        try await FluidSpeechMini.install(
+        try await FluidSpeechModel.mini.install(
             into: directory,
             listFiles: { files },
             downloadFile: { path, destination in
@@ -1085,8 +1111,8 @@ final class ParakeetPluginTests: XCTestCase {
             progress: { progress.append($0) }
         )
 
-        XCTAssertTrue(FluidSpeechMini.isInstalled(at: directory))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: FluidSpeechMini.stagingDirectory(for: directory).path))
+        XCTAssertTrue(FluidSpeechModel.isInstalled(at: directory))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: FluidSpeechModel.stagingDirectory(for: directory).path))
         let downloaded = await downloads.paths
         XCTAssertEqual(downloaded, files.map(\.path))
         XCTAssertEqual(progress.values.last, 1)
@@ -1096,12 +1122,12 @@ final class ParakeetPluginTests: XCTestCase {
         let directory = try makeTemporaryDirectory().appendingPathComponent("fluid-speech-mini-coreml")
         let files = Self.fluidSpeechMiniFiles
         let finished = files[0]
-        let staged = FluidSpeechMini.stagingDirectory(for: directory).appendingPathComponent(finished.path)
+        let staged = FluidSpeechModel.stagingDirectory(for: directory).appendingPathComponent(finished.path)
         try FileManager.default.createDirectory(at: staged.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Self.writeFile(of: files, path: finished.path, to: staged)
         let downloads = FluidSpeechMiniTransfers()
 
-        try await FluidSpeechMini.install(
+        try await FluidSpeechModel.mini.install(
             into: directory,
             listFiles: { files },
             downloadFile: { path, destination in
@@ -1114,7 +1140,7 @@ final class ParakeetPluginTests: XCTestCase {
         let downloaded = await downloads.paths
         XCTAssertFalse(downloaded.contains(finished.path))
         XCTAssertEqual(downloaded.count, files.count - 1)
-        XCTAssertTrue(FluidSpeechMini.isInstalled(at: directory))
+        XCTAssertTrue(FluidSpeechModel.isInstalled(at: directory))
     }
 
     func testFluidSpeechMiniInstallRejectsPathsOutsideTheModelFolder() async throws {
@@ -1122,15 +1148,15 @@ final class ParakeetPluginTests: XCTestCase {
         let files = [PluginHuggingFaceDownloadSize.RemoteFile(path: "../escaped.bin", size: 4)]
 
         do {
-            try await FluidSpeechMini.install(
+            try await FluidSpeechModel.mini.install(
                 into: directory,
                 listFiles: { files },
                 downloadFile: { _, _ in XCTFail("An unsafe path must not be downloaded") },
                 progress: { _ in }
             )
             XCTFail("Expected an error")
-        } catch is FluidSpeechMini.DownloadError {}
-        XCTAssertFalse(FluidSpeechMini.isInstalled(at: directory))
+        } catch is FluidSpeechModel.DownloadError {}
+        XCTAssertFalse(FluidSpeechModel.isInstalled(at: directory))
     }
 
     func testFluidSpeechMiniInstallRejectsATruncatedFile() async throws {
@@ -1138,20 +1164,20 @@ final class ParakeetPluginTests: XCTestCase {
         let files = Self.fluidSpeechMiniFiles
 
         do {
-            try await FluidSpeechMini.install(
+            try await FluidSpeechModel.mini.install(
                 into: directory,
                 listFiles: { files },
                 downloadFile: { _, destination in try Data([1]).write(to: destination) },
                 progress: { _ in }
             )
             XCTFail("Expected an error")
-        } catch is FluidSpeechMini.DownloadError {}
-        XCTAssertFalse(FluidSpeechMini.isInstalled(at: directory))
+        } catch is FluidSpeechModel.DownloadError {}
+        XCTAssertFalse(FluidSpeechModel.isInstalled(at: directory))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
     }
 
     private static let fluidSpeechMiniFiles: [PluginHuggingFaceDownloadSize.RemoteFile] =
-        FluidSpeechMini.modelFolders.sorted().flatMap { folder in
+        FluidSpeechModel.modelFolders.sorted().flatMap { folder in
             [
                 PluginHuggingFaceDownloadSize.RemoteFile(path: "\(folder)/coremldata.bin", size: 8),
                 PluginHuggingFaceDownloadSize.RemoteFile(path: "\(folder)/weights/weight.bin", size: 16),
