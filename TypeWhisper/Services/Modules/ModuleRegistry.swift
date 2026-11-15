@@ -57,7 +57,9 @@ final class ModuleRegistry {
     }
 
     /// The contributions of a module without the identifiers an earlier
-    /// module already uses, which would share its settings.
+    /// module already uses, which would share its settings. Hotkey actions
+    /// also need an identifier that `ModuleIdentifier` accepts, because the
+    /// app stores their shortcuts under it.
     private static func withoutDuplicates(
         _ new: ModuleContributions, after existing: ModuleContributions
     ) -> ModuleContributions {
@@ -66,13 +68,24 @@ final class ModuleRegistry {
             return items.filter { seen.insert($0.id).inserted }
         }
         return ModuleContributions(
-            hotkeyActions: unique(new.hotkeyActions, existing.hotkeyActions),
+            hotkeyActions: unique(new.hotkeyActions.filter { ModuleIdentifier.isValid($0.id) }, existing.hotkeyActions),
             menuItems: unique(new.menuItems, existing.menuItems),
             panels: unique(new.panels, existing.panels),
             recordActions: unique(new.recordActions, existing.recordActions),
             premiumCards: unique(new.premiumCards, existing.premiumCards),
             managedPolicyKeys: new.managedPolicyKeys
         )
+    }
+}
+
+/// The identifiers the app stores module settings and files under:
+/// letters, digits, dots, hyphens and underscores, at most 128 characters.
+enum ModuleIdentifier {
+    static func isValid(_ id: some StringProtocol) -> Bool {
+        guard !id.isEmpty, id.count <= 128, id != ".", id != "..", !id.hasPrefix(".") else { return false }
+        return id.unicodeScalars.allSatisfy { scalar in
+            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || "._-".unicodeScalars.contains(scalar))
+        }
     }
 }
 

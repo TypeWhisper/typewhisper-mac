@@ -19,7 +19,8 @@ public struct ModuleUserData: Identifiable, Sendable {
     public let id: String
     /// Runs when the user erases all data, before the app deletes its own.
     public let erase: @MainActor @Sendable () async throws -> Void
-    /// Returns the files to add to a data export, by file name.
+    /// Returns the files to add to a data export, by file name. A name with a
+    /// path separator is left out; names that differ only in case fail the export.
     public let export: @MainActor @Sendable () async throws -> [String: Data]
 
     public init(

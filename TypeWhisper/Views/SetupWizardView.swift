@@ -775,7 +775,12 @@ struct SetupWizardView: View {
                 title: localizedAppText("Shortcut", de: "Shortcut"),
                 onRecord: { hotkey in
                     if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: mode) {
-                        dictation.clearHotkey(for: conflict)
+                        // The modules' slot holds the shortcuts of several actions; take only this one.
+                        if conflict == .moduleAction {
+                            dictation.removeConflictingHotkey(hotkey, for: conflict)
+                        } else {
+                            dictation.clearHotkey(for: conflict)
+                        }
                     }
                     dictation.setHotkey(hotkey, for: mode)
                 },

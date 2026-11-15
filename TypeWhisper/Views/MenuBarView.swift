@@ -28,6 +28,8 @@ private final class MenuBarState: ObservableObject {
     @Published var restoreRawTranscriptMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var correctLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var askHistoryMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    /// The first shortcut of each module hotkey action a menu entry names, by action.
+    @Published var moduleMenuShortcuts: [String: HotkeyService.MenuShortcutDescriptor] = [:]
     /// Configured dictation shortcuts with their mode, empty when none is set.
     @Published var dictationShortcuts: [MenuBarStatusFormatting.DictationShortcut]
     @Published var needsEngineSetup: Bool
@@ -159,6 +161,13 @@ private final class MenuBarState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        hotkeyService.$moduleActionHotkeysRevision
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshModuleMenuShortcuts()
+            }
+            .store(in: &cancellables)
+
         hotkeyService.$dictationHotkeysPaused
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
@@ -255,6 +264,16 @@ private final class MenuBarState: ObservableObject {
         correctLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .correctLastDictation)
         askHistoryMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .askHistory)
         dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
+    }
+
+    private func refreshModuleMenuShortcuts() {
+        let hotkeyService = ServiceContainer.shared.hotkeyService
+        var shortcuts: [String: HotkeyService.MenuShortcutDescriptor] = [:]
+        for actionID in ServiceContainer.shared.moduleRegistry.contributions.menuItems.compactMap(\.hotkeyActionID) {
+            shortcuts[actionID] = hotkeyService.hotkeys(forModuleAction: actionID)
+                .lazy.compactMap(HotkeyService.menuShortcutDescriptor(for:)).first
+        }
+        moduleMenuShortcuts = shortcuts
     }
 
     private func refreshUndoAvailability() {
@@ -563,10 +582,7 @@ struct MenuBarView: View {
                         Text(moduleItem.title)
                     }
                 }
-                .keyboardShortcut(keyboardShortcut(from: moduleItem.hotkeyActionID.flatMap { actionID in
-                    ServiceContainer.shared.hotkeyService.hotkeys(forModuleAction: actionID)
-                        .lazy.compactMap(HotkeyService.menuShortcutDescriptor(for:)).first
-                }))
+                .keyboardShortcut(keyboardShortcut(from: moduleItem.hotkeyActionID.flatMap { status.moduleMenuShortcuts[$0] }))
             }
 
         case .errorLog:

@@ -216,6 +216,8 @@ private struct ModuleHotkeyActionRecorder: View {
     }
 
     private func record(_ hotkey: UnifiedHotkey, replacing existingHotkey: UnifiedHotkey? = nil) {
+        // A workflow keeps its shortcut, as in the workflow editor.
+        guard hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: nil) == nil else { return }
         var hotkeys = hotkeyService.hotkeys(forModuleAction: action.id)
         if let existingHotkey, let index = hotkeys.firstIndex(of: existingHotkey) {
             hotkeys[index] = hotkey

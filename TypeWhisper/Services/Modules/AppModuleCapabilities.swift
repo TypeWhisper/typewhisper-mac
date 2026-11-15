@@ -86,11 +86,19 @@ extension ModuleHistoryRecord {
 @MainActor
 final class AppHistorySearching: HistorySearching {
     private let index: HistorySearchIndex
+    private let isEnabled: @MainActor () -> Bool
     private let prepareIndex: @MainActor () async -> Void
 
+    /// - Parameter isEnabled: Whether the index may hold History now: the user's setting,
+    ///   Premium access and the managed policy, as for the indexer. Reads find nothing otherwise.
     /// - Parameter prepareIndex: Turns the index on and waits for it to catch up with History.
-    init(index: HistorySearchIndex, prepareIndex: @escaping @MainActor () async -> Void) {
+    init(
+        index: HistorySearchIndex,
+        isEnabled: @escaping @MainActor () -> Bool,
+        prepareIndex: @escaping @MainActor () async -> Void
+    ) {
         self.index = index
+        self.isEnabled = isEnabled
         self.prepareIndex = prepareIndex
     }
 
@@ -99,7 +107,8 @@ final class AppHistorySearching: HistorySearching {
     }
 
     func search(_ query: ModuleHistorySearchQuery) async throws -> [ModuleHistorySearchHit] {
-        try await index.search(
+        guard isEnabled() else { return [] }
+        return try await index.search(
             words: query.words,
             names: query.names,
             in: HistorySearchScope(query.scope),
@@ -109,12 +118,13 @@ final class AppHistorySearching: HistorySearching {
     }
 
     func newestRecords(in scope: ModuleHistorySearchScope, limit: Int) async throws -> ModuleHistoryNewestRecords {
+        guard isEnabled() else { return ModuleHistoryNewestRecords(hits: [], total: 0) }
         let (hits, total) = try await index.newestRecords(in: HistorySearchScope(scope), limit: limit)
         return ModuleHistoryNewestRecords(hits: hits.map(ModuleHistorySearchHit.init), total: total)
     }
 
     func transcript(ofRecord id: UUID) async throws -> ModuleHistoryTranscript? {
-        guard let transcript = try await index.transcript(ofRecord: id) else { return nil }
+        guard isEnabled(), let transcript = try await index.transcript(ofRecord: id) else { return nil }
         return ModuleHistoryTranscript(
             passages: transcript.passages.map(ModuleHistoryPassage.init),
             contentHash: transcript.contentHash
@@ -122,7 +132,8 @@ final class AppHistorySearching: HistorySearching {
     }
 
     func summary(ofRecord id: UUID, language: String) async throws -> ModuleHistorySummary? {
-        try await index.summary(ofRecord: id, language: language).map {
+        guard isEnabled() else { return nil }
+        return try await index.summary(ofRecord: id, language: language).map {
             ModuleHistorySummary(text: $0.text, providerId: $0.providerId)
         }
     }
@@ -130,10 +141,12 @@ final class AppHistorySearching: HistorySearching {
     func setSummary(
         _ summary: String, providerId: String, ofRecord id: UUID, contentHash: String, language: String
     ) async throws {
+        guard isEnabled() else { return }
         try await index.setSummary(summary, providerId: providerId, ofRecord: id, contentHash: contentHash, language: language)
     }
 
     func vocabulary() async throws -> ModuleHistoryVocabulary {
+        guard isEnabled() else { return ModuleHistoryVocabulary() }
         let vocabulary = try await index.vocabulary()
         return ModuleHistoryVocabulary(
             speakers: vocabulary.speakers,
@@ -400,7 +413,7 @@ final class AppModuleUserDataLifecycle: UserDataLifecycle {
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "Modules")
 
     func register(_ userData: ModuleUserData) {
-        guard Self.isSafePathComponent(userData.id) else {
+        guard ModuleIdentifier.isValid(userData.id) else {
             logger.error("Module data not registered: invalid identifier")
             return
         }
@@ -422,14 +435,20 @@ final class AppModuleUserDataLifecycle: UserDataLifecycle {
     }
 
     /// The modules' files for a data export, by their path in the archive.
-    /// Files whose names are no plain file names are left out.
+    /// Names that are no file name, such as a path, are left out.
+    /// - Throws: `UserDataExportService.ExportError.duplicateModuleFile` for two
+    ///   names that differ only in case, which would share one file.
     func exportFiles() async throws -> [String: Data] {
         var files: [String: Data] = [:]
         for userData in registrations {
-            for (name, data) in try await userData.export() {
-                guard Self.isSafePathComponent(name) else {
+            var names = Set<String>()
+            for (name, data) in try await userData.export().sorted(by: { $0.key < $1.key }) {
+                guard Self.isFileName(name) else {
                     logger.error("Module file left out of the export: invalid name")
                     continue
+                }
+                guard names.insert(name.lowercased()).inserted else {
+                    throw UserDataExportService.ExportError.duplicateModuleFile(name)
                 }
                 files["\(Self.exportFolderName)/\(userData.id)/\(name)"] = data
             }
@@ -437,10 +456,9 @@ final class AppModuleUserDataLifecycle: UserDataLifecycle {
         return files
     }
 
-    static func isSafePathComponent(_ name: String) -> Bool {
-        guard !name.isEmpty, name.count <= 128, name != ".", name != "..", !name.hasPrefix(".") else { return false }
-        return name.unicodeScalars.allSatisfy { scalar in
-            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || "._-".unicodeScalars.contains(scalar))
-        }
+    /// A single file name: no path separator, not `.` or `..`, at most 255 bytes.
+    static func isFileName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && name.utf8.count <= 255
+            && !name.contains("/") && !name.contains(":") && !name.unicodeScalars.contains { $0.value == 0 }
     }
 }

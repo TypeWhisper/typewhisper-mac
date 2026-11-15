@@ -454,14 +454,16 @@ final class ServiceContainer: ObservableObject {
         // One index for writing and searching, so a search sees the indexer's
         // last write and both share one connection.
         let historySearchIndex = HistorySearchIndex()
+        // Modules read the index only while the indexer may fill it.
+        let historySearchIndexIsEnabled: @MainActor () -> Bool = { [speakerCoordinator, managedPolicyService] in
+            UserDefaults.standard.bool(forKey: UserDefaultsKeys.historySearchIndexEnabled)
+                && speakerCoordinator.hasPremiumAccess
+                && ManagedAskHistoryPolicy.allowsAskHistory(managedPolicyService.current)
+        }
         let historySearchIndexer = HistorySearchIndexer(
             historyService: historyService,
             index: historySearchIndex,
-            isEnabled: { [speakerCoordinator, managedPolicyService] in
-                UserDefaults.standard.bool(forKey: UserDefaultsKeys.historySearchIndexEnabled)
-                    && speakerCoordinator.hasPremiumAccess
-                    && ManagedAskHistoryPolicy.allowsAskHistory(managedPolicyService.current)
-            },
+            isEnabled: historySearchIndexIsEnabled,
             isBusy: { [dictationViewModel, audioRecorderViewModel] in
                 let isDictating = switch dictationViewModel.state {
                 case .recording, .processing, .inserting, .promptProcessing: true
@@ -637,7 +639,10 @@ final class ServiceContainer: ObservableObject {
         self.moduleUserData = moduleUserData
         moduleRegistry = ModuleRegistry(host: AppModuleHost(
             historyReading: AppHistoryReading(historyService: historyService),
-            historySearching: AppHistorySearching(index: historySearchIndex) {
+            historySearching: AppHistorySearching(
+                index: historySearchIndex,
+                isEnabled: historySearchIndexIsEnabled
+            ) {
                 UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historySearchIndexEnabled)
                 await historySearchIndexer.reconcile()
                 await historySearchIndexer.waitForQueuedWork()

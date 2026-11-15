@@ -88,9 +88,16 @@ enum UserDataExportService {
         case archiveFailed(Int32)
         case databaseSnapshotFailed(String)
         case unreadableDirectory(String)
+        case duplicateModuleFile(String)
 
         var errorDescription: String? {
             switch self {
+            case .duplicateModuleFile(let name):
+                return localizedAppText(
+                    "A module exported two files named \(name), differing only in case.",
+                    de: "Ein Modul hat zwei Dateien namens \(name) exportiert, die sich nur in der Groß- und Kleinschreibung unterscheiden.",
+                    es: "Un módulo exportó dos archivos llamados \(name) que solo difieren en mayúsculas y minúsculas."
+                )
             case .archiveFailed(let status):
                 return localizedAppText(
                     "The ZIP archive could not be created (ditto exit code \(status)).",

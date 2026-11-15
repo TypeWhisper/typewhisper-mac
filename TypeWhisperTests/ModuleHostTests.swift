@@ -31,7 +31,11 @@ final class ModuleHostTests: XCTestCase {
     func testHotkeyActionRunsThroughTheRegistry() {
         let performed = Log()
         TestModulesEntry.modules = [TestModule(identifier: "test", contributions: ModuleContributions(
-            hotkeyActions: [ModuleHotkeyAction(id: "test.open", title: "Open") { performed.items.append("test.open") }]
+            hotkeyActions: [
+                ModuleHotkeyAction(id: "test.open", title: "Open") { performed.items.append("test.open") },
+                // Its shortcuts could not be stored or restored from a backup.
+                ModuleHotkeyAction(id: "test/open", title: "Invalid") { performed.items.append("test/open") },
+            ]
         ))]
         defer { TestModulesEntry.modules = [] }
         let registry = ModuleRegistry(entry: TestModulesEntry.self, host: AppModuleHost())
@@ -40,6 +44,7 @@ final class ModuleHostTests: XCTestCase {
         registry.performHotkeyAction(withID: "test.unknown")
 
         XCTAssertEqual(performed.items, ["test.open"])
+        XCTAssertEqual(registry.contributions.hotkeyActions.map(\.id), ["test.open"])
         XCTAssertEqual(registry.hotkeyAction(withID: "test.open")?.title, "Open")
     }
 
@@ -266,7 +271,7 @@ final class ModuleHostTests: XCTestCase {
         lifecycle.register(ModuleUserData(
             id: "com.example.first",
             erase: { erased.items.append("first") },
-            export: { ["consents.json": Data("[]".utf8), "../escape.txt": Data()] }
+            export: { ["consents.json": Data("[]".utf8), "Meeting Notes.txt": Data(), "../escape.txt": Data(), "..": Data()] }
         ))
         lifecycle.register(ModuleUserData(
             id: "com.example.second",
@@ -280,7 +285,21 @@ final class ModuleHostTests: XCTestCase {
 
         XCTAssertEqual(erased.items, ["first"])
         XCTAssertEqual(failures.map(\.item), ["com.example.second"])
-        XCTAssertEqual(Array(files.keys), ["Modules/com.example.first/consents.json"])
+        XCTAssertEqual(
+            Set(files.keys),
+            ["Modules/com.example.first/consents.json", "Modules/com.example.first/Meeting Notes.txt"]
+        )
+
+        lifecycle.register(ModuleUserData(
+            id: "com.example.first",
+            erase: {},
+            export: { ["state.json": Data(), "STATE.json": Data()] }
+        ))
+        do {
+            _ = try await lifecycle.exportFiles()
+            XCTFail("Two names that differ only in case share one file")
+        } catch UserDataExportService.ExportError.duplicateModuleFile {
+        }
     }
 
     // MARK: - History
@@ -321,7 +340,8 @@ final class ModuleHostTests: XCTestCase {
         let indexer = HistorySearchIndexer(
             historyService: history, index: index, isEnabled: { true }, isBusy: { false }
         )
-        let searching = AppHistorySearching(index: index) {
+        var isEnabled = true
+        let searching = AppHistorySearching(index: index, isEnabled: { isEnabled }) {
             await indexer.reconcile()
             await indexer.waitForQueuedWork()
         }
@@ -358,6 +378,15 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertEqual(Set(vocabulary.apps.map(\.bundleID)), ["com.apple.Notes", "com.apple.mail"])
         XCTAssertEqual(ModuleHistorySearchQuery.words(in: "Budget-Review, 2026!"), HistoryFullTextQuery.words(in: "Budget-Review, 2026!"))
         XCTAssertTrue(ModuleHistorySearchScope(recordIDs: [budget]).includes(try XCTUnwrap(hits.first)))
+
+        // Off, for example by a managed policy, the index answers nothing.
+        isEnabled = false
+        let hitsWhileOff = try await searching.search(ModuleHistorySearchQuery(words: ["budget"]))
+        let transcriptWhileOff = try await searching.transcript(ofRecord: budget)
+        let newestWhileOff = try await searching.newestRecords(in: ModuleHistorySearchScope(), limit: 1)
+        XCTAssertTrue(hitsWhileOff.isEmpty)
+        XCTAssertNil(transcriptWhileOff)
+        XCTAssertEqual(newestWhileOff.total, 0)
     }
 
     // MARK: - Language models

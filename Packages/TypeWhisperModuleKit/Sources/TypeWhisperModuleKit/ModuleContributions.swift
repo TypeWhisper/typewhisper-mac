@@ -47,6 +47,8 @@ public struct ModuleContributions: Sendable {
 
 /// An action the user can assign keyboard shortcuts to in the Hotkeys settings.
 public struct ModuleHotkeyAction: Identifiable, Sendable {
+    /// Letters, digits, dots, hyphens and underscores, at most 128 characters.
+    /// The app leaves out an action with another identifier.
     public let id: String
     /// The row title in the settings, such as "Open panel shortcut".
     public let title: String

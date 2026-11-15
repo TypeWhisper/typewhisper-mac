@@ -5,6 +5,10 @@ import Combine
 ///
 /// The app validates and reports these keys like its own. Keys that no module
 /// declared, and the app's own keys, have no value here.
+///
+/// The app reads the declared keys only after every module returned its
+/// contributions. During `HostModule.contributions(for:)` each key reads as
+/// unmanaged, so read the state when it is needed, not at that point.
 @MainActor
 public protocol ManagedPolicyReading: AnyObject {
     func state(ofKey name: String) -> ModuleManagedPolicyState

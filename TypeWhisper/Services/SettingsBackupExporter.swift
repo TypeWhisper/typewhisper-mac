@@ -60,10 +60,7 @@ enum SettingsBackupExporter {
     static func isHotkeyKey(_ key: String) -> Bool {
         if hotkeySlotKeys.contains(key) { return true }
         guard key.hasPrefix(UserDefaultsKeys.moduleActionHotkeysPrefix) else { return false }
-        let id = key.dropFirst(UserDefaultsKeys.moduleActionHotkeysPrefix.count)
-        return !id.isEmpty && id.count <= 128 && id.unicodeScalars.allSatisfy { scalar in
-            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || "._-".unicodeScalars.contains(scalar))
-        }
+        return ModuleIdentifier.isValid(key.dropFirst(UserDefaultsKeys.moduleActionHotkeysPrefix.count))
     }
 
     // MARK: - DTOs
