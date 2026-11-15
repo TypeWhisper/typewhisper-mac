@@ -214,6 +214,10 @@ struct ManagedPolicyDiagnostics: Encodable, Equatable {
         values.keys.sorted().compactMap { name in
             guard let value = values[name] else { return nil }
             let sensitive = ManagedPolicyKeys.definition(named: name)?.sensitive == true
+            // A module may mark any kind of key as sensitive.
+            if sensitive {
+                return Value(name: name, value: "[set]", items: nil)
+            }
             switch value {
             case .boolean(let flag):
                 return Value(name: name, value: flag ? "true" : "false", items: nil)

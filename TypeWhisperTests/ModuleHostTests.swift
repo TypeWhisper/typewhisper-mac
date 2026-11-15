@@ -179,6 +179,12 @@ final class ModuleHostTests: XCTestCase {
         // Toggle lets K go: the first action's K is armed again.
         service.clearHotkey(for: .toggle)
         XCTAssertEqual(service.moduleAction(assignedTo: commandShiftK), "test.first")
+
+        // A workflow that has K keeps it, also when it registers after the modules.
+        service.registerWorkflowHotkeys([(id: UUID(), hotkey: commandShiftK, behavior: .startDictation)])
+        XCTAssertNil(service.moduleAction(assignedTo: commandShiftK))
+        service.registerWorkflowHotkeys([])
+        XCTAssertEqual(service.moduleAction(assignedTo: commandShiftK), "test.first")
     }
 
     func testSettingsBackupAcceptsModuleShortcutKeys() {
@@ -197,6 +203,7 @@ final class ModuleHostTests: XCTestCase {
             ModuleManagedPolicyKey(name: "TestMode", kind: .enumeration, enumerationMaximum: 2),
             ModuleManagedPolicyKey(name: "TestSecret", kind: .text, sensitive: true),
             ModuleManagedPolicyKey(name: "TestSites", kind: .list),
+            ModuleManagedPolicyKey(name: "TestHiddenSwitch", kind: .boolean, sensitive: true),
             // The app's key and profile metadata stay the app's.
             ModuleManagedPolicyKey(name: "AllowCloudTranscription", kind: .text),
             ModuleManagedPolicyKey(name: "PayloadTest", kind: .boolean),
@@ -211,7 +218,7 @@ final class ModuleHostTests: XCTestCase {
 
         XCTAssertEqual(
             ManagedPolicyKeys.moduleDefinitions.map(\.name),
-            ["AllowTestFeature", "TestMode", "TestSecret", "TestSites"]
+            ["AllowTestFeature", "TestMode", "TestSecret", "TestSites", "TestHiddenSwitch"]
         )
         XCTAssertEqual(ManagedPolicyKeys.definition(named: "AllowCloudTranscription")?.kind, .boolean)
         XCTAssertEqual(ManagedPolicyKeys.definition(named: "TestMode")?.enumerationMaximum, 2)
@@ -222,6 +229,7 @@ final class ModuleHostTests: XCTestCase {
                 "TestMode": .integer(3),
                 "TestSecret": .string("fixture-secret"),
                 "TestSites": .array([.string("example.com")]),
+                "TestHiddenSwitch": .boolean(true),
                 "Recommended": .dictionary(["AllowTestFeature": .boolean(true), "TestSites": .array([])]),
             ]),
             revision: 1,
@@ -237,6 +245,8 @@ final class ModuleHostTests: XCTestCase {
 
         let diagnostics = ManagedPolicyDiagnostics(snapshot: snapshot)
         XCTAssertEqual(diagnostics.enforced.first { $0.name == "TestSecret" }?.value, "[set]")
+        XCTAssertEqual(diagnostics.enforced.first { $0.name == "AllowTestFeature" }?.value, "false")
+        XCTAssertEqual(diagnostics.enforced.first { $0.name == "TestHiddenSwitch" }?.value, "[set]")
         let encoded = String(decoding: try JSONEncoder().encode(diagnostics), as: UTF8.self)
         XCTAssertFalse(encoded.contains("fixture-secret"))
     }

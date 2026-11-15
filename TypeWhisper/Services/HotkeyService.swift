@@ -1100,6 +1100,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 WorkflowHotkeyState(workflowId: entry.id, hotkey: entry.hotkey, behavior: entry.behavior)
             )
         }
+        loadModuleActionHotkeys()
         tearDownMonitor()
         setupMonitor()
     }
@@ -1426,7 +1427,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private func loadModuleActionHotkeys() {
         var byHotkey: [UnifiedHotkey: String] = [:]
         var hotkeys: [UnifiedHotkey] = []
+        // A workflow keeps its shortcuts too, as when a module shortcut is recorded.
         let slotHotkeys = HotkeySlotType.allCases.filter { $0 != .moduleAction }.flatMap { self.hotkeys(for: $0) }
+            + workflowSlots.values.flatMap { $0.map(\.hotkey) }
         for id in moduleActionIDs {
             for hotkey in self.hotkeys(forModuleAction: id)
             where !(hotkeys + slotHotkeys).contains(where: { $0.conflicts(with: hotkey) }) {
