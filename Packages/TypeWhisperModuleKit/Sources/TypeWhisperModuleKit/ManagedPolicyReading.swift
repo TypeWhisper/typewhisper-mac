@@ -4,7 +4,7 @@ import Combine
 /// (`ModuleContributions.managedPolicyKeys`).
 ///
 /// The app validates and reports these keys like its own. Keys that no module
-/// declared, and the app's own keys, have no value here.
+/// declared have no value here, including the app's own keys a module did not declare.
 ///
 /// The app reads the declared keys only after every module returned its
 /// contributions. During `HostModule.contributions(for:)` each key reads as

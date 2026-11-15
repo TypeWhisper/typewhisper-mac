@@ -106,23 +106,47 @@ enum ManagedPolicyKeys {
     ]
 
     private static let byName = Dictionary(uniqueKeysWithValues: hostDefinitions.map { ($0.name, $0) })
-    private static let moduleStore = OSAllocatedUnfairLock<[ManagedPolicyDefinition]>(initialState: [])
-
-    /// The keys the app's modules declared, in their order.
-    static var moduleDefinitions: [ManagedPolicyDefinition] {
-        moduleStore.withLock { $0 }
+    private struct ModuleKeys {
+        var definitions: [ManagedPolicyDefinition] = []
+        /// The app's own keys that modules declared too, to read them.
+        var sharedHostKeys: Set<String> = []
     }
 
-    /// Replaces the keys of modules. A key without a name, with the name of one of the app's
-    /// keys, of `Recommended`, of an earlier key or of profile metadata is left out.
+    private static let moduleStore = OSAllocatedUnfairLock(initialState: ModuleKeys())
+
+    /// The keys the app's modules declared, in their order, without the app's own.
+    static var moduleDefinitions: [ManagedPolicyDefinition] {
+        moduleStore.withLock { $0.definitions }
+    }
+
+    /// Whether a module declared the key: one of its own, or one of the app's that it reads too.
+    static func isDeclaredByModule(_ name: String) -> Bool {
+        moduleStore.withLock { state in
+            state.sharedHostKeys.contains(name) || state.definitions.contains { $0.name == name }
+        }
+    }
+
+    /// Replaces the keys of modules. A module may declare one of the app's keys with the same
+    /// kind to read it; the app keeps its own definition. A key without a name, with the name
+    /// of `Recommended`, of an earlier key or of profile metadata, or one that matches an
+    /// app's key only in letter case or not in kind, is left out.
     /// - Returns: The names that were left out.
     @discardableResult
     static func setModuleDefinitions(_ definitions: [ManagedPolicyDefinition]) -> [String] {
         var accepted: [ManagedPolicyDefinition] = []
+        var shared: Set<String> = []
         var names = Set(byName.keys).union([recommendedDictionary])
         var rejected: [String] = []
         for definition in definitions {
             let name = definition.name
+            if let hostDefinition = byName[name] {
+                if hostDefinition.kind == definition.kind {
+                    shared.insert(name)
+                } else {
+                    rejected.append(name)
+                }
+                continue
+            }
             guard !name.isEmpty, !ManagedPolicyValidator.isProfileMetadataKey(name),
                   definition.enumerationMaximum >= 0,
                   !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
@@ -139,14 +163,14 @@ enum ManagedPolicyKeys {
                 sensitive: definition.sensitive
             ))
         }
-        let definitions = accepted
-        moduleStore.withLock { $0 = definitions }
+        let keys = ModuleKeys(definitions: accepted, sharedHostKeys: shared)
+        moduleStore.withLock { $0 = keys }
         return rejected
     }
 
     /// Finds a definition by its exact name, or nil for an unknown key.
     static func definition(named name: String) -> ManagedPolicyDefinition? {
-        byName[name] ?? moduleStore.withLock { $0.first { $0.name == name } }
+        byName[name] ?? moduleStore.withLock { $0.definitions.first { $0.name == name } }
     }
 
     /// The supported key that differs from `name` only in letter case, for diagnostics.

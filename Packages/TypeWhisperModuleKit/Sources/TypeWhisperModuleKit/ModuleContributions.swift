@@ -195,8 +195,9 @@ public struct ModulePremiumCard: Identifiable, Sendable {
 /// A managed settings key a module reads through `ManagedPolicyReading`.
 ///
 /// The app reads it from the managed preferences, validates it and reports it
-/// in its diagnostics like its own keys. A name the app or an earlier module
-/// already uses is skipped.
+/// in its diagnostics like its own keys. A module may declare one of the app's
+/// own keys with the same kind to read it; the app keeps its own definition.
+/// A name an earlier module already uses is skipped.
 public struct ModuleManagedPolicyKey: Hashable, Sendable {
     /// The value shapes of the app's own keys.
     public enum Kind: String, Sendable {

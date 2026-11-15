@@ -295,7 +295,7 @@ final class AppModuleManagedPolicyReading: TypeWhisperModuleKit.ManagedPolicyRea
     }
 
     func state(ofKey name: String) -> ModuleManagedPolicyState {
-        guard ManagedPolicyKeys.moduleDefinitions.contains(where: { $0.name == name }) else {
+        guard ManagedPolicyKeys.isDeclaredByModule(name) else {
             return ModuleManagedPolicyState()
         }
         let snapshot = service.current
