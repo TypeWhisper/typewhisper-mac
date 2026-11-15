@@ -85,17 +85,10 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          last_sha=$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/workflows/appstore-testflight.yml/runs?event=schedule&status=success&per_page=1" \
-            --jq '.workflow_runs[0].head_sha // ""')
-          if [[ "$last_sha" == "$GITHUB_SHA" ]]; then
-            echo "main is unchanged since the last nightly upload ($last_sha)."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           # App Store Connect closes a version's train once that version is
           # approved, and the stable tag follows the approval. Skip instead of
-          # archiving for half an hour only to have the upload rejected.
+          # archiving for half an hour only to have the upload rejected. This
+          # runs first so an unchanged main still gets the warning.
           version=$(gh api -H "Accept: application/vnd.github.raw" \
             "repos/$GITHUB_REPOSITORY/contents/AppStore/Config/AppStore.xcconfig?ref=$GITHUB_SHA" \
             | sed -n 's/^MARKETING_VERSION = \([0-9.]*\)$/\1/p')
@@ -103,10 +96,21 @@ jobs:
             echo "Could not read MARKETING_VERSION from AppStore/Config/AppStore.xcconfig." >&2
             exit 1
           fi
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" --silent 2>/dev/null; then
+          if tag_lookup=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" --silent 2>&1); then
             message="v$version is already released, so App Store Connect accepts no more $version builds. Start the next development line on main (both editions, see docs/appstore/README.md)."
             echo "::warning title=Nightly upload skipped::$message"
             echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          elif ! grep -q "HTTP 404" <<<"$tag_lookup"; then
+            echo "Could not look up the tag v$version: $tag_lookup" >&2
+            exit 1
+          fi
+          last_sha=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/appstore-testflight.yml/runs?event=schedule&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // ""')
+          if [[ "$last_sha" == "$GITHUB_SHA" ]]; then
+            echo "main is unchanged since the last nightly upload ($last_sha)."
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
