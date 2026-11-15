@@ -1,4 +1,5 @@
 import SwiftUI
+import TypeWhisperModuleKit
 
 enum PremiumCorrectionExamples {
     static var current: [(before: String, after: String)] {
@@ -237,6 +238,8 @@ struct PremiumLockedFeatureOverview: View {
     let isSupporter: Bool
     /// False while the organization suppresses optional prompts; access stays manageable from the status bar.
     var showsUnlock = true
+    /// The cards of the modules the app is built with, after the app's own.
+    var moduleCards: [ModulePremiumCard] = []
     let onUnlock: () -> Void
 
     var body: some View {
@@ -295,6 +298,18 @@ struct PremiumLockedFeatureOverview: View {
 
     private var lockedCards: [AnyView] {
         PremiumFeatureID.editionFeatures.map { AnyView(lockedCard(for: $0)) }
+            + moduleCards.map { card in
+                AnyView(PremiumFeatureCard(
+                    identifier: "module.\(card.id)",
+                    icon: card.systemImage,
+                    accent: .teal,
+                    title: card.title,
+                    description: card.summary,
+                    status: String(localized: "premium.hub.status.premium"),
+                    statusTone: .secondary,
+                    previewLines: card.preview.map { [$0] } ?? []
+                ))
+            }
     }
 
     @ViewBuilder
@@ -302,7 +317,7 @@ struct PremiumLockedFeatureOverview: View {
         switch feature {
         case .calendarMeeting:
             PremiumFeatureCard(
-                feature: .calendarMeeting,
+                identifier: PremiumFeatureID.calendarMeeting.rawValue,
                 icon: "calendar.badge.clock",
                 accent: .blue,
                 title: String(localized: "premium.hub.calendar.title"),
@@ -313,7 +328,7 @@ struct PremiumLockedFeatureOverview: View {
             )
         case .correctionLearning:
             PremiumFeatureCard(
-                feature: .correctionLearning,
+                identifier: PremiumFeatureID.correctionLearning.rawValue,
                 icon: "wand.and.sparkles",
                 accent: .yellow,
                 title: String(localized: "premium.hub.learning.title"),
@@ -324,7 +339,7 @@ struct PremiumLockedFeatureOverview: View {
             )
         case .cloudSync:
             PremiumFeatureCard(
-                feature: .cloudSync,
+                identifier: PremiumFeatureID.cloudSync.rawValue,
                 icon: "cloud",
                 accent: .cyan,
                 title: String(localized: "premium.hub.sync.title"),
@@ -335,7 +350,7 @@ struct PremiumLockedFeatureOverview: View {
             )
         case .speakerWorkspace:
             PremiumFeatureCard(
-                feature: .speakerWorkspace,
+                identifier: PremiumFeatureID.speakerWorkspace.rawValue,
                 icon: "person.2.wave.2",
                 accent: .purple,
                 title: String(localized: "premium.hub.speakers.title"),
@@ -346,7 +361,7 @@ struct PremiumLockedFeatureOverview: View {
             )
         case .pairedDevices:
             PremiumFeatureCard(
-                feature: .pairedDevices,
+                identifier: PremiumFeatureID.pairedDevices.rawValue,
                 icon: "iphone.radiowaves.left.and.right",
                 accent: .indigo,
                 title: PairedDevicesPremiumCopy.title,
@@ -417,6 +432,8 @@ struct PremiumActiveFeatureOverview: View {
     private let windowPresenter: any PremiumSettingsWindowPresenting
     private let features: [PremiumFeatureID]
     private let showsHeading: Bool
+    /// The cards of the modules the app is built with, after the app's own.
+    private let moduleCards: [ModulePremiumCard]
 
     /// The row of one feature for the Settings page where that feature lives.
     static func link(to feature: PremiumFeatureID) -> PremiumActiveFeatureOverview {
@@ -440,10 +457,12 @@ struct PremiumActiveFeatureOverview: View {
         calendarController: CalendarMeetingAutomationController,
         windowPresenter: any PremiumSettingsWindowPresenting,
         features: [PremiumFeatureID] = PremiumFeatureID.editionFeatures,
-        showsHeading: Bool = true
+        showsHeading: Bool = true,
+        moduleCards: [ModulePremiumCard] = []
     ) {
         self.features = features
         self.showsHeading = showsHeading
+        self.moduleCards = moduleCards
         self.license = licenseService
         self.premiumAccount = premiumAccount
         self.syncController = syncController
@@ -502,13 +521,26 @@ struct PremiumActiveFeatureOverview: View {
             case .speakerWorkspace: AnyView(speakerCard)
             case .pairedDevices: AnyView(pairedDevicesCard)
             }
+        } + moduleCards.map { card in
+            AnyView(PremiumFeatureRow(
+                identifier: "module.\(card.id)",
+                icon: card.systemImage,
+                accent: .teal,
+                title: card.title,
+                description: card.summary,
+                status: card.status?() ?? String(localized: "premium.hub.status.on"),
+                statusTone: .success,
+                previewLines: [card.summary],
+                actionTitle: card.perform == nil ? nil : String(localized: "premium.hub.settings"),
+                action: card.perform.map { perform in { perform() } }
+            ))
         }
     }
 
     private var calendarCard: some View {
         let action = access.action(for: .calendarMeeting)
         return PremiumFeatureRow(
-            feature: .calendarMeeting,
+            identifier: PremiumFeatureID.calendarMeeting.rawValue,
             icon: "calendar.badge.clock",
             accent: .blue,
             title: String(localized: "premium.hub.calendar.title"),
@@ -524,7 +556,7 @@ struct PremiumActiveFeatureOverview: View {
     private var learningCard: some View {
         let action = access.action(for: .correctionLearning)
         return PremiumFeatureRow(
-            feature: .correctionLearning,
+            identifier: PremiumFeatureID.correctionLearning.rawValue,
             icon: "wand.and.sparkles",
             accent: .yellow,
             title: String(localized: "premium.hub.learning.title"),
@@ -540,7 +572,7 @@ struct PremiumActiveFeatureOverview: View {
     private var syncCard: some View {
         let action = access.action(for: .cloudSync)
         return PremiumFeatureRow(
-            feature: .cloudSync,
+            identifier: PremiumFeatureID.cloudSync.rawValue,
             icon: "cloud",
             accent: .cyan,
             title: String(localized: "premium.hub.sync.title"),
@@ -558,7 +590,7 @@ struct PremiumActiveFeatureOverview: View {
         let isAvailable = access.requirement(for: .pairedDevices) == .available
         let isEnabled = remoteLink.isEnabled
         return PremiumFeatureRow(
-            feature: .pairedDevices,
+            identifier: PremiumFeatureID.pairedDevices.rawValue,
             icon: "iphone.radiowaves.left.and.right",
             accent: .indigo,
             title: PairedDevicesPremiumCopy.title,
@@ -578,7 +610,7 @@ struct PremiumActiveFeatureOverview: View {
         let isAvailable = access.requirement(for: .speakerWorkspace) == .available
         let modelsInstalled = speakerCoordinator.areModelsInstalled
         return PremiumFeatureRow(
-            feature: .speakerWorkspace,
+            identifier: PremiumFeatureID.speakerWorkspace.rawValue,
             icon: "person.2.wave.2",
             accent: .purple,
             title: String(localized: "premium.hub.speakers.title"),
@@ -856,7 +888,7 @@ private enum PremiumFeatureStatusTone {
 private struct PremiumFeatureCard: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
-    let feature: PremiumFeatureID
+    let identifier: String
     let icon: String
     let accent: Color
     let title: String
@@ -868,7 +900,7 @@ private struct PremiumFeatureCard: View {
     var action: (() -> Void)?
 
     init(
-        feature: PremiumFeatureID,
+        identifier: String,
         icon: String,
         accent: Color,
         title: String,
@@ -879,7 +911,7 @@ private struct PremiumFeatureCard: View {
         actionTitle: String? = nil,
         action: (() -> Void)? = nil
     ) {
-        self.feature = feature
+        self.identifier = identifier
         self.icon = icon
         self.accent = accent
         self.title = title
@@ -950,7 +982,7 @@ private struct PremiumFeatureCard: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .controlSize(.small)
-                    .accessibilityIdentifier("premium.feature.\(feature.rawValue).action")
+                    .accessibilityIdentifier("premium.feature.\(identifier).action")
             }
         }
         .padding(16)
@@ -977,14 +1009,14 @@ private struct PremiumFeatureCard: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
-        .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
+        .accessibilityIdentifier("premium.feature.\(identifier)")
     }
 }
 
 /// One Premium feature as a compact row: what it is, its current state, and
 /// a click through to its settings.
 private struct PremiumFeatureRow: View {
-    let feature: PremiumFeatureID
+    let identifier: String
     let icon: String
     let accent: Color
     let title: String
@@ -1056,7 +1088,7 @@ private struct PremiumFeatureRow: View {
         .accessibilityLabel(title)
         .accessibilityValue(([status] + previewLines).joined(separator: ", "))
         .accessibilityHint(actionTitle ?? "")
-        .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
+        .accessibilityIdentifier("premium.feature.\(identifier)")
     }
 }
 

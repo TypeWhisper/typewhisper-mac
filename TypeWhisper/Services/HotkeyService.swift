@@ -105,6 +105,10 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case restoreRawTranscript
     case correctLastDictation
     case askHistory
+    /// The shortcuts of the modules' hotkey actions. Each action keeps its own
+    /// shortcuts under `HotkeyService.moduleActionDefaultsKey(for:)`; this slot
+    /// arms them together.
+    case moduleAction
 
     var defaultsKey: String {
         switch self {
@@ -120,6 +124,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkey
         case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkey
         case .askHistory: return UserDefaultsKeys.askHistoryHotkey
+        case .moduleAction: return UserDefaultsKeys.moduleActionHotkey
         }
     }
 
@@ -137,6 +142,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkeys
         case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkeys
         case .askHistory: return UserDefaultsKeys.askHistoryHotkeys
+        case .moduleAction: return UserDefaultsKeys.moduleActionHotkeys
         }
     }
 }
@@ -149,7 +155,7 @@ extension HotkeySlotType {
         case .hybrid, .pushToTalk, .toggle:
             true
         case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle,
-             .undoLastDictation, .restoreRawTranscript, .correctLastDictation, .askHistory:
+             .undoLastDictation, .restoreRawTranscript, .correctLastDictation, .askHistory, .moduleAction:
             false
         }
     }
@@ -244,6 +250,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var onRestoreRawTranscript: (() -> Void)?
     var onCorrectLastDictation: (() -> Void)?
     var onAskHistoryToggle: (() -> Void)?
+    /// Called with the identifier of a module's hotkey action.
+    var onModuleHotkeyAction: ((String) -> Void)?
     var onProfileDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
@@ -411,6 +419,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private var workflowSlots: [UUID: [WorkflowHotkeyState]] = [:]
+
+    /// The modules' hotkey actions whose shortcuts are armed, in the modules' order.
+    private(set) var moduleActionIDs: [String] = []
+    /// The action each armed module shortcut belongs to.
+    private var moduleActionByHotkey: [UnifiedHotkey: String] = [:]
 
     private struct MeetingCountdownActionRegistration: Sendable {
         let id: UUID
@@ -1116,6 +1129,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private func loadHotkeys() {
         let defaults = UserDefaults.standard
         for slotType in HotkeySlotType.allCases {
+            if slotType == .moduleAction {
+                loadModuleActionHotkeys()
+                continue
+            }
             if let data = defaults.data(forKey: slotType.hotkeysDefaultsKey),
                let hotkeys = try? JSONDecoder().decode([UnifiedHotkey].self, from: data) {
                 let uniqueHotkeys = Self.uniqueHotkeys(hotkeys)
@@ -1139,6 +1156,17 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         cancelPendingHybridModifierHold()
 
         let uniqueHotkeys = Self.uniqueHotkeys(hotkeys)
+        if slotType == .moduleAction {
+            // Another slot took some of the shortcuts: each action keeps the rest.
+            for id in moduleActionIDs {
+                let kept = self.hotkeys(forModuleAction: id).filter(uniqueHotkeys.contains)
+                persistModuleActionHotkeys(kept, for: id)
+            }
+            loadModuleActionHotkeys()
+            tearDownMonitor()
+            setupMonitor()
+            return
+        }
         slots[slotType] = uniqueHotkeys.map { SlotState(hotkey: $0) }
         persistHotkeys(uniqueHotkeys, for: slotType)
         tearDownMonitor()
@@ -1333,6 +1361,72 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     func resumeMonitoring() {
         setupMonitor()
+    }
+
+    // MARK: - Module Hotkey Actions
+
+    static func moduleActionDefaultsKey(for id: String) -> String {
+        UserDefaultsKeys.moduleActionHotkeysPrefix + id
+    }
+
+    /// Arms the stored shortcuts of the modules' hotkey actions. Call before `setup()`.
+    func registerModuleHotkeyActions(_ ids: [String]) {
+        moduleActionIDs = ids
+        loadModuleActionHotkeys()
+    }
+
+    /// The shortcuts assigned to a module's hotkey action.
+    func hotkeys(forModuleAction id: String) -> [UnifiedHotkey] {
+        guard let data = UserDefaults.standard.data(forKey: Self.moduleActionDefaultsKey(for: id)),
+              let hotkeys = try? JSONDecoder().decode([UnifiedHotkey].self, from: data) else {
+            return []
+        }
+        return Self.uniqueHotkeys(hotkeys)
+    }
+
+    /// Assigns shortcuts to a module's hotkey action. Another action loses the ones it had.
+    func setHotkeys(_ hotkeys: [UnifiedHotkey], forModuleAction id: String) {
+        cancelPendingHybridModifierHold()
+        let hotkeys = Self.uniqueHotkeys(hotkeys)
+        for other in moduleActionIDs where other != id {
+            let kept = self.hotkeys(forModuleAction: other).filter { existing in
+                !hotkeys.contains { $0.conflicts(with: existing) }
+            }
+            persistModuleActionHotkeys(kept, for: other)
+        }
+        persistModuleActionHotkeys(hotkeys, for: id)
+        loadModuleActionHotkeys()
+        tearDownMonitor()
+        setupMonitor()
+    }
+
+    /// The module action a shortcut, or one that conflicts with it, is assigned to.
+    func moduleAction(assignedTo hotkey: UnifiedHotkey) -> String? {
+        moduleActionByHotkey.first { $0.key.conflicts(with: hotkey) }?.value
+    }
+
+    private func persistModuleActionHotkeys(_ hotkeys: [UnifiedHotkey], for id: String) {
+        let key = Self.moduleActionDefaultsKey(for: id)
+        if hotkeys.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+        } else if let data = try? JSONEncoder().encode(hotkeys) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    /// Fills the module slot with the shortcuts of the registered actions. A
+    /// shortcut that an earlier action has too stays with that one.
+    private func loadModuleActionHotkeys() {
+        var byHotkey: [UnifiedHotkey: String] = [:]
+        var hotkeys: [UnifiedHotkey] = []
+        for id in moduleActionIDs {
+            for hotkey in self.hotkeys(forModuleAction: id) where !hotkeys.contains(where: { $0.conflicts(with: hotkey) }) {
+                hotkeys.append(hotkey)
+                byHotkey[hotkey] = id
+            }
+        }
+        moduleActionByHotkey = byHotkey
+        slots[.moduleAction] = hotkeys.map { SlotState(hotkey: $0) }
     }
 
     // MARK: - Carbon Hotkeys (works through Secure Input)
@@ -3173,6 +3267,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             onAskHistoryToggle?()
             return
         }
+        if slotType == .moduleAction {
+            if let id = moduleActionByHotkey[hotkey] {
+                onModuleHotkeyAction?(id)
+            }
+            return
+        }
         if slotType == .recorderToggle {
             onRecorderToggle?()
             return
@@ -3260,6 +3360,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .correctLastDictation:
             break // handled on keyDown only
         case .askHistory:
+            break // handled on keyDown only
+        case .moduleAction:
             break // handled on keyDown only
         case .recorderToggle:
             break // handled on keyDown only

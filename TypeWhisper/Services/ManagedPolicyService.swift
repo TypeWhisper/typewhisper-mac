@@ -7,13 +7,13 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 /// Reads raw managed preferences without validating them. Implementations never write preferences.
 protocol ManagedPolicySource: Sendable {
     /// Reads all managed values. Failures are reported in the result, not thrown.
-    func read() -> ManagedPolicyReading
+    func read() -> ManagedPolicyRawReading
 }
 
 /// A source without managed values, used by test hosts so a profile installed for the development
 /// app cannot change test results.
 struct EmptyManagedPolicySource: ManagedPolicySource {
-    func read() -> ManagedPolicyReading { .absent }
+    func read() -> ManagedPolicyRawReading { .absent }
 }
 
 /// Reads the managed preferences of the app's own domain (`com.typewhisper.mac`,
@@ -29,7 +29,7 @@ struct ManagedPreferencesPolicySource: ManagedPolicySource {
         self.applicationID = applicationID
     }
 
-    func read() -> ManagedPolicyReading {
+    func read() -> ManagedPolicyRawReading {
         let domain = applicationID as CFString
         CFPreferencesAppSynchronize(domain)
 
@@ -56,7 +56,7 @@ struct ManagedPreferencesPolicySource: ManagedPolicySource {
             forcedValues[key] = ManagedPolicyRawValue(propertyList: value)
         }
 
-        return ManagedPolicyReading(forcedValues: forcedValues, unmanagedKeys: unmanagedKeys)
+        return ManagedPolicyRawReading(forcedValues: forcedValues, unmanagedKeys: unmanagedKeys)
     }
 
     private static func visibleKeys(applicationID: String) -> Dictionary<String, Any>.Keys {

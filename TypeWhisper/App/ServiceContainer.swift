@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import os
+import TypeWhisperModuleKit
 
 /// Launch-phase signposts for Instruments. They appear in the Points of Interest
 /// lane of the Time Profiler and App Launch templates.
@@ -110,6 +111,8 @@ final class ServiceContainer: ObservableObject {
     let calendarMeetingCountdownModel: CalendarMeetingCountdownModel
     let calendarMeetingAutomationController: CalendarMeetingAutomationController
     let moduleRegistry: ModuleRegistry
+    /// Erases and exports the data modules registered with the user's data.
+    let moduleUserData: AppModuleUserDataLifecycle
 
     // HTTP API
     let httpServer: HTTPServer
@@ -630,7 +633,31 @@ final class ServiceContainer: ObservableObject {
         )
 
         // The stub package, linked by default, has no modules.
-        moduleRegistry = ModuleRegistry(host: AppModuleHost())
+        let moduleUserData = AppModuleUserDataLifecycle()
+        self.moduleUserData = moduleUserData
+        moduleRegistry = ModuleRegistry(host: AppModuleHost(
+            historyReading: AppHistoryReading(historyService: historyService),
+            historySearching: AppHistorySearching(index: historySearchIndex) {
+                UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historySearchIndexEnabled)
+                await historySearchIndexer.reconcile()
+                await historySearchIndexer.waitForQueuedWork()
+            },
+            languageModelAnswering: AppLanguageModelAnswering(service: promptProcessingService),
+            managedPolicyReading: AppModuleManagedPolicyReading(service: managedPolicyService),
+            premiumAccessReading: AppPremiumAccessReading(
+                licenseService: licenseService,
+                premiumAccountService: premiumAccountService
+            ),
+            userDataLifecycle: moduleUserData
+        ))
+        if !moduleRegistry.contributions.managedPolicyKeys.isEmpty {
+            moduleRegistry.registerManagedPolicyKeys()
+            managedPolicyService.refresh()
+        }
+        hotkeyService.registerModuleHotkeyActions(moduleRegistry.contributions.hotkeyActions.map(\.id))
+        hotkeyService.onModuleHotkeyAction = { [moduleRegistry] id in
+            MainActor.assumeIsolated { moduleRegistry.performHotkeyAction(withID: id) }
+        }
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel

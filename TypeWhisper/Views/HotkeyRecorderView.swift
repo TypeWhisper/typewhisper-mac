@@ -222,12 +222,19 @@ struct HotkeyRecorderView: View {
         guard let slot = ServiceContainer.shared.hotkeyService.isHotkeyAssignedToGlobalSlot(candidate) else {
             return nil
         }
-        return assignmentDescription(for: slot)
+        return assignmentDescription(for: slot, hotkey: candidate)
     }
 
     /// Localized name of a conflicting global slot, without an English sentence wrapper.
-    static func assignmentDescription(for slot: HotkeySlotType) -> String {
-        globalSlotDisplayName(slot)
+    /// For the slot of the modules' actions, the title of the action that has `hotkey`.
+    static func assignmentDescription(for slot: HotkeySlotType, hotkey: UnifiedHotkey? = nil) -> String {
+        if slot == .moduleAction,
+           let hotkey,
+           let id = ServiceContainer.shared.hotkeyService.moduleAction(assignedTo: hotkey),
+           let action = ServiceContainer.shared.moduleRegistry.hotkeyAction(withID: id) {
+            return action.title
+        }
+        return globalSlotDisplayName(slot)
     }
 
     private static func globalSlotDisplayName(_ slot: HotkeySlotType) -> String {
@@ -244,6 +251,7 @@ struct HotkeyRecorderView: View {
         case .restoreRawTranscript: return localizedAppText("Restore Raw Transcript", de: "Rohtext wiederherstellen")
         case .correctLastDictation: return String(localized: "Correct Last Dictation")
         case .askHistory: return String(localized: "askHistory.title")
+        case .moduleAction: return String(localized: "Hotkeys")
         }
     }
 

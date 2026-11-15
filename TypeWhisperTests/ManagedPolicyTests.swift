@@ -275,7 +275,7 @@ final class ManagedPolicyValidatorTests: XCTestCase {
     }
 
     func testValuesSetOutsideAProfileAreReportedExceptTheManagedLicenseKey() {
-        let snapshot = validate(ManagedPolicyReading(unmanagedKeys: ["AllowCloudTranscription", "ManagedLicenseKey", "Recommended"]))
+        let snapshot = validate(ManagedPolicyRawReading(unmanagedKeys: ["AllowCloudTranscription", "ManagedLicenseKey", "Recommended"]))
 
         XCTAssertEqual(snapshot.status, .absent)
         XCTAssertFalse(snapshot.isManaged)
@@ -311,12 +311,12 @@ final class ManagedPolicyValidatorTests: XCTestCase {
 
     func testContentEqualsIgnoresRevisionAndReadTime() {
         let forced: [String: ManagedPolicyRawValue] = ["UpdateMode": .integer(1)]
-        let first = ManagedPolicyValidator.validate(ManagedPolicyReading(forcedValues: forced), revision: 1, readAt: readAt)
+        let first = ManagedPolicyValidator.validate(ManagedPolicyRawReading(forcedValues: forced), revision: 1, readAt: readAt)
         let second = ManagedPolicyValidator.validate(
-            ManagedPolicyReading(forcedValues: forced), revision: 2, readAt: readAt.addingTimeInterval(30)
+            ManagedPolicyRawReading(forcedValues: forced), revision: 2, readAt: readAt.addingTimeInterval(30)
         )
         let changed = ManagedPolicyValidator.validate(
-            ManagedPolicyReading(forcedValues: ["UpdateMode": .integer(0)]), revision: 3, readAt: readAt
+            ManagedPolicyRawReading(forcedValues: ["UpdateMode": .integer(0)]), revision: 3, readAt: readAt
         )
 
         XCTAssertTrue(first.contentEquals(second))
@@ -353,10 +353,10 @@ final class ManagedPolicyValidatorTests: XCTestCase {
     }
 
     private func validate(forced: [String: ManagedPolicyRawValue]) -> ManagedPolicySnapshot {
-        validate(ManagedPolicyReading(forcedValues: forced))
+        validate(ManagedPolicyRawReading(forcedValues: forced))
     }
 
-    private func validate(_ reading: ManagedPolicyReading) -> ManagedPolicySnapshot {
+    private func validate(_ reading: ManagedPolicyRawReading) -> ManagedPolicySnapshot {
         ManagedPolicyValidator.validate(reading, revision: 1, readAt: readAt)
     }
 }
@@ -431,14 +431,14 @@ final class ManagedPolicyServiceTests: XCTestCase {
         service.refresh()
         XCTAssertTrue(ManagedAskHistoryPolicy.allowsAskHistoryNow(service))
 
-        source.reading = ManagedPolicyReading(forcedValues: ["AllowHistoryAsk": .boolean(false)])
+        source.reading = ManagedPolicyRawReading(forcedValues: ["AllowHistoryAsk": .boolean(false)])
         XCTAssertFalse(ManagedAskHistoryPolicy.allowsAskHistoryNow(service))
         // The change is published for the panel too.
         XCTAssertFalse(ManagedAskHistoryPolicy.allowsAskHistory(service.current))
     }
 
     func testRefreshWithoutContentChangeKeepsTheSnapshot() {
-        let source = FakeManagedPolicySource(ManagedPolicyReading(forcedValues: ["UpdateMode": .integer(1)]))
+        let source = FakeManagedPolicySource(ManagedPolicyRawReading(forcedValues: ["UpdateMode": .integer(1)]))
         let service = ManagedPolicyService(source: source)
         service.refresh()
         var publications = 0
@@ -458,7 +458,7 @@ final class ManagedPolicyServiceTests: XCTestCase {
         let service = ManagedPolicyService(source: source)
         service.refresh()
 
-        source.reading = ManagedPolicyReading(forcedValues: ["AllowCloudTranscription": .boolean(false)])
+        source.reading = ManagedPolicyRawReading(forcedValues: ["AllowCloudTranscription": .boolean(false)])
         service.refresh()
 
         XCTAssertEqual(service.current.revision, 2)
@@ -472,7 +472,7 @@ final class ManagedPolicyServiceTests: XCTestCase {
     }
 
     func testUnreadableReadRetainsValuesAndBlocksUntilReadableAgain() {
-        let readable = ManagedPolicyReading(forcedValues: ["AllowPluginDownloads": .boolean(false)])
+        let readable = ManagedPolicyRawReading(forcedValues: ["AllowPluginDownloads": .boolean(false)])
         let source = FakeManagedPolicySource(readable)
         let service = ManagedPolicyService(source: source)
         service.refresh()
@@ -534,7 +534,7 @@ final class ManagedPolicyServiceTests: XCTestCase {
         }
         service.startMonitoring(notificationCenter: NotificationCenter(), workspaceNotificationCenter: NotificationCenter())
 
-        source.reading = ManagedPolicyReading(forcedValues: ["UpdateMode": .integer(0)])
+        source.reading = ManagedPolicyRawReading(forcedValues: ["UpdateMode": .integer(0)])
         tick.yield()
         await fulfillment(of: [published], timeout: 5)
 
@@ -603,7 +603,7 @@ final class ManagedPreferencesPolicySourceTests: XCTestCase {
 
 final class ManagedPolicyDiagnosticsTests: XCTestCase {
     func testDiagnosticsMaskSensitiveValuesAndOmitFreeText() {
-        let snapshot = ManagedPolicyValidator.validate(ManagedPolicyReading(forcedValues: [
+        let snapshot = ManagedPolicyValidator.validate(ManagedPolicyRawReading(forcedValues: [
             "ManagedLicenseKey": .string("SECRET-LICENSE"),
             "TranscriptionProviderId": .string("com.typewhisper.parakeet"),
             "TranscriptionModelId": .string("/Users/someone/models/private"),
@@ -634,7 +634,7 @@ final class ManagedPolicyDiagnosticsTests: XCTestCase {
 
     func testDiagnosticsEncodeWithoutSecrets() throws {
         let snapshot = ManagedPolicyValidator.validate(
-            ManagedPolicyReading(forcedValues: ["ManagedLicenseKey": .string("SECRET-LICENSE")]),
+            ManagedPolicyRawReading(forcedValues: ["ManagedLicenseKey": .string("SECRET-LICENSE")]),
             revision: 1,
             readAt: Date()
         )
@@ -655,15 +655,15 @@ final class ManagedPolicyDiagnosticsTests: XCTestCase {
 }
 
 private final class FakeManagedPolicySource: ManagedPolicySource, @unchecked Sendable {
-    var reading: ManagedPolicyReading
+    var reading: ManagedPolicyRawReading
     var onRead: (() -> Void)?
     private(set) var readCount = 0
 
-    init(_ reading: ManagedPolicyReading) {
+    init(_ reading: ManagedPolicyRawReading) {
         self.reading = reading
     }
 
-    func read() -> ManagedPolicyReading {
+    func read() -> ManagedPolicyRawReading {
         readCount += 1
         onRead?()
         return reading

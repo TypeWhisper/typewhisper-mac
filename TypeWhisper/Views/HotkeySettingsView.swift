@@ -1,5 +1,6 @@
 import Combine
 import SwiftUI
+import TypeWhisperModuleKit
 
 struct HotkeySettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
@@ -102,6 +103,14 @@ struct HotkeySettingsView: View {
                 )
                 }
 
+                ForEach(moduleActionGroups, id: \.title) { group in
+                    Section(group.title) {
+                        ForEach(group.actions) { action in
+                            ModuleHotkeyActionRecorder(action: action)
+                        }
+                    }
+                }
+
                 #if !APPSTORE
                 Section(localizedAppText("Dictation Undo", de: "Diktat rückgängig")) {
                 MultiHotkeySlotRecorder(
@@ -132,6 +141,101 @@ struct HotkeySettingsView: View {
         .onReceive(secureInputRefresh) { _ in
             secureInputDiagnostics = SecureInputDiagnosticsProvider.snapshot()
         }
+    }
+
+    /// The modules' hotkey actions by their group, in the order they come.
+    private var moduleActionGroups: [(title: String, actions: [ModuleHotkeyAction])] {
+        var groups: [(title: String, actions: [ModuleHotkeyAction])] = []
+        for action in ServiceContainer.shared.moduleRegistry.contributions.hotkeyActions {
+            let title = action.group ?? ""
+            if let index = groups.firstIndex(where: { $0.title == title }) {
+                groups[index].actions.append(action)
+            } else {
+                groups.append((title, [action]))
+            }
+        }
+        return groups
+    }
+}
+
+/// The shortcuts of one module's hotkey action, recorded like those of a slot.
+private struct ModuleHotkeyActionRecorder: View {
+    @ObservedObject private var dictation = DictationViewModel.shared
+    let action: ModuleHotkeyAction
+    /// Changes after every edit, so the row reads the new shortcuts.
+    @State private var revision = 0
+
+    private var hotkeyService: HotkeyService { ServiceContainer.shared.hotkeyService }
+
+    var body: some View {
+        let hotkeys = hotkeyService.hotkeys(forModuleAction: action.id)
+
+        Group {
+            if hotkeys.isEmpty {
+                HotkeyRecorderView(
+                    label: "",
+                    title: action.title,
+                    subtitle: action.subtitle,
+                    onRecord: { hotkey in record(hotkey) },
+                    onClear: { save([]) }
+                )
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(action.title)
+                        if let subtitle = action.subtitle {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer(minLength: 12)
+
+                    HStack(spacing: 8) {
+                        ForEach(hotkeys, id: \.self) { hotkey in
+                            HotkeyRecorderView(
+                                label: HotkeyService.displayName(for: hotkey),
+                                presentation: .compactChip,
+                                onRecord: { newHotkey in record(newHotkey, replacing: hotkey) },
+                                onClear: { save(hotkeys.filter { $0 != hotkey }) },
+                                hotkey: hotkey
+                            )
+                        }
+
+                        HotkeyRecorderView(
+                            label: "",
+                            title: localizedAppText("Add Shortcut", de: "Shortcut hinzufügen"),
+                            presentation: .iconButton(systemName: "plus.circle"),
+                            onRecord: { hotkey in record(hotkey) },
+                            onClear: {}
+                        )
+                    }
+                }
+            }
+        }
+        .id(revision)
+    }
+
+    private func record(_ hotkey: UnifiedHotkey, replacing existingHotkey: UnifiedHotkey? = nil) {
+        var hotkeys = hotkeyService.hotkeys(forModuleAction: action.id)
+        if let existingHotkey, let index = hotkeys.firstIndex(of: existingHotkey) {
+            hotkeys[index] = hotkey
+            hotkeys = hotkeys.enumerated().filter { $0.offset == index || !$0.element.conflicts(with: hotkey) }.map(\.element)
+        } else {
+            guard !hotkeys.contains(where: { $0.conflicts(with: hotkey) }) else { return }
+            hotkeys.append(hotkey)
+        }
+        // A slot that has the shortcut gives it up; another module action does so in `save`.
+        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .moduleAction) {
+            dictation.removeConflictingHotkey(hotkey, for: conflict)
+        }
+        save(hotkeys)
+    }
+
+    private func save(_ hotkeys: [UnifiedHotkey]) {
+        hotkeyService.setHotkeys(hotkeys, forModuleAction: action.id)
+        revision += 1
     }
 }
 

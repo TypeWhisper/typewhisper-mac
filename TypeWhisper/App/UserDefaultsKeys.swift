@@ -41,6 +41,8 @@ enum UserDefaultsKeys {
     static let restoreRawTranscriptHotkey = "restoreRawTranscriptHotkey"
     static let correctLastDictationHotkey = "correctLastDictationHotkey"
     static let askHistoryHotkey = "askHistoryHotkey"
+    /// Never written: modules' actions keep their shortcuts under `moduleActionHotkeysPrefix`.
+    static let moduleActionHotkey = "moduleActionHotkey"
 
     // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
     static let hybridHotkeys = "hybridHotkeys"
@@ -55,6 +57,10 @@ enum UserDefaultsKeys {
     static let restoreRawTranscriptHotkeys = "restoreRawTranscriptHotkeys"
     static let correctLastDictationHotkeys = "correctLastDictationHotkeys"
     static let askHistoryHotkeys = "askHistoryHotkeys"
+    /// Never written, see `moduleActionHotkey`.
+    static let moduleActionHotkeys = "moduleActionHotkeys"
+    /// Followed by the identifier of a module's hotkey action: its `[UnifiedHotkey]`.
+    static let moduleActionHotkeysPrefix = "moduleHotkeys."
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"

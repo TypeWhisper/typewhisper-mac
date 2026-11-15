@@ -785,7 +785,7 @@ struct SetupWizardView: View {
                     guard let slot = dictation.isHotkeyAssigned(candidate, excluding: mode) else {
                         return nil
                     }
-                    return HotkeyRecorderView.assignmentDescription(for: slot)
+                    return HotkeyRecorderView.assignmentDescription(for: slot, hotkey: candidate)
                 }
             )
             .fixedSize()
@@ -2007,6 +2007,7 @@ struct SetupWizardView: View {
         case .restoreRawTranscript: return dictation.restoreRawTranscriptHotkeyLabel
         case .correctLastDictation: return dictation.correctLastDictationHotkeyLabel
         case .askHistory: return dictation.askHistoryHotkeyLabel
+        case .moduleAction: return ""
         }
     }
 
@@ -2024,6 +2025,7 @@ struct SetupWizardView: View {
         case .restoreRawTranscript: return localizedAppText("Restore Raw Transcript", de: "Rohtext wiederherstellen")
         case .correctLastDictation: return String(localized: "Correct Last Dictation")
         case .askHistory: return String(localized: "askHistory.title")
+        case .moduleAction: return String(localized: "Hotkeys")
         }
     }
 

@@ -43,10 +43,10 @@ def swift_constants():
 
 
 def swift_catalog():
-    """Returns {name: (kind, recommendable, maximum, paired with)} from ManagedPolicyKeys.all."""
+    """Returns {name: (kind, recommendable, maximum, paired with)} from ManagedPolicyKeys.hostDefinitions."""
     source = POLICY_SOURCE.read_text()
     constants = swift_constants()
-    body = source.split("static let all: [ManagedPolicyDefinition] = [", 1)[1].split("\n    ]", 1)[0] + "\n"
+    body = source.split("static let hostDefinitions: [ManagedPolicyDefinition] = [", 1)[1].split("\n    ]", 1)[0] + "\n"
     catalog = {}
     for arguments in re.findall(r"\.init\((.*)\),?\n", body):
         name = constants[re.search(r"name: (\w+)", arguments).group(1)]

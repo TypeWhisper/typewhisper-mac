@@ -1,4 +1,5 @@
 import SwiftUI
+import TypeWhisperModuleKit
 import Combine
 import TypeWhisperPluginSDK
 
@@ -307,6 +308,8 @@ enum MenuBarMenuItem: Hashable {
     case settings
     case history
     case askHistory
+    /// A module's entry, by its identifier.
+    case module(String)
     case errorLog
     case toggleRecorder
     case dictationShortcut
@@ -347,10 +350,11 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
         items(hasRecoverableRecording: true)
     }
 
-    func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
+    /// - Parameter moduleItemIDs: The modules' entries, which follow History.
+    func items(hasRecoverableRecording: Bool, moduleItemIDs: [String] = []) -> [MenuBarMenuItem] {
         switch self {
         case .general:
-            [.settings, .history, .askHistory, .errorLog]
+            [.settings, .history, .askHistory] + moduleItemIDs.map(MenuBarMenuItem.module) + [.errorLog]
         case .transcription:
             hasRecoverableRecording
                 ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription,
@@ -466,7 +470,10 @@ struct MenuBarView: View {
 
             ForEach(MenuBarMenuSection.allCases, id: \.self) { section in
                 Section(String(localized: section.titleResource)) {
-                    ForEach(section.items(hasRecoverableRecording: status.hasRecoverableRecording), id: \.self) { item in
+                    ForEach(section.items(
+                        hasRecoverableRecording: status.hasRecoverableRecording,
+                        moduleItemIDs: ServiceContainer.shared.moduleRegistry.contributions.menuItems.map(\.id)
+                    ), id: \.self) { item in
                         menuItem(for: item)
                     }
                 }
@@ -543,6 +550,24 @@ struct MenuBarView: View {
                 Label(String(localized: "askHistory.menu"), systemImage: "text.magnifyingglass")
             }
             .keyboardShortcut(keyboardShortcut(from: status.askHistoryMenuShortcut))
+
+        case .module(let id):
+            if let moduleItem = ServiceContainer.shared.moduleRegistry.contributions.menuItems.first(where: { $0.id == id }) {
+                Button {
+                    // A key NSPanel cannot open while the menu still tracks.
+                    MenuBarActionDispatcher.performAfterMenuDismissal(moduleItem.perform)
+                } label: {
+                    if let systemImage = moduleItem.systemImage {
+                        Label(moduleItem.title, systemImage: systemImage)
+                    } else {
+                        Text(moduleItem.title)
+                    }
+                }
+                .keyboardShortcut(keyboardShortcut(from: moduleItem.hotkeyActionID.flatMap { actionID in
+                    ServiceContainer.shared.hotkeyService.hotkeys(forModuleAction: actionID)
+                        .lazy.compactMap(HotkeyService.menuShortcutDescriptor(for:)).first
+                }))
+            }
 
         case .errorLog:
             Button {

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The value shape of a managed policy key.
 enum ManagedPolicyValueKind: String, Sendable {
@@ -78,8 +79,11 @@ enum ManagedPolicyKeys {
     /// Read by `LicenseService` since 1.6.1, which also accepts values set with `defaults write`.
     static let managedLicenseKey = UserDefaultsKeys.managedLicenseKey
 
-    /// Every supported key in documentation order.
-    static let all: [ManagedPolicyDefinition] = [
+    /// Every supported key: the app's own in documentation order, then the keys of modules.
+    static var all: [ManagedPolicyDefinition] { hostDefinitions + moduleDefinitions }
+
+    /// The app's own keys in documentation order.
+    static let hostDefinitions: [ManagedPolicyDefinition] = [
         .init(name: transcriptionProviderId, kind: .text, allowsRecommendation: true, pairedWith: transcriptionModelId),
         .init(name: transcriptionModelId, kind: .text, allowsRecommendation: true, pairedWith: transcriptionProviderId),
         .init(name: llmProviderId, kind: .text, allowsRecommendation: true, pairedWith: llmModelId),
@@ -101,11 +105,48 @@ enum ManagedPolicyKeys {
         .init(name: managedLicenseKey, kind: .text, sensitive: true, acceptsUnmanagedValue: true),
     ]
 
-    private static let byName = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })
+    private static let byName = Dictionary(uniqueKeysWithValues: hostDefinitions.map { ($0.name, $0) })
+    private static let moduleStore = OSAllocatedUnfairLock<[ManagedPolicyDefinition]>(initialState: [])
+
+    /// The keys the app's modules declared, in their order.
+    static var moduleDefinitions: [ManagedPolicyDefinition] {
+        moduleStore.withLock { $0 }
+    }
+
+    /// Replaces the keys of modules. A key without a name, with the name of one of the app's
+    /// keys, of `Recommended`, of an earlier key or of profile metadata is left out.
+    /// - Returns: The names that were left out.
+    @discardableResult
+    static func setModuleDefinitions(_ definitions: [ManagedPolicyDefinition]) -> [String] {
+        var accepted: [ManagedPolicyDefinition] = []
+        var names = Set(byName.keys).union([recommendedDictionary])
+        var rejected: [String] = []
+        for definition in definitions {
+            let name = definition.name
+            guard !name.isEmpty, !ManagedPolicyValidator.isProfileMetadataKey(name),
+                  definition.enumerationMaximum >= 0,
+                  !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
+                rejected.append(name)
+                continue
+            }
+            names.insert(name)
+            // The app's pairs and its own unmanaged inputs stay the app's.
+            accepted.append(ManagedPolicyDefinition(
+                name: name,
+                kind: definition.kind,
+                allowsRecommendation: definition.allowsRecommendation,
+                enumerationMaximum: definition.enumerationMaximum,
+                sensitive: definition.sensitive
+            ))
+        }
+        let definitions = accepted
+        moduleStore.withLock { $0 = definitions }
+        return rejected
+    }
 
     /// Finds a definition by its exact name, or nil for an unknown key.
     static func definition(named name: String) -> ManagedPolicyDefinition? {
-        byName[name]
+        byName[name] ?? moduleStore.withLock { $0.first { $0.name == name } }
     }
 
     /// The supported key that differs from `name` only in letter case, for diagnostics.
