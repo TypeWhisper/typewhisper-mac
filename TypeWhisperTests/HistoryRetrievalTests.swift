@@ -197,6 +197,14 @@ final class AskHistoryPlannerTests: XCTestCase {
         XCTAssertTrue(onPhone.keywords.contains("passport"), "\(onPhone.keywords)")
     }
 
+    func testAnInflectedWordIsAlsoSearchedByItsStem() {
+        // From the tagger's lemma where it has one, otherwise without the ending.
+        let keywords = plan("Was wurde zu den Plakaten und Flyern beschlossen?").keywords.map { $0.lowercased() }
+        XCTAssertTrue(keywords.contains("plakat"), "\(keywords)")
+        XCTAssertTrue(keywords.contains("flyer"), "\(keywords)")
+        XCTAssertTrue(plan("Which invoices did we send?").keywords.contains { "invoice".hasPrefix($0.lowercased()) })
+    }
+
     func testAQuestionAboutTheLastTimePrefersNewRecords() {
         XCTAssertTrue(plan("Wann habe ich zuletzt über die Heizung gesprochen?").prefersNewest)
         XCTAssertTrue(plan("When did we last time talk about the heating?").prefersNewest)

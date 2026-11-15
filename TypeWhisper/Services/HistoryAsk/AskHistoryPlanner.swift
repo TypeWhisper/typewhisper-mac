@@ -103,7 +103,7 @@ struct AskHistoryPlanner: Sendable {
             let word = words[index]
             let isPlaced = words[max(index - 2, 0)..<index].contains { Self.placeWords.contains($0.folded) }
             if isPlaced, let sources = Self.devices[word.folded] {
-                plan.scope.sources.formUnion(sources.map(\.rawValue))
+                plan.scope.sources.formUnion(sources)
                 finishName()
                 index += 1
                 continue
@@ -207,8 +207,10 @@ struct AskHistoryPlanner: Sendable {
         ) { tag, range in
             let text = String(question[range])
             guard text.contains(where: { $0.isLetter || $0.isNumber }) else { return true }
+            // iOS has no German or French lemmas, and the Mac lacks some
+            // words, so a common ending comes off instead: "Plakaten", "Plakat".
             let lemma = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lemma).0
-                .map { folded($0.rawValue) }
+                .map { folded($0.rawValue) } ?? stem(of: folded(text), language: language)
             let utf16 = NSRange(range, in: question)
             words.append(Word(
                 text: text, folded: folded(text), lemma: lemma,
@@ -237,6 +239,26 @@ struct AskHistoryPlanner: Sendable {
         return words
     }
 
+    /// The word without an inflection ending of its language, for a search
+    /// by word start. Nil for a short word or one without such an ending.
+    private static func stem(of word: String, language: String?) -> String? {
+        guard let language, let endings = inflectionEndings[language], word.count >= 5 else { return nil }
+        for ending in endings where word.hasSuffix(ending) && word.count - ending.count >= 4 {
+            return String(word.dropLast(ending.count))
+        }
+        return nil
+    }
+
+    /// Longest first. A stem may be too short, as "Kund" for "Kunden", which
+    /// a search by word start still finds; one too long would find nothing.
+    private static let inflectionEndings: [String: [String]] = [
+        "de": ["en", "e", "n", "s"],
+        "en": ["ies", "ing", "es", "ed", "s"],
+        "fr": ["es", "s", "e"],
+        "es": ["es", "s"],
+        "it": ["i", "e"],
+    ]
+
     // MARK: - Word lists
 
     /// Words before an app or a device: "in Slack", "auf dem iPhone".
@@ -245,14 +267,16 @@ struct AskHistoryPlanner: Sendable {
         "dans", "sur", "depuis", "avec", "en", "desde", "con", "su", "sul", "sull", "nel", "da", "dal", "dall",
     ]
 
-    private static let devices: [String: Set<RecordingSource>] = [
-        "iphone": [.iPhone, .keyboard],
-        "ipad": [.iPad],
-        "watch": [.appleWatch],
-        "windows": [.windows],
-        "pc": [.windows],
-        "mac": [.mac, .recorder],
-        "macbook": [.mac, .recorder],
+    /// The sources as the index stores them. iOS has no `windows` and
+    /// `recorder` sources, so this list uses their raw values.
+    private static let devices: [String: Set<String>] = [
+        "iphone": ["iPhone", "keyboard"],
+        "ipad": ["iPad"],
+        "watch": ["appleWatch"],
+        "windows": ["windows"],
+        "pc": ["windows"],
+        "mac": ["mac", "recorder"],
+        "macbook": ["mac", "recorder"],
     ]
 
     private static let newestPhrases = [
