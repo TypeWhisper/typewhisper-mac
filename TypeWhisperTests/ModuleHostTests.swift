@@ -155,6 +155,32 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertEqual(service.isHotkeyAssignedToGlobalSlot(commandShiftK), .toggle)
     }
 
+    func testShortcutHeldByASlotStaysStoredAndReturnsWhenTheSlotLetsGo() {
+        let ids = ["test.first", "test.second"]
+        clearModuleHotkeys(ids)
+        let toggleKeys = [UserDefaultsKeys.toggleHotkey, UserDefaultsKeys.toggleHotkeys]
+        let savedToggle = toggleKeys.map { UserDefaults.standard.object(forKey: $0) }
+        defer {
+            clearModuleHotkeys(ids)
+            for (key, value) in zip(toggleKeys, savedToggle) { UserDefaults.standard.set(value, forKey: key) }
+        }
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        UserDefaults.standard.set(try? JSONEncoder().encode([commandShiftK]), forKey: HotkeyService.moduleActionDefaultsKey(for: "test.first"))
+        service.setHotkeysForTesting([commandShiftK], for: .toggle)
+        service.registerModuleHotkeyActions(ids)
+        service.setHotkeys([commandShiftL], forModuleAction: "test.second")
+
+        // Another slot takes L: the first action keeps its hidden K.
+        service.removeConflictingHotkey(commandShiftL, for: .moduleAction)
+        XCTAssertEqual(service.hotkeys(forModuleAction: "test.first"), [commandShiftK])
+        XCTAssertEqual(service.hotkeys(forModuleAction: "test.second"), [])
+
+        // Toggle lets K go: the first action's K is armed again.
+        service.clearHotkey(for: .toggle)
+        XCTAssertEqual(service.moduleAction(assignedTo: commandShiftK), "test.first")
+    }
+
     func testSettingsBackupAcceptsModuleShortcutKeys() {
         XCTAssertTrue(SettingsBackupExporter.isHotkeyKey(UserDefaultsKeys.toggleHotkeys))
         XCTAssertTrue(SettingsBackupExporter.isHotkeyKey("moduleHotkeys.com.example.open-panel_1"))

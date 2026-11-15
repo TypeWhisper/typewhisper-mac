@@ -1159,9 +1159,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         let uniqueHotkeys = Self.uniqueHotkeys(hotkeys)
         if slotType == .moduleAction {
-            // Another slot took some of the shortcuts: each action keeps the rest.
+            // Another slot took some of the armed shortcuts. Each action loses only
+            // those, also keeping shortcuts that another slot holds for now.
+            let removed = self.hotkeys(for: .moduleAction).filter { !uniqueHotkeys.contains($0) }
             for id in moduleActionIDs {
-                let kept = self.hotkeys(forModuleAction: id).filter(uniqueHotkeys.contains)
+                let kept = self.hotkeys(forModuleAction: id).filter { !removed.contains($0) }
                 persistModuleActionHotkeys(kept, for: id)
             }
             loadModuleActionHotkeys()
@@ -1171,6 +1173,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
         slots[slotType] = uniqueHotkeys.map { SlotState(hotkey: $0) }
         persistHotkeys(uniqueHotkeys, for: slotType)
+        // A module shortcut this slot held, or now holds, changes whether it is armed.
+        loadModuleActionHotkeys()
         tearDownMonitor()
         setupMonitor()
     }
