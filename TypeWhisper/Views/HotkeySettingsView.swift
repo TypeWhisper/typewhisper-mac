@@ -161,13 +161,12 @@ struct HotkeySettingsView: View {
 /// The shortcuts of one module's hotkey action, recorded like those of a slot.
 private struct ModuleHotkeyActionRecorder: View {
     @ObservedObject private var dictation = DictationViewModel.shared
+    /// Publishes every change of a module action's shortcuts, also those another row or slot made.
+    @ObservedObject private var hotkeyService = ServiceContainer.shared.hotkeyService
     let action: ModuleHotkeyAction
-    /// Changes after every edit, so the row reads the new shortcuts.
-    @State private var revision = 0
-
-    private var hotkeyService: HotkeyService { ServiceContainer.shared.hotkeyService }
 
     var body: some View {
+        let _ = hotkeyService.moduleActionHotkeysRevision
         let hotkeys = hotkeyService.hotkeys(forModuleAction: action.id)
 
         Group {
@@ -198,7 +197,7 @@ private struct ModuleHotkeyActionRecorder: View {
                                 label: HotkeyService.displayName(for: hotkey),
                                 presentation: .compactChip,
                                 onRecord: { newHotkey in record(newHotkey, replacing: hotkey) },
-                                onClear: { save(hotkeys.filter { $0 != hotkey }) },
+                                onClear: { save(hotkeyService.hotkeys(forModuleAction: action.id).filter { $0 != hotkey }) },
                                 hotkey: hotkey
                             )
                         }
@@ -214,7 +213,6 @@ private struct ModuleHotkeyActionRecorder: View {
                 }
             }
         }
-        .id(revision)
     }
 
     private func record(_ hotkey: UnifiedHotkey, replacing existingHotkey: UnifiedHotkey? = nil) {
@@ -235,7 +233,6 @@ private struct ModuleHotkeyActionRecorder: View {
 
     private func save(_ hotkeys: [UnifiedHotkey]) {
         hotkeyService.setHotkeys(hotkeys, forModuleAction: action.id)
-        revision += 1
     }
 }
 

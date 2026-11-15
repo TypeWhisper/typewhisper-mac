@@ -420,6 +420,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private var workflowSlots: [UUID: [WorkflowHotkeyState]] = [:]
 
+    /// Changes whenever a module action's shortcuts change, so every row that shows them rereads them.
+    @Published private(set) var moduleActionHotkeysRevision = 0
     /// The modules' hotkey actions whose shortcuts are armed, in the modules' order.
     private(set) var moduleActionIDs: [String] = []
     /// The action each armed module shortcut belongs to.
@@ -1427,6 +1429,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
         moduleActionByHotkey = byHotkey
         slots[.moduleAction] = hotkeys.map { SlotState(hotkey: $0) }
+        moduleActionHotkeysRevision &+= 1
     }
 
     // MARK: - Carbon Hotkeys (works through Secure Input)

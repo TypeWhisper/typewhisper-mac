@@ -1216,6 +1216,21 @@ class PromptProcessingService: ObservableObject {
     /// managed policies for providers apply; memories are not added. A local
     /// model is kept loaded for the request.
     func answerModuleRequest(instructions: String, prompt: String, with attempt: LanguageModelAttempt) async throws -> String {
+        // The organization may have enforced another pair since the module read the providers.
+        if let resolution = PluginManager.shared?.enforcedLlmResolution {
+            if let reason = resolution.unavailableReason {
+                throw ManagedPolicyRefusal(reason: reason)
+            }
+            if case .resolved(let providerId, let modelId) = resolution {
+                let enforcedProviderId = normalizeProviderId(providerId)
+                let enforcedModelId = enforcedProviderId == Self.appleIntelligenceId ? nil : Self.normalizedModelId(modelId)
+                guard attempt.providerId == enforcedProviderId, Self.normalizedModelId(attempt.modelId) == enforcedModelId else {
+                    throw ManagedPolicyRefusal(
+                        reason: String(localized: "Your organization does not allow this language model provider.")
+                    )
+                }
+            }
+        }
         var localProvidersUsed: [any LLMProviderPlugin] = []
         defer {
             for provider in localProvidersUsed {

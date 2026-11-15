@@ -99,6 +99,11 @@ final class ModuleHostTests: XCTestCase {
 
         XCTAssertEqual(service.hotkeys(forModuleAction: "test.first"), [commandShiftK, commandShiftL])
         XCTAssertEqual(service.hotkeys(forModuleAction: "test.second"), [])
+        // Every row rereads its shortcuts, also the one that lost one.
+        let revision = service.moduleActionHotkeysRevision
+        service.removeConflictingHotkey(commandShiftL, for: .moduleAction)
+        XCTAssertNotEqual(service.moduleActionHotkeysRevision, revision)
+        service.setHotkeys([commandShiftK, commandShiftL], forModuleAction: "test.first")
         XCTAssertEqual(service.moduleAction(assignedTo: commandShiftL), "test.first")
         XCTAssertEqual(service.isHotkeyAssignedToGlobalSlot(commandShiftK), .moduleAction)
 
@@ -391,6 +396,18 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertEqual(reply, "Be brief.|What is due?")
         XCTAssertEqual(tokens, ModuleTokenCount(count: 3, contextSize: 4096))
         XCTAssertEqual(emptyError as? ModuleLanguageModelError, .emptyReply)
+
+        // A pair the organization enforces later stops a provider read before.
+        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(isLlmBlocked: true))
+        defer { PluginManager.shared.applySelectionPolicy(.unmanaged) }
+        var refusal: (any Error)?
+        do {
+            _ = try await answering.answer(instructions: "", prompt: "x", using: provider)
+        } catch {
+            refusal = error
+        }
+        XCTAssertEqual(refusal as? ModuleLanguageModelError, .refused(ManagedProviderPolicy.blockedMessage))
+        XCTAssertThrowsError(try answering.providers())
     }
 
     func testLanguageModelErrorsBecomeModuleErrors() {
