@@ -443,8 +443,14 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertEqual(emptyError as? ModuleLanguageModelError, .emptyReply)
 
         // A pair the organization enforces later stops a provider read before.
+        let previousPluginManager = PluginManager.shared
+        let pluginDirectory = try TestSupport.makeTemporaryDirectory()
+        PluginManager.shared = PluginManager(appSupportDirectory: pluginDirectory)
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(pluginDirectory)
+        }
         PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(isLlmBlocked: true))
-        defer { PluginManager.shared.applySelectionPolicy(.unmanaged) }
         var refusal: (any Error)?
         do {
             _ = try await answering.answer(instructions: "", prompt: "x", using: provider)
