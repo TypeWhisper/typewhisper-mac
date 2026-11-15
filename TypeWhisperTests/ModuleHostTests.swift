@@ -300,6 +300,16 @@ final class ModuleHostTests: XCTestCase {
             XCTFail("Two names that differ only in case share one file")
         } catch UserDataExportService.ExportError.duplicateModuleFile {
         }
+
+        // Also across modules whose identifiers differ only in case.
+        let modules = AppModuleUserDataLifecycle()
+        modules.register(ModuleUserData(id: "com.example.notes", erase: {}, export: { ["state.json": Data()] }))
+        modules.register(ModuleUserData(id: "com.example.Notes", erase: {}, export: { ["state.json": Data()] }))
+        do {
+            _ = try await modules.exportFiles()
+            XCTFail("Two modules' folders that differ only in case share one folder")
+        } catch UserDataExportService.ExportError.duplicateModuleFile {
+        }
     }
 
     // MARK: - History

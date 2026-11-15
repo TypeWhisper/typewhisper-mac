@@ -437,20 +437,22 @@ final class AppModuleUserDataLifecycle: UserDataLifecycle {
     /// The modules' files for a data export, by their path in the archive.
     /// Names that are no file name, such as a path, are left out.
     /// - Throws: `UserDataExportService.ExportError.duplicateModuleFile` for two
-    ///   names that differ only in case, which would share one file.
+    ///   paths that differ only in case, which would share one file.
     func exportFiles() async throws -> [String: Data] {
         var files: [String: Data] = [:]
+        // Whole paths, because two modules' identifiers can differ only in case too.
+        var paths = Set<String>()
         for userData in registrations {
-            var names = Set<String>()
             for (name, data) in try await userData.export().sorted(by: { $0.key < $1.key }) {
                 guard Self.isFileName(name) else {
                     logger.error("Module file left out of the export: invalid name")
                     continue
                 }
-                guard names.insert(name.lowercased()).inserted else {
+                let path = "\(Self.exportFolderName)/\(userData.id)/\(name)"
+                guard paths.insert(path.lowercased()).inserted else {
                     throw UserDataExportService.ExportError.duplicateModuleFile(name)
                 }
-                files["\(Self.exportFolderName)/\(userData.id)/\(name)"] = data
+                files[path] = data
             }
         }
         return files
