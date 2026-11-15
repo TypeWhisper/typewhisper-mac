@@ -109,6 +109,7 @@ final class ServiceContainer: ObservableObject {
     let speakerVoiceProfileService: SpeakerVoiceProfileService
     let calendarMeetingCountdownModel: CalendarMeetingCountdownModel
     let calendarMeetingAutomationController: CalendarMeetingAutomationController
+    let moduleRegistry: ModuleRegistry
 
     // HTTP API
     let httpServer: HTTPServer
@@ -627,6 +628,9 @@ final class ServiceContainer: ObservableObject {
             watchFolderService: watchFolderService,
             modelManager: modelManagerService
         )
+
+        // The stub package, linked by default, has no modules.
+        moduleRegistry = ModuleRegistry(host: AppModuleHost())
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel

@@ -27,6 +27,10 @@ fileGroups:
 packages:
   TypeWhisperPluginSDK:
     path: TypeWhisperPluginSDK
+  TypeWhisperModuleKit:
+    path: Packages/TypeWhisperModuleKit
+  TypeWhisperModules:
+    path: Packages/TypeWhisperModules
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit.git
     revision: 80d96762fa727f816ffceab76a6529cd12c2726f
@@ -122,6 +126,8 @@ targets:
       - package: TypeWhisperPluginSDK
         product: TypeWhisperPluginSDK
         embed: true
+      - package: TypeWhisperModuleKit
+      - package: TypeWhisperModules
       # Embedded for the ONNX plugins; the app itself does not link it.
       - target: TypeWhisperONNXRuntime
         embed: true

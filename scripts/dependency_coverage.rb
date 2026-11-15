@@ -17,7 +17,11 @@ module DependencyCoverage
   ].freeze
   # Last main commit without Gemfile.lock, so the dependency-graph compare lists every gem as added.
   RUBY_GRAPH_BASE = "5701260345eee47d59508565a073e44911074e22"
-  MANIFESTS = (LOCKS + %w[Gemfile Gemfile.lock TypeWhisperPluginSDK/Package.swift TypeWhisper.xcodeproj/project.pbxproj .github/release-tools/requirements.txt]).freeze
+  # The packages under Packages/ have no remote dependencies.
+  MANIFESTS = (LOCKS + %w[
+    Gemfile Gemfile.lock TypeWhisperPluginSDK/Package.swift TypeWhisper.xcodeproj/project.pbxproj .github/release-tools/requirements.txt
+    Packages/TypeWhisperModuleKit/Package.swift Packages/TypeWhisperModulesStub/Package.swift
+  ]).freeze
 
   def self.git(*args)
     output, status = Open3.capture2("git", "-C", ROOT, *args)
