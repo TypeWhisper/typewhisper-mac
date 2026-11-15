@@ -7,7 +7,7 @@ private func snapshot(
     _ forced: [String: ManagedPolicyRawValue],
     revision: Int = 1
 ) -> ManagedPolicySnapshot {
-    ManagedPolicyValidator.validate(ManagedPolicyReading(forcedValues: forced), revision: revision, readAt: Date())
+    ManagedPolicyValidator.validate(ManagedPolicyRawReading(forcedValues: forced), revision: revision, readAt: Date())
 }
 
 private func recommended(_ values: [String: ManagedPolicyRawValue]) -> [String: ManagedPolicyRawValue] {
@@ -387,7 +387,7 @@ final class LaunchAtLoginPolicyControllerTests: XCTestCase {
 private final class PolicySource {
     private final class Source: ManagedPolicySource, @unchecked Sendable {
         var forced: [String: ManagedPolicyRawValue] = [:]
-        func read() -> ManagedPolicyReading { ManagedPolicyReading(forcedValues: forced) }
+        func read() -> ManagedPolicyRawReading { ManagedPolicyRawReading(forcedValues: forced) }
     }
 
     private let source = Source()

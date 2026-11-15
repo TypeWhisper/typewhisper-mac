@@ -38,7 +38,9 @@ enum UserDataEraser {
         container.remoteLinkViewModel.stop()
         // A running index update would write History text into a new index file.
         await container.historySearchIndexer.stop()
-        let failures = await discardActiveRecording(container.audioRecorderService)
+        var failures = await discardActiveRecording(container.audioRecorderService)
+        // Modules erase what they keep outside the app's folders and preferences.
+        failures += await container.moduleUserData.eraseAll()
 
         // The iCloud bridge copies the remote package into the local mirror
         // from its own XPC process; let a running sync finish first.

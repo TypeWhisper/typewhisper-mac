@@ -4,7 +4,7 @@ import XCTest
 @testable import TypeWhisper
 
 private func snapshot(_ forced: [String: ManagedPolicyRawValue]) -> ManagedPolicySnapshot {
-    ManagedPolicyValidator.validate(ManagedPolicyReading(forcedValues: forced), revision: 1, readAt: Date())
+    ManagedPolicyValidator.validate(ManagedPolicyRawReading(forcedValues: forced), revision: 1, readAt: Date())
 }
 
 final class ManagedSelectionPolicyTests: XCTestCase {

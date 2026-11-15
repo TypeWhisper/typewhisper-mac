@@ -11,6 +11,7 @@ struct PremiumSettingsView: View {
 
     private let settingsNavigation: SettingsNavigationCoordinator
     private let windowPresenter: any PremiumSettingsWindowPresenting
+    private let modules: ModuleRegistry
 
     init(
         licenseService: LicenseService = LicenseService.shared,
@@ -18,8 +19,10 @@ struct PremiumSettingsView: View {
         premiumAccount: PremiumAccountService = ServiceContainer.shared.premiumAccountService,
         correctionLearningService: TargetAppCorrectionLearningService = ServiceContainer.shared.targetAppCorrectionLearningService,
         settingsNavigation: SettingsNavigationCoordinator = .shared,
-        windowPresenter: any PremiumSettingsWindowPresenting = PremiumSettingsWindowManager.shared
+        windowPresenter: any PremiumSettingsWindowPresenting = PremiumSettingsWindowManager.shared,
+        modules: ModuleRegistry = ServiceContainer.shared.moduleRegistry
     ) {
+        self.modules = modules
         self.license = licenseService
         self.syncController = syncController
         self.premiumAccount = premiumAccount
@@ -62,18 +65,24 @@ struct PremiumSettingsView: View {
                             syncController: syncController,
                             correctionLearningService: correctionLearningService,
                             calendarController: ServiceContainer.shared.calendarMeetingAutomationController,
-                            windowPresenter: windowPresenter
+                            windowPresenter: windowPresenter,
+                            moduleCards: modules.contributions.premiumCards
                         )
                     } else {
                         #if !APPSTORE
                         PremiumLockedFeatureOverview(
                             isSupporter: license.isSupporter,
                             showsUnlock: !ManagedPromptPolicy.suppressesOptionalPrompts(managedPolicyService.current),
+                            moduleCards: modules.contributions.premiumCards,
                             onUnlock: {
                                 settingsNavigation.navigateToLicense(target: .top)
                             }
                         )
                         #endif
+                    }
+
+                    if modules.isStub {
+                        PremiumModulesMissingNote()
                     }
                 }
                 .padding(SettingsLayoutMetrics.pagePadding)

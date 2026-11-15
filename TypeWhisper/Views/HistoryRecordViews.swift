@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TypeWhisperModuleKit
 
 struct HistorySectionHeader: View {
     let group: HistoryDateGroup
@@ -443,6 +444,10 @@ struct HistoryRecordDetailView: View {
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
             .help(String(localized: "askHistory.askAboutRecording"))
+
+            ForEach(ServiceContainer.shared.moduleRegistry.contributions.recordActions) { action in
+                ModuleRecordActionButton(action: action, recordIDs: [record.id], style: .icon)
+            }
 
             if record.wasPostProcessed, !showsSpeakerTranscript {
                 Picker(String(localized: "Text Version"), selection: $viewModel.detailViewMode) {

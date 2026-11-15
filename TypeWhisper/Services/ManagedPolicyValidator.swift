@@ -41,7 +41,7 @@ indirect enum ManagedPolicyRawValue: Sendable, Equatable {
 }
 
 /// The raw content of one read of the managed preferences.
-struct ManagedPolicyReading: Sendable, Equatable {
+struct ManagedPolicyRawReading: Sendable, Equatable {
     /// False when the source could not be read; the values are then meaningless.
     var readable: Bool
     /// A safe technical description of a read failure.
@@ -64,10 +64,10 @@ struct ManagedPolicyReading: Sendable, Equatable {
     }
 
     /// A successful read of a domain without managed values.
-    static let absent = ManagedPolicyReading()
+    static let absent = ManagedPolicyRawReading()
 
-    static func unreadable(_ error: String) -> ManagedPolicyReading {
-        ManagedPolicyReading(readable: false, error: error)
+    static func unreadable(_ error: String) -> ManagedPolicyRawReading {
+        ManagedPolicyRawReading(readable: false, error: error)
     }
 }
 
@@ -88,7 +88,7 @@ enum ManagedPolicyValidator {
         key.hasPrefix("Payload") || key.hasPrefix("_")
     }
 
-    static func validate(_ reading: ManagedPolicyReading, revision: Int, readAt: Date) -> ManagedPolicySnapshot {
+    static func validate(_ reading: ManagedPolicyRawReading, revision: Int, readAt: Date) -> ManagedPolicySnapshot {
         guard reading.readable else {
             return ManagedPolicySnapshot(
                 revision: revision,

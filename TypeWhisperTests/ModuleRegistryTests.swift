@@ -22,22 +22,23 @@ final class ModuleRegistryTests: XCTestCase {
     }
 
     func testSkipsModulesThatNeedANewerInterface() {
+        let current = ModuleKitVersion.current
         let registry = ModuleRegistry(
             entry: TwoModulesEntry.self,
             host: AppModuleHost(),
-            kitVersion: ModuleKitVersion(major: 1, minor: 0)
+            kitVersion: ModuleKitVersion(major: current.major, minor: current.minor + 1)
         )
         let newer = ModuleRegistry(
             entry: TwoModulesEntry.self,
             host: AppModuleHost(),
-            kitVersion: ModuleKitVersion(major: 2, minor: 0)
+            kitVersion: ModuleKitVersion(major: current.major + 1, minor: 0)
         )
-        TwoModulesEntry.required = ModuleKitVersion(major: 1, minor: 1)
+        TwoModulesEntry.required = ModuleKitVersion(major: current.major, minor: current.minor + 1)
         defer { TwoModulesEntry.required = .current }
         let older = ModuleRegistry(
             entry: TwoModulesEntry.self,
             host: AppModuleHost(),
-            kitVersion: ModuleKitVersion(major: 1, minor: 0)
+            kitVersion: current
         )
 
         XCTAssertEqual(registry.modules.count, 2)
@@ -56,7 +57,7 @@ private enum TwoModulesEntry: ModuleEntryPoint {
 
     static func makeModules() -> [any HostModule] {
         [
-            TestModule(identifier: "test.first", policyKeys: [ModuleManagedPolicyKey(name: "TestKey", valueType: .boolean)]),
+            TestModule(identifier: "test.first", policyKeys: [ModuleManagedPolicyKey(name: "TestKey", kind: .boolean)]),
             TestModule(identifier: "test.second", policyKeys: []),
         ]
     }

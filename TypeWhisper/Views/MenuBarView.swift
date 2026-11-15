@@ -1,4 +1,5 @@
 import SwiftUI
+import TypeWhisperModuleKit
 import Combine
 import TypeWhisperPluginSDK
 
@@ -27,6 +28,8 @@ private final class MenuBarState: ObservableObject {
     @Published var restoreRawTranscriptMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var correctLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var askHistoryMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    /// The first shortcut of each module hotkey action a menu entry names, by action.
+    @Published var moduleMenuShortcuts: [String: HotkeyService.MenuShortcutDescriptor] = [:]
     /// Configured dictation shortcuts with their mode, empty when none is set.
     @Published var dictationShortcuts: [MenuBarStatusFormatting.DictationShortcut]
     @Published var needsEngineSetup: Bool
@@ -158,6 +161,13 @@ private final class MenuBarState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        hotkeyService.$moduleActionHotkeysRevision
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshModuleMenuShortcuts()
+            }
+            .store(in: &cancellables)
+
         hotkeyService.$dictationHotkeysPaused
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
@@ -256,6 +266,18 @@ private final class MenuBarState: ObservableObject {
         dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
     }
 
+    private func refreshModuleMenuShortcuts() {
+        let hotkeyService = ServiceContainer.shared.hotkeyService
+        var shortcuts: [String: HotkeyService.MenuShortcutDescriptor] = [:]
+        for actionID in ServiceContainer.shared.moduleRegistry.contributions.menuItems.compactMap(\.hotkeyActionID) {
+            // Only shortcuts that run this action; another action may have kept one.
+            shortcuts[actionID] = hotkeyService.hotkeys(forModuleAction: actionID)
+                .filter { hotkeyService.moduleAction(assignedTo: $0) == actionID }
+                .lazy.compactMap(HotkeyService.menuShortcutDescriptor(for:)).first
+        }
+        moduleMenuShortcuts = shortcuts
+    }
+
     private func refreshUndoAvailability() {
         let undoService = DictationViewModel.shared.dictationUndoService
         canUndoLastDictation = undoService.canUndo
@@ -307,6 +329,8 @@ enum MenuBarMenuItem: Hashable {
     case settings
     case history
     case askHistory
+    /// A module's entry, by its identifier.
+    case module(String)
     case errorLog
     case toggleRecorder
     case dictationShortcut
@@ -347,10 +371,11 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
         items(hasRecoverableRecording: true)
     }
 
-    func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
+    /// - Parameter moduleItemIDs: The modules' entries, which follow History.
+    func items(hasRecoverableRecording: Bool, moduleItemIDs: [String] = []) -> [MenuBarMenuItem] {
         switch self {
         case .general:
-            [.settings, .history, .askHistory, .errorLog]
+            [.settings, .history, .askHistory] + moduleItemIDs.map(MenuBarMenuItem.module) + [.errorLog]
         case .transcription:
             hasRecoverableRecording
                 ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription,
@@ -466,7 +491,10 @@ struct MenuBarView: View {
 
             ForEach(MenuBarMenuSection.allCases, id: \.self) { section in
                 Section(String(localized: section.titleResource)) {
-                    ForEach(section.items(hasRecoverableRecording: status.hasRecoverableRecording), id: \.self) { item in
+                    ForEach(section.items(
+                        hasRecoverableRecording: status.hasRecoverableRecording,
+                        moduleItemIDs: ServiceContainer.shared.moduleRegistry.contributions.menuItems.map(\.id)
+                    ), id: \.self) { item in
                         menuItem(for: item)
                     }
                 }
@@ -543,6 +571,21 @@ struct MenuBarView: View {
                 Label(String(localized: "askHistory.menu"), systemImage: "text.magnifyingglass")
             }
             .keyboardShortcut(keyboardShortcut(from: status.askHistoryMenuShortcut))
+
+        case .module(let id):
+            if let moduleItem = ServiceContainer.shared.moduleRegistry.contributions.menuItems.first(where: { $0.id == id }) {
+                Button {
+                    // A key NSPanel cannot open while the menu still tracks.
+                    MenuBarActionDispatcher.performAfterMenuDismissal(moduleItem.perform)
+                } label: {
+                    if let systemImage = moduleItem.systemImage {
+                        Label(moduleItem.title, systemImage: systemImage)
+                    } else {
+                        Text(moduleItem.title)
+                    }
+                }
+                .keyboardShortcut(keyboardShortcut(from: moduleItem.hotkeyActionID.flatMap { status.moduleMenuShortcuts[$0] }))
+            }
 
         case .errorLog:
             Button {

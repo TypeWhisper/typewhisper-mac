@@ -60367,6 +60367,41 @@
         }
       }
     },
+    "premium.hub.modulesMissing" : {
+      "comment" : "Premium page of builds without the Premium modules. Names no feature.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einige Premium-Funktionen sind in diesem Build nicht enthalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some Premium features are not included in this build."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Algunas funciones Premium no están incluidas en esta compilación."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このビルドには一部のPremium機能が含まれていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本未包含部分高级功能。"
+          }
+        }
+      }
+    },
     "premium.hub.unlock" : {
       "localizations" : {
         "de" : {

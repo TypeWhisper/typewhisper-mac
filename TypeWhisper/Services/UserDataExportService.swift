@@ -88,9 +88,16 @@ enum UserDataExportService {
         case archiveFailed(Int32)
         case databaseSnapshotFailed(String)
         case unreadableDirectory(String)
+        case duplicateModuleFile(String)
 
         var errorDescription: String? {
             switch self {
+            case .duplicateModuleFile(let name):
+                return localizedAppText(
+                    "A module exported two files named \(name), differing only in case.",
+                    de: "Ein Modul hat zwei Dateien namens \(name) exportiert, die sich nur in der Groß- und Kleinschreibung unterscheiden.",
+                    es: "Un módulo exportó dos archivos llamados \(name) que solo difieren en mayúsculas y minúsculas."
+                )
             case .archiveFailed(let status):
                 return localizedAppText(
                     "The ZIP archive could not be created (ditto exit code \(status)).",
@@ -170,9 +177,12 @@ enum UserDataExportService {
     /// Snapshots preferences on the calling actor, then copies files and builds
     /// the archive off the main thread.
     @MainActor
+    /// - Parameter moduleFiles: Files of the app's modules by their path in the
+    ///   archive, from `AppModuleUserDataLifecycle.exportFiles()`.
     static func export(
         to destination: URL,
         settingsBackup: Data,
+        moduleFiles: [String: Data] = [:],
         locations: UserDataLocations = .current(),
         userDefaults: UserDefaults = .standard
     ) async throws {
@@ -180,11 +190,11 @@ enum UserDataExportService {
             (userDefaults.persistentDomain(forName: locations.preferencesDomain) ?? [:])
                 .filter { !excludedPreferenceKeys.contains($0.key) }
         )
-        let extraFiles = [
+        let extraFiles = moduleFiles.merging([
             readmeFileName: Data(readme.utf8),
             preferencesFileName: preferences,
             settingsBackupFileName: settingsBackup,
-        ]
+        ]) { _, own in own }
         let appSupportDirectory = locations.appSupportDirectory
 
         try await Task.detached(priority: .userInitiated) {
@@ -221,7 +231,10 @@ enum UserDataExportService {
         )
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         for (name, data) in extraFiles {
-            try data.write(to: root.appendingPathComponent(name), options: .atomic)
+            let url = root.appendingPathComponent(name)
+            // Module files sit in folders of their own.
+            try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
         }
         try copyUserData(
             from: appSupportDirectory,

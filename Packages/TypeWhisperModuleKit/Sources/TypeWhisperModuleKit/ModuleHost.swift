@@ -10,31 +10,12 @@ public protocol ModuleHost: AnyObject {
     var managedPolicyReading: (any ManagedPolicyReading)? { get }
     var premiumAccessReading: (any PremiumAccessReading)? { get }
     var userDataLifecycle: (any UserDataLifecycle)? { get }
+
+    /// Shows one of the module's panels (`ModuleContributions.panels`) and makes it key.
+    func showPanel(withID id: String)
+    /// Hides a panel. Its content stays as it was until the panel shows again.
+    func hidePanel(withID id: String)
+    /// Shows a hidden panel and hides a visible one.
+    func togglePanel(withID id: String)
+    func isPanelVisible(withID id: String) -> Bool
 }
-
-// The requirements of each capability are added together with the app's
-// implementation of it.
-
-/// Reads history records and their changes.
-@MainActor
-public protocol HistoryReading: AnyObject {}
-
-/// Searches the app's full-text index of history records.
-@MainActor
-public protocol HistorySearching: AnyObject {}
-
-/// Sends a prompt to one of the app's language model providers.
-@MainActor
-public protocol LanguageModelAnswering: AnyObject {}
-
-/// Reads the managed settings keys a module declares.
-@MainActor
-public protocol ManagedPolicyReading: AnyObject {}
-
-/// Reports whether Premium features are available and when that changes.
-@MainActor
-public protocol PremiumAccessReading: AnyObject {}
-
-/// Lets a module erase and export its own data with the user's data.
-@MainActor
-public protocol UserDataLifecycle: AnyObject {}

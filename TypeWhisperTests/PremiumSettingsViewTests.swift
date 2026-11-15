@@ -57,7 +57,7 @@ final class PremiumSettingsViewTests: XCTestCase {
         let preview = PremiumLockedFeatureOverview(isSupporter: false, onUnlock: {})
         let labels = Mirror(reflecting: preview).children.compactMap(\.label)
 
-        XCTAssertEqual(labels, ["isSupporter", "showsUnlock", "onUnlock"])
+        XCTAssertEqual(labels, ["isSupporter", "showsUnlock", "moduleCards", "onUnlock"])
         XCTAssertTrue(preview.showsUnlock)
         XCTAssertFalse(labels.contains("controller"))
         XCTAssertFalse(labels.contains("windowPresenter"))

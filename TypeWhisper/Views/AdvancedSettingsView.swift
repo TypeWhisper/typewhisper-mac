@@ -1053,7 +1053,11 @@ struct AdvancedSettingsView: View {
         Task {
             defer { isExportingAllData = false }
             do {
-                try await UserDataExportService.export(to: url, settingsBackup: settingsBackup)
+                try await UserDataExportService.export(
+                    to: url,
+                    settingsBackup: settingsBackup,
+                    moduleFiles: ServiceContainer.shared.moduleUserData.exportFiles()
+                )
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {
                 backupErrorMessage = error.localizedDescription

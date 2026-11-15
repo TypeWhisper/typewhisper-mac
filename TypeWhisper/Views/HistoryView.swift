@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TypeWhisperModuleKit
 
 struct HistoryView: View {
     @ObservedObject private var viewModel = HistoryViewModel.shared
@@ -323,6 +324,7 @@ struct HistoryView: View {
                         }
                     }
                     askHistoryButton(about: viewModel.selectedRecords)
+                    moduleRecordActionButtons(for: viewModel.selectedRecords)
                 }
             }
         } else if let record = viewModel.selectedRecord {
@@ -474,6 +476,7 @@ struct HistoryView: View {
                 .disabled(viewModel.isDirty || !canCompare(record))
         }
         askHistoryButton(about: selected)
+        moduleRecordActionButtons(for: selected)
 
         Menu(String(localized: "Export as…")) {
             Button(String(localized: "Markdown (.md)")) { export(selected, as: .markdown) }
@@ -507,6 +510,16 @@ struct HistoryView: View {
         .help(records.count > AskHistorySession.maximumScopedRecords
             ? String(format: String(localized: "askHistory.askAboutRecordings.tooMany"), AskHistorySession.maximumScopedRecords)
             : "")
+    }
+
+    /// The modules' actions for one record or a selection.
+    @ViewBuilder
+    private func moduleRecordActionButtons(for records: [TranscriptionRecord]) -> some View {
+        ForEach(ServiceContainer.shared.moduleRegistry.contributions.recordActions) { action in
+            if records.count == 1 || action.selectionTitle != nil {
+                ModuleRecordActionButton(action: action, recordIDs: records.map(\.id), style: .title)
+            }
+        }
     }
 
     private func copy(_ text: String) {

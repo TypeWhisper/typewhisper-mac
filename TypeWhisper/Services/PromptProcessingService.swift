@@ -1179,6 +1179,98 @@ class PromptProcessingService: ObservableObject {
         return (budget, prompt)
     }
 
+    // MARK: - Requests from modules
+
+    /// One provider a module's request can try.
+    struct LanguageModelAttempt: Equatable, Sendable {
+        var providerId: String
+        var modelId: String?
+        var effortId: String?
+        var name: String
+        var isLocal: Bool
+        /// Nil for Apple Intelligence.
+        var pluginId: String?
+    }
+
+    /// The providers a module's request can try, in the order `process` would:
+    /// the pair an organization enforces, or the fallback list.
+    func languageModelAttempts() throws -> [LanguageModelAttempt] {
+        if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
+            throw ManagedPolicyRefusal(reason: reason)
+        }
+        return candidates(providerOverride: nil, cloudModelOverride: nil, effortOverride: nil).map { candidate in
+            let providerId = normalizeProviderId(candidate.providerId)
+            let plugin = providerId == Self.appleIntelligenceId ? nil : PluginManager.shared?.llmProvider(for: providerId)
+            return LanguageModelAttempt(
+                providerId: providerId,
+                modelId: Self.normalizedModelId(candidate.modelId),
+                effortId: Self.normalizedEffortId(candidate.effortId),
+                name: displayName(for: providerId),
+                isLocal: isLocalLLMProviderId(providerId),
+                pluginId: plugin.flatMap { PluginManager.shared?.pluginId(ofLLMProvider: $0) }
+            )
+        }
+    }
+
+    /// A provider's reply to a prompt that is answered as it is, trimmed. The
+    /// managed policies for providers apply; memories are not added. A local
+    /// model is kept loaded for the request.
+    func answerModuleRequest(instructions: String, prompt: String, with attempt: LanguageModelAttempt) async throws -> String {
+        // The organization may have enforced another pair since the module read the providers.
+        try checkEnforcedPair(allows: attempt)
+        var localProvidersUsed: [any LLMProviderPlugin] = []
+        defer {
+            for provider in localProvidersUsed {
+                modelManagerService?.endAutoUnloadProtectedUse(of: provider)
+            }
+        }
+        try Task.checkCancellation()
+        let reply = try await processSingleProvider(
+            providerId: attempt.providerId,
+            requestedModelId: attempt.modelId,
+            requestedEffortId: attempt.effortId,
+            prompt: instructions,
+            text: prompt,
+            temperatureDirective: .inheritProviderSetting,
+            answersPrompt: true,
+            appliesHistoryAskPolicy: false,
+            // Also once a local model has loaded, which can take a while.
+            checkBeforeDispatch: { [weak self] in try self?.checkEnforcedPair(allows: attempt) }
+        ) { [weak self] provider in
+            guard !localProvidersUsed.contains(where: { $0 === provider }) else { return }
+            localProvidersUsed.append(provider)
+            self?.modelManagerService?.beginAutoUnloadProtectedUse(of: provider)
+        }
+        try Task.checkCancellation()
+        return reply.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Throws when the organization blocks its enforced pair or enforces one other than `attempt`.
+    private func checkEnforcedPair(allows attempt: LanguageModelAttempt) throws {
+        guard let resolution = PluginManager.shared?.enforcedLlmResolution else { return }
+        if let reason = resolution.unavailableReason {
+            throw ManagedPolicyRefusal(reason: reason)
+        }
+        if case .resolved(let providerId, let modelId) = resolution {
+            let enforcedProviderId = normalizeProviderId(providerId)
+            let enforcedModelId = enforcedProviderId == Self.appleIntelligenceId ? nil : Self.normalizedModelId(modelId)
+            guard attempt.providerId == enforcedProviderId, Self.normalizedModelId(attempt.modelId) == enforcedModelId else {
+                throw ManagedPolicyRefusal(
+                    reason: String(localized: "Your organization does not allow this language model provider.")
+                )
+            }
+        }
+    }
+
+    /// The tokens a module's request takes with Apple Intelligence. Nil for
+    /// other providers, which cannot count them.
+    func moduleRequestInputTokens(
+        instructions: String, prompt: String, with attempt: LanguageModelAttempt
+    ) async -> (count: Int, contextSize: Int)? {
+        guard attempt.providerId == Self.appleIntelligenceId, let provider = appleIntelligenceProvider else { return nil }
+        return await provider.inputTokens(instructions: instructions, prompt: prompt)
+    }
+
     private func historyProviderKind(of providerId: String) -> AskHistoryProviderKind {
         if providerId == Self.appleIntelligenceId {
             return .appleIntelligence
@@ -1202,6 +1294,8 @@ class PromptProcessingService: ObservableObject {
         text: String,
         temperatureDirective: PluginLLMTemperatureDirective,
         answersPrompt: Bool = false,
+        appliesHistoryAskPolicy: Bool = true,
+        checkBeforeDispatch: (() throws -> Void)? = nil,
         onLocalProviderUsed: (any LLMProviderPlugin) -> Void
     ) async throws -> String {
         if providerId == Self.appleIntelligenceId {
@@ -1258,8 +1352,9 @@ class PromptProcessingService: ObservableObject {
             throw LLMError.noApiKey
         }
 
+        try checkBeforeDispatch?()
         // A local model may have taken a while to load; Ask History may be off by now.
-        if answersPrompt, !isHistoryAskAllowed() {
+        if answersPrompt, appliesHistoryAskPolicy, !isHistoryAskAllowed() {
             throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))
         }
         let model = try resolvedModelId(
@@ -1685,14 +1780,14 @@ class PromptProcessingService: ObservableObject {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func isCancellation(_ error: Error) -> Bool {
+    static func isCancellation(_ error: Error) -> Bool {
         if error is CancellationError { return true }
         if let urlError = error as? URLError, urlError.code == .cancelled { return true }
         let nsError = error as NSError
         return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
 
-    private static func isNotSetUp(_ error: Error) -> Bool {
+    static func isNotSetUp(_ error: Error) -> Bool {
         switch error as? LLMError {
         case .notAvailable, .noProviderConfigured, .noApiKey, .providerNotReady: true
         default: false

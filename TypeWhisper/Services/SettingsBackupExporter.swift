@@ -48,6 +48,21 @@ enum SettingsBackupExporter {
         UserDefaultsKeys.askHistoryHotkeys,
     ]
 
+    /// The slots' keys and those of the modules' hotkey actions that have shortcuts.
+    static func hotkeyKeys(in userDefaults: UserDefaults) -> [String] {
+        hotkeySlotKeys + userDefaults.dictionaryRepresentation().keys
+            .filter { $0.hasPrefix(UserDefaultsKeys.moduleActionHotkeysPrefix) }
+            .sorted()
+    }
+
+    /// Whether a backup may write shortcuts under `key`: a slot's key, or a module
+    /// action's, also of a module this build does not have.
+    static func isHotkeyKey(_ key: String) -> Bool {
+        if hotkeySlotKeys.contains(key) { return true }
+        guard key.hasPrefix(UserDefaultsKeys.moduleActionHotkeysPrefix) else { return false }
+        return ModuleIdentifier.isValid(key.dropFirst(UserDefaultsKeys.moduleActionHotkeysPrefix.count))
+    }
+
     // MARK: - DTOs
 
     struct WorkflowDTO: Codable {
@@ -508,7 +523,7 @@ enum SettingsBackupExporter {
         let profiles = profileService.profiles.map(ProfileDTO.init)
 
         var hotkeys: [String: [UnifiedHotkey]] = [:]
-        for key in hotkeySlotKeys {
+        for key in hotkeyKeys(in: userDefaults) {
             guard let data = userDefaults.data(forKey: key),
                   let decoded = try? JSONDecoder().decode([UnifiedHotkey].self, from: data),
                   !decoded.isEmpty else { continue }
@@ -845,7 +860,7 @@ enum SettingsBackupExporter {
         // contained in the backup. A backup is user-editable JSON, so only
         // known hotkey slots are written.
         var hotkeysBySlot: [String: [UnifiedHotkey]] = [:]
-        for key in hotkeySlotKeys {
+        for key in hotkeyKeys(in: userDefaults) {
             hotkeysBySlot[key] = userDefaults.data(forKey: key)
                 .flatMap { try? JSONDecoder().decode([UnifiedHotkey].self, from: $0) } ?? []
         }
@@ -855,7 +870,7 @@ enum SettingsBackupExporter {
             case .merge: userDefaults.data(forKey: key) == nil
             case .replace: hotkeysBySlot[key] != hotkeys
             }
-            guard hotkeySlotKeys.contains(key), canWrite, !hotkeys.isEmpty else {
+            guard isHotkeyKey(key), canWrite, !hotkeys.isEmpty else {
                 result.hotkeysSkipped += 1
                 continue
             }
