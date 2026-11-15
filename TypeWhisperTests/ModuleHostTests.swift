@@ -281,11 +281,11 @@ final class ModuleHostTests: XCTestCase {
     // MARK: - Premium access
 
     func testPremiumAccessReportsOnlyRealChanges() {
-        var hasAccess = false
+        let hasAccess = Flag(false)
         let changes = PassthroughSubject<Void, Never>()
         var shown = 0
         let reading = AppPremiumAccessReading(
-            hasAccess: { hasAccess },
+            hasAccess: { hasAccess.value },
             accessChanges: changes.eraseToAnyPublisher(),
             showAccess: { shown += 1 }
         )
@@ -293,7 +293,7 @@ final class ModuleHostTests: XCTestCase {
         let observation = reading.observeChanges { reported.append($0) }
 
         changes.send()
-        hasAccess = true
+        hasAccess.value = true
         changes.send()
         changes.send()
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
@@ -392,8 +392,8 @@ final class ModuleHostTests: XCTestCase {
         let indexer = HistorySearchIndexer(
             historyService: history, index: index, isEnabled: { true }, isBusy: { false }
         )
-        var isEnabled = true
-        let searching = AppHistorySearching(index: index, isEnabled: { isEnabled }) {
+        let isEnabled = Flag(true)
+        let searching = AppHistorySearching(index: index, isEnabled: { isEnabled.value }) {
             await indexer.reconcile()
             await indexer.waitForQueuedWork()
         }
@@ -432,7 +432,7 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertTrue(ModuleHistorySearchScope(recordIDs: [budget]).includes(try XCTUnwrap(hits.first)))
 
         // Off, for example by a managed policy, the index answers nothing.
-        isEnabled = false
+        isEnabled.value = false
         let hitsWhileOff = try await searching.search(ModuleHistorySearchQuery(words: ["budget"]))
         let transcriptWhileOff = try await searching.transcript(ofRecord: budget)
         let newestWhileOff = try await searching.newestRecords(in: ModuleHistorySearchScope(), limit: 1)
@@ -534,6 +534,15 @@ final class ModuleHostTests: XCTestCase {
 @MainActor
 private final class Log {
     var items: [String] = []
+}
+
+@MainActor
+private final class Flag {
+    var value: Bool
+
+    init(_ value: Bool) {
+        self.value = value
+    }
 }
 
 private enum TestModulesEntry: ModuleEntryPoint {
