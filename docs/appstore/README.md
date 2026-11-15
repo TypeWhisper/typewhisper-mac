@@ -122,6 +122,10 @@ release workflow refuses a tag that names another version. A release goes like t
 4. After approval, tag the approved commit `v1.8.0` for the stable Sparkle release
    and release the App Store version the same day. Release notes that change after
    the candidate go into a draft GitHub release for that tag before pushing it.
+5. Start the next development line on `main` right after the stable tag: bump
+   both editions in one pull request. App Store Connect accepts no more builds
+   for an approved version, so nightly TestFlight runs skip with a warning until
+   `main` carries a version without a stable tag.
 
 An urgent direct fix can skip the wait: tag it stable right away and submit the
 same commit to App Review afterwards.
