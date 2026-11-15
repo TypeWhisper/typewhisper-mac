@@ -270,7 +270,9 @@ private final class MenuBarState: ObservableObject {
         let hotkeyService = ServiceContainer.shared.hotkeyService
         var shortcuts: [String: HotkeyService.MenuShortcutDescriptor] = [:]
         for actionID in ServiceContainer.shared.moduleRegistry.contributions.menuItems.compactMap(\.hotkeyActionID) {
+            // Only shortcuts that run this action; another action may have kept one.
             shortcuts[actionID] = hotkeyService.hotkeys(forModuleAction: actionID)
+                .filter { hotkeyService.moduleAction(assignedTo: $0) == actionID }
                 .lazy.compactMap(HotkeyService.menuShortcutDescriptor(for:)).first
         }
         moduleMenuShortcuts = shortcuts

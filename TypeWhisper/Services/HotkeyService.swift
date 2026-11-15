@@ -1417,12 +1417,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     /// Fills the module slot with the shortcuts of the registered actions. A
-    /// shortcut that an earlier action has too stays with that one.
+    /// shortcut that an earlier action has too stays with that one, and one that
+    /// another slot took while the action was missing stays with the slot.
     private func loadModuleActionHotkeys() {
         var byHotkey: [UnifiedHotkey: String] = [:]
         var hotkeys: [UnifiedHotkey] = []
+        let slotHotkeys = HotkeySlotType.allCases.filter { $0 != .moduleAction }.flatMap { self.hotkeys(for: $0) }
         for id in moduleActionIDs {
-            for hotkey in self.hotkeys(forModuleAction: id) where !hotkeys.contains(where: { $0.conflicts(with: hotkey) }) {
+            for hotkey in self.hotkeys(forModuleAction: id)
+            where !(hotkeys + slotHotkeys).contains(where: { $0.conflicts(with: hotkey) }) {
                 hotkeys.append(hotkey)
                 byHotkey[hotkey] = id
             }

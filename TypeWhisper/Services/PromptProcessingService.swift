@@ -1217,20 +1217,7 @@ class PromptProcessingService: ObservableObject {
     /// model is kept loaded for the request.
     func answerModuleRequest(instructions: String, prompt: String, with attempt: LanguageModelAttempt) async throws -> String {
         // The organization may have enforced another pair since the module read the providers.
-        if let resolution = PluginManager.shared?.enforcedLlmResolution {
-            if let reason = resolution.unavailableReason {
-                throw ManagedPolicyRefusal(reason: reason)
-            }
-            if case .resolved(let providerId, let modelId) = resolution {
-                let enforcedProviderId = normalizeProviderId(providerId)
-                let enforcedModelId = enforcedProviderId == Self.appleIntelligenceId ? nil : Self.normalizedModelId(modelId)
-                guard attempt.providerId == enforcedProviderId, Self.normalizedModelId(attempt.modelId) == enforcedModelId else {
-                    throw ManagedPolicyRefusal(
-                        reason: String(localized: "Your organization does not allow this language model provider.")
-                    )
-                }
-            }
-        }
+        try checkEnforcedPair(allows: attempt)
         var localProvidersUsed: [any LLMProviderPlugin] = []
         defer {
             for provider in localProvidersUsed {
@@ -1246,7 +1233,9 @@ class PromptProcessingService: ObservableObject {
             text: prompt,
             temperatureDirective: .inheritProviderSetting,
             answersPrompt: true,
-            appliesHistoryAskPolicy: false
+            appliesHistoryAskPolicy: false,
+            // Also once a local model has loaded, which can take a while.
+            checkBeforeDispatch: { [weak self] in try self?.checkEnforcedPair(allows: attempt) }
         ) { [weak self] provider in
             guard !localProvidersUsed.contains(where: { $0 === provider }) else { return }
             localProvidersUsed.append(provider)
@@ -1254,6 +1243,23 @@ class PromptProcessingService: ObservableObject {
         }
         try Task.checkCancellation()
         return reply.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Throws when the organization blocks its enforced pair or enforces one other than `attempt`.
+    private func checkEnforcedPair(allows attempt: LanguageModelAttempt) throws {
+        guard let resolution = PluginManager.shared?.enforcedLlmResolution else { return }
+        if let reason = resolution.unavailableReason {
+            throw ManagedPolicyRefusal(reason: reason)
+        }
+        if case .resolved(let providerId, let modelId) = resolution {
+            let enforcedProviderId = normalizeProviderId(providerId)
+            let enforcedModelId = enforcedProviderId == Self.appleIntelligenceId ? nil : Self.normalizedModelId(modelId)
+            guard attempt.providerId == enforcedProviderId, Self.normalizedModelId(attempt.modelId) == enforcedModelId else {
+                throw ManagedPolicyRefusal(
+                    reason: String(localized: "Your organization does not allow this language model provider.")
+                )
+            }
+        }
     }
 
     /// The tokens a module's request takes with Apple Intelligence. Nil for
@@ -1289,6 +1295,7 @@ class PromptProcessingService: ObservableObject {
         temperatureDirective: PluginLLMTemperatureDirective,
         answersPrompt: Bool = false,
         appliesHistoryAskPolicy: Bool = true,
+        checkBeforeDispatch: (() throws -> Void)? = nil,
         onLocalProviderUsed: (any LLMProviderPlugin) -> Void
     ) async throws -> String {
         if providerId == Self.appleIntelligenceId {
@@ -1345,6 +1352,7 @@ class PromptProcessingService: ObservableObject {
             throw LLMError.noApiKey
         }
 
+        try checkBeforeDispatch?()
         // A local model may have taken a while to load; Ask History may be off by now.
         if answersPrompt, appliesHistoryAskPolicy, !isHistoryAskAllowed() {
             throw ManagedPolicyRefusal(reason: String(localized: "askHistory.managed.message"))

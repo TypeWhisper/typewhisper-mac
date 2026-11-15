@@ -147,6 +147,12 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertNil(service.moduleAction(assignedTo: commandShiftK))
         XCTAssertNil(service.isHotkeyAssignedToGlobalSlot(commandShiftK))
         XCTAssertEqual(service.hotkeys(forModuleAction: "test.absent"), [commandShiftK])
+
+        // A slot that took the shortcut meanwhile keeps it when the action returns.
+        service.setHotkeysForTesting([commandShiftK], for: .toggle)
+        service.registerModuleHotkeyActions(ids)
+        XCTAssertNil(service.moduleAction(assignedTo: commandShiftK))
+        XCTAssertEqual(service.isHotkeyAssignedToGlobalSlot(commandShiftK), .toggle)
     }
 
     func testSettingsBackupAcceptsModuleShortcutKeys() {
