@@ -4,7 +4,8 @@ name: Mac App Store Upload
 # uploads it to App Store Connect (TestFlight). Runs manually or nightly, on
 # main only; the signing material lives in the protected `app-store` environment.
 # Nightly runs upload to the internal TestFlight group, but only when main
-# changed since the last successful nightly upload.
+# changed since the last successful nightly upload, and skip with a warning
+# once main's version has a stable tag.
 # For a release, dispatch it on main with release_tag (for example v1.8.0): it
 # builds that tag, which must be on main, so the App Store build comes from the
 # same commit as the Sparkle release.
@@ -61,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
     outputs:
       run: ${{ steps.check.outputs.run }}
       ref: ${{ steps.check.outputs.ref }}
@@ -82,6 +84,27 @@ jobs:
           if [[ "$EVENT" != "schedule" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          # App Store Connect closes a version's train once that version is
+          # approved, and the stable tag follows the approval. Skip instead of
+          # archiving for half an hour only to have the upload rejected. This
+          # runs first so an unchanged main still gets the warning.
+          version=$(gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$GITHUB_REPOSITORY/contents/AppStore/Config/AppStore.xcconfig?ref=$GITHUB_SHA" \
+            | sed -n 's/^MARKETING_VERSION = \([0-9.]*\)$/\1/p')
+          if [[ -z "$version" ]]; then
+            echo "Could not read MARKETING_VERSION from AppStore/Config/AppStore.xcconfig." >&2
+            exit 1
+          fi
+          if tag_lookup=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" --silent 2>&1); then
+            message="v$version is already released, so App Store Connect accepts no more $version builds. Start the next development line on main (both editions, see docs/appstore/README.md)."
+            echo "::warning title=Nightly upload skipped::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          elif ! grep -q "HTTP 404" <<<"$tag_lookup"; then
+            echo "Could not look up the tag v$version: $tag_lookup" >&2
+            exit 1
           fi
           last_sha=$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/appstore-testflight.yml/runs?event=schedule&status=success&per_page=1" \

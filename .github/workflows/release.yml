@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Optional exact release tag (for example v1.8.3-daily.20261111)
+        description: Optional exact release tag (for example v1.9.0-daily.20261115)
         required: false
         type: string
 
