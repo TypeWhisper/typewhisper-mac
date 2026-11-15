@@ -278,6 +278,30 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertTrue(reading.state(ofKey: "AllowTestFeature").isBlocked)
     }
 
+    func testModuleReadsAnAppKeyItDeclaresWithTheSameKind() {
+        let skipped = ManagedPolicyKeys.setModuleDefinitions([
+            ManagedPolicyDefinition(ModuleManagedPolicyKey(name: "AllowCloudTranscription", kind: .boolean)),
+            ManagedPolicyDefinition(ModuleManagedPolicyKey(name: "UpdateMode", kind: .text)),
+            ManagedPolicyDefinition(ModuleManagedPolicyKey(name: "allowCloudTextProcessing", kind: .boolean)),
+        ])
+        defer { ManagedPolicyKeys.setModuleDefinitions([]) }
+        let source = TestPolicySource(ManagedPolicyRawReading(forcedValues: [
+            "AllowCloudTranscription": .boolean(false),
+            "UpdateMode": .integer(1),
+        ]))
+        let reading = AppModuleManagedPolicyReading(service: ManagedPolicyService(source: source))
+
+        reading.refresh()
+
+        // Another kind or another spelling stays the app's alone.
+        XCTAssertEqual(skipped, ["UpdateMode", "allowCloudTextProcessing"])
+        XCTAssertEqual(reading.state(ofKey: "AllowCloudTranscription"), ModuleManagedPolicyState(enforced: .boolean(false)))
+        XCTAssertEqual(reading.state(ofKey: "UpdateMode"), ModuleManagedPolicyState())
+        // The app keeps its own definition, once.
+        XCTAssertTrue(ManagedPolicyKeys.moduleDefinitions.isEmpty)
+        XCTAssertEqual(ManagedPolicyKeys.all.filter { $0.name == "AllowCloudTranscription" }.count, 1)
+    }
+
     // MARK: - Premium access
 
     func testPremiumAccessReportsOnlyRealChanges() {
