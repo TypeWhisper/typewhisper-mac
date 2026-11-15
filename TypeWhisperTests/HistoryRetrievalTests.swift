@@ -205,6 +205,16 @@ final class AskHistoryPlannerTests: XCTestCase {
         XCTAssertTrue(plan("Which invoices did we send?").keywords.contains { "invoice".hasPrefix($0.lowercased()) })
     }
 
+    func testAWordWithoutALemmaLosesACommonEndingOfItsLanguage() {
+        XCTAssertEqual(AskHistoryPlanner.stem(of: "plakaten", language: "de"), "plakat")
+        XCTAssertEqual(AskHistoryPlanner.stem(of: "flyern", language: "de"), "flyer")
+        XCTAssertEqual(AskHistoryPlanner.stem(of: "termine", language: "de"), "termin")
+        XCTAssertEqual(AskHistoryPlanner.stem(of: "invoices", language: "en"), "invoic")
+        // Too short, or no language to know the endings of.
+        XCTAssertNil(AskHistoryPlanner.stem(of: "haus", language: "de"))
+        XCTAssertNil(AskHistoryPlanner.stem(of: "plakaten", language: nil))
+    }
+
     func testAQuestionAboutTheLastTimePrefersNewRecords() {
         XCTAssertTrue(plan("Wann habe ich zuletzt über die Heizung gesprochen?").prefersNewest)
         XCTAssertTrue(plan("When did we last time talk about the heating?").prefersNewest)

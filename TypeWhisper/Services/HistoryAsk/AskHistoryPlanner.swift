@@ -241,7 +241,7 @@ struct AskHistoryPlanner: Sendable {
 
     /// The word without an inflection ending of its language, for a search
     /// by word start. Nil for a short word or one without such an ending.
-    private static func stem(of word: String, language: String?) -> String? {
+    static func stem(of word: String, language: String?) -> String? {
         guard let language, let endings = inflectionEndings[language], word.count >= 5 else { return nil }
         for ending in endings where word.hasSuffix(ending) && word.count - ending.count >= 4 {
             return String(word.dropLast(ending.count))
