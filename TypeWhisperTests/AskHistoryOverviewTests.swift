@@ -60,6 +60,14 @@ final class AskHistoryFollowUpPlanTests: XCTestCase {
         // One word and its dictionary form are one thing to search for, a name named twice one person.
         XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "What were their priorities?"), history: history))
         XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was hat Ben gesagt, als Ben da war?"), history: history))
+        // A period and nothing else asks for an overview, also within a conversation.
+        XCTAssertFalse(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was habe ich letzte Woche aufgenommen?"), history: history))
+        // With no other words, a period continues the conversation's topic.
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Und letzte Woche?"), history: history))
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "And what about last week?"), history: history))
+        // Pointing back at the conversation keeps its topic too.
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was wurde letzte Woche dazu gesagt?"), history: history))
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "What was said about it last week?"), history: history))
 
         // The model invents a period; only the question's own counts.
         let followUp = AskHistoryFollowUpPlan(

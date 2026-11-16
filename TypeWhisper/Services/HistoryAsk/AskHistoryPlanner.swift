@@ -24,6 +24,11 @@ struct HistorySearchPlan: Equatable, Sendable {
     /// The words searched for, counted once each: `keywords` also holds their
     /// dictionary forms.
     var topicCount = 0
+    /// The question has words besides its period and places, as "What did I
+    /// record last week?" has and "And last week?" has not.
+    var hasWordsBesidesItsScope = false
+    /// The question points back at the conversation: "dazu", "about it".
+    var refersBack = false
 
     var intent: Intent { keywords.isEmpty && names.isEmpty ? .overview : .lookup }
 }
@@ -103,7 +108,7 @@ struct AskHistoryPlanner: Sendable {
             let word = words[index]
             let isPlaced = words[max(index - 2, 0)..<index].contains { Self.placeWords.contains($0.folded) }
             if isPlaced, let sources = Self.devices[word.folded] {
-                plan.scope.sources.formUnion(sources.map(\.rawValue))
+                plan.scope.sources.formUnion(sources)
                 finishName()
                 index += 1
                 continue
@@ -124,11 +129,16 @@ struct AskHistoryPlanner: Sendable {
                 continue
             }
             finishName()
+            if word.isContent { plan.hasWordsBesidesItsScope = true }
+            if Self.referenceWords.contains(word.folded) { plan.refersBack = true }
+            // A cut-off ending can look like a stop word ("données", "donne"),
+            // so only a real lemma can rule a word out.
+            let lemma = word.lemma.flatMap { word.isStem && stopWords.contains($0) ? nil : $0 }
             guard word.isContent, !stopWords.contains(word.folded),
-                  word.lemma.map({ !stopWords.contains($0) }) ?? true else { continue }
+                  lemma.map({ !stopWords.contains($0) }) ?? true else { continue }
             keywords.append(word.text)
-            topics.insert(word.lemma ?? word.folded)
-            if let lemma = word.lemma, lemma != word.folded { keywords.append(lemma) }
+            topics.insert(lemma ?? word.folded)
+            if let lemma, lemma != word.folded { keywords.append(lemma) }
         }
         finishName()
 
@@ -153,8 +163,16 @@ struct AskHistoryPlanner: Sendable {
 
     /// Whether a model should read the question together with the earlier
     /// conversation: a follow-up that names fewer than two things to search for.
+    /// A question that names a period and nothing to search for asks for an
+    /// overview of that period, also within a conversation ("What did I record
+    /// last week?"). With no other words ("And last week?") it continues the
+    /// conversation's topic, and so does one that points back at it ("Was wurde
+    /// letzte Woche dazu gesagt?").
     static func needsFollowUpPlan(_ plan: HistorySearchPlan, history: [AskHistoryTurn]) -> Bool {
-        !history.isEmpty && plan.topicCount + Set(plan.names.map(folded)).count < 2
+        let asksForAnOverview = plan.intent == .overview && plan.scope.period != nil
+            && plan.hasWordsBesidesItsScope && !plan.refersBack
+        guard !history.isEmpty, !asksForAnOverview else { return false }
+        return plan.topicCount + Set(plan.names.map(folded)).count < 2
     }
 
     /// The plan for a follow-up question with what a model read from the
@@ -185,6 +203,8 @@ struct AskHistoryPlanner: Sendable {
         /// Lowercased and without diacritics.
         var folded: String
         var lemma: String?
+        /// The lemma is the word without a common ending, because the tagger had none.
+        var isStem = false
         var range: Range<Int>
         /// A word that can name a topic, as opposed to "the", "and" or "with".
         var isContent: Bool
@@ -207,11 +227,13 @@ struct AskHistoryPlanner: Sendable {
         ) { tag, range in
             let text = String(question[range])
             guard text.contains(where: { $0.isLetter || $0.isNumber }) else { return true }
-            let lemma = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lemma).0
-                .map { folded($0.rawValue) }
+            // iOS has no German or French lemmas, and the Mac lacks some
+            // words, so a common ending comes off instead: "Plakaten", "Plakat".
+            let tagged = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lemma).0.map { folded($0.rawValue) }
+            let lemma = tagged ?? stem(of: folded(text), language: language)
             let utf16 = NSRange(range, in: question)
             words.append(Word(
-                text: text, folded: folded(text), lemma: lemma,
+                text: text, folded: folded(text), lemma: lemma, isStem: tagged == nil && lemma != nil,
                 range: utf16.location..<NSMaxRange(utf16), isContent: false
             ))
             classes.append(tag)
@@ -237,6 +259,26 @@ struct AskHistoryPlanner: Sendable {
         return words
     }
 
+    /// The word without an inflection ending of its language, for a search
+    /// by word start. Nil for a short word or one without such an ending.
+    static func stem(of word: String, language: String?) -> String? {
+        guard let language, let endings = inflectionEndings[language], word.count >= 5 else { return nil }
+        for ending in endings where word.hasSuffix(ending) && word.count - ending.count >= 4 {
+            return String(word.dropLast(ending.count))
+        }
+        return nil
+    }
+
+    /// Longest first. A stem may be too short, as "Kund" for "Kunden", which
+    /// a search by word start still finds; one too long would find nothing.
+    private static let inflectionEndings: [String: [String]] = [
+        "de": ["en", "e", "n", "s"],
+        "en": ["ies", "ing", "es", "ed", "s"],
+        "fr": ["es", "s", "e"],
+        "es": ["es", "s"],
+        "it": ["i", "e"],
+    ]
+
     // MARK: - Word lists
 
     /// Words before an app or a device: "in Slack", "auf dem iPhone".
@@ -245,14 +287,16 @@ struct AskHistoryPlanner: Sendable {
         "dans", "sur", "depuis", "avec", "en", "desde", "con", "su", "sul", "sull", "nel", "da", "dal", "dall",
     ]
 
-    private static let devices: [String: Set<RecordingSource>] = [
-        "iphone": [.iPhone, .keyboard],
-        "ipad": [.iPad],
-        "watch": [.appleWatch],
-        "windows": [.windows],
-        "pc": [.windows],
-        "mac": [.mac, .recorder],
-        "macbook": [.mac, .recorder],
+    /// The sources as the index stores them. iOS has no `windows` and
+    /// `recorder` sources, so this list uses their raw values.
+    private static let devices: [String: Set<String>] = [
+        "iphone": ["iPhone", "keyboard"],
+        "ipad": ["iPad"],
+        "watch": ["appleWatch"],
+        "windows": ["windows"],
+        "pc": ["windows"],
+        "mac": ["mac", "recorder"],
+        "macbook": ["mac", "recorder"],
     ]
 
     private static let newestPhrases = [
@@ -264,6 +308,16 @@ struct AskHistoryPlanner: Sendable {
     /// "be" and "have", "say", "recording", "summarize". The tagger already
     /// leaves out articles, pronouns and prepositions; the longer ones are also
     /// listed for a Mac whose tagger has no word classes for the language.
+    /// Words that point back at what the conversation was about, folded. Words
+    /// of a period ("this week") are gone before these are looked for.
+    private static let referenceWords: Set<String> = [
+        "dazu", "daruber", "davon", "dabei", "damit", "dafur", "daran", "darum", "dazwischen",
+        "it", "that", "this", "them", "these", "those",
+        "cela", "ca", "dessus",
+        "eso", "esto", "ello",
+        "cio", "questo", "quello",
+    ]
+
     private static func stopWords(for language: String?) -> Set<String> {
         guard let language, let words = stopWordsByLanguage[language] else {
             return stopWordsByLanguage.values.reduce(into: Set()) { $0.formUnion($1) }
