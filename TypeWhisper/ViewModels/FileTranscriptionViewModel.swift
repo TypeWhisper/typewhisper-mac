@@ -5,6 +5,8 @@ import os
 import UniformTypeIdentifiers
 import TypeWhisperPluginSDK
 
+private let fileTranscriptionLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "FileTranscription")
+
 @MainActor
 final class FileTranscriptionViewModel: ObservableObject {
     typealias AudioProgressHandler = @MainActor @Sendable (AudioFileLoadProgress) -> Bool
@@ -27,7 +29,9 @@ final class FileTranscriptionViewModel: ObservableObject {
         @escaping CancellationChecker
     ) async throws -> TranscriptionResult
     typealias EngineReadinessChecker = @MainActor (String?) -> Bool
-    typealias TranscriptFileSaver = @MainActor (String, TranscriptExportFormat, String) -> Void
+    /// Asks where to save one transcript and saves it. Returns false when the
+    /// file could not be written; choosing Cancel is not a failure.
+    typealias TranscriptFileSaver = @MainActor (String, TranscriptExportFormat, String) -> Bool
     typealias TranscriptFolderPicker = @MainActor () -> URL?
 
     nonisolated(unsafe) static var _shared: FileTranscriptionViewModel?
@@ -142,6 +146,8 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
     /// The folder for automatic saves; nil saves next to the original file.
     @Published private(set) var autoSaveFolderPath: String?
+    /// Names the files an export could not save, until the alert is dismissed.
+    @Published var exportFailureMessage: String?
     @Published var selectedEngine: String? {
         didSet {
             defaults.set(selectedEngine, forKey: UserDefaultsKeys.fileTranscriptionEngine)
@@ -231,7 +237,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         }
         self.engineReadinessChecker = engineReadinessChecker
         self.transcriptFileSaver = transcriptFileSaver ?? { content, format, suggestedName in
-            _ = TranscriptExporter.saveToFile(content: content, format: format, suggestedName: suggestedName)
+            TranscriptExporter.saveToFile(content: content, format: format, suggestedName: suggestedName)
         }
         self.transcriptFolderPicker = transcriptFolderPicker ?? {
             let panel = NSOpenPanel()
@@ -254,7 +260,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         self.autoSaveFormat = TranscriptExportFormat(
             rawValue: defaults.string(forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFormat) ?? ""
         ) ?? .markdown
-        self.autoSaveFolderPath = configuredAutoSaveFolderPath()
+        self.autoSaveFolderPath = detectsSpeakers ? nil : configuredAutoSaveFolderPath()
         self.isInitialized = true
         HistoryRetranscriptionActivity.recordIDPublisher
             .map { $0 != nil }
@@ -667,7 +673,9 @@ final class FileTranscriptionViewModel: ObservableObject {
         guard let content = exportContent(for: item, format: format) else { return }
 
         let name = item.url.deletingPathExtension().lastPathComponent
-        transcriptFileSaver(content, format, name)
+        if !transcriptFileSaver(content, format, name) {
+            reportExportFailure(fileNames: [item.fileName])
+        }
     }
 
     func exportAllTranscripts(format: TranscriptExportFormat) {
@@ -683,7 +691,9 @@ final class FileTranscriptionViewModel: ObservableObject {
         // For single file, use save panel directly
         if exports.count == 1, let export = exports.first {
             let name = export.item.url.deletingPathExtension().lastPathComponent
-            transcriptFileSaver(export.content, format, name)
+            if !transcriptFileSaver(export.content, format, name) {
+                reportExportFailure(fileNames: [export.item.fileName])
+            }
             return
         }
 
@@ -692,31 +702,43 @@ final class FileTranscriptionViewModel: ObservableObject {
 
         // Files with the same name, from different folders or already in the
         // chosen one, get numbered names instead of replacing each other.
+        var failedFileNames: [String] = []
         for export in exports {
-            TranscriptExporter.writeNewFile(
+            let url = TranscriptExporter.writeNewFile(
                 export.content,
                 in: folder,
                 baseName: export.item.url.deletingPathExtension().lastPathComponent,
                 fileExtension: format.fileExtension
             )
+            if url == nil { failedFileNames.append(export.item.fileName) }
         }
+        if !failedFileNames.isEmpty {
+            reportExportFailure(fileNames: failedFileNames)
+        }
+    }
+
+    private func reportExportFailure(fileNames: [String]) {
+        let names = fileNames.joined(separator: "\n")
+        exportFailureMessage = String(localized: "These transcripts weren't saved:\n\(names)")
     }
 
     // MARK: - Auto-save
 
     func chooseAutoSaveFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = transcriptFolderPicker() else { return }
         setAutoSaveFolder(url)
     }
 
     func setAutoSaveFolder(_ url: URL) {
-        guard let bookmark = try? url.bookmarkData(options: .withSecurityScope) else { return }
+        let bookmark: Data
+        do {
+            bookmark = try url.bookmarkData(options: .withSecurityScope)
+        } catch {
+            fileTranscriptionLogger.error(
+                "Failed to remember the auto-save folder: \(error.localizedDescription, privacy: .public)"
+            )
+            return
+        }
         defaults.set(bookmark, forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark)
         autoSaveFolderPath = url.path
     }
@@ -754,13 +776,25 @@ final class FileTranscriptionViewModel: ObservableObject {
             return nil
         }
         var isStale = false
+        // A disconnected disk or server counts as missing; it is neither mounted
+        // nor asked for credentials, also not during app launch.
         guard let url = try? URL(
             resolvingBookmarkData: bookmark,
-            options: .withSecurityScope,
+            options: [.withSecurityScope, .withoutUI, .withoutMounting, .withoutImplicitStartAccessing],
+            relativeTo: nil,
             bookmarkDataIsStale: &isStale
         ) else { return nil }
-        if isStale, let refreshed = try? url.bookmarkData(options: .withSecurityScope) {
-            defaults.set(refreshed, forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark)
+        if isStale {
+            let isAccessing = url.startAccessingSecurityScopedResource()
+            defer { if isAccessing { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let refreshed = try url.bookmarkData(options: .withSecurityScope)
+                defaults.set(refreshed, forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark)
+            } catch {
+                fileTranscriptionLogger.error(
+                    "Failed to refresh the auto-save folder bookmark: \(error.localizedDescription, privacy: .public)"
+                )
+            }
         }
         return url
     }
@@ -771,7 +805,8 @@ final class FileTranscriptionViewModel: ObservableObject {
     /// edition. A chosen folder that can no longer be found is reported, not
     /// replaced by the original file's folder. An empty transcript is not saved.
     private func autoSaveTranscriptIfEnabled(at index: Int) {
-        guard autoSaveTranscripts, files.indices.contains(index) else { return }
+        // The Speakers page shares these settings but shows neither result.
+        guard autoSaveTranscripts, !detectsSpeakers, files.indices.contains(index) else { return }
         let item = files[index]
         guard let content = exportContent(for: item, format: autoSaveFormat) else { return }
 
@@ -783,7 +818,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         } else if !hasChosenFolder, item.importedMedia == nil, Self.canAutoSaveNextToOriginal {
             folder = item.url.deletingLastPathComponent()
         } else {
-            files[index].autoSaveErrorMessage = String(localized: "fileTranscription.autoSave.failed")
+            reportAutoSaveFailure(at: index)
             return
         }
 
@@ -799,8 +834,14 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].autoSavedURL = url
             files[index].autoSaveErrorMessage = nil
         } else {
-            files[index].autoSaveErrorMessage = String(localized: "fileTranscription.autoSave.failed")
+            reportAutoSaveFailure(at: index)
         }
+    }
+
+    private func reportAutoSaveFailure(at index: Int) {
+        let message = String(localized: "fileTranscription.autoSave.failed")
+        files[index].autoSaveErrorMessage = message
+        accessibilityAnnouncementService?.announceError("\(files[index].fileName): \(message)")
     }
 
     private func exportContent(for item: FileItem, format: TranscriptExportFormat) -> String? {

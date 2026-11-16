@@ -251,6 +251,17 @@ struct FileTranscriptionView: View {
                 viewModel.addFiles(urls)
             }
         }
+        .alert(
+            String(localized: "Export Failed"),
+            isPresented: Binding(
+                get: { viewModel.exportFailureMessage != nil },
+                set: { if !$0 { viewModel.exportFailureMessage = nil } }
+            )
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(viewModel.exportFailureMessage ?? "")
+        }
         .onAppear {
             if viewModel.showFilePickerFromMenu {
                 viewModel.showFilePickerFromMenu = false

@@ -2485,6 +2485,34 @@
         }
       }
     },
+    "These transcripts weren't saved:\n%@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Transkripte wurden nicht gespeichert:\n%@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estas transcripciones no se guardaron:\n%@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の文字起こしは保存されませんでした:\n%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以下转录未保存：\n%@"
+          }
+        }
+      }
+    },
     "Saves each file transcribed at the top of this page when it finishes." : {
       "localizations" : {
         "de" : {
@@ -56173,40 +56201,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所选字幕格式需要时间戳，但引擎未返回分段信息。"
-          }
-        }
-      }
-    },
-    "watchFolder.folders" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ordner"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Folders"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Carpetas"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フォルダー"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文件夹"
           }
         }
       }

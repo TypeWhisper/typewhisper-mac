@@ -70,7 +70,7 @@ enum TranscriptExporter {
                 timestampsPath: nil
             )
         case .plainText, .srt, .vtt:
-            return text
+            return text + "\n"
         }
     }
 
@@ -107,6 +107,8 @@ enum TranscriptExporter {
     /// Stops `writeNewFile` in a folder that already holds this many files of one name.
     private static let maximumFileNumber = 10_000
 
+    /// Asks where to save `content` and saves it. Returns false when the chosen
+    /// file could not be written; choosing Cancel is not a failure.
     @MainActor
     @discardableResult
     static func saveToFile(content: String, format: TranscriptExportFormat, suggestedName: String) -> Bool {
@@ -115,7 +117,7 @@ enum TranscriptExporter {
         panel.nameFieldStringValue = "\(suggestedName).\(format.fileExtension)"
         panel.canCreateDirectories = true
 
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        guard panel.runModal() == .OK, let url = panel.url else { return true }
 
         return writeContent(content, to: url, suggestedName: suggestedName)
     }
