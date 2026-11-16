@@ -81,11 +81,13 @@ struct ExampleWebhookConfig: Codable, Identifiable {
     var isEnabled: Bool
     var workflowFilter: [String]  // Empty = all transcriptions
     var includesRecordings: Bool
+    var includesDictations: Bool  // False = Recorder transcripts only
 
     init(name: String = "", url: String = "", httpMethod: String = "POST",
          headers: [String: String] = ["Content-Type": "application/json"],
          secretHeaderNames: [String] = [],
-         isEnabled: Bool = true, workflowFilter: [String] = [], includesRecordings: Bool = false) {
+         isEnabled: Bool = true, workflowFilter: [String] = [], includesRecordings: Bool = false,
+         includesDictations: Bool = true) {
         self.id = UUID()
         self.name = name
         self.url = url
@@ -95,6 +97,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         self.isEnabled = isEnabled
         self.workflowFilter = workflowFilter
         self.includesRecordings = includesRecordings
+        self.includesDictations = includesDictations
     }
 
     var isUnmodifiedDefaultDraft: Bool {
@@ -106,6 +109,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
             && isEnabled
             && workflowFilter.isEmpty
             && !includesRecordings
+            && includesDictations
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -118,6 +122,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         case isEnabled
         case workflowFilter = "profileFilter"
         case includesRecordings
+        case includesDictations
     }
 
     init(from decoder: Decoder) throws {
@@ -131,6 +136,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         workflowFilter = try container.decode([String].self, forKey: .workflowFilter)
         includesRecordings = try container.decodeIfPresent(Bool.self, forKey: .includesRecordings) ?? false
+        includesDictations = try container.decodeIfPresent(Bool.self, forKey: .includesDictations) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -144,6 +150,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(workflowFilter, forKey: .workflowFilter)
         try container.encode(includesRecordings, forKey: .includesRecordings)
+        try container.encode(includesDictations, forKey: .includesDictations)
     }
 }
 
@@ -375,7 +382,7 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
     // MARK: - Sending
 
     func sendWebhooks(for payload: TranscriptionCompletedPayload) async {
-        for webhook in webhooks where webhook.isEnabled {
+        for webhook in webhooks where webhook.isEnabled && webhook.includesDictations {
             // The event still exposes the legacy ruleName compatibility field.
             // An empty workflow filter means every completed transcription.
             if !webhook.workflowFilter.isEmpty {
@@ -472,6 +479,7 @@ struct ExampleWebhookEditorPresentation {
 enum ExampleWebhookWorkflowScope: String, CaseIterable, Equatable {
     case allTranscriptions
     case selectedWorkflows
+    case recorderOnly
 }
 
 struct ExampleWebhookEditorState {
@@ -480,12 +488,20 @@ struct ExampleWebhookEditorState {
 
     init(webhook: ExampleWebhookConfig) {
         self.webhook = webhook
-        self.workflowScope = webhook.workflowFilter.isEmpty ? .allTranscriptions : .selectedWorkflows
+        if !webhook.includesDictations {
+            self.workflowScope = .recorderOnly
+        } else {
+            self.workflowScope = webhook.workflowFilter.isEmpty ? .allTranscriptions : .selectedWorkflows
+        }
     }
 
     var canSave: Bool {
         guard !webhook.url.isEmpty else { return false }
-        return workflowScope == .allTranscriptions || !webhook.workflowFilter.isEmpty
+        switch workflowScope {
+        case .allTranscriptions: return true
+        case .selectedWorkflows: return !webhook.workflowFilter.isEmpty
+        case .recorderOnly: return webhook.includesRecordings
+        }
     }
 
     mutating func setWorkflow(_ name: String, isSelected: Bool) {
@@ -503,9 +519,11 @@ struct ExampleWebhookEditorState {
     }
 
     var webhookForSaving: ExampleWebhookConfig {
-        guard workflowScope == .allTranscriptions else { return webhook }
         var updated = webhook
-        updated.workflowFilter = []
+        updated.includesDictations = workflowScope != .recorderOnly
+        if workflowScope != .selectedWorkflows {
+            updated.workflowFilter = []
+        }
         return updated
     }
 }
@@ -665,6 +683,9 @@ private struct WebhookRow: View {
     }
 
     private var workflowScopeDescription: String {
+        guard webhook.includesDictations else {
+            return String(localized: "Recorder transcripts only", bundle: bundle)
+        }
         guard !webhook.workflowFilter.isEmpty else {
             return String(localized: "All transcriptions", bundle: bundle)
         }
@@ -785,6 +806,8 @@ private struct ExampleWebhookEditView: View {
                                 .tag(ExampleWebhookWorkflowScope.allTranscriptions)
                             Text("Selected workflows", bundle: bundle)
                                 .tag(ExampleWebhookWorkflowScope.selectedWorkflows)
+                            Text("Recorder transcripts only", bundle: bundle)
+                                .tag(ExampleWebhookWorkflowScope.recorderOnly)
                         }
                         .pickerStyle(.radioGroup)
 
@@ -854,6 +877,10 @@ private struct ExampleWebhookEditView: View {
             return String(localized: "Select at least one workflow.", bundle: bundle)
         case .selectedWorkflows:
             return String(localized: "The webhook is sent only for the selected workflows.", bundle: bundle)
+        case .recorderOnly where !editorState.webhook.includesRecordings:
+            return String(localized: "Turn on Recorder transcripts above, otherwise this webhook never sends.", bundle: bundle)
+        case .recorderOnly:
+            return String(localized: "Dictations never trigger this webhook. Only completed Recorder transcripts are sent.", bundle: bundle)
         }
     }
 
