@@ -24,6 +24,9 @@ struct HistorySearchPlan: Equatable, Sendable {
     /// The words searched for, counted once each: `keywords` also holds their
     /// dictionary forms.
     var topicCount = 0
+    /// The question has words besides its period and places, as "What did I
+    /// record last week?" has and "And last week?" has not.
+    var hasWordsBesidesItsScope = false
 
     var intent: Intent { keywords.isEmpty && names.isEmpty ? .overview : .lookup }
 }
@@ -124,6 +127,7 @@ struct AskHistoryPlanner: Sendable {
                 continue
             }
             finishName()
+            if word.isContent { plan.hasWordsBesidesItsScope = true }
             // A cut-off ending can look like a stop word ("données", "donne"),
             // so only a real lemma can rule a word out.
             let lemma = word.lemma.flatMap { word.isStem && stopWords.contains($0) ? nil : $0 }
@@ -157,9 +161,12 @@ struct AskHistoryPlanner: Sendable {
     /// Whether a model should read the question together with the earlier
     /// conversation: a follow-up that names fewer than two things to search for.
     /// A question that names a period and nothing to search for asks for an
-    /// overview of that period, also within a conversation.
+    /// overview of that period, also within a conversation ("What did I record
+    /// last week?"). With no other words ("And last week?") it continues the
+    /// conversation's topic.
     static func needsFollowUpPlan(_ plan: HistorySearchPlan, history: [AskHistoryTurn]) -> Bool {
-        guard !history.isEmpty, !(plan.intent == .overview && plan.scope.period != nil) else { return false }
+        let asksForAnOverview = plan.intent == .overview && plan.scope.period != nil && plan.hasWordsBesidesItsScope
+        guard !history.isEmpty, !asksForAnOverview else { return false }
         return plan.topicCount + Set(plan.names.map(folded)).count < 2
     }
 

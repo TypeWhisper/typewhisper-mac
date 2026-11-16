@@ -62,6 +62,9 @@ final class AskHistoryFollowUpPlanTests: XCTestCase {
         XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was hat Ben gesagt, als Ben da war?"), history: history))
         // A period and nothing else asks for an overview, also within a conversation.
         XCTAssertFalse(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Was habe ich letzte Woche aufgenommen?"), history: history))
+        // With no other words, a period continues the conversation's topic.
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "Und letzte Woche?"), history: history))
+        XCTAssertTrue(AskHistoryPlanner.needsFollowUpPlan(planner.plan(for: "And what about last week?"), history: history))
 
         // The model invents a period; only the question's own counts.
         let followUp = AskHistoryFollowUpPlan(
