@@ -14,6 +14,9 @@ final class ModuleRegistry {
     let isStub: Bool
     private(set) var modules: [any HostModule] = []
     private(set) var contributions = ModuleContributions()
+    /// The host the modules were given. Kept as long as the registry, which
+    /// lives as long as the app, so a module may hold the host weakly.
+    let host: any ModuleHost
 
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "Modules")
 
@@ -23,6 +26,7 @@ final class ModuleRegistry {
         kitVersion: ModuleKitVersion = .current
     ) {
         isStub = entry.isStub
+        self.host = host
         let required = entry.requiredModuleKitVersion
         guard kitVersion.supports(required) else {
             logger.error(

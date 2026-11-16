@@ -21,6 +21,20 @@ final class ModuleRegistryTests: XCTestCase {
         XCTAssertEqual(registry.contributions.managedPolicyKeys.map(\.name), ["TestKey"])
     }
 
+    func testKeepsTheHostItGaveTheModules() {
+        weak var weakHost: AppModuleHost?
+        let registry: ModuleRegistry
+        do {
+            let host = AppModuleHost()
+            weakHost = host
+            registry = ModuleRegistry(entry: TwoModulesEntry.self, host: host)
+        }
+
+        // A module that holds the host weakly can still open its panels.
+        XCTAssertNotNil(weakHost)
+        XCTAssertTrue(registry.host === weakHost)
+    }
+
     func testSkipsModulesThatNeedANewerInterface() {
         let current = ModuleKitVersion.current
         let registry = ModuleRegistry(
