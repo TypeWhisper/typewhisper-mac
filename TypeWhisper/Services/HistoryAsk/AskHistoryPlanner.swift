@@ -27,6 +27,8 @@ struct HistorySearchPlan: Equatable, Sendable {
     /// The question has words besides its period and places, as "What did I
     /// record last week?" has and "And last week?" has not.
     var hasWordsBesidesItsScope = false
+    /// The question points back at the conversation: "dazu", "about it".
+    var refersBack = false
 
     var intent: Intent { keywords.isEmpty && names.isEmpty ? .overview : .lookup }
 }
@@ -128,6 +130,7 @@ struct AskHistoryPlanner: Sendable {
             }
             finishName()
             if word.isContent { plan.hasWordsBesidesItsScope = true }
+            if Self.referenceWords.contains(word.folded) { plan.refersBack = true }
             // A cut-off ending can look like a stop word ("données", "donne"),
             // so only a real lemma can rule a word out.
             let lemma = word.lemma.flatMap { word.isStem && stopWords.contains($0) ? nil : $0 }
@@ -163,9 +166,11 @@ struct AskHistoryPlanner: Sendable {
     /// A question that names a period and nothing to search for asks for an
     /// overview of that period, also within a conversation ("What did I record
     /// last week?"). With no other words ("And last week?") it continues the
-    /// conversation's topic.
+    /// conversation's topic, and so does one that points back at it ("Was wurde
+    /// letzte Woche dazu gesagt?").
     static func needsFollowUpPlan(_ plan: HistorySearchPlan, history: [AskHistoryTurn]) -> Bool {
-        let asksForAnOverview = plan.intent == .overview && plan.scope.period != nil && plan.hasWordsBesidesItsScope
+        let asksForAnOverview = plan.intent == .overview && plan.scope.period != nil
+            && plan.hasWordsBesidesItsScope && !plan.refersBack
         guard !history.isEmpty, !asksForAnOverview else { return false }
         return plan.topicCount + Set(plan.names.map(folded)).count < 2
     }
@@ -303,6 +308,16 @@ struct AskHistoryPlanner: Sendable {
     /// "be" and "have", "say", "recording", "summarize". The tagger already
     /// leaves out articles, pronouns and prepositions; the longer ones are also
     /// listed for a Mac whose tagger has no word classes for the language.
+    /// Words that point back at what the conversation was about, folded. Words
+    /// of a period ("this week") are gone before these are looked for.
+    private static let referenceWords: Set<String> = [
+        "dazu", "daruber", "davon", "dabei", "damit", "dafur", "daran", "darum", "dazwischen",
+        "it", "that", "this", "them", "these", "those",
+        "cela", "ca", "dessus",
+        "eso", "esto", "ello",
+        "cio", "questo", "quello",
+    ]
+
     private static func stopWords(for language: String?) -> Set<String> {
         guard let language, let words = stopWordsByLanguage[language] else {
             return stopWordsByLanguage.values.reduce(into: Set()) { $0.formUnion($1) }
