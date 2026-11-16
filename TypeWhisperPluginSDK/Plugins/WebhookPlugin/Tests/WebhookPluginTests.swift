@@ -11,6 +11,7 @@ final class WebhookPluginTests: XCTestCase {
         """.utf8)
         XCTAssertFalse(try JSONDecoder().decode(ExampleWebhookConfig.self, from: legacy).includesRecordings)
         XCTAssertFalse(ExampleWebhookConfig().includesRecordings)
+        XCTAssertTrue(try JSONDecoder().decode(ExampleWebhookConfig.self, from: legacy).includesDictations)
     }
 
     func testRecorderSubscriptionDeliversOnlyToOptedInEnabledWebhooks() async throws {
@@ -421,6 +422,43 @@ final class WebhookPluginTests: XCTestCase {
 
         await service.sendWebhooks(for: payload(ruleName: "Cleaned Text"))
         XCTAssertEqual(sessionStore.sessions.first?.requestedRequests.count, 2)
+    }
+
+    func testRecorderOnlyWebhookSkipsDictationsButSendsRecorderTranscripts() async throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        var state = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
+            name: "Recorder Hook",
+            url: "https://example.com/recorder",
+            workflowFilter: ["Cleaned Text"]
+        ))
+        state.workflowScope = .recorderOnly
+        XCTAssertFalse(state.canSave)
+        state.webhook.includesRecordings = true
+        XCTAssertTrue(state.canSave)
+        let saved = state.webhookForSaving
+        XCTAssertFalse(saved.includesDictations)
+        XCTAssertTrue(saved.workflowFilter.isEmpty)
+        XCTAssertEqual(ExampleWebhookEditorState(webhook: saved).workflowScope, .recorderOnly)
+        service.saveWebhook(saved)
+
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://example.com/recorder")!, statusCode: 204, httpVersion: nil, headerFields: nil
+        ))
+        let sessionStore = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            sessionStore.makeSession(outcomes: [.success(Data(), response)])
+        }
+
+        await service.sendWebhooks(for: payload(ruleName: nil))
+        await service.sendWebhooks(for: payload(ruleName: "Cleaned Text"))
+        XCTAssertTrue(sessionStore.sessions.flatMap(\.requestedRequests).isEmpty)
+
+        await service.sendWebhooks(for: RecorderTranscriptReadyPayload(
+            recordingID: UUID(), text: "Meeting", audioFilePath: "/recordings/meeting.wav",
+            transcriptFilePath: "/recordings/meeting.txt", markdownFilePath: nil
+        ))
+        XCTAssertEqual(sessionStore.sessions.flatMap(\.requestedRequests).count, 1)
     }
 
     private func payload(ruleName: String?) -> TranscriptionCompletedPayload {

@@ -868,7 +868,7 @@ Completion receipts are saved alongside recordings as `<audio filename>.transcri
 
 The Plugin SDK emits **`recorderTranscriptReady`** after the transcript and receipt have been saved. When the recording gets speaker detection, the event waits until detection has finished and carries `speaker_state` and the speakers, so it arrives later than the transcript files; the next recording is transcribed meanwhile. If TypeWhisper quits before detection finishes, the event is not sent. It does not emit the dictation `transcriptionCompleted` event or run Recorder Workflows. Event delivery is best effort while TypeWhisper and the plugin are running; use the API to catch up on missed completions.
 
-In **Webhook Notifications**, enable **Also send completed Recorder transcripts** for each destination that should receive this event. The JSON body has the same fields as an entry above. Webhook retries keep the same `completion_id`.
+In **Webhook Notifications**, enable **Also send completed Recorder transcripts** for each destination that should receive this event. To keep dictations away from a destination, set **Send webhook for** to **Recorder transcripts only**. The JSON body has the same fields as an entry above. Webhook retries keep the same `completion_id`.
 
 In **Script Runner**, enable **Also run for completed Recorder transcripts** for each export command. Both options default to off, including for existing configurations, and operate independently of dictation rule/workflow filters. Recorder scripts receive the saved original through stdin and these environment variables:
 

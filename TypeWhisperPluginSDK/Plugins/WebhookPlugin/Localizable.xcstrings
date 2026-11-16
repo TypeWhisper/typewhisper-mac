@@ -871,6 +871,90 @@
           }
         }
       }
+    },
+    "Recorder transcripts only": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Recorder-Transkripte"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo transcripciones de la grabadora"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーの文字起こしのみ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅录音器转录"
+          }
+        }
+      }
+    },
+    "Turn on Recorder transcripts above, otherwise this webhook never sends.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte oben die Recorder-Transkripte ein, sonst sendet dieser Webhook nie."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activa arriba las transcripciones de la grabadora. Si no, este webhook nunca se enviará."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上でレコーダーの文字起こしをオンにしてください。オフのままでは、このWebhookは送信されません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在上方开启录音器转录，否则此 Webhook 永远不会发送。"
+          }
+        }
+      }
+    },
+    "Dictations never trigger this webhook. Only completed Recorder transcripts are sent.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktate lösen diesen Webhook nie aus. Gesendet werden nur fertige Recorder-Transkripte."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los dictados nunca activan este webhook. Solo se envían las transcripciones completadas de la grabadora."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声入力ではこのWebhookは送信されません。完了したレコーダーの文字起こしのみ送信されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "听写永远不会触发此 Webhook。只发送已完成的录音器转录。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
