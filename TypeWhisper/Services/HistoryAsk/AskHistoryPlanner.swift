@@ -124,11 +124,14 @@ struct AskHistoryPlanner: Sendable {
                 continue
             }
             finishName()
+            // A cut-off ending can look like a stop word ("données", "donne"),
+            // so only a real lemma can rule a word out.
+            let lemma = word.lemma.flatMap { word.isStem && stopWords.contains($0) ? nil : $0 }
             guard word.isContent, !stopWords.contains(word.folded),
-                  word.lemma.map({ !stopWords.contains($0) }) ?? true else { continue }
+                  lemma.map({ !stopWords.contains($0) }) ?? true else { continue }
             keywords.append(word.text)
-            topics.insert(word.lemma ?? word.folded)
-            if let lemma = word.lemma, lemma != word.folded { keywords.append(lemma) }
+            topics.insert(lemma ?? word.folded)
+            if let lemma, lemma != word.folded { keywords.append(lemma) }
         }
         finishName()
 
@@ -188,6 +191,8 @@ struct AskHistoryPlanner: Sendable {
         /// Lowercased and without diacritics.
         var folded: String
         var lemma: String?
+        /// The lemma is the word without a common ending, because the tagger had none.
+        var isStem = false
         var range: Range<Int>
         /// A word that can name a topic, as opposed to "the", "and" or "with".
         var isContent: Bool
@@ -212,11 +217,11 @@ struct AskHistoryPlanner: Sendable {
             guard text.contains(where: { $0.isLetter || $0.isNumber }) else { return true }
             // iOS has no German or French lemmas, and the Mac lacks some
             // words, so a common ending comes off instead: "Plakaten", "Plakat".
-            let lemma = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lemma).0
-                .map { folded($0.rawValue) } ?? stem(of: folded(text), language: language)
+            let tagged = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lemma).0.map { folded($0.rawValue) }
+            let lemma = tagged ?? stem(of: folded(text), language: language)
             let utf16 = NSRange(range, in: question)
             words.append(Word(
-                text: text, folded: folded(text), lemma: lemma,
+                text: text, folded: folded(text), lemma: lemma, isStem: tagged == nil && lemma != nil,
                 range: utf16.location..<NSMaxRange(utf16), isContent: false
             ))
             classes.append(tag)

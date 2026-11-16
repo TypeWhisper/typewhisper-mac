@@ -215,6 +215,14 @@ final class AskHistoryPlannerTests: XCTestCase {
         XCTAssertNil(AskHistoryPlanner.stem(of: "plakaten", language: nil))
     }
 
+    func testAStemThatLooksLikeAStopWordKeepsTheWord() {
+        // "donnees" without its ending is "donne", a French stop word.
+        XCTAssertEqual(AskHistoryPlanner.stem(of: "donnees", language: "fr"), "donne")
+        let data = plan("Que dire des données sur les ventes ?")
+        XCTAssertTrue(data.keywords.contains("données"), "\(data.keywords)")
+        XCTAssertNotEqual(data.intent, .overview)
+    }
+
     func testAQuestionAboutTheLastTimePrefersNewRecords() {
         XCTAssertTrue(plan("Wann habe ich zuletzt über die Heizung gesprochen?").prefersNewest)
         XCTAssertTrue(plan("When did we last time talk about the heating?").prefersNewest)
