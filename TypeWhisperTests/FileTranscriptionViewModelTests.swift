@@ -789,6 +789,134 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
     }
 
+    func testAutoSaveWritesTranscriptNextToTheOriginalWithoutReplacingAFile() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "lecture.m4a")
+        let folder = fileURL.deletingLastPathComponent()
+        let existingURL = folder.appendingPathComponent("lecture.txt")
+        try "keep me".write(to: existingURL, atomically: true, encoding: .utf8)
+        let viewModel = makeAutoSaveViewModel(defaults: defaults, text: "Lecture transcript")
+        viewModel.autoSaveTranscripts = true
+        viewModel.autoSaveFormat = .plainText
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        let savedURL = folder.appendingPathComponent("lecture 2.txt")
+        XCTAssertEqual(viewModel.files.first?.autoSavedURL?.standardizedFileURL, savedURL.standardizedFileURL)
+        XCTAssertNil(viewModel.files.first?.autoSaveErrorMessage)
+        XCTAssertEqual(try String(contentsOf: savedURL, encoding: .utf8), "Lecture transcript\n")
+        XCTAssertEqual(try String(contentsOf: existingURL, encoding: .utf8), "keep me")
+    }
+
+    func testAutoSaveWritesMarkdownToTheChosenFolder() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "podcast.mp3")
+        let outputFolder = makeTemporaryDirectory()
+        let viewModel = makeAutoSaveViewModel(
+            defaults: defaults,
+            text: "Podcast transcript",
+            transcriptFolderPicker: { outputFolder }
+        )
+        viewModel.autoSaveTranscripts = true
+        viewModel.autoSaveFormat = .markdown
+        viewModel.chooseAutoSaveFolder()
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        let savedURL = outputFolder.appendingPathComponent("podcast.md")
+        let content = try String(contentsOf: savedURL, encoding: .utf8)
+        XCTAssertTrue(content.hasPrefix("---\n"))
+        XCTAssertTrue(content.hasSuffix("# Transcription: podcast.mp3\n\nPodcast transcript\n"))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: fileURL.deletingLastPathComponent().appendingPathComponent("podcast.md").path
+        ))
+
+        let reloaded = makeAutoSaveViewModel(defaults: defaults, text: "")
+        XCTAssertTrue(reloaded.autoSaveTranscripts)
+        XCTAssertEqual(reloaded.autoSaveFormat, .markdown)
+        XCTAssertEqual(
+            reloaded.autoSaveFolderPath.map { URL(fileURLWithPath: $0).standardizedFileURL },
+            outputFolder.standardizedFileURL
+        )
+        reloaded.clearAutoSaveFolder()
+        XCTAssertNil(reloaded.autoSaveFolderPath)
+    }
+
+    func testAutoSaveReportsAChosenFolderThatCannotBeFound() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        defaults.set(Data("not a bookmark".utf8), forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark)
+        let fileURL = makeTemporaryFile(named: "interview.wav")
+        var announcements: [(message: String, isUrgent: Bool)] = []
+        let announcer = AccessibilityAnnouncementService()
+        announcer.isVoiceOverEnabled = { true }
+        announcer.post = { message, isUrgent in announcements.append((message, isUrgent)) }
+        let viewModel = makeAutoSaveViewModel(
+            defaults: defaults,
+            text: "Interview transcript",
+            accessibilityAnnouncementService: announcer
+        )
+        viewModel.autoSaveTranscripts = true
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertNil(viewModel.files.first?.autoSavedURL)
+        XCTAssertNotNil(viewModel.files.first?.autoSaveErrorMessage)
+        // VoiceOver users hear the failure, not only see the caption.
+        XCTAssertTrue(announcements.contains { $0.message.contains("interview.wav") && $0.isUrgent })
+        let folderContents = try FileManager.default.contentsOfDirectory(atPath: fileURL.deletingLastPathComponent().path)
+        XCTAssertEqual(folderContents, ["interview.wav"])
+    }
+
+    func testAutoSaveIsOffByDefault() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "memo.wav")
+        let viewModel = makeAutoSaveViewModel(defaults: defaults, text: "Memo transcript")
+        XCTAssertFalse(viewModel.autoSaveTranscripts)
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertNil(viewModel.files.first?.autoSavedURL)
+        let folderContents = try FileManager.default.contentsOfDirectory(atPath: fileURL.deletingLastPathComponent().path)
+        XCTAssertEqual(folderContents, ["memo.wav"])
+    }
+
+    func testAutoSaveSkipsTheSpeakersPage() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        defaults.set(true, forKey: UserDefaultsKeys.fileTranscriptionAutoSave)
+        let fileURL = makeTemporaryFile(named: "panel.wav")
+        let viewModel = makeAutoSaveViewModel(defaults: defaults, text: "Panel transcript", detectsSpeakers: true)
+        viewModel.speakerRecordIntake = { _ in UUID() }
+        XCTAssertTrue(viewModel.autoSaveTranscripts)
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertEqual(viewModel.files.first?.state, .done)
+        XCTAssertNil(viewModel.files.first?.autoSavedURL)
+        XCTAssertNil(viewModel.files.first?.autoSaveErrorMessage)
+        let folderContents = try FileManager.default.contentsOfDirectory(atPath: fileURL.deletingLastPathComponent().path)
+        XCTAssertEqual(folderContents, ["panel.wav"])
+    }
+
     func testTranscribeAllExposesLoadingProgressAndElapsedTime() async throws {
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "long-video.mp4")
@@ -984,19 +1112,20 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "team-meeting.wav")
         var savedContent: String?
-        var savedFormat: SubtitleFormat?
+        var savedFormat: TranscriptExportFormat?
         var savedSuggestedName: String?
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
             dictionaryService: makeDictionaryService(),
             defaults: defaults,
-            subtitleFileSaver: { content, format, suggestedName in
+            transcriptFileSaver: { content, format, suggestedName in
                 savedContent = content
                 savedFormat = format
                 savedSuggestedName = suggestedName
+                return true
             },
-            subtitleFolderPicker: {
+            transcriptFolderPicker: {
                 XCTFail("Single-file export should use the save panel path")
                 return nil
             }
@@ -1010,7 +1139,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             segments: []
         )
 
-        viewModel.exportAllSubtitles(format: .srt)
+        viewModel.exportAllTranscripts(format: .srt)
 
         XCTAssertEqual(savedFormat, .srt)
         XCTAssertEqual(savedSuggestedName, "team-meeting")
@@ -1028,10 +1157,11 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             audioFileService: AudioFileService(),
             dictionaryService: makeDictionaryService(),
             defaults: defaults,
-            subtitleFileSaver: { _, _, _ in
+            transcriptFileSaver: { _, _, _ in
                 XCTFail("Multi-file export should use the folder export path")
+                return true
             },
-            subtitleFolderPicker: {
+            transcriptFolderPicker: {
                 folderPickerCalls += 1
                 return exportFolder
             }
@@ -1051,7 +1181,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             segments: []
         )
 
-        viewModel.exportAllSubtitles(format: .vtt)
+        viewModel.exportAllTranscripts(format: .vtt)
 
         XCTAssertEqual(folderPickerCalls, 1)
         let firstContent = try String(contentsOf: exportFolder.appendingPathComponent("first-call.vtt"))
@@ -1069,8 +1199,9 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             audioFileService: AudioFileService(),
             dictionaryService: makeDictionaryService(),
             defaults: defaults,
-            subtitleFileSaver: { content, _, _ in
+            transcriptFileSaver: { content, _, _ in
                 savedContent = content
+                return true
             }
         )
 
@@ -1086,12 +1217,215 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
         let item = try XCTUnwrap(viewModel.files.first)
 
-        viewModel.exportSubtitles(for: item, format: .vtt)
+        viewModel.exportTranscript(for: item, format: .vtt)
 
         XCTAssertEqual(
             savedContent,
             "WEBVTT\n\n1\n00:00:00.250 --> 00:00:01.500\nFirst segment\n\n2\n00:00:01.500 --> 00:00:02.750\nSecond segment\n"
         )
+    }
+
+    func testExportTranscriptSavesTrimmedPlainText() throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "interview.m4a")
+        var savedContent: String?
+        var savedFormat: TranscriptExportFormat?
+        var savedSuggestedName: String?
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            transcriptFileSaver: { content, format, suggestedName in
+                savedContent = content
+                savedFormat = format
+                savedSuggestedName = suggestedName
+                return true
+            }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(text: "  Hello there.\nSecond line.  ", duration: 3)
+        let item = try XCTUnwrap(viewModel.files.first)
+
+        viewModel.exportTranscript(for: item, format: .plainText)
+
+        XCTAssertEqual(savedFormat, .plainText)
+        XCTAssertEqual(savedSuggestedName, "interview")
+        XCTAssertEqual(savedContent, "Hello there.\nSecond line.\n")
+    }
+
+    func testExportTranscriptSkipsEmptyText() throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "silence.wav")
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            transcriptFileSaver: { _, _, _ in
+                XCTFail("An empty transcript should not be saved")
+                return true
+            }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(text: "   ", duration: 3)
+        let item = try XCTUnwrap(viewModel.files.first)
+
+        viewModel.exportTranscript(for: item, format: .plainText)
+        viewModel.exportTranscript(for: item, format: .markdown)
+    }
+
+    func testExportAllTranscriptsWritesMarkdownFilesWithHeader() throws {
+        let defaults = try makeDefaults()
+        let firstURL = makeTemporaryFile(named: "standup.wav")
+        let secondURL = makeTemporaryFile(named: "retro.wav")
+        let exportFolder = makeTemporaryDirectory()
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            transcriptFileSaver: { _, _, _ in
+                XCTFail("Multi-file export should use the folder export path")
+                return true
+            },
+            transcriptFolderPicker: { exportFolder }
+        )
+
+        viewModel.addFiles([firstURL, secondURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(text: "Standup notes", duration: 1)
+        viewModel.files[1].state = .done
+        viewModel.files[1].result = makeTranscriptionResult(text: "Retro notes", duration: 1)
+
+        viewModel.exportAllTranscripts(format: .markdown)
+
+        let firstContent = try String(contentsOf: exportFolder.appendingPathComponent("standup.md"))
+        let secondContent = try String(contentsOf: exportFolder.appendingPathComponent("retro.md"))
+        XCTAssertTrue(firstContent.hasPrefix("---\naudio: "))
+        XCTAssertTrue(firstContent.contains("\nengine: \"test\"\n"))
+        XCTAssertTrue(firstContent.hasSuffix("# Transcription: standup.wav\n\nStandup notes\n"))
+        XCTAssertTrue(secondContent.hasSuffix("# Transcription: retro.wav\n\nRetro notes\n"))
+    }
+
+    func testExportAllTranscriptsKeepsFilesWithTheSameName() throws {
+        let defaults = try makeDefaults()
+        let firstURL = makeTemporaryFile(named: "meeting.wav")
+        let secondURL = makeTemporaryFile(named: "meeting.mp3")
+        let exportFolder = makeTemporaryDirectory()
+        let existingURL = exportFolder.appendingPathComponent("meeting.txt")
+        try "keep me".write(to: existingURL, atomically: true, encoding: .utf8)
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            transcriptFolderPicker: { exportFolder }
+        )
+
+        viewModel.addFiles([firstURL, secondURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(text: "First meeting", duration: 1)
+        viewModel.files[1].state = .done
+        viewModel.files[1].result = makeTranscriptionResult(text: "Second meeting", duration: 1)
+
+        viewModel.exportAllTranscripts(format: .plainText)
+
+        XCTAssertEqual(try String(contentsOf: existingURL, encoding: .utf8), "keep me")
+        XCTAssertEqual(
+            try String(contentsOf: exportFolder.appendingPathComponent("meeting 2.txt"), encoding: .utf8),
+            "First meeting\n"
+        )
+        XCTAssertEqual(
+            try String(contentsOf: exportFolder.appendingPathComponent("meeting 3.txt"), encoding: .utf8),
+            "Second meeting\n"
+        )
+    }
+
+    func testExportAllTranscriptsReportsFilesItCouldNotSave() throws {
+        let defaults = try makeDefaults()
+        let firstURL = makeTemporaryFile(named: "standup.wav")
+        let secondURL = makeTemporaryFile(named: "retro.wav")
+        let missingFolder = makeTemporaryDirectory().appendingPathComponent("removed", isDirectory: true)
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            transcriptFolderPicker: { missingFolder }
+        )
+
+        viewModel.addFiles([firstURL, secondURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(text: "Standup notes", duration: 1)
+        viewModel.files[1].state = .done
+        viewModel.files[1].result = makeTranscriptionResult(text: "Retro notes", duration: 1)
+
+        XCTAssertNil(viewModel.exportFailureMessage)
+        viewModel.exportAllTranscripts(format: .plainText)
+
+        let message = try XCTUnwrap(viewModel.exportFailureMessage)
+        XCTAssertTrue(message.contains("standup.wav"))
+        XCTAssertTrue(message.contains("retro.wav"))
+    }
+
+    func testExportTranscriptReportsAFileItCouldNotSave() throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "lecture.m4a")
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            transcriptFileSaver: { _, _, _ in false }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(text: "Lecture notes", duration: 1)
+        let item = try XCTUnwrap(viewModel.files.first)
+
+        viewModel.exportTranscript(for: item, format: .markdown)
+        XCTAssertTrue(try XCTUnwrap(viewModel.exportFailureMessage).contains("lecture.m4a"))
+
+        // Export All with one finished file saves through the same panel.
+        viewModel.exportFailureMessage = nil
+        viewModel.exportAllTranscripts(format: .plainText)
+        XCTAssertTrue(try XCTUnwrap(viewModel.exportFailureMessage).contains("lecture.m4a"))
+    }
+
+    func testTranscriptExporterBuildsMarkdownLikeWatchFolderExports() throws {
+        let date = Date(timeIntervalSince1970: 0)
+        let result = makeTranscriptionResult(text: "Body text", duration: 1)
+        let content = TranscriptExporter.exportContent(
+            for: result,
+            format: .markdown,
+            fileName: "call.mp3",
+            engineName: "Parakeet",
+            date: date,
+            audioPath: "/tmp/call.mp3"
+        )
+        let watchFolderContent = try WatchFolderExportBuilder.build(
+            format: .markdown,
+            result: result,
+            fileName: "call.mp3",
+            engineName: "Parakeet",
+            date: date,
+            audioPath: "/tmp/call.mp3"
+        ).content
+
+        XCTAssertEqual(content, watchFolderContent)
+        XCTAssertNil(TranscriptExporter.exportContent(
+            for: makeTranscriptionResult(text: "  \n", duration: 1),
+            format: .markdown,
+            fileName: "call.mp3",
+            engineName: "Parakeet",
+            date: date
+        ))
     }
 
     func testTextOnlySubtitleExportUsesOneSecondCueForInvalidDuration() {
@@ -1794,6 +2128,36 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             try? FileManager.default.removeItem(at: directory)
         }
         return url
+    }
+
+    private func makeAutoSaveViewModel(
+        defaults: UserDefaults,
+        text: String,
+        detectsSpeakers: Bool = false,
+        transcriptFolderPicker: FileTranscriptionViewModel.TranscriptFolderPicker? = nil,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
+    ) -> FileTranscriptionViewModel {
+        FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            detectsSpeakers: detectsSpeakers,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
+                TranscriptionResult(
+                    text: text,
+                    detectedLanguage: "en",
+                    duration: 2,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true },
+            transcriptFolderPicker: transcriptFolderPicker,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
+        )
     }
 
     private func makeTemporaryDirectory() -> URL {

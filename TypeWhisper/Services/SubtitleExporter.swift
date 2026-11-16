@@ -1,8 +1,5 @@
-import AppKit
-import os
+import Foundation
 import UniformTypeIdentifiers
-
-private let subtitleExporterLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SubtitleExporter")
 
 enum SubtitleFormat: String, CaseIterable {
     case srt
@@ -51,32 +48,6 @@ enum SubtitleExporter {
             lines.append("")
         }
         return lines.joined(separator: "\n")
-    }
-
-    @MainActor
-    @discardableResult
-    static func saveToFile(content: String, format: SubtitleFormat, suggestedName: String) -> Bool {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [format.utType]
-        panel.nameFieldStringValue = "\(suggestedName).\(format.fileExtension)"
-        panel.canCreateDirectories = true
-
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
-
-        return writeContent(content, to: url, suggestedName: suggestedName)
-    }
-
-    @discardableResult
-    static func writeContent(_ content: String, to url: URL, suggestedName: String) -> Bool {
-        do {
-            try content.write(to: url, atomically: true, encoding: .utf8)
-            return true
-        } catch {
-            subtitleExporterLogger.error(
-                "Failed to export subtitle '\(suggestedName, privacy: .private(mask: .hash))' to \(url.path, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .public)"
-            )
-            return false
-        }
     }
 
     // MARK: - Time Formatting
