@@ -2,6 +2,9 @@
 ///
 /// A capability is nil when the app does not provide it, for example because
 /// the build or a managed policy leaves it out. Modules check before use.
+///
+/// The app keeps the host it passes to `HostModule.contributions(for:)` for as
+/// long as it runs, so a module may hold it weakly or strongly.
 @MainActor
 public protocol ModuleHost: AnyObject {
     var historyReading: (any HistoryReading)? { get }
