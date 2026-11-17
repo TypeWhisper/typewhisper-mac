@@ -868,7 +868,7 @@ Completion receipts are saved alongside recordings as `<audio filename>.transcri
 
 The Plugin SDK emits **`recorderTranscriptReady`** after the transcript and receipt have been saved. When the recording gets speaker detection, the event waits until detection has finished and carries `speaker_state` and the speakers, so it arrives later than the transcript files; the next recording is transcribed meanwhile. If TypeWhisper quits before detection finishes, the event is not sent. It does not emit the dictation `transcriptionCompleted` event or run Recorder Workflows. Event delivery is best effort while TypeWhisper and the plugin are running; use the API to catch up on missed completions.
 
-In **Webhook Notifications**, enable **Also send completed Recorder transcripts** for each destination that should receive this event. To keep dictations away from a destination, set **Send webhook for** to **Recorder transcripts only**. The JSON body has the same fields as an entry above. Webhook retries keep the same `completion_id`.
+In **Webhook Notifications**, enable **Also send completed Recorder transcripts** for each destination that should receive this event. To keep dictations away from a destination, set **Send webhook for** to **No dictations**. The JSON body has the same fields as an entry above. Webhook retries keep the same `completion_id`.
 
 In **Script Runner**, enable **Also run for completed Recorder transcripts** for each export command. Both options default to off, including for existing configurations, and operate independently of dictation rule/workflow filters. Recorder scripts receive the saved original through stdin and these environment variables:
 
@@ -889,6 +889,21 @@ In **Script Runner**, enable **Also run for completed Recorder transcripts** for
 The `TYPEWHISPER_MEETING_*` variables come from `calendar_event` above and are set only for recordings started from the calendar. For all other recordings they stay unset, so a script can tell the two apart. Start and end have no decimal places, so `date -r "$TYPEWHISPER_MEETING_START" +%H:%M` works.
 
 Recorder scripts export the original transcript independently; stdout is ignored and may be empty. A nonzero exit status is logged as a failure. The existing five-second script timeout applies, so enqueue longer processing in a separate worker. Ordinary dictation scripts continue to transform text through stdout.
+
+Files from the Watch Folder reach webhooks too. In **Webhook Notifications**, enable **Also send file transcripts** for each destination that should receive them; files transcribed in File Transcription follow from TypeWhisper 1.9. The option defaults to off and operates independently of workflow filters. The webhook can arrive before the transcript file exists, so read the text from the body rather than from `output_file`. The JSON body has these fields:
+
+| Field | Value |
+| --- | --- |
+| `source` | `watch-folder` or `file-transcription` |
+| `completion_id` | UUID for this delivery; retries keep it |
+| `completed_at` | Completion time in Unix seconds |
+| `text` | Transcript text from the engine; plugins that change the saved file do not change it |
+| `source_file`, `source_file_name` | Path and name of the transcribed file, when known |
+| `output_file`, `output_format` | Where the transcript is saved and its format, when it is saved |
+| `engine`, `model`, `language` | Engine, model and detected language, when known |
+| `segments` | Timed segments with `text`, `start`, `end` and, after speaker detection, `speaker` |
+
+Dictation webhooks carry `"source": "dictation"`, so one endpoint can tell all three kinds apart.
 
 ## CLI Tool
 

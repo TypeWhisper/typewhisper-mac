@@ -424,7 +424,7 @@ final class WebhookPluginTests: XCTestCase {
         XCTAssertEqual(sessionStore.sessions.first?.requestedRequests.count, 2)
     }
 
-    func testRecorderOnlyWebhookSkipsDictationsButSendsRecorderTranscripts() async throws {
+    func testNoDictationsWebhookSkipsDictationsButSendsRecorderTranscripts() async throws {
         let host = try PluginTestHostServices()
         let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
         var state = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
@@ -432,14 +432,14 @@ final class WebhookPluginTests: XCTestCase {
             url: "https://example.com/recorder",
             workflowFilter: ["Cleaned Text"]
         ))
-        state.workflowScope = .recorderOnly
+        state.workflowScope = .noDictations
         XCTAssertFalse(state.canSave)
         state.webhook.includesRecordings = true
         XCTAssertTrue(state.canSave)
         let saved = state.webhookForSaving
         XCTAssertFalse(saved.includesDictations)
         XCTAssertTrue(saved.workflowFilter.isEmpty)
-        XCTAssertEqual(ExampleWebhookEditorState(webhook: saved).workflowScope, .recorderOnly)
+        XCTAssertEqual(ExampleWebhookEditorState(webhook: saved).workflowScope, .noDictations)
         service.saveWebhook(saved)
 
         let response = try XCTUnwrap(HTTPURLResponse(
@@ -459,6 +459,69 @@ final class WebhookPluginTests: XCTestCase {
             transcriptFilePath: "/recordings/meeting.txt", markdownFilePath: nil
         ))
         XCTAssertEqual(sessionStore.sessions.flatMap(\.requestedRequests).count, 1)
+    }
+
+    func testFileTranscriptsGoOnlyToOptedInWebhooksWithSourceAndFileName() async throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        XCTAssertFalse(try JSONDecoder().decode(
+            ExampleWebhookConfig.self,
+            from: JSONEncoder().encode(ExampleWebhookConfig())
+        ).includesFileJobs)
+        service.saveWebhook(ExampleWebhookConfig(name: "Default", url: "https://example.com/default"))
+        service.saveWebhook(ExampleWebhookConfig(
+            name: "Files", url: "https://example.com/files",
+            workflowFilter: ["Unrelated workflow"], includesFileJobs: true
+        ))
+
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://example.com/files")!, statusCode: 204, httpVersion: nil, headerFields: nil
+        ))
+        let sessionStore = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            sessionStore.makeSession(outcomes: [.success(Data(), response), .success(Data(), response)])
+        }
+
+        let context = FileJobContext(
+            jobKind: .watchFolder, sourceFilePath: "/Dipper/inbox/call.m4a",
+            outputFilePath: "/Dipper/out/call.md", outputFormat: "md",
+            engineName: "Parakeet", transcriptText: "Hello from a file"
+        )
+        await service.sendWebhooks(for: FileTranscriptWebhookPayload(context: context))
+
+        let requests = sessionStore.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.path }, ["/files"])
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(requests.first?.httpBody)
+        ) as? [String: Any])
+        XCTAssertEqual(body["source"] as? String, "watch-folder")
+        XCTAssertEqual(body["source_file_name"] as? String, "call.m4a")
+        XCTAssertEqual(body["output_file"] as? String, "/Dipper/out/call.md")
+        XCTAssertEqual(body["text"] as? String, "Hello from a file")
+
+        await service.sendWebhooks(for: payload(ruleName: nil))
+        let dictation = try XCTUnwrap(sessionStore.sessions.flatMap(\.requestedRequests).last)
+        XCTAssertEqual(dictation.url?.path, "/default")
+        let dictationBody = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(dictation.httpBody)
+        ) as? [String: Any])
+        XCTAssertEqual(dictationBody["source"] as? String, "dictation")
+        XCTAssertEqual(dictationBody["finalText"] as? String, "final")
+    }
+
+    @MainActor
+    func testFileJobAutomationLeavesTheArtifactUnchanged() async throws {
+        let plugin = WebhookPlugin()
+        plugin.activate(host: try PluginTestHostServices())
+        defer { plugin.deactivate() }
+        let artifact = FileJobArtifact(fileExtension: "md", content: "# Transcript")
+        let result = try await plugin.process(
+            artifact: artifact,
+            context: FileJobContext(jobKind: .fileTranscription, transcriptText: "Transcript")
+        )
+        XCTAssertEqual(result.artifact, artifact)
+        XCTAssertTrue(result.appliedSteps.isEmpty)
+        XCTAssertFalse(result.outputPathWasWritten)
     }
 
     private func payload(ruleName: String?) -> TranscriptionCompletedPayload {
