@@ -144,34 +144,6 @@
         }
       }
     },
-    "Runs for every file from the Watch Folder and, from TypeWhisper 1.9, from File Transcription. A script gets the transcript file's content on stdin. What it prints replaces the saved file; a script that prints nothing leaves it unchanged.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Läuft für jede Datei aus dem überwachten Ordner und ab TypeWhisper 1.9 auch aus der Datei-Transkription. Ein Skript bekommt den Inhalt der Transkriptdatei über stdin. Was es ausgibt, ersetzt die gespeicherte Datei; gibt es nichts aus, bleibt sie unverändert."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Se ejecuta para cada archivo de la carpeta vigilada y, desde TypeWhisper 1.9, de Transcripción de archivos. El script recibe el contenido del archivo de transcripción por stdin. Lo que imprime reemplaza el archivo guardado; si no imprime nada, el archivo no cambia."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "監視フォルダーのすべてのファイルに対して実行され、TypeWhisper 1.9以降はファイル文字起こしのファイルにも実行されます。スクリプトは文字起こしファイルの内容をstdinで受け取ります。出力した内容で保存ファイルが置き換えられます。何も出力しない場合、ファイルは変更されません。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "对监控文件夹中的每个文件运行，从 TypeWhisper 1.9 起也对文件转录中的文件运行。脚本通过 stdin 接收转录文件的内容。脚本输出的内容会替换保存的文件；如果没有输出，文件保持不变。"
-          }
-        }
-      }
-    },
     "Enabled": {
       "localizations": {
         "de": {
@@ -476,6 +448,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "退出代码 %lld"
+          }
+        }
+      }
+    },
+    "Runs for every file from the Watch Folder and, from TypeWhisper 1.9, from File Transcription. A script gets the transcript file's content on stdin. What it prints replaces the saved file; a script that prints nothing leaves it unchanged, so discard the response of commands such as curl.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft für jede Datei aus dem überwachten Ordner und ab TypeWhisper 1.9 auch aus der Datei-Transkription. Ein Skript bekommt den Inhalt der Transkriptdatei über stdin. Was es ausgibt, ersetzt die gespeicherte Datei; gibt es nichts aus, bleibt sie unverändert. Verwirf deshalb die Antwort von Befehlen wie curl."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se ejecuta para cada archivo de la carpeta vigilada y, desde TypeWhisper 1.9, de Transcripción de archivos. El script recibe el contenido del archivo de transcripción por stdin. Lo que imprime reemplaza el archivo guardado; si no imprime nada, el archivo no cambia. Por eso, descarta la respuesta de comandos como curl."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "監視フォルダーのすべてのファイルに対して実行され、TypeWhisper 1.9以降はファイル文字起こしのファイルにも実行されます。スクリプトは文字起こしファイルの内容をstdinで受け取ります。出力した内容で保存ファイルが置き換えられます。何も出力しない場合、ファイルは変更されません。 curlなどのコマンドの応答は破棄してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对监控文件夹中的每个文件运行，从 TypeWhisper 1.9 起也对文件转录中的文件运行。脚本通过 stdin 接收转录文件的内容。脚本输出的内容会替换保存的文件；如果没有输出，文件保持不变。因此请丢弃 curl 等命令的响应。"
           }
         }
       }

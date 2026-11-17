@@ -6,11 +6,11 @@
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Run shell scripts for files from the Watch Folder and File Transcription. Scripts can send transcripts elsewhere or replace the saved file.",
+    "description": "Run shell scripts for files from the Watch Folder and, from TypeWhisper 1.9, File Transcription. Scripts can send transcripts elsewhere or replace the saved file.",
     "descriptions": {
-        "de": "Shell-Skripte für Dateien aus dem überwachten Ordner und der Datei-Transkription ausführen. Skripte können Transkripte weitergeben oder die gespeicherte Datei ersetzen.",
-        "es": "Ejecuta scripts de shell para los archivos de la carpeta vigilada y de Transcripción de archivos. Los scripts pueden enviar las transcripciones a otro lugar o reemplazar el archivo guardado.",
-        "ja": "監視フォルダーとファイル文字起こしのファイルに対してシェルスクリプトを実行します。スクリプトで文字起こしを別の場所へ送ったり、保存ファイルを置き換えたりできます。"
+        "de": "Shell-Skripte für Dateien aus dem überwachten Ordner und ab TypeWhisper 1.9 aus der Datei-Transkription ausführen. Skripte können Transkripte weitergeben oder die gespeicherte Datei ersetzen.",
+        "es": "Ejecuta scripts de shell para los archivos de la carpeta vigilada y, desde TypeWhisper 1.9, de Transcripción de archivos. Los scripts pueden enviar las transcripciones a otro lugar o reemplazar el archivo guardado.",
+        "ja": "監視フォルダーのファイル、およびTypeWhisper 1.9以降はファイル文字起こしのファイルに対してシェルスクリプトを実行します。スクリプトで文字起こしを別の場所へ送ったり、保存ファイルを置き換えたりできます。"
     },
     "category": "file-automation",
     "iconSystemName": "folder.badge.gearshape",

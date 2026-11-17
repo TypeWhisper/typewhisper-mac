@@ -130,6 +130,19 @@ final class FileJobScriptPluginTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: markerURL, encoding: .utf8), "file-transcription|call.m4a")
     }
 
+    func testDefaultCatCommandLeavesANewlineTerminatedFileUnchanged() async throws {
+        let artifact = FileJobArtifact(fileExtension: "md", content: "# Call\n\nHello\n")
+        let result = await FileJobScriptRunner().execute(
+            script: FileJobScriptConfig(name: "Default", command: "cat"),
+            artifact: artifact,
+            context: FileJobContext(jobKind: .fileTranscription, transcriptText: "Hello")
+        )
+
+        XCTAssertNil(result.errorMessage)
+        XCTAssertFalse(result.didChangeArtifact)
+        XCTAssertEqual(result.artifact, artifact)
+    }
+
     func testNonZeroExitFallsBackToInputArtifact() async throws {
         let outputURL = try makeOutputURL()
         let context = makeContext(outputPath: outputURL.path)

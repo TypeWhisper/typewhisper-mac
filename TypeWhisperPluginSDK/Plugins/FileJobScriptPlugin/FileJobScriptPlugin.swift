@@ -325,10 +325,8 @@ final class FileJobScriptRunner: @unchecked Sendable {
                     }
 
                     let outputData = stdoutData.withLock { $0 }
+                    // The output becomes the saved file verbatim, so `cat` leaves it unchanged.
                     var output = String(data: outputData, encoding: .utf8) ?? ""
-                    if output.hasSuffix("\n") {
-                        output = String(output.dropLast())
-                    }
                     output = output.replacingOccurrences(of: "\0", with: "")
                     continuation.resume(returning: output)
                 } catch {
@@ -446,7 +444,13 @@ private struct OutputFileSnapshot: Equatable {
 }
 
 /// The plugin's own bundle, for its localized strings.
-var fileJobScriptBundle: Bundle { Bundle(for: FileJobScriptService.self) }
+var fileJobScriptBundle: Bundle {
+    #if SWIFT_PACKAGE
+    Bundle.module
+    #else
+    Bundle(for: FileJobScriptService.self)
+    #endif
+}
 
 enum FileJobScriptError: LocalizedError, Equatable {
     case timeout(seconds: Int)
@@ -485,7 +489,7 @@ private struct FileJobScriptSettingsView: View {
                 .buttonStyle(.bordered)
             }
 
-            Text("Runs for every file from the Watch Folder and, from TypeWhisper 1.9, from File Transcription. A script gets the transcript file's content on stdin. What it prints replaces the saved file; a script that prints nothing leaves it unchanged.", bundle: bundle)
+            Text("Runs for every file from the Watch Folder and, from TypeWhisper 1.9, from File Transcription. A script gets the transcript file's content on stdin. What it prints replaces the saved file; a script that prints nothing leaves it unchanged, so discard the response of commands such as curl.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
