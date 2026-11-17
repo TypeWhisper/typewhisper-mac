@@ -109,6 +109,27 @@ final class FileJobScriptPluginTests: XCTestCase {
         XCTAssertEqual(result.artifact.content, "from file")
     }
 
+    func testScriptWithoutOutputLeavesTheFileUnchangedWithoutError() async throws {
+        let context = FileJobContext(
+            jobKind: .fileTranscription,
+            sourceFilePath: "/tmp/in/call.m4a",
+            transcriptText: "Call transcript"
+        )
+        let artifact = FileJobArtifact(fileExtension: "md", content: "# Call")
+        let markerURL = try makeOutputURL()
+        let script = FileJobScriptConfig(
+            name: "Send",
+            command: #"printf '%s|%s' "$TYPEWHISPER_JOB_KIND" "$TYPEWHISPER_SOURCE_FILE_NAME" > "\#(markerURL.path)""#
+        )
+
+        let result = await FileJobScriptRunner().execute(script: script, artifact: artifact, context: context)
+
+        XCTAssertNil(result.errorMessage)
+        XCTAssertFalse(result.didChangeArtifact)
+        XCTAssertEqual(result.artifact, artifact)
+        XCTAssertEqual(try String(contentsOf: markerURL, encoding: .utf8), "file-transcription|call.m4a")
+    }
+
     func testNonZeroExitFallsBackToInputArtifact() async throws {
         let outputURL = try makeOutputURL()
         let context = makeContext(outputPath: outputURL.path)

@@ -1,15 +1,16 @@
 {
     "id": "com.typewhisper.file-job-script",
     "name": "File Job Script",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Run shell scripts for watch-folder file jobs. Scripts can replace the final exported artifact.",
+    "description": "Run shell scripts for files from the Watch Folder and File Transcription. Scripts can send transcripts elsewhere or replace the saved file.",
     "descriptions": {
-        "de": "Shell-Skripte für Watch-Folder-Dateijobs ausführen. Skripte können das finale Export-Artefakt ersetzen.",
-        "ja": "監視フォルダのファイルジョブでシェルスクリプトを実行します。スクリプトで最終出力ファイルを置き換えられます。"
+        "de": "Shell-Skripte für Dateien aus dem überwachten Ordner und der Datei-Transkription ausführen. Skripte können Transkripte weitergeben oder die gespeicherte Datei ersetzen.",
+        "es": "Ejecuta scripts de shell para los archivos de la carpeta vigilada y de Transcripción de archivos. Los scripts pueden enviar las transcripciones a otro lugar o reemplazar el archivo guardado.",
+        "ja": "監視フォルダーとファイル文字起こしのファイルに対してシェルスクリプトを実行します。スクリプトで文字起こしを別の場所へ送ったり、保存ファイルを置き換えたりできます。"
     },
     "category": "file-automation",
     "iconSystemName": "folder.badge.gearshape",

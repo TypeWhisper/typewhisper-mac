@@ -65,7 +65,7 @@ struct FileJobScriptConfig: Codable, Equatable, Identifiable, Sendable {
 
     var displayName: String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Untitled Script" : trimmed
+        return trimmed.isEmpty ? String(localized: "Untitled Script", bundle: fileJobScriptBundle) : trimmed
     }
 }
 
@@ -217,11 +217,12 @@ final class FileJobScriptRunner: @unchecked Sendable {
                 )
             }
 
+            // No output leaves the file as it is, for scripts that only send or copy it.
             return FileJobScriptExecutionResult(
                 artifact: artifact,
                 didChangeArtifact: false,
                 wroteOutputPath: false,
-                errorMessage: FileJobScriptError.emptyOutput.errorDescription,
+                errorMessage: nil,
                 durationMs: elapsedMilliseconds(since: start)
             )
         } catch {
@@ -444,19 +445,20 @@ private struct OutputFileSnapshot: Equatable {
     }
 }
 
+/// The plugin's own bundle, for its localized strings.
+var fileJobScriptBundle: Bundle { Bundle(for: FileJobScriptService.self) }
+
 enum FileJobScriptError: LocalizedError, Equatable {
     case timeout(seconds: Int)
     case nonZeroExit(code: Int32, stderr: String)
-    case emptyOutput
 
     var errorDescription: String? {
         switch self {
         case .timeout(let seconds):
-            return "Script timed out after \(seconds) seconds"
+            return String(localized: "Script timed out after \(seconds) seconds", bundle: fileJobScriptBundle)
         case .nonZeroExit(let code, let stderr):
-            return "Exit code \(code)\(stderr.isEmpty ? "" : ": \(stderr)")"
-        case .emptyOutput:
-            return "Script produced no output"
+            let exit = String(localized: "Exit code \(Int(code))", bundle: fileJobScriptBundle)
+            return stderr.isEmpty ? exit : "\(exit): \(stderr)"
         }
     }
 }
@@ -464,36 +466,43 @@ enum FileJobScriptError: LocalizedError, Equatable {
 private struct FileJobScriptSettingsView: View {
     @ObservedObject var service: FileJobScriptService
 
+    private let bundle = fileJobScriptBundle
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("File Job Script")
+                Text("File Job Script", bundle: bundle)
                     .font(.headline)
                 Spacer()
                 Button {
                     service.addScript(FileJobScriptConfig(
-                        name: "New Script",
-                        command: #"cat > "$TYPEWHISPER_OUTPUT_PATH""#
+                        name: String(localized: "New Script", bundle: bundle),
+                        command: "cat"
                     ))
                 } label: {
-                    Label(String(localized: "Add Script"), systemImage: "plus")
+                    Label(String(localized: "Add Script", bundle: bundle), systemImage: "plus")
                 }
                 .buttonStyle(.bordered)
             }
 
+            Text("Runs for every file from the Watch Folder and, from TypeWhisper 1.9, from File Transcription. A script gets the transcript file's content on stdin. What it prints replaces the saved file; a script that prints nothing leaves it unchanged.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             if service.scripts.isEmpty {
                 ContentUnavailableView(
-                    String(localized: "No Scripts"),
+                    String(localized: "No Scripts", bundle: bundle),
                     systemImage: "terminal",
-                    description: Text(String(localized: "Add a script to customize watch-folder exports."))
+                    description: Text("Add a script to send transcripts elsewhere or to change the saved file.", bundle: bundle)
                 )
             } else {
                 List {
                     ForEach($service.scripts) { $script in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Toggle(String(localized: "Enabled"), isOn: $script.isEnabled)
-                                    .accessibilityLabel(Text("Enable \(script.displayName)"))
+                                Toggle(String(localized: "Enabled", bundle: bundle), isOn: $script.isEnabled)
+                                    .accessibilityLabel(Text("Enable \(script.displayName)", bundle: bundle))
                                 Spacer()
                                 Button(role: .destructive) {
                                     service.removeScript(id: script.id)
@@ -501,15 +510,15 @@ private struct FileJobScriptSettingsView: View {
                                     Image(systemName: "trash")
                                 }
                                 .buttonStyle(.borderless)
-                                .accessibilityLabel(Text("Delete \(script.displayName)"))
+                                .accessibilityLabel(Text("Delete \(script.displayName)", bundle: bundle))
                             }
 
-                            TextField(String(localized: "Name"), text: $script.name)
-                            TextField(String(localized: "Command"), text: $script.command, axis: .vertical)
+                            TextField(String(localized: "Name", bundle: bundle), text: $script.name)
+                            TextField(String(localized: "Command", bundle: bundle), text: $script.command, axis: .vertical)
                                 .font(.system(.body, design: .monospaced))
                                 .lineLimit(3...8)
                             Stepper(
-                                String(localized: "Timeout: \(script.effectiveTimeoutSeconds)s"),
+                                String(localized: "Timeout: \(script.effectiveTimeoutSeconds)s", bundle: bundle),
                                 value: $script.timeoutSeconds,
                                 in: 5...3_600,
                                 step: 5
@@ -524,13 +533,24 @@ private struct FileJobScriptSettingsView: View {
                 .listStyle(.inset)
             }
 
+            DisclosureGroup(String(localized: "Environment variables", bundle: bundle)) {
+                Text(Self.environmentVariables)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.caption)
+
             if !service.executionLog.isEmpty {
                 Divider()
-                Text(String(localized: "Recent Runs"))
+                Text("Recent Runs", bundle: bundle)
                     .font(.subheadline.weight(.semibold))
                 ForEach(service.executionLog.prefix(5)) { entry in
                     Label(
-                        entry.errorMessage ?? "\(entry.scriptName) finished in \(entry.durationMs)ms",
+                        entry.errorMessage ?? String(
+                            localized: "\(entry.scriptName) finished in \(entry.durationMs) ms",
+                            bundle: bundle
+                        ),
                         systemImage: entry.success ? "checkmark.circle" : "xmark.circle"
                     )
                     .foregroundStyle(entry.success ? Color.secondary : Color.red)
@@ -541,4 +561,18 @@ private struct FileJobScriptSettingsView: View {
         .padding()
         .frame(minWidth: 520, minHeight: 360)
     }
+
+    private static let environmentVariables = """
+    TYPEWHISPER_JOB_KIND             watch-folder or file-transcription
+    TYPEWHISPER_SOURCE_FILE_PATH     the transcribed file
+    TYPEWHISPER_SOURCE_FILE_NAME
+    TYPEWHISPER_OUTPUT_PATH          the transcript file (Watch Folder)
+    TYPEWHISPER_OUTPUT_DIR
+    TYPEWHISPER_OUTPUT_FORMAT        md, txt, srt or vtt
+    TYPEWHISPER_TRANSCRIPT_TEXT
+    TYPEWHISPER_TRANSCRIPT_JSON_PATH text, language, engine, segments
+    TYPEWHISPER_SEGMENTS_JSON_PATH
+    TYPEWHISPER_ENGINE_ID, TYPEWHISPER_ENGINE_NAME
+    TYPEWHISPER_MODEL_ID, TYPEWHISPER_LANGUAGE
+    """
 }
