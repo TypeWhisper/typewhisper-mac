@@ -279,6 +279,7 @@ let package = Package(
             path: "Plugins/FileJobScriptPlugin",
             exclude: ["Tests"],
             resources: [
+                .process("Localizable.xcstrings"),
                 .process("manifest.json"),
             ]
         ),

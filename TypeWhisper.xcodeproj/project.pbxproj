@@ -249,6 +249,7 @@
 		F18A00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = F18A00000000000000000037 /* TypeWhisperPluginSDK */; };
 		F48400000000000000000001 /* FileJobScriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48400000000000000000010 /* FileJobScriptPlugin.swift */; };
 		F48400000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = F48400000000000000000011 /* manifest.json */; };
+		F48400000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F48400000000000000000013 /* Localizable.xcstrings */; };
 		F48400000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = F48400000000000000000037 /* TypeWhisperPluginSDK */; };
 		F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
 		AA00000000000000000001 /* TypeWhisperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperApp.swift */; };
@@ -1353,6 +1354,7 @@
 		BB00000000000000000215 /* ScriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		F48400000000000000000010 /* FileJobScriptPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileJobScriptPlugin.swift; sourceTree = "<group>"; };
 		F48400000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		F48400000000000000000013 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		F48400000000000000000012 /* FileJobScriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FileJobScriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000216 /* LiveTranscriptPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000217 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -3027,6 +3029,7 @@
 			children = (
 				F48400000000000000000010 /* FileJobScriptPlugin.swift */,
 				F48400000000000000000011 /* manifest.json */,
+				F48400000000000000000013 /* Localizable.xcstrings */,
 			);
 			name = FileJobScriptPlugin;
 			path = TypeWhisperPluginSDK/Plugins/FileJobScriptPlugin;
@@ -5286,6 +5289,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F48400000000000000000002 /* manifest.json in Resources */,
+				F48400000000000000000004 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
