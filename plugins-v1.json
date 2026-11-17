@@ -4505,6 +4505,31 @@
           "downloadCount": 7
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.file-job-script",
+      "name": "File Job Script",
+      "author": "TypeWhisper",
+      "description": "Run shell scripts for files from the Watch Folder and, from TypeWhisper 1.9, File Transcription. Scripts can send transcripts elsewhere or replace the saved file.",
+      "category": "file-automation",
+      "downloadCount": 0,
+      "descriptions": {
+        "de": "Shell-Skripte f\u00fcr Dateien aus dem \u00fcberwachten Ordner und ab TypeWhisper 1.9 aus der Datei-Transkription ausf\u00fchren. Skripte k\u00f6nnen Transkripte weitergeben oder die gespeicherte Datei ersetzen.",
+        "es": "Ejecuta scripts de shell para los archivos de la carpeta vigilada y, desde TypeWhisper 1.9, de Transcripci\u00f3n de archivos. Los scripts pueden enviar las transcripciones a otro lugar o reemplazar el archivo guardado.",
+        "ja": "\u76e3\u8996\u30d5\u30a9\u30eb\u30c0\u30fc\u306e\u30d5\u30a1\u30a4\u30eb\u3001\u304a\u3088\u3073TypeWhisper 1.9\u4ee5\u964d\u306f\u30d5\u30a1\u30a4\u30eb\u6587\u5b57\u8d77\u3053\u3057\u306e\u30d5\u30a1\u30a4\u30eb\u306b\u5bfe\u3057\u3066\u30b7\u30a7\u30eb\u30b9\u30af\u30ea\u30d7\u30c8\u3092\u5b9f\u884c\u3057\u307e\u3059\u3002\u30b9\u30af\u30ea\u30d7\u30c8\u3067\u6587\u5b57\u8d77\u3053\u3057\u3092\u5225\u306e\u5834\u6240\u3078\u9001\u3063\u305f\u308a\u3001\u4fdd\u5b58\u30d5\u30a1\u30a4\u30eb\u3092\u7f6e\u304d\u63db\u3048\u305f\u308a\u3067\u304d\u307e\u3059\u3002"
+      },
+      "iconSystemName": "folder.badge.gearshape",
+      "locality": "configurable",
+      "releases": [
+        {
+          "version": "1.1.0",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 196361,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-job-script-v1.1.0/FileJobScriptPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     }
   ]
 }
