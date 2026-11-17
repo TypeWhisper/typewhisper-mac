@@ -12,7 +12,7 @@ public struct ModuleKitVersion: Hashable, Comparable, Sendable, CustomStringConv
     }
 
     /// The version this package provides.
-    public static let current = ModuleKitVersion(major: 2, minor: 1)
+    public static let current = ModuleKitVersion(major: 2, minor: 2)
 
     /// Whether a module that requires `required` can run against this version.
     public func supports(_ required: ModuleKitVersion) -> Bool {

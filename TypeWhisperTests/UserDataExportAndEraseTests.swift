@@ -285,6 +285,60 @@ final class UserDataExportAndEraseTests: XCTestCase {
         XCTAssertNil(fixture.userDefaults.persistentDomain(forName: fixture.suiteName)?["selectedLanguage"])
     }
 
+    func testModuleDataFolderIsExportedAndErasedWithApplicationSupport() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let lifecycle = AppModuleUserDataLifecycle { fixture.locations.appSupportDirectory }
+
+        let folder = try lifecycle.dataFolder(forModuleID: "com.example.notes")
+        XCTAssertEqual(
+            folder.standardizedFileURL.path,
+            fixture.locations.appSupportDirectory.appendingPathComponent("Modules/com.example.notes").standardizedFileURL.path
+        )
+        XCTAssertEqual(try lifecycle.dataFolder(forModuleID: "com.example.notes"), folder)
+        try write("{}", to: folder.appendingPathComponent("items/one.json"))
+        XCTAssertThrowsError(try lifecycle.dataFolder(forModuleID: "../outside"))
+        XCTAssertThrowsError(try lifecycle.dataFolder(forModuleID: ""))
+        XCTAssertThrowsError(try lifecycle.dataFolder(forModuleID: String(repeating: "a", count: 129)))
+
+        let destination = fixture.dir.appendingPathComponent("Export.zip")
+        try await UserDataExportService.export(
+            to: destination,
+            settingsBackup: Data("{}".utf8),
+            locations: fixture.locations,
+            userDefaults: fixture.userDefaults
+        )
+        let extracted = fixture.dir.appendingPathComponent("Extracted", isDirectory: true)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-x", "-k", destination.path, extracted.path]
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        let exported = extracted.appendingPathComponent("Export/Application Support/Modules/com.example.notes/items/one.json")
+        XCTAssertEqual(try String(contentsOf: exported, encoding: .utf8), "{}")
+
+        let failures = UserDataEraser.eraseAll(
+            locations: fixture.locations,
+            userDefaults: fixture.userDefaults,
+            deleteKeychainItems: {},
+            resetSystemRegistrations: { [] }
+        )
+        XCTAssertEqual(failures, [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
+    func testModuleDataFolderLivesInTheAppsOwnApplicationSupport() throws {
+        let folder = try AppModuleUserDataLifecycle().dataFolder(forModuleID: "com.example.dataFolderTest")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        XCTAssertEqual(
+            folder.standardizedFileURL.path,
+            AppConstants.appSupportDirectory.appendingPathComponent("Modules/com.example.dataFolderTest").standardizedFileURL.path
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path))
+    }
+
     func testEraseAllContinuesAfterKeychainFailure() throws {
         let fixture = try makeFixture()
         defer { teardown(fixture) }

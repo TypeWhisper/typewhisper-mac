@@ -655,6 +655,7 @@ final class ServiceContainer: ObservableObject {
             ),
             userDataLifecycle: moduleUserData
         ))
+        historyViewModel.setModuleSidebarGroups(moduleRegistry.contributions.historySidebarGroups)
         if !moduleRegistry.contributions.managedPolicyKeys.isEmpty {
             moduleRegistry.registerManagedPolicyKeys()
             managedPolicyService.refresh()

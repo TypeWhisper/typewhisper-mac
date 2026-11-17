@@ -408,9 +408,31 @@ final class AppPremiumAccessReading: PremiumAccessReading {
 final class AppModuleUserDataLifecycle: UserDataLifecycle {
     /// The folder of a data export that holds the modules' files.
     static let exportFolderName = "Modules"
+    /// The folder in Application Support that holds the modules' data folders.
+    /// Erasing all data deletes it and the export copies it, like the rest of
+    /// Application Support.
+    static let dataFolderName = "Modules"
+
+    enum DataFolderError: Error, Equatable {
+        case invalidIdentifier(String)
+    }
 
     private(set) var registrations: [ModuleUserData] = []
+    private let appSupportDirectory: () -> URL
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "Modules")
+
+    init(appSupportDirectory: @escaping () -> URL = { AppConstants.appSupportDirectory }) {
+        self.appSupportDirectory = appSupportDirectory
+    }
+
+    func dataFolder(forModuleID id: String) throws -> URL {
+        guard ModuleIdentifier.isValid(id) else { throw DataFolderError.invalidIdentifier(id) }
+        let folder = appSupportDirectory()
+            .appendingPathComponent(Self.dataFolderName, isDirectory: true)
+            .appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
 
     func register(_ userData: ModuleUserData) {
         guard ModuleIdentifier.isValid(userData.id) else {

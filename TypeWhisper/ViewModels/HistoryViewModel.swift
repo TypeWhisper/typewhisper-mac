@@ -1,6 +1,8 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftUI
+import TypeWhisperModuleKit
 
 enum HistoryDateGroup: Int, CaseIterable, Identifiable {
     case today, yesterday, thisWeek, thisMonth, older
@@ -155,6 +157,22 @@ enum HistoryNavigationSelection: Hashable {
     case smartMailbox(HistoryCollectionScope)
     case device(String)
     case deviceSource(deviceID: String, source: RecordingSource)
+    /// A module's group (`ModuleHistorySidebarGroup.id`).
+    case moduleGroup(String)
+}
+
+/// A module's sidebar group while it is visible, with its entries newest first.
+struct HistoryModuleGroup: Identifiable {
+    let group: ModuleHistorySidebarGroup
+    let entries: [ModuleHistorySidebarEntry]
+
+    var id: String { group.id }
+}
+
+/// The view of the selected entry of a module's group, made once per selection.
+struct HistoryModuleEntryContent: Identifiable {
+    let id: String
+    let view: AnyView
 }
 
 struct HistoryDeviceSourceSection: Identifiable, Hashable {
@@ -221,7 +239,22 @@ final class HistoryViewModel: ObservableObject {
     @Published var correctionSuggestions: [CorrectionSuggestion] = []
     @Published var showCorrectionBanner = false
     @Published var detailViewMode: HistoryDetailViewMode = .final
-    @Published private(set) var navigationSelection: HistoryNavigationSelection = .smartMailbox(.all)
+    @Published private(set) var navigationSelection: HistoryNavigationSelection = .smartMailbox(.all) {
+        didSet {
+            guard navigationSelection != oldValue else { return }
+            selectedModuleEntryID = nil
+            createdModuleEntryID = nil
+        }
+    }
+    /// The modules' visible sidebar groups, in the order of the modules.
+    @Published private(set) var moduleGroups: [HistoryModuleGroup] = []
+    @Published private(set) var selectedModuleEntryID: String? {
+        didSet {
+            guard selectedModuleEntryID != oldValue else { return }
+            updateModuleEntryContent()
+        }
+    }
+    @Published private(set) var moduleEntryContent: HistoryModuleEntryContent?
     @Published var selectedAppFilter: String?
     @Published var selectedTimeRange: HistoryTimeRange = .all
     @Published var selectedSortOrder: HistorySortOrder = .newest
@@ -271,6 +304,11 @@ final class HistoryViewModel: ObservableObject {
     private var pendingWork: [UUID: Task<Void, Never>] = [:]
     private var diffCache: [UUID: CachedDiff] = [:]
     private var diffCacheOrder: [UUID] = []
+    private var moduleSidebarGroups: [ModuleHistorySidebarGroup] = []
+    private var moduleGroupObservations: [AnyCancellable] = []
+    private var isObservingModuleGroups = false
+    /// An entry the user just created, which stays selected until its module lists it.
+    private var createdModuleEntryID: String?
 
     private struct CachedDiff {
         let rawText: String
@@ -356,14 +394,32 @@ final class HistoryViewModel: ObservableObject {
         case .deviceSource(let id, let source):
             deviceSections.first { $0.id == id }?.sources.first { $0.source == source }?.title
                 ?? source.displayName
+        case .moduleGroup(let id): moduleGroups.first { $0.id == id }?.group.title ?? ""
         }
     }
 
     var navigationSummary: String {
         String.localizedStringWithFormat(
             String(localized: "%lld entries"),
-            Int64(totalMatchingRecordCount)
+            Int64(isShowingModuleGroup ? filteredModuleEntries.count : totalMatchingRecordCount)
         )
+    }
+
+    /// Whether a module's group is selected instead of History records.
+    var isShowingModuleGroup: Bool {
+        if case .moduleGroup = navigationSelection { return true }
+        return false
+    }
+
+    var selectedModuleGroup: HistoryModuleGroup? {
+        guard case .moduleGroup(let id) = navigationSelection else { return nil }
+        return moduleGroups.first { $0.id == id }
+    }
+
+    /// The selected group's entries that match the search field, newest first.
+    var filteredModuleEntries: [ModuleHistorySidebarEntry] {
+        guard let group = selectedModuleGroup else { return [] }
+        return Self.moduleEntries(group.entries, matching: searchQuery)
     }
 
     var selectedSmartMailbox: HistoryCollectionScope? {
@@ -389,6 +445,7 @@ final class HistoryViewModel: ObservableObject {
     func activate() {
         guard !isActive else { return }
         isActive = true
+        observeModuleGroupsIfNeeded()
         reloadCurrentQuery(resetListIdentity: false)
         refreshFacets()
     }
@@ -464,6 +521,96 @@ final class HistoryViewModel: ObservableObject {
     func requestNavigationSelection(_ selection: HistoryNavigationSelection) {
         guard selection != navigationSelection else { return }
         prepare(.navigation(selection))
+    }
+
+    // MARK: - Module groups
+
+    /// The modules' sidebar groups. Their entries are read when History first
+    /// opens, so launching the app does not ask the modules for them.
+    func setModuleSidebarGroups(_ groups: [ModuleHistorySidebarGroup]) {
+        moduleSidebarGroups = groups
+        moduleGroupObservations = []
+        isObservingModuleGroups = false
+        if isActive {
+            observeModuleGroupsIfNeeded()
+        }
+    }
+
+    func requestModuleEntrySelection(_ id: String?) {
+        selectedModuleEntryID = id
+    }
+
+    /// Creates an entry in the selected group and selects it.
+    func createModuleEntry() {
+        guard let newEntry = selectedModuleGroup?.group.newEntry,
+              let id = newEntry.perform() else { return }
+        // A search the new entry does not match would hide it in the list.
+        searchQuery = ""
+        createdModuleEntryID = id
+        selectedModuleEntryID = id
+    }
+
+    /// Deletes an entry of the selected group. The view asks for confirmation first.
+    func deleteModuleEntry(withID id: String) {
+        guard let group = selectedModuleGroup?.group, group.canDelete else { return }
+        if selectedModuleEntryID == id {
+            selectedModuleEntryID = nil
+        }
+        if createdModuleEntryID == id {
+            createdModuleEntryID = nil
+        }
+        group.delete(entryID: id)
+    }
+
+    /// Entries whose title or subtitle contains every word of the query,
+    /// ignoring case and diacritics.
+    static func moduleEntries(
+        _ entries: [ModuleHistorySidebarEntry], matching query: String
+    ) -> [ModuleHistorySidebarEntry] {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return entries }
+        return entries.filter { entry in
+            words.allSatisfy { word in
+                entry.title.localizedStandardContains(word)
+                    || entry.subtitle?.localizedStandardContains(word) == true
+            }
+        }
+    }
+
+    private func observeModuleGroupsIfNeeded() {
+        guard !isObservingModuleGroups else { return }
+        isObservingModuleGroups = true
+        moduleGroupObservations = moduleSidebarGroups.map { group in
+            group.observeChanges { [weak self] in self?.refreshModuleGroups() }
+        }
+        refreshModuleGroups()
+    }
+
+    private func refreshModuleGroups() {
+        moduleGroups = moduleSidebarGroups.filter(\.isVisible).map { group in
+            HistoryModuleGroup(group: group, entries: group.entries().sorted { $0.date > $1.date })
+        }
+        guard case .moduleGroup(let id) = navigationSelection else { return }
+        guard let group = moduleGroups.first(where: { $0.id == id }) else {
+            // The group is gone; History shows all records again.
+            execute(.navigation(.smartMailbox(.all)))
+            return
+        }
+        let entryIDs = Set(group.entries.map(\.id))
+        if let created = createdModuleEntryID, entryIDs.contains(created) {
+            createdModuleEntryID = nil
+        }
+        if let selected = selectedModuleEntryID, !entryIDs.contains(selected), selected != createdModuleEntryID {
+            selectedModuleEntryID = nil
+        }
+    }
+
+    private func updateModuleEntryContent() {
+        guard let id = selectedModuleEntryID, let group = selectedModuleGroup?.group else {
+            moduleEntryContent = nil
+            return
+        }
+        moduleEntryContent = HistoryModuleEntryContent(id: id, view: group.makeContent(forEntryID: id))
     }
 
     func requestRecordSelection(_ selection: Set<UUID>) {
@@ -920,6 +1067,9 @@ final class HistoryViewModel: ObservableObject {
             query.originDeviceID = deviceID
             query.includeLegacyCurrentMacRecords = deviceID == currentDeviceID
             query.source = source
+        case .moduleGroup:
+            // The list shows the group's entries; records load for all of History.
+            break
         }
         return query
     }
@@ -1044,7 +1194,8 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private func matchesCurrentNavigation(_ record: TranscriptionRecord) -> Bool {
-        !Self.applyCollectionScope(selectedSmartMailbox ?? .all, to: [record]).isEmpty
+        guard !isShowingModuleGroup else { return false }
+        return !Self.applyCollectionScope(selectedSmartMailbox ?? .all, to: [record]).isEmpty
             && HistoryPostFilter(query: navigationQuery).matches(record)
     }
 
@@ -1120,7 +1271,8 @@ final class HistoryViewModel: ObservableObject {
             .dropFirst()
             .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
             .sink { [weak self] query in
-                guard let self, query != self.lastRequestedSearchQuery else { return }
+                // A module's group filters its entries itself; records load on leaving it.
+                guard let self, !self.isShowingModuleGroup, query != self.lastRequestedSearchQuery else { return }
                 self.pendingRecordToRevealID = nil
                 self.recordScrollRequest = nil
                 self.reloadCurrentQuery()
@@ -1291,7 +1443,12 @@ final class HistoryViewModel: ObservableObject {
             openRecord(withID: id)
         case .navigation(let selection):
             navigationSelection = selection
-            reloadCurrentQuery()
+            if case .moduleGroup = selection {
+                // Record actions in the toolbar act on the selection.
+                selectedRecordIDs = []
+            } else {
+                reloadCurrentQuery()
+            }
         case .appFilter(let bundleID):
             selectedAppFilter = bundleID
             reloadCurrentQuery()

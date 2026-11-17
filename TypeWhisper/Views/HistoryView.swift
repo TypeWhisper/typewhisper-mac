@@ -8,13 +8,14 @@ struct HistoryView: View {
     @State private var deleteCandidateIDs: Set<UUID> = []
     @State private var showingDeleteConfirmation = false
     @State private var comparisonRecord: TranscriptionRecord?
+    @State private var moduleEntryDeletionCandidate: ModuleHistorySidebarEntry?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
         } content: {
-            recordList
+            listColumn
                 .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
         } detail: {
             detail
@@ -58,6 +59,22 @@ struct HistoryView: View {
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
             Text(deleteConfirmationMessage)
+        }
+        .confirmationDialog(
+            String(localized: "Delete Entry?"),
+            isPresented: Binding(
+                get: { moduleEntryDeletionCandidate != nil },
+                set: { if !$0 { moduleEntryDeletionCandidate = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: moduleEntryDeletionCandidate
+        ) { entry in
+            Button(String(localized: "Delete"), role: .destructive) {
+                viewModel.deleteModuleEntry(withID: entry.id)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { entry in
+            Text(entry.title + "\n\n" + String(localized: "This cannot be undone."))
         }
         .onChange(of: viewModel.pendingDeletionIDs) { _, ids in
             guard !ids.isEmpty else { return }
@@ -107,6 +124,17 @@ struct HistoryView: View {
             Section(String(localized: "Devices")) {
                 ForEach(viewModel.deviceSections) { device in
                     deviceGroup(device)
+                }
+            }
+
+            ForEach(viewModel.moduleGroups) { moduleGroup in
+                Section(moduleGroup.group.title) {
+                    sidebarButton(
+                        title: moduleGroup.group.title,
+                        systemImage: moduleGroup.group.systemImage,
+                        count: moduleGroup.entries.count,
+                        selection: .moduleGroup(moduleGroup.id)
+                    )
                 }
             }
         }
@@ -208,6 +236,65 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
+    private var listColumn: some View {
+        if let moduleGroup = viewModel.selectedModuleGroup {
+            moduleEntryList(moduleGroup)
+                .navigationTitle(viewModel.navigationTitle)
+                .navigationSubtitle(viewModel.navigationSummary)
+        } else {
+            recordList
+        }
+    }
+
+    private var moduleEntrySelection: Binding<String?> {
+        Binding {
+            viewModel.selectedModuleEntryID
+        } set: { id in
+            viewModel.requestModuleEntrySelection(id)
+        }
+    }
+
+    @ViewBuilder
+    private func moduleEntryList(_ moduleGroup: HistoryModuleGroup) -> some View {
+        let entries = viewModel.filteredModuleEntries
+        if entries.isEmpty {
+            if viewModel.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                ContentUnavailableView {
+                    Label(String(localized: "No Entries"), systemImage: moduleGroup.group.systemImage)
+                } actions: {
+                    if let newEntry = moduleGroup.group.newEntry {
+                        Button(newEntry.title) { viewModel.createModuleEntry() }
+                    }
+                }
+            } else {
+                ContentUnavailableView(String(localized: "No Results"), systemImage: "magnifyingglass")
+            }
+        } else {
+            List(selection: moduleEntrySelection) {
+                ForEach(entries) { entry in
+                    HistoryModuleEntryRow(entry: entry)
+                        .tag(entry.id)
+                        .contextMenu {
+                            if moduleGroup.group.canDelete {
+                                Button(String(localized: "Delete"), role: .destructive) {
+                                    moduleEntryDeletionCandidate = entry
+                                }
+                            }
+                        }
+                }
+            }
+            .listStyle(.inset)
+            .onDeleteCommand {
+                guard moduleGroup.group.canDelete,
+                      let id = viewModel.selectedModuleEntryID,
+                      let entry = entries.first(where: { $0.id == id }) else { return }
+                moduleEntryDeletionCandidate = entry
+            }
+            .id(moduleGroup.id)
+        }
+    }
+
+    @ViewBuilder
     private var recordList: some View {
         Group {
             if viewModel.filteredRecords.isEmpty {
@@ -301,7 +388,14 @@ struct HistoryView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if viewModel.selectedRecordIDs.count > 1 {
+        if let moduleGroup = viewModel.selectedModuleGroup {
+            if let content = viewModel.moduleEntryContent {
+                content.view
+                    .id("\(moduleGroup.id)/\(content.id)")
+            } else {
+                ContentUnavailableView(String(localized: "Select an Entry"), systemImage: moduleGroup.group.systemImage)
+            }
+        } else if viewModel.selectedRecordIDs.count > 1 {
             ContentUnavailableView {
                 Label(
                     String.localizedStringWithFormat(
@@ -341,6 +435,25 @@ struct HistoryView: View {
 
     @ToolbarContentBuilder
     private var workspaceToolbar: some ToolbarContent {
+        if let moduleGroup = viewModel.selectedModuleGroup {
+            // Filters, sorting and record actions apply to History records only.
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let newEntry = moduleGroup.group.newEntry {
+                    Button {
+                        viewModel.createModuleEntry()
+                    } label: {
+                        Label(newEntry.title, systemImage: "square.and.pencil")
+                    }
+                    .help(newEntry.title)
+                }
+            }
+        } else {
+            recordToolbar
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var recordToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             if let record = viewModel.selectedRecord {
                 Button {
@@ -565,6 +678,30 @@ struct HistoryView: View {
 
     private func export(_ records: [TranscriptionRecord], as format: HistoryExportFormat) {
         viewModel.exportRecords(records, format: format)
+    }
+}
+
+/// An entry of a module's sidebar group: title, subtitle and date.
+private struct HistoryModuleEntryRow: View {
+    let entry: ModuleHistorySidebarEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(entry.title)
+                .lineLimit(1)
+                .font(.body.weight(.semibold))
+            if let subtitle = entry.subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .lineLimit(2)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(entry.date, format: .dateTime.day().month(.abbreviated).year().hour().minute())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
     }
 }
 
