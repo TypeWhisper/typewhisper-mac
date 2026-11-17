@@ -2646,7 +2646,7 @@ private final class RecordingFileJobAutomation: NSObject, FileJobAutomationPlugi
     func process(artifact: FileJobArtifact, context: FileJobContext) async throws -> FileJobAutomationResult {
         receivedArtifact = artifact
         receivedContext = context
-        await onProcess?()
+        onProcess?()
         return FileJobAutomationResult(artifact: FileJobArtifact(fileExtension: artifact.fileExtension, content: replacement))
     }
 }
