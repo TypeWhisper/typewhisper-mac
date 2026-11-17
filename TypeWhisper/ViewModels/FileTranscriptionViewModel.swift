@@ -478,6 +478,8 @@ final class FileTranscriptionViewModel: ObservableObject {
                 }
             }
 
+            // After a reset, a newer batch may own the state; this task must not end it.
+            guard activeCancellationFlag === cancellationFlag else { return }
             if cancellationFlag.isCancelled {
                 batchState = .cancelled
                 accessibilityAnnouncementService?.announce(String(localized: "Cancelled"))

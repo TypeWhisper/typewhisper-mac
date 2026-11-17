@@ -934,6 +934,36 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: savedURL, encoding: .utf8), "# Processed\n")
     }
 
+    func testABatchStartedAfterAResetIsNotEndedByTheOldOne() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let automation = RecordingFileJobAutomation(replacement: "")
+        let viewModel = makeAutoSaveViewModel(
+            defaults: defaults,
+            text: "Transcript",
+            fileJobAutomationPipeline: FileJobAutomationPipeline(automationsProvider: { [automation] })
+        )
+        let secondFile = makeTemporaryFile(named: "second.wav")
+        var didRestart = false
+        // While the first batch waits for a plugin, the page is reset and a new batch starts.
+        automation.onProcess = {
+            guard !didRestart else { return }
+            didRestart = true
+            viewModel.reset()
+            viewModel.addFiles([secondFile])
+            viewModel.transcribeAll()
+        }
+
+        viewModel.addFiles([makeTemporaryFile(named: "first.wav")])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertTrue(didRestart)
+        XCTAssertEqual(viewModel.files.map(\.fileName), ["second.wav"])
+        XCTAssertEqual(viewModel.files.first?.state, .done)
+    }
+
     func testAutoSaveIsOffByDefault() async throws {
         try registerEngines(["whisper"])
         let defaults = try makeDefaults()
