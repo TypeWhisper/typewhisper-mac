@@ -176,6 +176,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     private let transcriptFileSaver: TranscriptFileSaver
     private let transcriptFolderPicker: TranscriptFolderPicker
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService?
+    private let fileJobAutomationPipeline: FileJobAutomationPipeline
     private var cancellables = Set<AnyCancellable>()
     private var isInitialized = false
     private var activeBatchTask: Task<Void, Never>?
@@ -198,9 +199,13 @@ final class FileTranscriptionViewModel: ObservableObject {
         engineReadinessChecker: EngineReadinessChecker? = nil,
         transcriptFileSaver: TranscriptFileSaver? = nil,
         transcriptFolderPicker: TranscriptFolderPicker? = nil,
-        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil,
+        fileJobAutomationPipeline: FileJobAutomationPipeline? = nil
     ) {
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
+        self.fileJobAutomationPipeline = fileJobAutomationPipeline ?? FileJobAutomationPipeline(
+            automationsProvider: { PluginManager.shared?.fileJobAutomations ?? [] }
+        )
         self.modelManager = modelManager
         self.audioFileService = audioFileService
         self.dictionaryService = dictionaryService
@@ -473,6 +478,8 @@ final class FileTranscriptionViewModel: ObservableObject {
                 }
             }
 
+            // After a reset, a newer batch may own the state; this task must not end it.
+            guard activeCancellationFlag === cancellationFlag else { return }
             if cancellationFlag.isCancelled {
                 batchState = .cancelled
                 accessibilityAnnouncementService?.announce(String(localized: "Cancelled"))
@@ -565,6 +572,16 @@ final class FileTranscriptionViewModel: ObservableObject {
 
             // The chosen engine can come back while this file runs on the default.
             let modelOverride = availableSelectedModel
+            // File plugins learn the model that produced the transcript, even if the
+            // default model changes or a plugin is turned on while the file runs.
+            // Without a plugin manager (some tests) there are no plugins to tell.
+            let modelAtStart: FileJobModel? = PluginManager.shared == nil ? nil : FileJobModel(
+                engineId: modelManager.effectiveEngineId(availableSelectedEngine),
+                modelId: modelManager.resolvedModelId(
+                    engineOverrideId: availableSelectedEngine,
+                    cloudModelOverride: modelOverride
+                )
+            )
             // The task picker hides Translate for a model that cannot translate; a choice
             // made for an earlier model must not make every file fail.
             let result = try await transcriptionRunner(
@@ -647,7 +664,19 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].progressFraction = 1.0
             files[index].sourceProgress = nil
             files[index].finishedAt = Date()
-            autoSaveTranscriptIfEnabled(at: index)
+            guard !detectsSpeakers else { return }
+            let itemID = files[index].id
+            // Plugins see and return content in this format, even if the picker changes meanwhile.
+            let format = autoSaveFormat
+            let automatedContent = await runFileJobAutomations(
+                at: index,
+                format: format,
+                modelAtStart: modelAtStart,
+                modelOverride: modelOverride
+            )
+            // The list can change while automations run.
+            guard let doneIndex = files.firstIndex(where: { $0.id == itemID }) else { return }
+            autoSaveTranscriptIfEnabled(at: doneIndex, format: format, content: automatedContent)
         } catch is CancellationError {
             guard files.indices.contains(index) else { return }
             files[index].state = .cancelled
@@ -804,11 +833,16 @@ final class FileTranscriptionViewModel: ObservableObject {
     /// it is saved only to a chosen folder, as is everything in the App Store
     /// edition. A chosen folder that can no longer be found is reported, not
     /// replaced by the original file's folder. An empty transcript is not saved.
-    private func autoSaveTranscriptIfEnabled(at index: Int) {
+    private func autoSaveTranscriptIfEnabled(
+        at index: Int,
+        format requestedFormat: TranscriptExportFormat? = nil,
+        content automatedContent: String? = nil
+    ) {
         // The Speakers page shares these settings but shows neither result.
         guard autoSaveTranscripts, !detectsSpeakers, files.indices.contains(index) else { return }
         let item = files[index]
-        guard let content = exportContent(for: item, format: autoSaveFormat) else { return }
+        let format = requestedFormat ?? autoSaveFormat
+        guard let content = automatedContent ?? exportContent(for: item, format: format) else { return }
 
         let hasChosenFolder = defaults.data(forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark) != nil
         let customFolder = hasChosenFolder ? resolvedAutoSaveFolder() : nil
@@ -829,13 +863,64 @@ final class FileTranscriptionViewModel: ObservableObject {
             content,
             in: folder,
             baseName: item.url.deletingPathExtension().lastPathComponent,
-            fileExtension: autoSaveFormat.fileExtension
+            fileExtension: format.fileExtension
         ) {
             files[index].autoSavedURL = url
             files[index].autoSaveErrorMessage = nil
         } else {
             reportAutoSaveFailure(at: index)
         }
+    }
+
+    /// Hands a finished transcript to file job plugins, as the Watch Folder does, and
+    /// returns the content they leave for the automatic save. Without plugins, or for
+    /// an empty transcript, the content stays unchanged.
+    private func runFileJobAutomations(
+        at index: Int,
+        format: TranscriptExportFormat,
+        modelAtStart: FileJobModel?,
+        modelOverride: String?
+    ) async -> String? {
+        guard !fileJobAutomationPipeline.hasNoAutomations else { return nil }
+        let item = files[index]
+        guard let result = item.result, !item.hasEmptyTranscript,
+              let content = exportContent(for: item, format: format) else { return nil }
+
+        let engineId = result.engineUsed
+        let context = FileJobContext(
+            jobKind: .fileTranscription,
+            sourceFilePath: item.importedMedia == nil ? item.url.path : nil,
+            sourceFileName: item.fileName,
+            outputFormat: format.fileExtension,
+            engineId: engineId,
+            engineName: PluginManager.shared?.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId,
+            // A fallback engine did not use the model chosen at the start.
+            modelId: modelAtStart?.engineId == engineId
+                ? modelAtStart?.modelId
+                : modelManager.resolvedModelId(engineOverrideId: engineId, cloudModelOverride: modelOverride),
+            transcriptText: result.text,
+            detectedLanguage: result.detectedLanguage,
+            segments: result.segments.map {
+                FileJobTranscriptSegment(
+                    text: $0.text,
+                    start: $0.start,
+                    end: $0.end,
+                    speakerLabel: $0.speakerLabel,
+                    speakerConfidence: $0.speakerConfidence
+                )
+            }
+        )
+        let automationResult = await fileJobAutomationPipeline.process(
+            artifact: FileJobArtifact(fileExtension: format.fileExtension, content: content),
+            context: context
+        )
+        return automationResult.artifact.content
+    }
+
+    /// The engine and model a file starts with.
+    struct FileJobModel {
+        let engineId: String?
+        let modelId: String?
     }
 
     private func reportAutoSaveFailure(at index: Int) {

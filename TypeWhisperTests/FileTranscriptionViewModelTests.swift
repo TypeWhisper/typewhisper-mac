@@ -879,6 +879,91 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(folderContents, ["interview.wav"])
     }
 
+    func testFileJobAutomationsReceiveTheTranscriptAndShapeTheAutoSavedFile() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "dipper-call.m4a")
+        let automation = RecordingFileJobAutomation(replacement: "Processed by a plugin\n")
+        let viewModel = makeAutoSaveViewModel(
+            defaults: defaults,
+            text: "Call transcript",
+            fileJobAutomationPipeline: FileJobAutomationPipeline(automationsProvider: { [automation] })
+        )
+        viewModel.autoSaveTranscripts = true
+        viewModel.autoSaveFormat = .plainText
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        let context = try XCTUnwrap(automation.receivedContext)
+        XCTAssertEqual(context.jobKind, .fileTranscription)
+        XCTAssertEqual(context.sourceFilePath, fileURL.path)
+        XCTAssertEqual(context.sourceFileName, "dipper-call.m4a")
+        XCTAssertEqual(context.transcriptText, "Call transcript")
+        XCTAssertEqual(context.engineId, "whisper")
+        XCTAssertEqual(context.outputFormat, "txt")
+        XCTAssertEqual(automation.receivedArtifact?.content, "Call transcript\n")
+        let savedURL = try XCTUnwrap(viewModel.files.first?.autoSavedURL)
+        XCTAssertEqual(try String(contentsOf: savedURL, encoding: .utf8), "Processed by a plugin\n")
+    }
+
+    func testAutoSaveKeepsTheFormatThePluginsReceivedWhenThePickerChanges() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "standup.wav")
+        let automation = RecordingFileJobAutomation(replacement: "# Processed\n")
+        let viewModel = makeAutoSaveViewModel(
+            defaults: defaults,
+            text: "Standup transcript",
+            fileJobAutomationPipeline: FileJobAutomationPipeline(automationsProvider: { [automation] })
+        )
+        automation.onProcess = { viewModel.autoSaveFormat = .srt }
+        viewModel.autoSaveTranscripts = true
+        viewModel.autoSaveFormat = .markdown
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertEqual(viewModel.autoSaveFormat, .srt)
+        let savedURL = try XCTUnwrap(viewModel.files.first?.autoSavedURL)
+        XCTAssertEqual(savedURL.pathExtension, "md")
+        XCTAssertEqual(try String(contentsOf: savedURL, encoding: .utf8), "# Processed\n")
+    }
+
+    func testABatchStartedAfterAResetIsNotEndedByTheOldOne() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let automation = RecordingFileJobAutomation(replacement: "")
+        let viewModel = makeAutoSaveViewModel(
+            defaults: defaults,
+            text: "Transcript",
+            fileJobAutomationPipeline: FileJobAutomationPipeline(automationsProvider: { [automation] })
+        )
+        let secondFile = makeTemporaryFile(named: "second.wav")
+        var didRestart = false
+        // While the first batch waits for a plugin, the page is reset and a new batch starts.
+        automation.onProcess = {
+            guard !didRestart else { return }
+            didRestart = true
+            viewModel.reset()
+            viewModel.addFiles([secondFile])
+            viewModel.transcribeAll()
+        }
+
+        viewModel.addFiles([makeTemporaryFile(named: "first.wav")])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertTrue(didRestart)
+        XCTAssertEqual(viewModel.files.map(\.fileName), ["second.wav"])
+        XCTAssertEqual(viewModel.files.first?.state, .done)
+    }
+
     func testAutoSaveIsOffByDefault() async throws {
         try registerEngines(["whisper"])
         let defaults = try makeDefaults()
@@ -2135,7 +2220,8 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         text: String,
         detectsSpeakers: Bool = false,
         transcriptFolderPicker: FileTranscriptionViewModel.TranscriptFolderPicker? = nil,
-        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil,
+        fileJobAutomationPipeline: FileJobAutomationPipeline? = nil
     ) -> FileTranscriptionViewModel {
         FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
@@ -2156,7 +2242,8 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             },
             engineReadinessChecker: { _ in true },
             transcriptFolderPicker: transcriptFolderPicker,
-            accessibilityAnnouncementService: accessibilityAnnouncementService
+            accessibilityAnnouncementService: accessibilityAnnouncementService,
+            fileJobAutomationPipeline: fileJobAutomationPipeline
         )
     }
 
@@ -2528,5 +2615,38 @@ private final class FileTranscriptionModelListPlugin: NSObject, TranscriptionEng
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+    }
+}
+
+private final class RecordingFileJobAutomation: NSObject, FileJobAutomationPlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.test.file-transcription-job"
+    static let pluginName = "Recording File Job"
+
+    let automationName = "Recording File Job"
+    private let replacement: String
+    private(set) var receivedArtifact: FileJobArtifact?
+    private(set) var receivedContext: FileJobContext?
+
+    required override init() {
+        replacement = ""
+        super.init()
+    }
+
+    /// Runs while the plugin works, for example to change a setting meanwhile.
+    var onProcess: (@MainActor () -> Void)?
+
+    init(replacement: String) {
+        self.replacement = replacement
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func process(artifact: FileJobArtifact, context: FileJobContext) async throws -> FileJobAutomationResult {
+        receivedArtifact = artifact
+        receivedContext = context
+        onProcess?()
+        return FileJobAutomationResult(artifact: FileJobArtifact(fileExtension: artifact.fileExtension, content: replacement))
     }
 }
