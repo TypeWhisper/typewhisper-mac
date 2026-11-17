@@ -897,7 +897,7 @@ Files from the Watch Folder reach webhooks too. In **Webhook Notifications**, en
 | `source` | `watch-folder` or `file-transcription` |
 | `completion_id` | UUID for this delivery; retries keep it |
 | `completed_at` | Completion time in Unix seconds |
-| `text` | Transcript text |
+| `text` | Transcript text from the engine; plugins that change the saved file do not change it |
 | `source_file`, `source_file_name` | Path and name of the transcribed file, when known |
 | `output_file`, `output_format` | Where the transcript is saved and its format, when it is saved |
 | `engine`, `model`, `language` | Engine, model and detected language, when known |
