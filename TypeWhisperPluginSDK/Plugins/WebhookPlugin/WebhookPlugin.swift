@@ -18,7 +18,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WebhookPlugin)
-final class WebhookPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
+final class WebhookPlugin: NSObject, FileJobAutomationPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.webhook"
     static let pluginName = "Webhook Notifications"
 
@@ -60,6 +60,22 @@ final class WebhookPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
         service = nil
     }
 
+    // MARK: - File Jobs
+
+    var automationName: String { Self.pluginName }
+    // Runs after automations that may still change the transcript.
+    var priority: Int { 900 }
+
+    @MainActor
+    func process(artifact: FileJobArtifact, context: FileJobContext) async throws -> FileJobAutomationResult {
+        // Delivery runs on its own so a slow endpoint does not hold up the file.
+        if let service {
+            let payload = FileTranscriptWebhookPayload(context: context)
+            Task { await service.sendWebhooks(for: payload) }
+        }
+        return FileJobAutomationResult(artifact: artifact)
+    }
+
     // Provide a settings view for the Plugin Settings UI
     var settingsView: AnyView? {
         guard let service else { return nil }
@@ -81,13 +97,14 @@ struct ExampleWebhookConfig: Codable, Identifiable {
     var isEnabled: Bool
     var workflowFilter: [String]  // Empty = all transcriptions
     var includesRecordings: Bool
-    var includesDictations: Bool  // False = Recorder transcripts only
+    var includesDictations: Bool  // False = no dictations
+    var includesFileJobs: Bool
 
     init(name: String = "", url: String = "", httpMethod: String = "POST",
          headers: [String: String] = ["Content-Type": "application/json"],
          secretHeaderNames: [String] = [],
          isEnabled: Bool = true, workflowFilter: [String] = [], includesRecordings: Bool = false,
-         includesDictations: Bool = true) {
+         includesDictations: Bool = true, includesFileJobs: Bool = false) {
         self.id = UUID()
         self.name = name
         self.url = url
@@ -98,6 +115,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         self.workflowFilter = workflowFilter
         self.includesRecordings = includesRecordings
         self.includesDictations = includesDictations
+        self.includesFileJobs = includesFileJobs
     }
 
     var isUnmodifiedDefaultDraft: Bool {
@@ -110,6 +128,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
             && workflowFilter.isEmpty
             && !includesRecordings
             && includesDictations
+            && !includesFileJobs
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -123,6 +142,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         case workflowFilter = "profileFilter"
         case includesRecordings
         case includesDictations
+        case includesFileJobs
     }
 
     init(from decoder: Decoder) throws {
@@ -137,6 +157,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         workflowFilter = try container.decode([String].self, forKey: .workflowFilter)
         includesRecordings = try container.decodeIfPresent(Bool.self, forKey: .includesRecordings) ?? false
         includesDictations = try container.decodeIfPresent(Bool.self, forKey: .includesDictations) ?? true
+        includesFileJobs = try container.decodeIfPresent(Bool.self, forKey: .includesFileJobs) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -151,6 +172,77 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         try container.encode(workflowFilter, forKey: .workflowFilter)
         try container.encode(includesRecordings, forKey: .includesRecordings)
         try container.encode(includesDictations, forKey: .includesDictations)
+        try container.encode(includesFileJobs, forKey: .includesFileJobs)
+    }
+}
+
+// MARK: - Payloads
+
+/// A dictation payload with its source, so one endpoint can tell the events apart.
+struct DictationWebhookPayload: Encodable, Sendable {
+    let payload: TranscriptionCompletedPayload
+
+    private enum CodingKeys: String, CodingKey { case source }
+
+    func encode(to encoder: Encoder) throws {
+        try payload.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode("dictation", forKey: .source)
+    }
+}
+
+/// A finished watch-folder or File Transcription file.
+struct FileTranscriptWebhookPayload: Encodable, Sendable, Equatable {
+    let completionID: UUID
+    let completedAt: Date
+    let source: String
+    let text: String
+    let sourceFilePath: String?
+    let sourceFileName: String?
+    let outputFilePath: String?
+    let outputFormat: String?
+    let engine: String?
+    let model: String?
+    let language: String?
+    let segments: [FileJobTranscriptSegment]
+
+    init(context: FileJobContext, completionID: UUID = UUID(), completedAt: Date = Date()) {
+        self.completionID = completionID
+        self.completedAt = completedAt
+        source = context.jobKind.rawValue
+        text = context.transcriptText
+        sourceFilePath = context.sourceFilePath
+        sourceFileName = context.sourceFileName
+        outputFilePath = context.outputFilePath
+        outputFormat = context.outputFormat
+        engine = context.engineName ?? context.engineId
+        model = context.modelId
+        language = context.detectedLanguage
+        segments = context.segments
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case completionID = "completion_id", completedAt = "completed_at", source, text
+        case sourceFilePath = "source_file", sourceFileName = "source_file_name"
+        case outputFilePath = "output_file", outputFormat = "output_format"
+        case engine, model, language, segments
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(completionID, forKey: .completionID)
+        // Unix seconds, like Recorder payloads, independently of the encoder's date strategy.
+        try values.encode(completedAt.timeIntervalSince1970, forKey: .completedAt)
+        try values.encode(source, forKey: .source)
+        try values.encode(text, forKey: .text)
+        try values.encodeIfPresent(sourceFilePath, forKey: .sourceFilePath)
+        try values.encodeIfPresent(sourceFileName, forKey: .sourceFileName)
+        try values.encodeIfPresent(outputFilePath, forKey: .outputFilePath)
+        try values.encodeIfPresent(outputFormat, forKey: .outputFormat)
+        try values.encodeIfPresent(engine, forKey: .engine)
+        try values.encodeIfPresent(model, forKey: .model)
+        try values.encodeIfPresent(language, forKey: .language)
+        try values.encode(segments, forKey: .segments)
     }
 }
 
@@ -391,6 +483,14 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
                     continue
                 }
             }
+            await sendSingle(webhook, payload: DictationWebhookPayload(payload: payload))
+        }
+    }
+
+    @MainActor
+    func sendWebhooks(for payload: FileTranscriptWebhookPayload) async {
+        // File opt-in is independent of dictation workflow filters, like Recorder transcripts.
+        for webhook in webhooks where webhook.isEnabled && webhook.includesFileJobs {
             await sendSingle(webhook, payload: payload)
         }
     }
@@ -479,7 +579,7 @@ struct ExampleWebhookEditorPresentation {
 enum ExampleWebhookWorkflowScope: String, CaseIterable, Equatable {
     case allTranscriptions
     case selectedWorkflows
-    case recorderOnly
+    case noDictations
 }
 
 struct ExampleWebhookEditorState {
@@ -489,7 +589,7 @@ struct ExampleWebhookEditorState {
     init(webhook: ExampleWebhookConfig) {
         self.webhook = webhook
         if !webhook.includesDictations {
-            self.workflowScope = .recorderOnly
+            self.workflowScope = .noDictations
         } else {
             self.workflowScope = webhook.workflowFilter.isEmpty ? .allTranscriptions : .selectedWorkflows
         }
@@ -500,7 +600,7 @@ struct ExampleWebhookEditorState {
         switch workflowScope {
         case .allTranscriptions: return true
         case .selectedWorkflows: return !webhook.workflowFilter.isEmpty
-        case .recorderOnly: return webhook.includesRecordings
+        case .noDictations: return webhook.includesRecordings || webhook.includesFileJobs
         }
     }
 
@@ -520,7 +620,7 @@ struct ExampleWebhookEditorState {
 
     var webhookForSaving: ExampleWebhookConfig {
         var updated = webhook
-        updated.includesDictations = workflowScope != .recorderOnly
+        updated.includesDictations = workflowScope != .noDictations
         if workflowScope != .selectedWorkflows {
             updated.workflowFilter = []
         }
@@ -684,7 +784,7 @@ private struct WebhookRow: View {
 
     private var workflowScopeDescription: String {
         guard webhook.includesDictations else {
-            return String(localized: "Recorder transcripts only", bundle: bundle)
+            return String(localized: "No dictations", bundle: bundle)
         }
         guard !webhook.workflowFilter.isEmpty else {
             return String(localized: "All transcriptions", bundle: bundle)
@@ -797,6 +897,15 @@ private struct ExampleWebhookEditView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    Section(String(localized: "Files", bundle: bundle)) {
+                        Toggle(isOn: $editorState.webhook.includesFileJobs) {
+                            Text("Also send file transcripts", bundle: bundle)
+                        }
+                        Text("Sends transcripts of files from the Watch Folder and, from TypeWhisper 1.9, from File Transcription. Independent of workflow filters.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Section(String(localized: "Workflows", bundle: bundle)) {
                         Picker(
                             String(localized: "Send webhook for", bundle: bundle),
@@ -806,8 +915,8 @@ private struct ExampleWebhookEditView: View {
                                 .tag(ExampleWebhookWorkflowScope.allTranscriptions)
                             Text("Selected workflows", bundle: bundle)
                                 .tag(ExampleWebhookWorkflowScope.selectedWorkflows)
-                            Text("Recorder transcripts only", bundle: bundle)
-                                .tag(ExampleWebhookWorkflowScope.recorderOnly)
+                            Text("No dictations", bundle: bundle)
+                                .tag(ExampleWebhookWorkflowScope.noDictations)
                         }
                         .pickerStyle(.radioGroup)
 
@@ -877,10 +986,10 @@ private struct ExampleWebhookEditView: View {
             return String(localized: "Select at least one workflow.", bundle: bundle)
         case .selectedWorkflows:
             return String(localized: "The webhook is sent only for the selected workflows.", bundle: bundle)
-        case .recorderOnly where !editorState.webhook.includesRecordings:
-            return String(localized: "Turn on Recorder transcripts above, otherwise this webhook never sends.", bundle: bundle)
-        case .recorderOnly:
-            return String(localized: "Dictations never trigger this webhook. Only completed Recorder transcripts are sent.", bundle: bundle)
+        case .noDictations where !editorState.webhook.includesRecordings && !editorState.webhook.includesFileJobs:
+            return String(localized: "Turn on Recorder or file transcripts above, otherwise this webhook never sends.", bundle: bundle)
+        case .noDictations:
+            return String(localized: "Dictations never trigger this webhook. Only the Recorder and file transcripts turned on above are sent.", bundle: bundle)
         }
     }
 

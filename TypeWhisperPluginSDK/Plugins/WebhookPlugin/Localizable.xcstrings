@@ -872,86 +872,170 @@
         }
       }
     },
-    "Recorder transcripts only": {
+    "No dictations": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nur Recorder-Transkripte"
+            "value": "Keine Diktate"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Solo transcripciones de la grabadora"
+            "value": "Sin dictados"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "レコーダーの文字起こしのみ"
+            "value": "音声入力を除く"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仅录音器转录"
+            "value": "不含听写"
           }
         }
       }
     },
-    "Turn on Recorder transcripts above, otherwise this webhook never sends.": {
+    "Files": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Schalte oben die Recorder-Transkripte ein, sonst sendet dieser Webhook nie."
+            "value": "Dateien"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activa arriba las transcripciones de la grabadora. Si no, este webhook nunca se enviará."
+            "value": "Archivos"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "上でレコーダーの文字起こしをオンにしてください。オフのままでは、このWebhookは送信されません。"
+            "value": "ファイル"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请在上方开启录音器转录，否则此 Webhook 永远不会发送。"
+            "value": "文件"
           }
         }
       }
     },
-    "Dictations never trigger this webhook. Only completed Recorder transcripts are sent.": {
+    "Also send file transcripts": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Diktate lösen diesen Webhook nie aus. Gesendet werden nur fertige Recorder-Transkripte."
+            "value": "Auch Datei-Transkripte senden"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Los dictados nunca activan este webhook. Solo se envían las transcripciones completadas de la grabadora."
+            "value": "Enviar también las transcripciones de archivos"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "音声入力ではこのWebhookは送信されません。完了したレコーダーの文字起こしのみ送信されます。"
+            "value": "ファイルの文字起こしも送信"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "听写永远不会触发此 Webhook。只发送已完成的录音器转录。"
+            "value": "同时发送文件转录结果"
+          }
+        }
+      }
+    },
+    "Turn on Recorder or file transcripts above, otherwise this webhook never sends.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte oben Recorder- oder Datei-Transkripte ein, sonst sendet dieser Webhook nie."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activa arriba las transcripciones de la grabadora o de archivos. Si no, este webhook nunca se enviará."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上でレコーダーまたはファイルの文字起こしをオンにしてください。オフのままでは、このWebhookは送信されません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在上方开启录音器转录或文件转录，否则此 Webhook 永远不会发送。"
+          }
+        }
+      }
+    },
+    "Dictations never trigger this webhook. Only the Recorder and file transcripts turned on above are sent.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktate lösen diesen Webhook nie aus. Gesendet werden nur die oben eingeschalteten Recorder- und Datei-Transkripte."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los dictados nunca activan este webhook. Solo se envían las transcripciones de la grabadora y de archivos activadas arriba."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声入力ではこのWebhookは送信されません。上でオンにしたレコーダーとファイルの文字起こしのみ送信されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "听写永远不会触发此 Webhook。只发送上方已开启的录音器转录和文件转录。"
+          }
+        }
+      }
+    },
+    "Sends transcripts of files from the Watch Folder and, from TypeWhisper 1.9, from File Transcription. Independent of workflow filters.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendet Transkripte von Dateien aus dem überwachten Ordner und ab TypeWhisper 1.9 auch aus der Datei-Transkription. Unabhängig von Workflow-Filtern."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envía las transcripciones de los archivos de la carpeta vigilada y, desde TypeWhisper 1.9, de Transcripción de archivos. Es independiente de los filtros de flujos de trabajo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "監視フォルダーのファイルの文字起こしを送信します。TypeWhisper 1.9以降はファイル文字起こしのファイルも対象です。ワークフローフィルターとは独立しています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送监控文件夹中文件的转录结果，从 TypeWhisper 1.9 起也发送文件转录中的文件。不受工作流筛选条件影响。"
           }
         }
       }
