@@ -654,10 +654,12 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].finishedAt = Date()
             guard !detectsSpeakers else { return }
             let itemID = files[index].id
-            let automatedContent = await runFileJobAutomations(at: index, modelOverride: modelOverride)
+            // Plugins see and return content in this format, even if the picker changes meanwhile.
+            let format = autoSaveFormat
+            let automatedContent = await runFileJobAutomations(at: index, format: format, modelOverride: modelOverride)
             // The list can change while automations run.
             guard let doneIndex = files.firstIndex(where: { $0.id == itemID }) else { return }
-            autoSaveTranscriptIfEnabled(at: doneIndex, content: automatedContent)
+            autoSaveTranscriptIfEnabled(at: doneIndex, format: format, content: automatedContent)
         } catch is CancellationError {
             guard files.indices.contains(index) else { return }
             files[index].state = .cancelled
@@ -814,11 +816,16 @@ final class FileTranscriptionViewModel: ObservableObject {
     /// it is saved only to a chosen folder, as is everything in the App Store
     /// edition. A chosen folder that can no longer be found is reported, not
     /// replaced by the original file's folder. An empty transcript is not saved.
-    private func autoSaveTranscriptIfEnabled(at index: Int, content automatedContent: String? = nil) {
+    private func autoSaveTranscriptIfEnabled(
+        at index: Int,
+        format requestedFormat: TranscriptExportFormat? = nil,
+        content automatedContent: String? = nil
+    ) {
         // The Speakers page shares these settings but shows neither result.
         guard autoSaveTranscripts, !detectsSpeakers, files.indices.contains(index) else { return }
         let item = files[index]
-        guard let content = automatedContent ?? exportContent(for: item, format: autoSaveFormat) else { return }
+        let format = requestedFormat ?? autoSaveFormat
+        guard let content = automatedContent ?? exportContent(for: item, format: format) else { return }
 
         let hasChosenFolder = defaults.data(forKey: UserDefaultsKeys.fileTranscriptionAutoSaveFolderBookmark) != nil
         let customFolder = hasChosenFolder ? resolvedAutoSaveFolder() : nil
@@ -839,7 +846,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             content,
             in: folder,
             baseName: item.url.deletingPathExtension().lastPathComponent,
-            fileExtension: autoSaveFormat.fileExtension
+            fileExtension: format.fileExtension
         ) {
             files[index].autoSavedURL = url
             files[index].autoSaveErrorMessage = nil
@@ -851,17 +858,21 @@ final class FileTranscriptionViewModel: ObservableObject {
     /// Hands a finished transcript to file job plugins, as the Watch Folder does, and
     /// returns the content they leave for the automatic save. Without plugins, or for
     /// an empty transcript, the content stays unchanged.
-    private func runFileJobAutomations(at index: Int, modelOverride: String?) async -> String? {
+    private func runFileJobAutomations(
+        at index: Int,
+        format: TranscriptExportFormat,
+        modelOverride: String?
+    ) async -> String? {
         let item = files[index]
         guard let result = item.result, !item.hasEmptyTranscript,
-              let content = exportContent(for: item, format: autoSaveFormat) else { return nil }
+              let content = exportContent(for: item, format: format) else { return nil }
 
         let engineId = result.engineUsed
         let context = FileJobContext(
             jobKind: .fileTranscription,
             sourceFilePath: item.importedMedia == nil ? item.url.path : nil,
             sourceFileName: item.fileName,
-            outputFormat: autoSaveFormat.fileExtension,
+            outputFormat: format.fileExtension,
             engineId: engineId,
             engineName: PluginManager.shared?.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId,
             modelId: modelManager.resolvedModelId(engineOverrideId: engineId, cloudModelOverride: modelOverride),
@@ -878,7 +889,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             }
         )
         let automationResult = await fileJobAutomationPipeline.process(
-            artifact: FileJobArtifact(fileExtension: autoSaveFormat.fileExtension, content: content),
+            artifact: FileJobArtifact(fileExtension: format.fileExtension, content: content),
             context: context
         )
         return automationResult.artifact.content

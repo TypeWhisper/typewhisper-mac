@@ -909,6 +909,31 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: savedURL, encoding: .utf8), "Processed by a plugin\n")
     }
 
+    func testAutoSaveKeepsTheFormatThePluginsReceivedWhenThePickerChanges() async throws {
+        try registerEngines(["whisper"])
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "standup.wav")
+        let automation = RecordingFileJobAutomation(replacement: "# Processed\n")
+        let viewModel = makeAutoSaveViewModel(
+            defaults: defaults,
+            text: "Standup transcript",
+            fileJobAutomationPipeline: FileJobAutomationPipeline(automationsProvider: { [automation] })
+        )
+        automation.onProcess = { viewModel.autoSaveFormat = .srt }
+        viewModel.autoSaveTranscripts = true
+        viewModel.autoSaveFormat = .markdown
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertEqual(viewModel.autoSaveFormat, .srt)
+        let savedURL = try XCTUnwrap(viewModel.files.first?.autoSavedURL)
+        XCTAssertEqual(savedURL.pathExtension, "md")
+        XCTAssertEqual(try String(contentsOf: savedURL, encoding: .utf8), "# Processed\n")
+    }
+
     func testAutoSaveIsOffByDefault() async throws {
         try registerEngines(["whisper"])
         let defaults = try makeDefaults()
@@ -2577,6 +2602,9 @@ private final class RecordingFileJobAutomation: NSObject, FileJobAutomationPlugi
         super.init()
     }
 
+    /// Runs while the plugin works, for example to change a setting meanwhile.
+    var onProcess: (@MainActor () -> Void)?
+
     init(replacement: String) {
         self.replacement = replacement
         super.init()
@@ -2588,6 +2616,7 @@ private final class RecordingFileJobAutomation: NSObject, FileJobAutomationPlugi
     func process(artifact: FileJobArtifact, context: FileJobContext) async throws -> FileJobAutomationResult {
         receivedArtifact = artifact
         receivedContext = context
+        await onProcess?()
         return FileJobAutomationResult(artifact: FileJobArtifact(fileExtension: artifact.fileExtension, content: replacement))
     }
 }
