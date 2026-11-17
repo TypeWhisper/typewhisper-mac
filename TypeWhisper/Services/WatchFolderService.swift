@@ -57,6 +57,9 @@ struct FileJobAutomationPipeline {
         self.automationsProvider = automationsProvider
     }
 
+    /// True when no enabled plugin automates file jobs, so callers can skip building a context.
+    var hasNoAutomations: Bool { automationsProvider().isEmpty }
+
     func process(artifact: FileJobArtifact, context: FileJobContext) async -> FileJobAutomationResult {
         var currentArtifact = artifact
         var appliedSteps: [String] = []

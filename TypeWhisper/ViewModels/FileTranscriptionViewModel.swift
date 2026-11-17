@@ -863,6 +863,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         format: TranscriptExportFormat,
         modelOverride: String?
     ) async -> String? {
+        guard !fileJobAutomationPipeline.hasNoAutomations else { return nil }
         let item = files[index]
         guard let result = item.result, !item.hasEmptyTranscript,
               let content = exportContent(for: item, format: format) else { return nil }
