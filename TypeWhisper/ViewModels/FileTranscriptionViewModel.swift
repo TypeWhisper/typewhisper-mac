@@ -571,8 +571,9 @@ final class FileTranscriptionViewModel: ObservableObject {
             // The chosen engine can come back while this file runs on the default.
             let modelOverride = availableSelectedModel
             // File plugins learn the model that produced the transcript, even if the
-            // default model changes while the file runs.
-            let modelAtStart: FileJobModel? = fileJobAutomationPipeline.hasNoAutomations ? nil : FileJobModel(
+            // default model changes or a plugin is turned on while the file runs.
+            // Without a plugin manager (some tests) there are no plugins to tell.
+            let modelAtStart: FileJobModel? = PluginManager.shared == nil ? nil : FileJobModel(
                 engineId: modelManager.effectiveEngineId(availableSelectedEngine),
                 modelId: modelManager.resolvedModelId(
                     engineOverrideId: availableSelectedEngine,
