@@ -570,6 +570,15 @@ final class FileTranscriptionViewModel: ObservableObject {
 
             // The chosen engine can come back while this file runs on the default.
             let modelOverride = availableSelectedModel
+            // File plugins learn the model that produced the transcript, even if the
+            // default model changes while the file runs.
+            let modelAtStart: FileJobModel? = fileJobAutomationPipeline.hasNoAutomations ? nil : FileJobModel(
+                engineId: modelManager.effectiveEngineId(availableSelectedEngine),
+                modelId: modelManager.resolvedModelId(
+                    engineOverrideId: availableSelectedEngine,
+                    cloudModelOverride: modelOverride
+                )
+            )
             // The task picker hides Translate for a model that cannot translate; a choice
             // made for an earlier model must not make every file fail.
             let result = try await transcriptionRunner(
@@ -656,7 +665,12 @@ final class FileTranscriptionViewModel: ObservableObject {
             let itemID = files[index].id
             // Plugins see and return content in this format, even if the picker changes meanwhile.
             let format = autoSaveFormat
-            let automatedContent = await runFileJobAutomations(at: index, format: format, modelOverride: modelOverride)
+            let automatedContent = await runFileJobAutomations(
+                at: index,
+                format: format,
+                modelAtStart: modelAtStart,
+                modelOverride: modelOverride
+            )
             // The list can change while automations run.
             guard let doneIndex = files.firstIndex(where: { $0.id == itemID }) else { return }
             autoSaveTranscriptIfEnabled(at: doneIndex, format: format, content: automatedContent)
@@ -861,6 +875,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     private func runFileJobAutomations(
         at index: Int,
         format: TranscriptExportFormat,
+        modelAtStart: FileJobModel?,
         modelOverride: String?
     ) async -> String? {
         guard !fileJobAutomationPipeline.hasNoAutomations else { return nil }
@@ -876,7 +891,10 @@ final class FileTranscriptionViewModel: ObservableObject {
             outputFormat: format.fileExtension,
             engineId: engineId,
             engineName: PluginManager.shared?.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId,
-            modelId: modelManager.resolvedModelId(engineOverrideId: engineId, cloudModelOverride: modelOverride),
+            // A fallback engine did not use the model chosen at the start.
+            modelId: modelAtStart?.engineId == engineId
+                ? modelAtStart?.modelId
+                : modelManager.resolvedModelId(engineOverrideId: engineId, cloudModelOverride: modelOverride),
             transcriptText: result.text,
             detectedLanguage: result.detectedLanguage,
             segments: result.segments.map {
@@ -894,6 +912,12 @@ final class FileTranscriptionViewModel: ObservableObject {
             context: context
         )
         return automationResult.artifact.content
+    }
+
+    /// The engine and model a file starts with.
+    struct FileJobModel {
+        let engineId: String?
+        let modelId: String?
     }
 
     private func reportAutoSaveFailure(at index: Int) {
