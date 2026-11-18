@@ -5092,6 +5092,102 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(inserting.status, 409)
     }
 
+    /// The Stream Deck toggles dictation through the API. A "No speech recognized" banner must
+    /// not block the next start, as it does not block the dictation hotkey (#1959).
+    func testDictationStartReplacesNoSpeechFeedbackBanner() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("")
+        context = await MainActor.run {
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+            context.dictationViewModel.soundFeedbackEnabled = false
+            context.dictationViewModel.spokenFeedbackEnabled = false
+            context.audioRecordingService.hasMicrophonePermissionOverride = true
+            context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            context.audioRecordingService.startRecordingOverride = {}
+            context.audioRecordingService.stopRecordingOverride = { _ in
+                Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+            }
+            context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+            context.textInsertionService.selectedTextOverride = { nil }
+            return context
+        }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+
+        let firstStart = await router.route(HTTPRequest(
+            method: "POST", path: "/v1/dictation/start", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(firstStart.status, 200)
+        await apiContext.dictationViewModel.testingWaitForRecordingStart()
+        let stop = await router.route(HTTPRequest(
+            method: "POST", path: "/v1/dictation/stop", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(stop.status, 200)
+
+        let noSpeechMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "No speech recognized")
+        for _ in 0..<80 {
+            let feedback = await MainActor.run { apiContext.dictationViewModel.actionFeedbackMessage }
+            if feedback?.hasPrefix(noSpeechMessage) == true {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        let bannerState = await MainActor.run {
+            (
+                state: apiContext.dictationViewModel.state,
+                feedback: apiContext.dictationViewModel.actionFeedbackMessage
+            )
+        }
+        XCTAssertEqual(bannerState.state, .inserting)
+        XCTAssertTrue(bannerState.feedback?.hasPrefix(noSpeechMessage) == true)
+
+        let secondStart = await router.route(HTTPRequest(
+            method: "POST", path: "/v1/dictation/start", queryParams: [:], headers: [:], body: Data()
+        ))
+        let secondJSON = try Self.jsonObject(secondStart)
+        XCTAssertEqual(secondStart.status, 200)
+        XCTAssertEqual(secondJSON["status"] as? String, "recording")
+        await apiContext.dictationViewModel.testingWaitForRecordingStart()
+        // The banner's lifetime ended with the start, so it cannot reset the new recording later.
+        try? await Task.sleep(for: .milliseconds(100))
+        let recordingState = await MainActor.run {
+            (
+                state: apiContext.dictationViewModel.state,
+                feedback: apiContext.dictationViewModel.actionFeedbackMessage
+            )
+        }
+        XCTAssertEqual(recordingState.state, .recording)
+        XCTAssertNil(recordingState.feedback)
+
+        // Let the second dictation finish before the mock transcription is reset.
+        let secondID = try XCTUnwrap((secondJSON["id"] as? String).flatMap(UUID.init(uuidString:)))
+        await MainActor.run {
+            _ = apiContext.dictationViewModel.apiStopRecording()
+        }
+        var secondStatus: DictationSessionSnapshot.Status?
+        for _ in 0..<80 {
+            secondStatus = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
+            if secondStatus == .failed || secondStatus == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        secondStatus = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
+        XCTAssertTrue(
+            secondStatus == .failed || secondStatus == .completed,
+            "Second dictation status: \(String(describing: secondStatus))"
+        )
+        await apiContext.dictationViewModel.testingWaitForRecordingCleanup()
+    }
+
     func testDictationEndpointsReturnSessionIDAndCompletedTranscription() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
@@ -15660,6 +15756,159 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         XCTAssertEqual(context.dictationViewModel.actionFeedbackActionTitle, openRecoveryTitle)
         XCTAssertFalse(context.dictationViewModel.actionFeedbackIsError)
+    }
+
+    /// An API start replaces the Dictation Recovery banner and keeps the saved recording (#1959).
+    @MainActor
+    func testAPIStartReplacesRecoveryFeedbackAndKeepsRecovery() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .never
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("")
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = viewModel.apiStopRecording()
+
+        let openRecoveryTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Open Recovery")
+        for _ in 0..<80 {
+            if viewModel.apiDictationSession(id: sessionID)?.status == .failed,
+               viewModel.actionFeedbackActionTitle == openRecoveryTitle {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(viewModel.state, .inserting)
+        XCTAssertEqual(viewModel.actionFeedbackActionTitle, openRecoveryTitle)
+        XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
+        let recoveryURL = try XCTUnwrap(recoveryStore.recoveryURLs.first)
+
+        // Processing still blocks an API start, even with a banner set.
+        viewModel.state = .processing
+        XCTAssertFalse(viewModel.canStartAPIRecording)
+        viewModel.state = .inserting
+        XCTAssertTrue(viewModel.canStartAPIRecording)
+
+        let nextSessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+
+        XCTAssertNotEqual(nextSessionID, sessionID)
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertEqual(viewModel.apiDictationSession(id: nextSessionID)?.status, .recording)
+        XCTAssertNil(viewModel.actionFeedbackMessage)
+        XCTAssertEqual(recoveryStore.recoveryURLs, [recoveryURL])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recoveryURL.path))
+
+        // Let the second dictation finish before the test removes its directory.
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<80 {
+            let status = viewModel.apiDictationSession(id: nextSessionID)?.status
+            if status == .failed || status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        let nextStatus = viewModel.apiDictationSession(id: nextSessionID)?.status
+        XCTAssertTrue(
+            nextStatus == .failed || nextStatus == .completed,
+            "Next dictation status: \(String(describing: nextStatus))"
+        )
+        await viewModel.testingWaitForRecordingCleanup()
+    }
+
+    /// A hotkey start queued during processing keeps priority over an API start, both while
+    /// the resulting "No speech recognized" banner is shown and once the reset sets the state
+    /// to idle.
+    @MainActor
+    func testAPIStartWaitsForQueuedHotkeyStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("")
+        MockTranscriptionPlugin.setHang(seconds: 0.3)
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        let startCount = OSAllocatedUnfairLock(initialState: 0)
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = { startCount.withLock { $0 += 1 } }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<100 where viewModel.state != .processing {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(viewModel.state, .processing)
+        context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+
+        let noSpeechMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "No speech recognized")
+        for _ in 0..<80 where viewModel.actionFeedbackMessage?.hasPrefix(noSpeechMessage) != true {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(viewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertTrue(viewModel.actionFeedbackMessage?.hasPrefix(noSpeechMessage) == true)
+        XCTAssertTrue(viewModel.canDismissActionFeedback)
+        // The banner alone could be replaced, but the queued hotkey start comes first.
+        XCTAssertFalse(viewModel.canStartAPIRecording)
+
+        // Ending the banner resets to idle before the queued start runs; the API still waits.
+        viewModel.dismissActionFeedback()
+        XCTAssertFalse(viewModel.canStartAPIRecording)
+        for _ in 0..<100 where startCount.withLock({ $0 }) < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await viewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(startCount.withLock { $0 }, 2)
+        XCTAssertEqual(viewModel.state, .recording)
+
+        let queuedSessionID = try XCTUnwrap(viewModel.apiStopRecording())
+        XCTAssertNotEqual(queuedSessionID, sessionID)
+        for _ in 0..<80 where viewModel.state != .inserting && viewModel.state != .idle {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(viewModel.apiDictationSession(id: queuedSessionID)?.status, .failed)
+        await viewModel.testingWaitForRecordingCleanup()
     }
 
     @MainActor

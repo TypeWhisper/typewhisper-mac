@@ -1217,7 +1217,11 @@ final class DictationViewModel: ObservableObject {
     }
 
     var canStartAPIRecording: Bool {
-        HistoryRetranscriptionActivity.recordID == nil && (state == .idle || canReplaceUndeliveredTranscriptOffer)
+        // A queued hotkey start runs first, even after the reset has already set the state to
+        // idle, so an API start cannot drop it and its workflow.
+        HistoryRetranscriptionActivity.recordID == nil
+            && pendingHotkeyDictationStart == nil
+            && (state == .idle || canReplaceUndeliveredTranscriptOffer || canDismissActionFeedback)
     }
 
     /// The Insert offer stays up for a while, so a new dictation replaces it, as the dictation
@@ -1256,8 +1260,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     func apiStartRecording(forcedWorkflowId: UUID? = nil) -> UUID {
-        if canReplaceUndeliveredTranscriptOffer {
+        // A new API dictation replaces a passive feedback banner, such as "No speech
+        // recognized", as the dictation hotkey does (#1959).
+        if canReplaceUndeliveredTranscriptOffer || canDismissActionFeedback {
             indicatorFeedbackLifetime.finishImmediately()
+            if state == .inserting {
+                resetDictationState()
+            }
         }
         let sessionID = UUID()
         startRecording(
