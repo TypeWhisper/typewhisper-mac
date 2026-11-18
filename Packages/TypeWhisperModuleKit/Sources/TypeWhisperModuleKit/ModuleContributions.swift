@@ -9,6 +9,7 @@ public struct ModuleContributions: Sendable {
     public var recordActions: [ModuleRecordAction]
     public var premiumCards: [ModulePremiumCard]
     public var managedPolicyKeys: [ModuleManagedPolicyKey]
+    public var historySidebarGroups: [ModuleHistorySidebarGroup]
 
     public init(
         hotkeyActions: [ModuleHotkeyAction] = [],
@@ -16,7 +17,8 @@ public struct ModuleContributions: Sendable {
         panels: [ModulePanel] = [],
         recordActions: [ModuleRecordAction] = [],
         premiumCards: [ModulePremiumCard] = [],
-        managedPolicyKeys: [ModuleManagedPolicyKey] = []
+        managedPolicyKeys: [ModuleManagedPolicyKey] = [],
+        historySidebarGroups: [ModuleHistorySidebarGroup] = []
     ) {
         self.hotkeyActions = hotkeyActions
         self.menuItems = menuItems
@@ -24,11 +26,13 @@ public struct ModuleContributions: Sendable {
         self.recordActions = recordActions
         self.premiumCards = premiumCards
         self.managedPolicyKeys = managedPolicyKeys
+        self.historySidebarGroups = historySidebarGroups
     }
 
     public var isEmpty: Bool {
         hotkeyActions.isEmpty && menuItems.isEmpty && panels.isEmpty
             && recordActions.isEmpty && premiumCards.isEmpty && managedPolicyKeys.isEmpty
+            && historySidebarGroups.isEmpty
     }
 
     /// Adds the contributions of another module after these.
@@ -39,6 +43,7 @@ public struct ModuleContributions: Sendable {
         recordActions += other.recordActions
         premiumCards += other.premiumCards
         managedPolicyKeys += other.managedPolicyKeys
+        historySidebarGroups += other.historySidebarGroups
     }
 }
 

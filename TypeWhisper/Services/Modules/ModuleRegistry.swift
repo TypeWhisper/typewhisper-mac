@@ -77,7 +77,8 @@ final class ModuleRegistry {
             panels: unique(new.panels, existing.panels),
             recordActions: unique(new.recordActions, existing.recordActions),
             premiumCards: unique(new.premiumCards, existing.premiumCards),
-            managedPolicyKeys: new.managedPolicyKeys
+            managedPolicyKeys: new.managedPolicyKeys,
+            historySidebarGroups: unique(new.historySidebarGroups, existing.historySidebarGroups)
         )
     }
 }

@@ -378,6 +378,207 @@ final class ModuleHostTests: XCTestCase {
         }
     }
 
+    // MARK: - History sidebar groups
+
+    func testStubBuildShowsNoHistorySidebarGroup() throws {
+        let registry = ModuleRegistry(host: AppModuleHost())
+        let fixture = try HistorySidebarFixture()
+        defer { fixture.remove() }
+
+        fixture.viewModel.setModuleSidebarGroups(registry.contributions.historySidebarGroups)
+        fixture.viewModel.activate()
+
+        XCTAssertTrue(registry.contributions.historySidebarGroups.isEmpty)
+        XCTAssertTrue(fixture.viewModel.moduleGroups.isEmpty)
+    }
+
+    func testHistorySidebarGroupShowsEntriesNewestFirstAndFollowsChanges() throws {
+        let store = TestSidebarStore()
+        TestModulesEntry.modules = [
+            TestModule(identifier: "test.first", contributions: ModuleContributions(historySidebarGroups: [store.group()])),
+            TestModule(identifier: "test.second", contributions: ModuleContributions(historySidebarGroups: [
+                TestSidebarStore().group(), TestSidebarStore().group(id: "test.other"),
+            ])),
+        ]
+        defer { TestModulesEntry.modules = [] }
+        let registry = ModuleRegistry(entry: TestModulesEntry.self, host: AppModuleHost())
+        XCTAssertEqual(registry.contributions.historySidebarGroups.map(\.id), ["test.group", "test.other"])
+
+        let fixture = try HistorySidebarFixture()
+        defer { fixture.remove() }
+        let viewModel = fixture.viewModel
+        store.entries = [store.entry("old", daysAgo: 3), store.entry("new", daysAgo: 0), store.entry("mid", daysAgo: 1)]
+        viewModel.setModuleSidebarGroups([store.group()])
+
+        // Nothing is read before History opens.
+        XCTAssertTrue(viewModel.moduleGroups.isEmpty)
+        XCTAssertEqual(store.entryReads, 0)
+
+        viewModel.activate()
+        XCTAssertEqual(viewModel.moduleGroups.map(\.id), ["test.group"])
+        XCTAssertEqual(viewModel.moduleGroups.first?.entries.map(\.id), ["new", "mid", "old"])
+
+        store.entries.append(store.entry("newest", daysAgo: -1))
+        store.changed()
+        XCTAssertEqual(viewModel.moduleGroups.first?.entries.map(\.id), ["newest", "new", "mid", "old"])
+
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+        viewModel.requestModuleEntrySelection("mid")
+        XCTAssertEqual(viewModel.navigationTitle, "Notes")
+        XCTAssertEqual(viewModel.moduleEntryContent?.id, "mid")
+        XCTAssertEqual(store.madeContent, ["mid"])
+
+        // An entry the module no longer lists is no longer selected.
+        store.entries.removeAll { $0.id == "mid" }
+        store.changed()
+        XCTAssertNil(viewModel.selectedModuleEntryID)
+        XCTAssertNil(viewModel.moduleEntryContent)
+
+        // A hidden group leaves the sidebar, and History shows all records again.
+        store.isVisible = false
+        store.changed()
+        XCTAssertTrue(viewModel.moduleGroups.isEmpty)
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+        XCTAssertEqual(viewModel.filteredRecords.count, 1)
+
+        store.isVisible = true
+        store.changed()
+        XCTAssertEqual(viewModel.moduleGroups.map(\.id), ["test.group"])
+
+        // While History is closed, changes are not read; opening it reads them.
+        viewModel.deactivate()
+        let readsWhenClosed = store.entryReads
+        store.entries.append(store.entry("closed", daysAgo: -2))
+        store.changed()
+        XCTAssertEqual(store.entryReads, readsWhenClosed)
+        viewModel.activate()
+        XCTAssertEqual(viewModel.moduleGroups.first?.entries.first?.id, "closed")
+    }
+
+    func testSearchFieldFiltersTheEntriesOfTheSelectedGroup() throws {
+        let store = TestSidebarStore()
+        store.entries = [
+            ModuleHistorySidebarEntry(id: "a", title: "Café budget", subtitle: "Second quarter", date: Date()),
+            ModuleHistorySidebarEntry(id: "b", title: "Hiring plan", subtitle: "Budget for two roles", date: Date(timeIntervalSinceNow: -60)),
+            ModuleHistorySidebarEntry(id: "c", title: "Travel", subtitle: nil, date: Date(timeIntervalSinceNow: -120)),
+        ]
+        let fixture = try HistorySidebarFixture()
+        defer { fixture.remove() }
+        let viewModel = fixture.viewModel
+        viewModel.setModuleSidebarGroups([store.group()])
+        viewModel.activate()
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+
+        viewModel.searchQuery = "BUDGET"
+        XCTAssertEqual(viewModel.filteredModuleEntries.map(\.id), ["a", "b"])
+        XCTAssertEqual(viewModel.navigationSummary, String.localizedStringWithFormat(String(localized: "%lld entries"), Int64(2)))
+
+        viewModel.searchQuery = "cafe second"
+        XCTAssertEqual(viewModel.filteredModuleEntries.map(\.id), ["a"])
+
+        viewModel.searchQuery = "  "
+        XCTAssertEqual(viewModel.filteredModuleEntries.map(\.id), ["a", "b", "c"])
+        // The sidebar counts all entries, whatever the search.
+        XCTAssertEqual(viewModel.moduleGroups.first?.entries.count, 3)
+    }
+
+    func testNewEntryIsSelectedAndDeletedEntryLeavesTheGroup() throws {
+        let store = TestSidebarStore()
+        store.entries = [store.entry("first", daysAgo: 1)]
+        let fixture = try HistorySidebarFixture()
+        defer { fixture.remove() }
+        let viewModel = fixture.viewModel
+        viewModel.setModuleSidebarGroups([store.group()])
+        viewModel.activate()
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+        viewModel.searchQuery = "first"
+
+        // The new entry stays selected until the module lists it.
+        store.listsNewEntriesLater = true
+        viewModel.createModuleEntry()
+        XCTAssertEqual(viewModel.selectedModuleEntryID, "created-1")
+        XCTAssertEqual(viewModel.moduleEntryContent?.id, "created-1")
+        XCTAssertEqual(viewModel.searchQuery, "")
+        store.changed()
+        XCTAssertEqual(viewModel.selectedModuleEntryID, "created-1")
+        store.publishPendingEntries()
+        XCTAssertEqual(viewModel.moduleGroups.first?.entries.map(\.id), ["created-1", "first"])
+        XCTAssertEqual(viewModel.selectedModuleEntryID, "created-1")
+
+        // A confirmation opened for another group deletes nothing.
+        viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.other")
+        XCTAssertEqual(store.deleted, [])
+        // Nor does one for a group hidden in the meantime.
+        store.isVisible = false
+        viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.group")
+        XCTAssertEqual(store.deleted, [])
+        store.isVisible = true
+        viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.group")
+        XCTAssertEqual(store.deleted, ["created-1"])
+        XCTAssertNil(viewModel.selectedModuleEntryID)
+        XCTAssertEqual(viewModel.moduleGroups.first?.entries.map(\.id), ["first"])
+
+        // An entry the module lists right away leaves the selection once it is removed.
+        store.listsNewEntriesLater = false
+        viewModel.createModuleEntry()
+        XCTAssertEqual(viewModel.selectedModuleEntryID, "created-2")
+        store.removeEntry("created-2")
+        XCTAssertNil(viewModel.selectedModuleEntryID)
+        XCTAssertNil(viewModel.moduleEntryContent)
+
+        // A group without deletion deletes nothing.
+        let readOnly = TestSidebarStore(offersDeletion: false)
+        readOnly.entries = [readOnly.entry("kept", daysAgo: 0)]
+        viewModel.setModuleSidebarGroups([readOnly.group(id: "test.readOnly")])
+        viewModel.requestNavigationSelection(.moduleGroup("test.readOnly"))
+        XCTAssertFalse(try XCTUnwrap(viewModel.selectedModuleGroup).group.canDelete)
+        viewModel.deleteModuleEntry(withID: "kept", inGroup: "test.readOnly")
+        XCTAssertEqual(readOnly.entries.map(\.id), ["kept"])
+    }
+
+    func testSwitchingToAGroupKeepsUnsavedChangesUntilTheUserDecides() throws {
+        let store = TestSidebarStore()
+        let fixture = try HistorySidebarFixture()
+        defer { fixture.remove() }
+        let viewModel = fixture.viewModel
+        viewModel.setModuleSidebarGroups([store.group()])
+        viewModel.activate()
+        viewModel.requestRecordSelection([fixture.recordID])
+        viewModel.editedText = "Unsaved correction"
+
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+        XCTAssertTrue(viewModel.showsUnsavedChangesPrompt)
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+
+        viewModel.discardAndContinue()
+        XCTAssertEqual(viewModel.navigationSelection, .moduleGroup("test.group"))
+        XCTAssertTrue(viewModel.isShowingModuleGroup)
+        // Record actions in the toolbar have nothing to act on.
+        XCTAssertTrue(viewModel.selectedRecordIDs.isEmpty)
+        XCTAssertNil(viewModel.selectedRecord)
+
+        // A group that went away while the prompt was open is not opened.
+        viewModel.requestNavigationSelection(.smartMailbox(.all))
+        viewModel.requestRecordSelection([fixture.recordID])
+        viewModel.editedText = "Another correction"
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+        XCTAssertTrue(viewModel.showsUnsavedChangesPrompt)
+        store.isVisible = false
+        store.changed()
+        viewModel.discardAndContinue()
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+        XCTAssertFalse(viewModel.isShowingModuleGroup)
+        store.isVisible = true
+        store.changed()
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+        XCTAssertEqual(viewModel.navigationSelection, .moduleGroup("test.group"))
+
+        // Opening a record, for example from a module, leaves the group.
+        viewModel.requestOpenRecord(withID: fixture.recordID)
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+        XCTAssertEqual(viewModel.selectedRecordIDs, [fixture.recordID])
+    }
+
     // MARK: - History
 
     func testHistoryReadingReturnsReadyRecordsAndReportsChanges() async throws {
@@ -566,6 +767,122 @@ private final class Flag {
 
     init(_ value: Bool) {
         self.value = value
+    }
+}
+
+@MainActor
+private final class TestSidebarStore {
+    var entries: [ModuleHistorySidebarEntry] = []
+    var isVisible = true
+    /// Lists created entries only after `publishPendingEntries()`.
+    var listsNewEntriesLater = false
+    private(set) var deleted: [String] = []
+    private(set) var madeContent: [String] = []
+    private(set) var entryReads = 0
+    private var pendingEntries: [ModuleHistorySidebarEntry] = []
+    private var created = 0
+    private let offersDeletion: Bool
+    private let subject = PassthroughSubject<Void, Never>()
+
+    init(offersDeletion: Bool = true) {
+        self.offersDeletion = offersDeletion
+    }
+
+    func entry(_ id: String, daysAgo: Double) -> ModuleHistorySidebarEntry {
+        ModuleHistorySidebarEntry(id: id, title: id, date: Date(timeIntervalSinceNow: -daysAgo * 86_400))
+    }
+
+    func changed() {
+        subject.send()
+    }
+
+    /// Removes an entry without the app, as a sync would.
+    func removeEntry(_ id: String) {
+        entries.removeAll { $0.id == id }
+        changed()
+    }
+
+    func publishPendingEntries() {
+        entries += pendingEntries
+        pendingEntries = []
+        changed()
+    }
+
+    func group(id: String = "test.group") -> ModuleHistorySidebarGroup {
+        let newEntry = ModuleHistorySidebarGroup.NewEntry(title: "New Note") { [unowned self] () -> String? in
+            self.createEntry()
+        }
+        var delete: (@MainActor @Sendable (String) -> Void)?
+        if offersDeletion {
+            delete = { [unowned self] (entryID: String) in self.deleteEntry(entryID) }
+        }
+        return ModuleHistorySidebarGroup(
+            id: id,
+            title: "Notes",
+            systemImage: "note.text",
+            isVisible: { [unowned self] () -> Bool in self.isVisible },
+            entries: { [unowned self] () -> [ModuleHistorySidebarEntry] in self.readEntries() },
+            observeChanges: { [unowned self] (handler: @escaping @MainActor () -> Void) -> AnyCancellable in
+                self.subject.sink { MainActor.assumeIsolated { handler() } }
+            },
+            makeContent: { [unowned self] (entryID: String) -> AnyView in self.makeContent(entryID) },
+            newEntry: newEntry,
+            delete: delete
+        )
+    }
+
+    private func readEntries() -> [ModuleHistorySidebarEntry] {
+        entryReads += 1
+        return entries
+    }
+
+    private func makeContent(_ entryID: String) -> AnyView {
+        madeContent.append(entryID)
+        return AnyView(Text(entryID))
+    }
+
+    private func createEntry() -> String {
+        created += 1
+        let entry = ModuleHistorySidebarEntry(id: "created-\(created)", title: "Untitled", date: Date())
+        if listsNewEntriesLater {
+            pendingEntries.append(entry)
+        } else {
+            entries.append(entry)
+            changed()
+        }
+        return entry.id
+    }
+
+    private func deleteEntry(_ entryID: String) {
+        deleted.append(entryID)
+        entries.removeAll { $0.id == entryID }
+        changed()
+    }
+}
+
+/// History with one record and its view model.
+@MainActor
+private struct HistorySidebarFixture {
+    let directory: URL
+    let viewModel: HistoryViewModel
+    let recordID = UUID()
+
+    init() throws {
+        directory = try TestSupport.makeTemporaryDirectory(prefix: "HistorySidebar")
+        let history = HistoryService(appSupportDirectory: directory)
+        _ = history.addRecord(
+            id: recordID, rawText: "Budget meeting", finalText: "Budget meeting.", appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes", durationSeconds: 3, language: "en", engineUsed: "test"
+        )
+        viewModel = HistoryViewModel(
+            historyService: history,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: directory)
+        )
+    }
+
+    func remove() {
+        TestSupport.remove(directory)
     }
 }
 
