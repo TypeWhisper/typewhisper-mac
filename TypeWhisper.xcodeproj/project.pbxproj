@@ -10429,7 +10429,7 @@
 			repositoryURL = "https://github.com/TypeWhisper/mlx-audio-swift.git";
 			requirement = {
 				kind = revision;
-				revision = 56abd969a481b909efbb0a20fc762d701df196aa;
+				revision = 4cd7b792e9d0ab6d8af30119b4de16b303f67334;
 			};
 		};
 		RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {

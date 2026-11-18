@@ -163,6 +163,15 @@ final class Qwen3PluginTests: XCTestCase {
         )
     }
 
+    func testRumbleVocabularyGetsItsControlTokensAndQwen3GetsNone() {
+        let rumbleTokens: Set<String> = ["<digits>", "<nofiller>", "<verbatim>", "<|im_end|>"]
+        XCTAssertEqual(
+            Qwen3Plugin.controlTokenPrefix(hasToken: rumbleTokens.contains),
+            "<digits><nofiller><verbatim>"
+        )
+        XCTAssertEqual(Qwen3Plugin.controlTokenPrefix(hasToken: { $0 == "<|im_end|>" }), "")
+    }
+
     func testDictionaryTermsAreNotAdvertisedForQwen3Prompting() {
         XCTAssertEqual(Qwen3Plugin().dictionaryTermsSupport, .unsupported)
     }
@@ -245,6 +254,7 @@ final class Qwen3PluginTests: XCTestCase {
                 "qwen3-asr-1.7b-6bit",
                 "qwen3-asr-1.7b-8bit",
                 "qwen3-asr-1.7b-bf16",
+                "rumble-2-flash-8bit",
             ]
         )
     }
