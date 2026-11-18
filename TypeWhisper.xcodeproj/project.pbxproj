@@ -10466,7 +10466,7 @@
 		};
 		D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/microsoft/onnxruntime-swift-package-manager.git";
+			repositoryURL = "https://github.com/TypeWhisper/onnxruntime-swift-package-manager.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.24.2;
