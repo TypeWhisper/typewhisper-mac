@@ -581,7 +581,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(request.url?.absoluteString, "https://dictation.assemblyai.com/v1/transcribe")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "assembly-key")
         XCTAssertNil(request.value(forHTTPHeaderField: "X-AAI-Model"))
-        XCTAssertEqual(request.timeoutInterval, 31)
+        XCTAssertEqual(request.timeoutInterval, 31, accuracy: 1)
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains(#"{"keyterms_prompt":["TypeWhisper"],"language_codes":["de"]}"#))
     }
@@ -651,6 +651,79 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(AssemblyAISyncEndpoint.sync.timeout(forAudioDuration: 5), 45)
     }
 
+    func testSyncBudgetIsSharedByTheUploadsOfOneAttempt() {
+        let start = ContinuousClock.now
+        let budget = AssemblyAISyncBudget(seconds: 90, start: start)
+
+        XCTAssertEqual(budget.requestTimeout(at: start) ?? 0, 90, accuracy: 0.001)
+        // A WAV upload after an M4A rejected at 40 s gets what is left.
+        XCTAssertEqual(budget.requestTimeout(at: start + .seconds(40)) ?? 0, 50, accuracy: 0.001)
+        XCTAssertNil(budget.requestTimeout(at: start + .seconds(86)))
+    }
+
+    func testDictationWavRetryAfterARejectedM4AUploadKeepsTheAttemptsBudget() async throws {
+        let plugin = try Self.makeDictationModePlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":"Unsupported media type"}"#.utf8),
+                    Self.httpResponse(url: "https://dictation.assemblyai.com/v1/transcribe", statusCode: 415)
+                ),
+                .success(
+                    Data(#"{"text":"hallo","llm_response":"Hallo.","words":[],"confidence":0.9,"audio_duration_ms":1000,"session_id":"s"}"#.utf8),
+                    Self.httpResponse(url: "https://dictation.assemblyai.com/v1/transcribe", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await Self.transcribeDictation(with: plugin)
+
+        XCTAssertEqual(result.text, "Hallo.")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertLessThanOrEqual(requests[1].timeoutInterval, requests[0].timeoutInterval)
+        XCTAssertGreaterThan(requests[1].timeoutInterval, 25)
+    }
+
+    func testDictationModeFallsBackToTheAsyncAPIAfterATimeoutWithoutSendingItAgain() async throws {
+        let plugin = try Self.makeDictationModePlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            // The timeout resets the shared session; the async API runs on the next one.
+            if store.sessions.isEmpty {
+                return store.makeSession(outcomes: [.failure(URLError(.timedOut))])
+            }
+            return store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"upload_url":"https://cdn.example.test/audio.m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"id":"transcript_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"status":"completed","text":"um hallo typewhisper","language_code":"de"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript/transcript_123", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await Self.transcribeDictation(with: plugin)
+
+        XCTAssertEqual(result.text, "um hallo typewhisper")
+        XCTAssertEqual(
+            store.sessions.flatMap(\.requestedRequests).map { "\($0.url?.host ?? "")\($0.url?.path ?? "")" },
+            [
+                "dictation.assemblyai.com/v1/transcribe",
+                "api.assemblyai.com/v2/upload",
+                "api.assemblyai.com/v2/transcript",
+                "api.assemblyai.com/v2/transcript/transcript_123",
+            ]
+        )
+    }
+
     func testDictationModeKeepsDictionaryTrainingVerbatim() async throws {
         let plugin = try Self.makeDictationModePlugin()
         let store = PluginHTTPClientSessionStore()
@@ -701,7 +774,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         let request = requests[0]
         XCTAssertEqual(request.url?.absoluteString, "https://sync.assemblyai.com/v1/transcribe")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-AAI-Model"), "universal-3-5-pro")
-        XCTAssertEqual(request.timeoutInterval, 45)
+        XCTAssertEqual(request.timeoutInterval, 45, accuracy: 1)
     }
 
     private static func makeDictationModePlugin() throws -> AssemblyAIPlugin {

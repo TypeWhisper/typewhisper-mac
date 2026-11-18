@@ -55,6 +55,27 @@ enum AssemblyAISyncEndpoint: Equatable, Sendable {
     }
 }
 
+/// One time budget for a Sync or Dictation attempt. The M4A upload and a WAV upload
+/// after a format rejection share it, so the second upload cannot push the async
+/// fallback past the host's deadline for the dictation.
+struct AssemblyAISyncBudget {
+    /// Below this, another upload is not worth starting.
+    static let minimumRequestTimeout: TimeInterval = 5
+
+    let end: ContinuousClock.Instant
+
+    init(seconds: TimeInterval, start: ContinuousClock.Instant = .now) {
+        end = start + .milliseconds(Int64(seconds * 1_000))
+    }
+
+    /// The seconds left for the next request, or nil when too little is left.
+    func requestTimeout(at now: ContinuousClock.Instant = .now) -> TimeInterval? {
+        let left = (end - now).components
+        let seconds = Double(left.seconds) + Double(left.attoseconds) / 1e18
+        return seconds >= Self.minimumRequestTimeout ? seconds : nil
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(AssemblyAIPlugin)
@@ -429,13 +450,14 @@ final class AssemblyAIPlugin: NSObject,
         apiKey: String,
         endpoint: AssemblyAISyncEndpoint
     ) async throws -> PluginStructuredTranscriptionResult {
+        let budget = AssemblyAISyncBudget(seconds: endpoint.timeout(forAudioDuration: audio.duration))
         let text = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
             try await sendSyncRequest(
                 syncRequest,
                 uploadFile: uploadFile,
                 apiKey: apiKey,
                 endpoint: endpoint,
-                audioDuration: audio.duration
+                budget: budget
             )
         }
         // The sync response carries no detected language.
@@ -447,10 +469,13 @@ final class AssemblyAIPlugin: NSObject,
         uploadFile: PluginAudioUploadFile,
         apiKey: String,
         endpoint: AssemblyAISyncEndpoint,
-        audioDuration: TimeInterval
+        budget: AssemblyAISyncBudget
     ) async throws -> String {
         guard let url = URL(string: endpoint.urlString) else {
             throw PluginTranscriptionError.apiError("Invalid \(endpoint.name) URL")
+        }
+        guard let timeout = budget.requestTimeout() else {
+            throw PluginTranscriptionError.apiError("\(endpoint.name) time budget used up before another upload")
         }
 
         let boundary = UUID().uuidString
@@ -467,15 +492,15 @@ final class AssemblyAIPlugin: NSObject,
             uploadFile: uploadFile,
             boundary: boundary
         )
-        request.timeoutInterval = endpoint.timeout(forAudioDuration: audioDuration)
+        request.timeoutInterval = timeout
 
         // A failed request falls back to the async API instead of being sent again: even a
-        // Cloudflare 522 can follow a request AssemblyAI received, and a second one would be
-        // billed. Uploads too large for the shared session's 600 s get their own session.
-        let (data, response) = try await PluginHTTPClient.data(
+        // Cloudflare 522 or a timeout can follow a request AssemblyAI received, and a second
+        // one would be billed. Uploads too large for the shared session's 600 s get their
+        // own session.
+        let (data, response) = try await PluginHTTPClient.dataSentOnce(
             for: request,
-            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count),
-            retry: .disabled
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
         )
 
         guard let httpResponse = response as? HTTPURLResponse else {
