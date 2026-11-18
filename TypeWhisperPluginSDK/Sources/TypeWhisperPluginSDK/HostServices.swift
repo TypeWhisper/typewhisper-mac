@@ -250,7 +250,9 @@ public enum PluginHTTPClient {
     /// time once it may have reached the server: no retry ladder for a status such as
     /// 522, and no immediate retry after a timeout or a connection lost mid-request.
     /// A failure before a connection existed, such as a DNS error, still gets the one
-    /// immediate retry, since nothing was sent.
+    /// immediate retry, since nothing was sent. URLSession still follows a 307 or 308
+    /// redirect on its own, which repeats the body; use it only with endpoints that do
+    /// not redirect.
     public static func dataSentOnce(
         for request: URLRequest,
         resourceTimeout: TimeInterval?
