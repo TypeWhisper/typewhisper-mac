@@ -566,7 +566,9 @@ final class HistoryViewModel: ObservableObject {
     /// Deletes an entry of the selected group. The view asks for confirmation
     /// first and passes the group it asked for.
     func deleteModuleEntry(withID id: String, inGroup groupID: String) {
-        guard let group = selectedModuleGroup?.group, group.id == groupID, group.canDelete else { return }
+        guard let group = selectedModuleGroup?.group, group.id == groupID, group.canDelete,
+              // The group can be hidden by now, reported or not.
+              group.isVisible else { return }
         if selectedModuleEntryID == id {
             selectedModuleEntryID = nil
         }

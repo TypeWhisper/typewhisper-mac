@@ -508,6 +508,11 @@ final class ModuleHostTests: XCTestCase {
         // A confirmation opened for another group deletes nothing.
         viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.other")
         XCTAssertEqual(store.deleted, [])
+        // Nor does one for a group hidden in the meantime.
+        store.isVisible = false
+        viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.group")
+        XCTAssertEqual(store.deleted, [])
+        store.isVisible = true
         viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.group")
         XCTAssertEqual(store.deleted, ["created-1"])
         XCTAssertNil(viewModel.selectedModuleEntryID)
