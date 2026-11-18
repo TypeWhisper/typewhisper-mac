@@ -89,6 +89,37 @@ struct AssemblyAISyncBudget {
     }
 }
 
+/// The first of several results, for a race whose losers keep running. Later results
+/// are dropped.
+final class FirstResult<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<Value, any Error>?
+    private var continuation: CheckedContinuation<Value, any Error>?
+
+    func finish(_ newResult: Result<Value, any Error>) {
+        let waiting: CheckedContinuation<Value, any Error>? = lock.withLock {
+            guard result == nil else { return nil }
+            result = newResult
+            defer { continuation = nil }
+            return continuation
+        }
+        waiting?.resume(with: newResult)
+    }
+
+    func value() async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            let finished: Result<Value, any Error>? = lock.withLock {
+                if let result { return result }
+                self.continuation = continuation
+                return nil
+            }
+            if let finished {
+                continuation.resume(with: finished)
+            }
+        }
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(AssemblyAIPlugin)
@@ -496,6 +527,8 @@ final class AssemblyAIPlugin: NSObject,
         guard let url = URL(string: endpoint.urlString) else {
             throw PluginTranscriptionError.apiError("Invalid \(endpoint.name) URL")
         }
+        // A Dictation attempt past its limit is cancelled; it must not upload late.
+        try Task.checkCancellation()
         guard let timeLeft = budget.requestTimeout() else {
             throw PluginTranscriptionError.apiError("\(endpoint.name) time budget used up before another upload")
         }
@@ -557,27 +590,33 @@ final class AssemblyAIPlugin: NSObject,
         return text
     }
 
-    /// Runs `operation` and stops it after `seconds`, with an API error that sends the
-    /// recording to the async fallback. A cancellation of the caller stays a cancellation.
+    /// Runs `operation` and returns after `seconds` at the latest, with an API error that
+    /// sends the recording to the async fallback. It does not wait for an operation that
+    /// ignores cancellation, such as encoding, which cannot stop midway; that operation is
+    /// cancelled and its late result dropped. A cancellation of the caller stays a
+    /// cancellation.
     static func finishing<Value: Sendable>(
         within seconds: TimeInterval,
         endpoint: AssemblyAISyncEndpoint,
         _ operation: @escaping @Sendable () async throws -> Value
     ) async throws -> Value {
-        try await withThrowingTaskGroup(of: Value?.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .milliseconds(Int64(seconds * 1_000)))
-                return nil
-            }
-            defer { group.cancelAll() }
-            guard let first = try await group.next(), let value = first else {
-                try Task.checkCancellation()
-                throw PluginTranscriptionError.apiError(
-                    "\(endpoint.name) attempt did not finish within \(Int(seconds)) s"
-                )
-            }
-            return value
+        let race = FirstResult<Value>()
+        let work = Task { try await operation() }
+        Task { race.finish(await work.result) }
+        let timer = Task {
+            try await Task.sleep(for: .milliseconds(Int64(seconds * 1_000)))
+            race.finish(.failure(PluginTranscriptionError.apiError(
+                "\(endpoint.name) attempt did not finish within \(Int(seconds)) s"
+            )))
+        }
+        defer {
+            timer.cancel()
+            work.cancel()
+        }
+        return try await withTaskCancellationHandler {
+            try await race.value()
+        } onCancel: {
+            race.finish(.failure(CancellationError()))
         }
     }
 

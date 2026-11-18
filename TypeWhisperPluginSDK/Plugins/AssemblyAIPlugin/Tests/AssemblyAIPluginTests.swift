@@ -675,6 +675,24 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(value, "in time")
     }
 
+    func testDictationAttemptLimitDoesNotWaitForWorkThatIgnoresCancellation() async throws {
+        // Encoding cannot stop midway; the fallback must start at the limit anyway.
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            _ = try await AssemblyAIPlugin.finishing(within: 0.1, endpoint: .dictation) {
+                usleep(1_000_000) // blocks, like encoding
+                return "late"
+            }
+            XCTFail("the attempt must stop at the limit")
+        } catch {
+            guard case PluginTranscriptionError.apiError = error else {
+                return XCTFail("expected an API error that starts the async fallback, got \(error)")
+            }
+        }
+        XCTAssertLessThan(clock.now - start, .milliseconds(800))
+    }
+
     func testCancellingADictationAttemptStaysACancellation() async throws {
         // The host cancels at its deadline or when the user stops; neither may start the fallback.
         let attempt = Task {
