@@ -561,30 +561,30 @@
         }
       }
     },
-    "Uploads the recording when you stop and returns it cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings over 20 minutes, more than 100 dictionary terms, speaker diarization, a language it doesn't support, or a failed request use the async API with the selected model instead, without cleanup.": {
+    "Uploads dictations when you stop and returns them cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings and files use the Sync API, without cleanup. Dictations over 20 minutes, with more than 100 dictionary terms or in a language it doesn't support, and failed requests use the async API with the selected model, without cleanup.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lädt die Aufnahme beim Stopp hoch und gibt sie von Universal-3.6 Pro bereinigt zurück: Füllwörter entfernt, Satzzeichen und Großschreibung korrigiert. Keine Live-Vorschau von AssemblyAI. Aufnahmen über 20 Minuten, mehr als 100 Wörterbuchbegriffe, Sprechererkennung, eine nicht unterstützte Sprache oder eine fehlgeschlagene Anfrage nutzen stattdessen die Async-API mit dem gewählten Modell, ohne Bereinigung."
+            "value": "Lädt Diktate beim Stopp hoch und gibt sie von Universal-3.6 Pro bereinigt zurück: Füllwörter entfernt, Satzzeichen und Großschreibung korrigiert. Keine Live-Vorschau von AssemblyAI. Aufnahmen und Dateien nutzen die Sync-API, ohne Bereinigung. Diktate über 20 Minuten, mit mehr als 100 Wörterbuchbegriffen oder in einer nicht unterstützten Sprache sowie fehlgeschlagene Anfragen nutzen die Async-API mit dem gewählten Modell, ohne Bereinigung."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sube la grabación al detenerte y la devuelve depurada por Universal-3.6 Pro: sin muletillas y con la puntuación y las mayúsculas corregidas. Sin vista previa en vivo de AssemblyAI. Las grabaciones de más de 20 minutos, más de 100 términos del diccionario, la diarización de hablantes, un idioma no compatible o una solicitud fallida usan en su lugar la API asíncrona con el modelo seleccionado, sin depuración."
+            "value": "Sube los dictados al detenerte y los devuelve depurados por Universal-3.6 Pro: sin muletillas y con la puntuación y las mayúsculas corregidas. Sin vista previa en vivo de AssemblyAI. Las grabaciones y los archivos usan la API Sync, sin depuración. Los dictados de más de 20 minutos, con más de 100 términos del diccionario o en un idioma no compatible, y las solicitudes fallidas usan la API asíncrona con el modelo seleccionado, sin depuración."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "停止時に録音をアップロードし、Universal-3.6 Pro で整えたテキストを返します。フィラーを除き、句読点と大文字小文字を修正します。AssemblyAI のライブプレビューはありません。20 分を超える録音、100 語を超える辞書の用語、話者分離、対応していない言語、またはリクエストの失敗時は、選択したモデルで非同期 API を使い、整形は行いません。"
+            "value": "停止時にディクテーションをアップロードし、Universal-3.6 Pro で整えたテキストを返します。フィラーを除き、句読点と大文字小文字を修正します。AssemblyAI のライブプレビューはありません。録音とファイルには Sync API を使用し、整形は行いません。20 分を超えるディクテーション、辞書の用語が 100 を超えるディクテーション、対応していない言語のディクテーション、および失敗したリクエストには、選択したモデルで非同期 API を使用し、整形は行いません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "停止时上传录音，并返回由 Universal-3.6 Pro 整理后的文本：去除口头禅，修正标点和大小写。没有来自 AssemblyAI 的实时预览。超过 20 分钟的录音、超过 100 个词典术语、说话人分离、不支持的语言或请求失败时，会改用所选模型的异步 API，且不做整理。"
+            "value": "停止时上传听写，并返回由 Universal-3.6 Pro 整理后的文本：去除口头禅，修正标点和大小写。没有来自 AssemblyAI 的实时预览。录音和文件使用 Sync API，不做整理。超过 20 分钟、词典术语超过 100 个或使用不支持语言的听写，以及失败的请求，会改用所选模型的异步 API，且不做整理。"
           }
         }
       }

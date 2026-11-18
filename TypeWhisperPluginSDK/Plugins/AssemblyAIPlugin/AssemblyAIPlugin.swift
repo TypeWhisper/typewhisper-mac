@@ -6,18 +6,51 @@ import TypeWhisperPluginSDK
 // MARK: - Transcription Mode
 
 /// How finished recordings are transcribed and whether dictations stream, with
-/// AssemblyAI's list price for Universal-3.5 Pro.
+/// AssemblyAI's list prices: Universal-3.5 Pro, and Universal-3.6 Pro for Dictation.
 enum AssemblyAITranscriptionMode: String, CaseIterable, Sendable {
     /// Dictations stream to the realtime API ($0.45/h of connection time);
     /// recordings and files go to the Sync API.
     case live
     /// Recordings go to the Sync API ($0.30/h); no live preview from AssemblyAI.
     case sync
-    /// Recordings go to the Dictation API ($0.62/h), which returns the text
-    /// cleaned up; no live preview from AssemblyAI.
+    /// Dictations go to the Dictation API ($0.62/h), which returns the text
+    /// cleaned up; recordings and files go to the Sync API. No live preview
+    /// from AssemblyAI.
     case dictation
     /// Recordings go to the async API ($0.21/h); no live preview from AssemblyAI.
     case async
+}
+
+/// Where a finished recording goes when it fits the Sync API's limits.
+enum AssemblyAISyncEndpoint: Equatable, Sendable {
+    /// The Sync API: the verbatim transcript from the selected model.
+    case sync
+    /// The Dictation API: the same request, always on Universal-3.6 Pro, with the
+    /// transcript cleaned up by an LLM.
+    case dictation
+
+    var name: String {
+        switch self {
+        case .sync: "Sync"
+        case .dictation: "Dictation"
+        }
+    }
+
+    var urlString: String {
+        switch self {
+        case .sync: "https://sync.assemblyai.com/v1/transcribe"
+        case .dictation: "https://dictation.assemblyai.com/v1/transcribe"
+        }
+    }
+
+    /// The Sync server gives up after 30 s. The Dictation API also rewrites the text,
+    /// and AssemblyAI recommends a 90 s client timeout for it. The rest covers the upload.
+    var timeout: TimeInterval {
+        switch self {
+        case .sync: 45
+        case .dictation: 90
+        }
+    }
 }
 
 // MARK: - Plugin Entry Point
@@ -95,8 +128,8 @@ final class AssemblyAIPlugin: NSObject,
     }
 
     var supportsTranslation: Bool { false }
-    /// Dictations stream through live sessions; finished audio always goes to the Sync or
-    /// async API, which are faster than replaying it at the realtime API's 1.25x limit.
+    /// Dictations stream through live sessions; finished audio goes to the Sync, Dictation
+    /// or async API, which are faster than replaying it at the realtime API's 1.25x limit.
     var supportsStreaming: Bool { supportsLiveTranscriptionSession(forModelId: nil) }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget {
@@ -105,6 +138,11 @@ final class AssemblyAIPlugin: NSObject,
     var isSpeakerDiarizationEnabled: Bool { _speakerDiarizationEnabled }
     /// Dictations leave speaker labels out, since AssemblyAI bills them and the host drops them.
     private var diarizesRequest: Bool { _speakerDiarizationEnabled && PluginSpeakerLabels.areRequested }
+    /// Only dictations go to the Dictation API; recordings and files keep the verbatim
+    /// Sync transcript. Like `diarizesRequest`, read it in the task that transcribes.
+    private var syncEndpoint: AssemblyAISyncEndpoint {
+        _transcriptionMode == .dictation && !PluginSpeakerLabels.areRequested ? .dictation : .sync
+    }
     var transcriptionMode: AssemblyAITranscriptionMode { _transcriptionMode }
 
     var supportedLanguages: [String] {
@@ -259,8 +297,8 @@ final class AssemblyAIPlugin: NSObject,
 
     // MARK: - Transcription With Progress
 
-    /// Finished audio, such as a file or a preview window: the Sync or async API, then the
-    /// text as progress. Dictations stream through live sessions instead.
+    /// Finished audio, such as a file or a preview window: the Sync, Dictation or async API,
+    /// then the text as progress. Live dictations stream through live sessions instead.
     func transcribe(
         audio: AudioData,
         language: String?,
@@ -285,6 +323,7 @@ final class AssemblyAIPlugin: NSObject,
         prompt: String?,
         speakerDiarizationEnabled: Bool
     ) async throws -> PluginStructuredTranscriptionResult {
+        let endpoint = syncEndpoint
         if _transcriptionMode != .async, let syncRequest = Self.makeSyncRequest(
             modelId: modelId,
             language: language,
@@ -297,7 +336,7 @@ final class AssemblyAIPlugin: NSObject,
                     audio: audio,
                     request: syncRequest,
                     apiKey: apiKey,
-                    cleanedUp: _transcriptionMode == .dictation
+                    endpoint: endpoint
                 )
             } catch {
                 if error is CancellationError || Task.isCancelled {
@@ -306,8 +345,9 @@ final class AssemblyAIPlugin: NSObject,
                 if case PluginTranscriptionError.invalidApiKey = error {
                     throw error
                 }
+                let cleanupNote = endpoint == .dictation ? " without cleanup" : ""
                 logger.warning(
-                    "AssemblyAI sync transcription failed, falling back to the async API: \(error.localizedDescription, privacy: .public)"
+                    "AssemblyAI \(endpoint.name, privacy: .public) transcription failed, falling back to the async API\(cleanupNote, privacy: .public): \(error.localizedDescription, privacy: .public)"
                 )
             }
         }
@@ -375,17 +415,17 @@ final class AssemblyAIPlugin: NSObject,
         return SyncRequest(modelId: sync.modelId, language: syncLanguage, keyterms: keyterms)
     }
 
-    /// With `cleanedUp`, the recording goes to the Dictation API instead, which takes the
-    /// same request, always runs Universal-3.6 Pro and returns the text cleaned up. When
-    /// `makeSyncRequest` returns nil or this throws, the async fallback has no cleanup.
+    /// The Dictation endpoint takes the same request as Sync, always runs Universal-3.6 Pro
+    /// and returns the text cleaned up. When `makeSyncRequest` returns nil or this throws,
+    /// the async fallback has no cleanup.
     private func transcribeSync(
         audio: AudioData,
         request syncRequest: SyncRequest,
         apiKey: String,
-        cleanedUp: Bool
+        endpoint: AssemblyAISyncEndpoint
     ) async throws -> PluginStructuredTranscriptionResult {
         let text = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await sendSyncRequest(syncRequest, uploadFile: uploadFile, apiKey: apiKey, cleanedUp: cleanedUp)
+            try await sendSyncRequest(syncRequest, uploadFile: uploadFile, apiKey: apiKey, endpoint: endpoint)
         }
         // The sync response carries no detected language.
         return PluginStructuredTranscriptionResult(text: text, detectedLanguage: syncRequest.language)
@@ -395,13 +435,10 @@ final class AssemblyAIPlugin: NSObject,
         _ syncRequest: SyncRequest,
         uploadFile: PluginAudioUploadFile,
         apiKey: String,
-        cleanedUp: Bool
+        endpoint: AssemblyAISyncEndpoint
     ) async throws -> String {
-        let endpoint = cleanedUp
-            ? "https://dictation.assemblyai.com/v1/transcribe"
-            : "https://sync.assemblyai.com/v1/transcribe"
-        guard let url = URL(string: endpoint) else {
-            throw PluginTranscriptionError.apiError("Invalid sync URL")
+        guard let url = URL(string: endpoint.urlString) else {
+            throw PluginTranscriptionError.apiError("Invalid \(endpoint.name) URL")
         }
 
         let boundary = UUID().uuidString
@@ -409,7 +446,7 @@ final class AssemblyAIPlugin: NSObject,
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         // The Dictation API always runs Universal-3.6 Pro and takes no model header.
-        if !cleanedUp {
+        if endpoint == .sync {
             request.setValue(syncRequest.modelId, forHTTPHeaderField: "X-AAI-Model")
         }
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
@@ -418,8 +455,7 @@ final class AssemblyAIPlugin: NSObject,
             uploadFile: uploadFile,
             boundary: boundary
         )
-        // The server gives up after 30 s; the rest covers the upload.
-        request.timeoutInterval = 45
+        request.timeoutInterval = endpoint.timeout
 
         // A failed Sync request falls back to the async API instead of being sent again:
         // even a Cloudflare 522 can follow a request AssemblyAI received, and a second one
@@ -444,18 +480,18 @@ final class AssemblyAIPlugin: NSObject,
                 statusCode: httpResponse.statusCode,
                 responseData: data,
                 underlyingError: PluginTranscriptionError.apiError(
-                    "Sync transcription failed HTTP \(httpResponse.statusCode): \(body)"
+                    "\(endpoint.name) transcription failed HTTP \(httpResponse.statusCode): \(body)"
                 )
             )
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let text = json["text"] as? String else {
-            throw PluginTranscriptionError.apiError("Invalid sync transcription response")
+            throw PluginTranscriptionError.apiError("Invalid \(endpoint.name) transcription response")
         }
         // The Dictation API returns the verbatim transcript in `text` and the cleaned-up
         // text in `llm_response`; without a rewrite, the transcript is still usable.
-        if cleanedUp, let cleanedText = json["llm_response"] as? String,
+        if endpoint == .dictation, let cleanedText = json["llm_response"] as? String,
            !cleanedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return cleanedText
         }
@@ -1598,7 +1634,7 @@ private struct AssemblyAISettingsView: View {
                     case .sync:
                         Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
                     case .dictation:
-                        Text("Uploads the recording when you stop and returns it cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings over 20 minutes, more than 100 dictionary terms, speaker diarization, a language it doesn't support, or a failed request use the async API with the selected model instead, without cleanup.", bundle: bundle)
+                        Text("Uploads dictations when you stop and returns them cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings and files use the Sync API, without cleanup. Dictations over 20 minutes, with more than 100 dictionary terms or in a language it doesn't support, and failed requests use the async API with the selected model, without cleanup.", bundle: bundle)
                     case .async:
                         Text("Lowest price; the text takes a few seconds after you stop. No live preview from AssemblyAI.", bundle: bundle)
                     }
