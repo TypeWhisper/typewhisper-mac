@@ -5172,16 +5172,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         await MainActor.run {
             _ = apiContext.dictationViewModel.apiStopRecording()
         }
-        var secondFinished = false
+        var secondStatus: DictationSessionSnapshot.Status?
         for _ in 0..<80 {
-            let status = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
-            if status == .failed || status == .completed {
-                secondFinished = true
+            secondStatus = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
+            if secondStatus == .failed || secondStatus == .completed {
                 break
             }
             try? await Task.sleep(for: .milliseconds(25))
         }
-        XCTAssertTrue(secondFinished)
+        secondStatus = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
+        XCTAssertTrue(secondStatus == .failed || secondStatus == .completed)
         await apiContext.dictationViewModel.testingWaitForRecordingCleanup()
     }
 
@@ -15824,40 +15824,83 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         // Let the second dictation finish before the test removes its directory.
         _ = viewModel.apiStopRecording()
-        var nextFinished = false
         for _ in 0..<80 {
             let status = viewModel.apiDictationSession(id: nextSessionID)?.status
             if status == .failed || status == .completed {
-                nextFinished = true
                 break
             }
             try? await Task.sleep(for: .milliseconds(25))
         }
-        XCTAssertTrue(nextFinished)
+        let nextStatus = viewModel.apiDictationSession(id: nextSessionID)?.status
+        XCTAssertTrue(nextStatus == .failed || nextStatus == .completed)
         await viewModel.testingWaitForRecordingCleanup()
     }
 
-    /// A hotkey start queued during processing keeps priority over an API start, also once the
-    /// reset has set the state to idle and while a banner or the Insert offer is visible.
+    /// A hotkey start queued during processing keeps priority over an API start, both while
+    /// the resulting "No speech recognized" banner is shown and once the reset sets the state
+    /// to idle.
     @MainActor
     func testAPIStartWaitsForQueuedHotkeyStart() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
+            MockTranscriptionPlugin.reset()
             TestSupport.remove(appSupportDirectory)
         }
 
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("")
+        MockTranscriptionPlugin.setHang(seconds: 0.3)
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
         let viewModel = context.dictationViewModel
-        viewModel.state = .processing
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        var startCount = 0
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = { startCount += 1 }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<100 where viewModel.state != .processing {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(viewModel.state, .processing)
         context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
 
-        viewModel.state = .idle
+        let noSpeechMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "No speech recognized")
+        for _ in 0..<80 where viewModel.actionFeedbackMessage?.hasPrefix(noSpeechMessage) != true {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(viewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertTrue(viewModel.actionFeedbackMessage?.hasPrefix(noSpeechMessage) == true)
+        XCTAssertTrue(viewModel.canDismissActionFeedback)
+        // The banner alone could be replaced, but the queued hotkey start comes first.
         XCTAssertFalse(viewModel.canStartAPIRecording)
-        viewModel.state = .inserting
+
+        // Ending the banner resets to idle before the queued start runs; the API still waits.
+        viewModel.dismissActionFeedback()
         XCTAssertFalse(viewModel.canStartAPIRecording)
+        for _ in 0..<100 where startCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await viewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(viewModel.state, .recording)
+
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<80 where viewModel.state != .inserting && viewModel.state != .idle {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        await viewModel.testingWaitForRecordingCleanup()
     }
 
     @MainActor
