@@ -5172,13 +5172,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         await MainActor.run {
             _ = apiContext.dictationViewModel.apiStopRecording()
         }
+        var secondFinished = false
         for _ in 0..<80 {
             let status = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
             if status == .failed || status == .completed {
+                secondFinished = true
                 break
             }
             try? await Task.sleep(for: .milliseconds(25))
         }
+        XCTAssertTrue(secondFinished)
         await apiContext.dictationViewModel.testingWaitForRecordingCleanup()
     }
 
@@ -15821,14 +15824,40 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         // Let the second dictation finish before the test removes its directory.
         _ = viewModel.apiStopRecording()
+        var nextFinished = false
         for _ in 0..<80 {
             let status = viewModel.apiDictationSession(id: nextSessionID)?.status
             if status == .failed || status == .completed {
+                nextFinished = true
                 break
             }
             try? await Task.sleep(for: .milliseconds(25))
         }
+        XCTAssertTrue(nextFinished)
         await viewModel.testingWaitForRecordingCleanup()
+    }
+
+    /// A hotkey start queued during processing keeps priority over an API start, also once the
+    /// reset has set the state to idle and while a banner or the Insert offer is visible.
+    @MainActor
+    func testAPIStartWaitsForQueuedHotkeyStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.state = .processing
+        context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+
+        viewModel.state = .idle
+        XCTAssertFalse(viewModel.canStartAPIRecording)
+        viewModel.state = .inserting
+        XCTAssertFalse(viewModel.canStartAPIRecording)
     }
 
     @MainActor
