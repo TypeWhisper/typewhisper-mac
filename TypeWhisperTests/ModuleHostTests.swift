@@ -501,6 +501,14 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertNil(viewModel.selectedModuleEntryID)
         XCTAssertEqual(viewModel.moduleGroups.first?.entries.map(\.id), ["first"])
 
+        // An entry the module lists right away leaves the selection once it is removed.
+        store.listsNewEntriesLater = false
+        viewModel.createModuleEntry()
+        XCTAssertEqual(viewModel.selectedModuleEntryID, "created-2")
+        store.removeEntry("created-2")
+        XCTAssertNil(viewModel.selectedModuleEntryID)
+        XCTAssertNil(viewModel.moduleEntryContent)
+
         // A group without deletion deletes nothing.
         let readOnly = TestSidebarStore(offersDeletion: false)
         readOnly.entries = [readOnly.entry("kept", daysAgo: 0)]
@@ -531,6 +539,21 @@ final class ModuleHostTests: XCTestCase {
         // Record actions in the toolbar have nothing to act on.
         XCTAssertTrue(viewModel.selectedRecordIDs.isEmpty)
         XCTAssertNil(viewModel.selectedRecord)
+
+        // A group that went away while the prompt was open is not opened.
+        viewModel.requestNavigationSelection(.smartMailbox(.all))
+        viewModel.requestRecordSelection([fixture.recordID])
+        viewModel.editedText = "Another correction"
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+        XCTAssertTrue(viewModel.showsUnsavedChangesPrompt)
+        store.isVisible = false
+        store.changed()
+        viewModel.discardAndContinue()
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+        XCTAssertFalse(viewModel.isShowingModuleGroup)
+        store.isVisible = true
+        store.changed()
+        viewModel.requestNavigationSelection(.moduleGroup("test.group"))
 
         // Opening a record, for example from a module, leaves the group.
         viewModel.requestOpenRecord(withID: fixture.recordID)
@@ -753,6 +776,12 @@ private final class TestSidebarStore {
 
     func changed() {
         subject.send()
+    }
+
+    /// Removes an entry without the app, as a sync would.
+    func removeEntry(_ id: String) {
+        entries.removeAll { $0.id == id }
+        changed()
     }
 
     func publishPendingEntries() {

@@ -546,7 +546,9 @@ final class HistoryViewModel: ObservableObject {
               let id = newEntry.perform() else { return }
         // A search the new entry does not match would hide it in the list.
         searchQuery = ""
-        createdModuleEntryID = id
+        // A module that lists the entry right away needs no pending marker.
+        let isListed = selectedModuleGroup?.entries.contains { $0.id == id } == true
+        createdModuleEntryID = isListed ? nil : id
         selectedModuleEntryID = id
     }
 
@@ -1441,7 +1443,11 @@ final class HistoryViewModel: ObservableObject {
             selectedRecordIDs = selection
         case .openRecord(let id):
             openRecord(withID: id)
-        case .navigation(let selection):
+        case .navigation(var selection):
+            if case .moduleGroup(let id) = selection, !moduleGroups.contains(where: { $0.id == id }) {
+                // The group went away while the user decided about unsaved changes.
+                selection = .smartMailbox(.all)
+            }
             navigationSelection = selection
             if case .moduleGroup = selection {
                 // Record actions in the toolbar act on the selection.
