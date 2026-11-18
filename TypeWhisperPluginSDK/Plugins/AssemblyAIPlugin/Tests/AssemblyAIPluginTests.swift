@@ -666,11 +666,30 @@ final class AssemblyAIPluginTests: XCTestCase {
             guard case PluginTranscriptionError.apiError(let message) = error else {
                 return XCTFail("expected an API error that starts the async fallback, got \(error)")
             }
-            XCTAssertTrue(message.contains("Dictation request did not finish"))
+            XCTAssertTrue(message.contains("Dictation attempt did not finish"))
         }
 
         let value = try await AssemblyAIPlugin.finishing(within: 5, endpoint: .dictation) { "in time" }
         XCTAssertEqual(value, "in time")
+    }
+
+    func testCancellingADictationAttemptStaysACancellation() async throws {
+        // The host cancels at its deadline or when the user stops; neither may start the fallback.
+        let attempt = Task {
+            try await AssemblyAIPlugin.finishing(within: 5, endpoint: .dictation) {
+                try await Task.sleep(for: .seconds(5))
+                return "late"
+            }
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        attempt.cancel()
+
+        do {
+            _ = try await attempt.value
+            XCTFail("a cancelled attempt must not return")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "expected a cancellation, got \(error)")
+        }
     }
 
     func testSyncBudgetIsSharedByTheUploadsOfOneAttempt() {

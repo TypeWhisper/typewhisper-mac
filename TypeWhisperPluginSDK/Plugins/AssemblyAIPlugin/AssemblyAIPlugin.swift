@@ -64,7 +64,7 @@ enum AssemblyAISyncEndpoint: Equatable, Sendable {
     }
 
     /// `URLRequest.timeoutInterval` only limits the silence between packets, so a
-    /// Dictation response that trickles in is also stopped by the clock.
+    /// Dictation attempt, including a response that trickles in, is also stopped by the clock.
     var boundsElapsedTime: Bool { self == .dictation }
 }
 
@@ -463,17 +463,24 @@ final class AssemblyAIPlugin: NSObject,
         apiKey: String,
         endpoint: AssemblyAISyncEndpoint
     ) async throws -> PluginStructuredTranscriptionResult {
-        let budget = AssemblyAISyncBudget(seconds: endpoint.attemptLimit(forAudioDuration: audio.duration))
-        let text = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await sendSyncRequest(
-                syncRequest,
-                uploadFile: uploadFile,
-                apiKey: apiKey,
-                endpoint: endpoint,
-                budget: budget,
-                audioDuration: audio.duration
-            )
+        let attemptLimit = endpoint.attemptLimit(forAudioDuration: audio.duration)
+        let budget = AssemblyAISyncBudget(seconds: attemptLimit)
+        let attempt: @Sendable () async throws -> String = { [self] in
+            try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+                try await sendSyncRequest(
+                    syncRequest,
+                    uploadFile: uploadFile,
+                    apiKey: apiKey,
+                    endpoint: endpoint,
+                    budget: budget,
+                    audioDuration: audio.duration
+                )
+            }
         }
+        // The clock covers encoding, building the body and both uploads.
+        let text = endpoint.boundsElapsedTime
+            ? try await Self.finishing(within: attemptLimit, endpoint: endpoint, attempt)
+            : try await attempt()
         // The sync response carries no detected language.
         return PluginStructuredTranscriptionResult(text: text, detectedLanguage: syncRequest.language)
     }
@@ -513,13 +520,10 @@ final class AssemblyAIPlugin: NSObject,
         // Cloudflare 522 or a timeout can follow a request AssemblyAI received, and a second
         // one would be billed. Uploads too large for the shared session's 600 s get their
         // own session.
-        let resourceTimeout = PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
-        let send: @Sendable () async throws -> (Data, URLResponse) = { [request] in
-            try await PluginHTTPClient.dataSentOnce(for: request, resourceTimeout: resourceTimeout)
-        }
-        let (data, response) = endpoint.boundsElapsedTime
-            ? try await Self.finishing(within: timeLeft, endpoint: endpoint, send)
-            : try await send()
+        let (data, response) = try await PluginHTTPClient.dataSentOnce(
+            for: request,
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -570,7 +574,7 @@ final class AssemblyAIPlugin: NSObject,
             guard let first = try await group.next(), let value = first else {
                 try Task.checkCancellation()
                 throw PluginTranscriptionError.apiError(
-                    "\(endpoint.name) request did not finish within \(Int(seconds)) s"
+                    "\(endpoint.name) attempt did not finish within \(Int(seconds)) s"
                 )
             }
             return value
