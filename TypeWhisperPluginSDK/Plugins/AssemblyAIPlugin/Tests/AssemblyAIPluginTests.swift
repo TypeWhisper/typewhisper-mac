@@ -581,7 +581,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(request.url?.absoluteString, "https://dictation.assemblyai.com/v1/transcribe")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "assembly-key")
         XCTAssertNil(request.value(forHTTPHeaderField: "X-AAI-Model"))
-        XCTAssertEqual(request.timeoutInterval, 90)
+        XCTAssertEqual(request.timeoutInterval, 31)
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains(#"{"keyterms_prompt":["TypeWhisper"],"language_codes":["de"]}"#))
     }
@@ -641,6 +641,36 @@ final class AssemblyAIPluginTests: XCTestCase {
                 "api.assemblyai.com/v2/transcript/transcript_123",
             ]
         )
+    }
+
+    func testDictationTimeoutLeavesTheAsyncFallbackTimeInTheHostDeadline() {
+        // The host gives a dictation 60 s plus its length; 30 s of it stay for the fallback.
+        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.timeout(forAudioDuration: 5), 35)
+        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.timeout(forAudioDuration: 60), 90)
+        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.timeout(forAudioDuration: 1_200), 90)
+        XCTAssertEqual(AssemblyAISyncEndpoint.sync.timeout(forAudioDuration: 5), 45)
+    }
+
+    func testDictationModeKeepsDictionaryTrainingVerbatim() async throws {
+        let plugin = try Self.makeDictationModePlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"noshun","words":[],"confidence":0.9,"audio_duration_ms":1000,"session_id":"s"}"#.utf8),
+                    Self.httpResponse(url: "https://sync.assemblyai.com/v1/transcribe", statusCode: 200)
+                ),
+            ])
+        }
+
+        // Dictionary training runs like a dictation, without speaker labels, but asks for the words as heard.
+        let result = try await PluginVerbatimTranscript.$isRequired.withValue(true) {
+            try await Self.transcribeDictation(with: plugin)
+        }
+
+        XCTAssertEqual(result.text, "noshun")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.absoluteString }, ["https://sync.assemblyai.com/v1/transcribe"])
     }
 
     func testDictationModeSendsFilesToTheSyncAPI() async throws {

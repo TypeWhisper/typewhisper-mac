@@ -43,12 +43,14 @@ enum AssemblyAISyncEndpoint: Equatable, Sendable {
         }
     }
 
-    /// The Sync server gives up after 30 s. The Dictation API also rewrites the text,
-    /// and AssemblyAI recommends a 90 s client timeout for it. The rest covers the upload.
-    var timeout: TimeInterval {
+    /// The Sync server gives up after 30 s; the rest covers the upload. The Dictation
+    /// API also rewrites the text, and AssemblyAI recommends a 90 s client timeout for it.
+    /// A short dictation waits less, so the async fallback still fits in the host's
+    /// deadline for the dictation (60 s plus its length).
+    func timeout(forAudioDuration duration: TimeInterval) -> TimeInterval {
         switch self {
         case .sync: 45
-        case .dictation: 90
+        case .dictation: min(90, 30 + max(0, duration))
         }
     }
 }
@@ -138,10 +140,13 @@ final class AssemblyAIPlugin: NSObject,
     var isSpeakerDiarizationEnabled: Bool { _speakerDiarizationEnabled }
     /// Dictations leave speaker labels out, since AssemblyAI bills them and the host drops them.
     private var diarizesRequest: Bool { _speakerDiarizationEnabled && PluginSpeakerLabels.areRequested }
-    /// Only dictations go to the Dictation API; recordings and files keep the verbatim
-    /// Sync transcript. Like `diarizesRequest`, read it in the task that transcribes.
+    /// Only dictations go to the Dictation API; recordings, files and dictionary training
+    /// keep the verbatim transcript. Like `diarizesRequest`, read it in the task that
+    /// transcribes.
     private var syncEndpoint: AssemblyAISyncEndpoint {
-        _transcriptionMode == .dictation && !PluginSpeakerLabels.areRequested ? .dictation : .sync
+        _transcriptionMode == .dictation
+            && !PluginSpeakerLabels.areRequested
+            && !PluginVerbatimTranscript.isRequired ? .dictation : .sync
     }
     var transcriptionMode: AssemblyAITranscriptionMode { _transcriptionMode }
 
@@ -425,7 +430,13 @@ final class AssemblyAIPlugin: NSObject,
         endpoint: AssemblyAISyncEndpoint
     ) async throws -> PluginStructuredTranscriptionResult {
         let text = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await sendSyncRequest(syncRequest, uploadFile: uploadFile, apiKey: apiKey, endpoint: endpoint)
+            try await sendSyncRequest(
+                syncRequest,
+                uploadFile: uploadFile,
+                apiKey: apiKey,
+                endpoint: endpoint,
+                audioDuration: audio.duration
+            )
         }
         // The sync response carries no detected language.
         return PluginStructuredTranscriptionResult(text: text, detectedLanguage: syncRequest.language)
@@ -435,7 +446,8 @@ final class AssemblyAIPlugin: NSObject,
         _ syncRequest: SyncRequest,
         uploadFile: PluginAudioUploadFile,
         apiKey: String,
-        endpoint: AssemblyAISyncEndpoint
+        endpoint: AssemblyAISyncEndpoint,
+        audioDuration: TimeInterval
     ) async throws -> String {
         guard let url = URL(string: endpoint.urlString) else {
             throw PluginTranscriptionError.apiError("Invalid \(endpoint.name) URL")
@@ -455,16 +467,16 @@ final class AssemblyAIPlugin: NSObject,
             uploadFile: uploadFile,
             boundary: boundary
         )
-        request.timeoutInterval = endpoint.timeout
+        request.timeoutInterval = endpoint.timeout(forAudioDuration: audioDuration)
 
-        // A failed Sync request falls back to the async API instead of being sent again:
-        // even a Cloudflare 522 can follow a request AssemblyAI received, and a second one
-        // would be billed. Only uploads too large for the shared session's resource
-        // timeout take the resource-timeout path, which keeps the default policy.
-        let resourceTimeout = PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
-        let (data, response) = resourceTimeout > Self.sharedSessionResourceTimeout
-            ? try await PluginHTTPClient.data(for: request, resourceTimeout: resourceTimeout)
-            : try await PluginHTTPClient.data(for: request, retry: .disabled)
+        // A failed request falls back to the async API instead of being sent again: even a
+        // Cloudflare 522 can follow a request AssemblyAI received, and a second one would be
+        // billed. Uploads too large for the shared session's 600 s get their own session.
+        let (data, response) = try await PluginHTTPClient.data(
+            for: request,
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count),
+            retry: .disabled
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -497,9 +509,6 @@ final class AssemblyAIPlugin: NSObject,
         }
         return text
     }
-
-    /// `PluginHTTPClient`'s shared session allows 600 s; longer uploads need their own session.
-    private static let sharedSessionResourceTimeout: TimeInterval = 600
 
     static func makeSyncRequestBody(
         config: [String: Any],
@@ -1634,7 +1643,7 @@ private struct AssemblyAISettingsView: View {
                     case .sync:
                         Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
                     case .dictation:
-                        Text("Uploads dictations when you stop and returns them cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings and files use the Sync API, without cleanup. Dictations over 20 minutes, with more than 100 dictionary terms or in a language it doesn't support, and failed requests use the async API with the selected model, without cleanup.", bundle: bundle)
+                        Text("Uploads dictations when you stop and returns them cleaned up by Universal-3.6 Pro: filler words removed, punctuation and capitalization fixed. No live preview from AssemblyAI. Recordings and files are not cleaned up; they use the Sync API, or the async API beyond its limits. Dictations over 20 minutes, with more than 100 dictionary terms or in a language it doesn't support, and failed requests use the async API with the selected model, without cleanup.", bundle: bundle)
                     case .async:
                         Text("Lowest price; the text takes a few seconds after you stop. No live preview from AssemblyAI.", bundle: bundle)
                     }

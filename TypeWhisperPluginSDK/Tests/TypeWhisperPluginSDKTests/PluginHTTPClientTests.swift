@@ -382,6 +382,27 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertTrue(delays.isEmpty)
     }
 
+    func testDisabledPolicySkipsTheLadderOnADedicatedSession() async throws {
+        // A long upload a provider may bill after a 522 must not be sent twice either.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.success(Self.statusResponse(522)), .success(Self.okResponse())])
+        }
+        let recorder = DelayRecorder()
+        PluginHTTPClient.configureRetryForTesting(sleeper: { await recorder.record($0) })
+        var request = Self.request(path: "/long-upload")
+        request.httpMethod = "POST"
+
+        let (_, response) = try await PluginHTTPClient.data(
+            for: request, resourceTimeout: 1_650, retry: .disabled
+        )
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 522)
+        XCTAssertEqual(store.sessions.first?.requestedPaths, ["/long-upload"])
+        let delays = await recorder.delays
+        XCTAssertTrue(delays.isEmpty)
+    }
+
     func testTimeoutStillGetsTheCompatibilityImmediateRetry() async throws {
         // This asserted the OPPOSITE until CodeRabbit caught it. Narrowing the
         // immediate retry to stale-pool codes ALTERED pre-existing behaviour rather

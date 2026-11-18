@@ -237,15 +237,25 @@ public enum PluginHTTPClient {
         for request: URLRequest,
         resourceTimeout: TimeInterval?
     ) async throws -> (Data, URLResponse) {
+        try await data(for: request, resourceTimeout: resourceTimeout, retry: .default)
+    }
+
+    /// Like `data(for:resourceTimeout:)`, for a request that must not be sent
+    /// twice, such as an upload a provider may bill even when it answers 522.
+    public static func data(
+        for request: URLRequest,
+        resourceTimeout: TimeInterval?,
+        retry policy: PluginHTTPRetryPolicy
+    ) async throws -> (Data, URLResponse) {
         try ensureNetworkAccessIsAllowed()
         guard let resourceTimeout, resourceTimeout > longRunningResourceTimeout else {
-            return try await dataWithRetries(for: request, policy: .default)
+            return try await dataWithRetries(for: request, policy: policy)
         }
 
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = resourceTimeout
         config.timeoutIntervalForResource = resourceTimeout
-        return try await dataWithRetries(for: request, policy: .default, dedicatedConfiguration: config)
+        return try await dataWithRetries(for: request, policy: policy, dedicatedConfiguration: config)
     }
 
     /// A resource timeout for `data(for:resourceTimeout:)` that gives an
