@@ -43,16 +43,29 @@ enum AssemblyAISyncEndpoint: Equatable, Sendable {
         }
     }
 
-    /// The Sync server gives up after 30 s; the rest covers the upload. The Dictation
-    /// API also rewrites the text, and AssemblyAI recommends a 90 s client timeout for it.
-    /// A short dictation waits less, so the async fallback still fits in the host's
-    /// deadline for the dictation (60 s plus its length).
-    func timeout(forAudioDuration duration: TimeInterval) -> TimeInterval {
+    /// How long one request may go without data. The Sync server gives up after 30 s;
+    /// the rest covers the upload. The Dictation API also rewrites the text, and
+    /// AssemblyAI recommends a 90 s client timeout for it.
+    func requestTimeout(forAudioDuration duration: TimeInterval) -> TimeInterval {
         switch self {
         case .sync: 45
-        case .dictation: min(90, 30 + max(0, duration))
+        case .dictation: min(90, attemptLimit(forAudioDuration: duration))
         }
     }
+
+    /// How long the whole attempt may take, encoding and every upload included. The host
+    /// gives a dictation 60 s plus its length, and a Dictation attempt leaves 30 s of that
+    /// for the async fallback. A Sync attempt shares the 45 s between its uploads.
+    func attemptLimit(forAudioDuration duration: TimeInterval) -> TimeInterval {
+        switch self {
+        case .sync: 45
+        case .dictation: 30 + max(0, duration)
+        }
+    }
+
+    /// `URLRequest.timeoutInterval` only limits the silence between packets, so a
+    /// Dictation response that trickles in is also stopped by the clock.
+    var boundsElapsedTime: Bool { self == .dictation }
 }
 
 /// One time budget for a Sync or Dictation attempt. The M4A upload and a WAV upload
@@ -450,14 +463,15 @@ final class AssemblyAIPlugin: NSObject,
         apiKey: String,
         endpoint: AssemblyAISyncEndpoint
     ) async throws -> PluginStructuredTranscriptionResult {
-        let budget = AssemblyAISyncBudget(seconds: endpoint.timeout(forAudioDuration: audio.duration))
+        let budget = AssemblyAISyncBudget(seconds: endpoint.attemptLimit(forAudioDuration: audio.duration))
         let text = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
             try await sendSyncRequest(
                 syncRequest,
                 uploadFile: uploadFile,
                 apiKey: apiKey,
                 endpoint: endpoint,
-                budget: budget
+                budget: budget,
+                audioDuration: audio.duration
             )
         }
         // The sync response carries no detected language.
@@ -469,12 +483,13 @@ final class AssemblyAIPlugin: NSObject,
         uploadFile: PluginAudioUploadFile,
         apiKey: String,
         endpoint: AssemblyAISyncEndpoint,
-        budget: AssemblyAISyncBudget
+        budget: AssemblyAISyncBudget,
+        audioDuration: TimeInterval
     ) async throws -> String {
         guard let url = URL(string: endpoint.urlString) else {
             throw PluginTranscriptionError.apiError("Invalid \(endpoint.name) URL")
         }
-        guard let timeout = budget.requestTimeout() else {
+        guard let timeLeft = budget.requestTimeout() else {
             throw PluginTranscriptionError.apiError("\(endpoint.name) time budget used up before another upload")
         }
 
@@ -492,16 +507,19 @@ final class AssemblyAIPlugin: NSObject,
             uploadFile: uploadFile,
             boundary: boundary
         )
-        request.timeoutInterval = timeout
+        request.timeoutInterval = min(endpoint.requestTimeout(forAudioDuration: audioDuration), timeLeft)
 
         // A failed request falls back to the async API instead of being sent again: even a
         // Cloudflare 522 or a timeout can follow a request AssemblyAI received, and a second
         // one would be billed. Uploads too large for the shared session's 600 s get their
         // own session.
-        let (data, response) = try await PluginHTTPClient.dataSentOnce(
-            for: request,
-            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
-        )
+        let resourceTimeout = PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
+        let send: @Sendable () async throws -> (Data, URLResponse) = { [request] in
+            try await PluginHTTPClient.dataSentOnce(for: request, resourceTimeout: resourceTimeout)
+        }
+        let (data, response) = endpoint.boundsElapsedTime
+            ? try await Self.finishing(within: timeLeft, endpoint: endpoint, send)
+            : try await send()
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -533,6 +551,30 @@ final class AssemblyAIPlugin: NSObject,
             return cleanedText
         }
         return text
+    }
+
+    /// Runs `operation` and stops it after `seconds`, with an API error that sends the
+    /// recording to the async fallback. A cancellation of the caller stays a cancellation.
+    static func finishing<Value: Sendable>(
+        within seconds: TimeInterval,
+        endpoint: AssemblyAISyncEndpoint,
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await withThrowingTaskGroup(of: Value?.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: .milliseconds(Int64(seconds * 1_000)))
+                return nil
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next(), let value = first else {
+                try Task.checkCancellation()
+                throw PluginTranscriptionError.apiError(
+                    "\(endpoint.name) request did not finish within \(Int(seconds)) s"
+                )
+            }
+            return value
+        }
     }
 
     static func makeSyncRequestBody(

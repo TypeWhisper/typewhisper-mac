@@ -645,10 +645,32 @@ final class AssemblyAIPluginTests: XCTestCase {
 
     func testDictationTimeoutLeavesTheAsyncFallbackTimeInTheHostDeadline() {
         // The host gives a dictation 60 s plus its length; 30 s of it stay for the fallback.
-        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.timeout(forAudioDuration: 5), 35)
-        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.timeout(forAudioDuration: 60), 90)
-        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.timeout(forAudioDuration: 1_200), 90)
-        XCTAssertEqual(AssemblyAISyncEndpoint.sync.timeout(forAudioDuration: 5), 45)
+        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.attemptLimit(forAudioDuration: 5), 35)
+        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.attemptLimit(forAudioDuration: 1_200), 1_230)
+        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.requestTimeout(forAudioDuration: 5), 35)
+        XCTAssertEqual(AssemblyAISyncEndpoint.dictation.requestTimeout(forAudioDuration: 1_200), 90)
+        XCTAssertEqual(AssemblyAISyncEndpoint.sync.requestTimeout(forAudioDuration: 5), 45)
+        XCTAssertTrue(AssemblyAISyncEndpoint.dictation.boundsElapsedTime)
+        XCTAssertFalse(AssemblyAISyncEndpoint.sync.boundsElapsedTime)
+    }
+
+    func testDictationRequestThatTricklesInStopsAtTheAttemptLimit() async throws {
+        // A response that keeps sending data never hits `timeoutInterval`, so the clock stops it.
+        do {
+            _ = try await AssemblyAIPlugin.finishing(within: 0.2, endpoint: .dictation) {
+                try await Task.sleep(for: .seconds(5))
+                return "late"
+            }
+            XCTFail("the request must stop at the limit")
+        } catch {
+            guard case PluginTranscriptionError.apiError(let message) = error else {
+                return XCTFail("expected an API error that starts the async fallback, got \(error)")
+            }
+            XCTAssertTrue(message.contains("Dictation request did not finish"))
+        }
+
+        let value = try await AssemblyAIPlugin.finishing(within: 5, endpoint: .dictation) { "in time" }
+        XCTAssertEqual(value, "in time")
     }
 
     func testSyncBudgetIsSharedByTheUploadsOfOneAttempt() {
