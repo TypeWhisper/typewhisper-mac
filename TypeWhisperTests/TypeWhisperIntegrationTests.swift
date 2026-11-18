@@ -5167,9 +5167,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(recordingState.state, .recording)
         XCTAssertNil(recordingState.feedback)
 
+        // Let the second dictation finish before the mock transcription is reset.
+        let secondID = try XCTUnwrap((secondJSON["id"] as? String).flatMap(UUID.init(uuidString:)))
         await MainActor.run {
             _ = apiContext.dictationViewModel.apiStopRecording()
         }
+        for _ in 0..<80 {
+            let status = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
+            if status == .failed || status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        await apiContext.dictationViewModel.testingWaitForRecordingCleanup()
     }
 
     func testDictationEndpointsReturnSessionIDAndCompletedTranscription() async throws {
@@ -15791,6 +15801,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .inserting)
         XCTAssertEqual(viewModel.actionFeedbackActionTitle, openRecoveryTitle)
         XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
+        let recoveryURL = try XCTUnwrap(recoveryStore.recoveryURLs.first)
 
         // Processing still blocks an API start, even with a banner set.
         viewModel.state = .processing
@@ -15805,9 +15816,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .recording)
         XCTAssertEqual(viewModel.apiDictationSession(id: nextSessionID)?.status, .recording)
         XCTAssertNil(viewModel.actionFeedbackMessage)
-        XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
+        XCTAssertEqual(recoveryStore.recoveryURLs, [recoveryURL])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recoveryURL.path))
 
+        // Let the second dictation finish before the test removes its directory.
         _ = viewModel.apiStopRecording()
+        for _ in 0..<80 {
+            let status = viewModel.apiDictationSession(id: nextSessionID)?.status
+            if status == .failed || status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        await viewModel.testingWaitForRecordingCleanup()
     }
 
     @MainActor

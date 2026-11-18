@@ -1218,7 +1218,13 @@ final class DictationViewModel: ObservableObject {
 
     var canStartAPIRecording: Bool {
         HistoryRetranscriptionActivity.recordID == nil
-            && (state == .idle || canReplaceUndeliveredTranscriptOffer || canDismissActionFeedback)
+            && (state == .idle || canReplaceUndeliveredTranscriptOffer || canReplaceActionFeedback)
+    }
+
+    /// A new API dictation ends a passive feedback banner, as the dictation hotkey does, unless
+    /// a hotkey start is already queued. That start runs when the banner ends.
+    private var canReplaceActionFeedback: Bool {
+        canDismissActionFeedback && pendingHotkeyDictationStart == nil
     }
 
     /// The Insert offer stays up for a while, so a new dictation replaces it, as the dictation
@@ -1259,7 +1265,7 @@ final class DictationViewModel: ObservableObject {
     func apiStartRecording(forcedWorkflowId: UUID? = nil) -> UUID {
         // A new API dictation replaces a passive feedback banner, such as "No speech
         // recognized", as the dictation hotkey does (#1959).
-        if canReplaceUndeliveredTranscriptOffer || canDismissActionFeedback {
+        if canReplaceUndeliveredTranscriptOffer || canReplaceActionFeedback {
             indicatorFeedbackLifetime.finishImmediately()
             if state == .inserting {
                 resetDictationState()
