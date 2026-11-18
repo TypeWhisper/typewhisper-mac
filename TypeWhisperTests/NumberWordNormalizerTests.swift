@@ -109,6 +109,18 @@ final class NumberWordNormalizerTests: XCTestCase {
         )
     }
 
+    func testGermanMillionenWithoutNumberWordStaysAWord() {
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "erreichte 200 Millionen Euro", language: "de"),
+            "erreichte 200 Millionen Euro"
+        )
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "Millionen Menschen", language: "de"), "Millionen Menschen")
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "zweihundert Millionen Euro", language: "de"),
+            "200000000 Euro"
+        )
+    }
+
     func testEnglishNegativeDecimalNormalizesToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "minus two point five", language: "en"), "-2.5")
     }
