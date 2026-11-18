@@ -47,7 +47,7 @@ packages:
     url: https://github.com/huggingface/swift-huggingface.git
     exactVersion: 0.10.1
   ONNXRuntime:
-    url: https://github.com/microsoft/onnxruntime-swift-package-manager.git
+    url: https://github.com/TypeWhisper/onnxruntime-swift-package-manager.git
     exactVersion: 1.24.2
   MCP:
     url: https://github.com/modelcontextprotocol/swift-sdk.git
