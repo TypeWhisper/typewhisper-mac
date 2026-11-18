@@ -542,8 +542,10 @@ final class HistoryViewModel: ObservableObject {
 
     /// Creates an entry in the selected group and selects it.
     func createModuleEntry() {
-        guard let newEntry = selectedModuleGroup?.group.newEntry,
-              let id = newEntry.perform() else { return }
+        guard let group = selectedModuleGroup?.group, let newEntry = group.newEntry,
+              let id = newEntry.perform(),
+              // Creating the entry can hide the group.
+              selectedModuleGroup?.id == group.id else { return }
         // A search the new entry does not match would hide it in the list.
         searchQuery = ""
         // A module that lists the entry right away needs no pending marker.

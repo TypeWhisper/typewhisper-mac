@@ -554,6 +554,7 @@ final class ModuleHostTests: XCTestCase {
         store.isVisible = true
         store.changed()
         viewModel.requestNavigationSelection(.moduleGroup("test.group"))
+        XCTAssertEqual(viewModel.navigationSelection, .moduleGroup("test.group"))
 
         // Opening a record, for example from a module, leaves the group.
         viewModel.requestOpenRecord(withID: fixture.recordID)
