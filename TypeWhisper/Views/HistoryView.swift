@@ -8,7 +8,7 @@ struct HistoryView: View {
     @State private var deleteCandidateIDs: Set<UUID> = []
     @State private var showingDeleteConfirmation = false
     @State private var comparisonRecord: TranscriptionRecord?
-    @State private var moduleEntryDeletionCandidate: ModuleHistorySidebarEntry?
+    @State private var moduleEntryDeletionCandidate: HistoryModuleEntryDeletion?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -68,13 +68,16 @@ struct HistoryView: View {
             ),
             titleVisibility: .visible,
             presenting: moduleEntryDeletionCandidate
-        ) { entry in
+        ) { candidate in
             Button(String(localized: "Delete"), role: .destructive) {
-                viewModel.deleteModuleEntry(withID: entry.id)
+                viewModel.deleteModuleEntry(withID: candidate.entry.id, inGroup: candidate.groupID)
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
-        } message: { entry in
-            Text(entry.title + "\n\n" + String(localized: "This cannot be undone."))
+        } message: { candidate in
+            Text(candidate.entry.title + "\n\n" + String(localized: "This cannot be undone."))
+        }
+        .onChange(of: viewModel.navigationSelection) { _, _ in
+            moduleEntryDeletionCandidate = nil
         }
         .onChange(of: viewModel.pendingDeletionIDs) { _, ids in
             guard !ids.isEmpty else { return }
@@ -277,7 +280,9 @@ struct HistoryView: View {
                         .contextMenu {
                             if moduleGroup.group.canDelete {
                                 Button(String(localized: "Delete"), role: .destructive) {
-                                    moduleEntryDeletionCandidate = entry
+                                    moduleEntryDeletionCandidate = HistoryModuleEntryDeletion(
+                                        groupID: moduleGroup.id, entry: entry
+                                    )
                                 }
                             }
                         }
@@ -288,7 +293,7 @@ struct HistoryView: View {
                 guard moduleGroup.group.canDelete,
                       let id = viewModel.selectedModuleEntryID,
                       let entry = entries.first(where: { $0.id == id }) else { return }
-                moduleEntryDeletionCandidate = entry
+                moduleEntryDeletionCandidate = HistoryModuleEntryDeletion(groupID: moduleGroup.id, entry: entry)
             }
             .id(moduleGroup.id)
         }

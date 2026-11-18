@@ -175,6 +175,12 @@ struct HistoryModuleEntryContent: Identifiable {
     let view: AnyView
 }
 
+/// An entry the user is asked to confirm deleting, with the group it belongs to.
+struct HistoryModuleEntryDeletion {
+    let groupID: String
+    let entry: ModuleHistorySidebarEntry
+}
+
 struct HistoryDeviceSourceSection: Identifiable, Hashable {
     let source: RecordingSource
     let title: String
@@ -452,6 +458,9 @@ final class HistoryViewModel: ObservableObject {
 
     func deactivate() {
         isActive = false
+        // Activating again reads the groups anew.
+        moduleGroupObservations = []
+        isObservingModuleGroups = false
         cancelPendingQueryWork()
         records = historyService.recentRecords
         totalMatchingRecordCount = historyService.totalRecords
@@ -554,9 +563,10 @@ final class HistoryViewModel: ObservableObject {
         selectedModuleEntryID = id
     }
 
-    /// Deletes an entry of the selected group. The view asks for confirmation first.
-    func deleteModuleEntry(withID id: String) {
-        guard let group = selectedModuleGroup?.group, group.canDelete else { return }
+    /// Deletes an entry of the selected group. The view asks for confirmation
+    /// first and passes the group it asked for.
+    func deleteModuleEntry(withID id: String, inGroup groupID: String) {
+        guard let group = selectedModuleGroup?.group, group.id == groupID, group.canDelete else { return }
         if selectedModuleEntryID == id {
             selectedModuleEntryID = nil
         }

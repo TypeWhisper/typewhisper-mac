@@ -444,6 +444,15 @@ final class ModuleHostTests: XCTestCase {
         store.isVisible = true
         store.changed()
         XCTAssertEqual(viewModel.moduleGroups.map(\.id), ["test.group"])
+
+        // While History is closed, changes are not read; opening it reads them.
+        viewModel.deactivate()
+        let readsWhenClosed = store.entryReads
+        store.entries.append(store.entry("closed", daysAgo: -2))
+        store.changed()
+        XCTAssertEqual(store.entryReads, readsWhenClosed)
+        viewModel.activate()
+        XCTAssertEqual(viewModel.moduleGroups.first?.entries.first?.id, "closed")
     }
 
     func testSearchFieldFiltersTheEntriesOfTheSelectedGroup() throws {
@@ -496,7 +505,10 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertEqual(viewModel.moduleGroups.first?.entries.map(\.id), ["created-1", "first"])
         XCTAssertEqual(viewModel.selectedModuleEntryID, "created-1")
 
-        viewModel.deleteModuleEntry(withID: "created-1")
+        // A confirmation opened for another group deletes nothing.
+        viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.other")
+        XCTAssertEqual(store.deleted, [])
+        viewModel.deleteModuleEntry(withID: "created-1", inGroup: "test.group")
         XCTAssertEqual(store.deleted, ["created-1"])
         XCTAssertNil(viewModel.selectedModuleEntryID)
         XCTAssertEqual(viewModel.moduleGroups.first?.entries.map(\.id), ["first"])
@@ -515,7 +527,7 @@ final class ModuleHostTests: XCTestCase {
         viewModel.setModuleSidebarGroups([readOnly.group(id: "test.readOnly")])
         viewModel.requestNavigationSelection(.moduleGroup("test.readOnly"))
         XCTAssertFalse(try XCTUnwrap(viewModel.selectedModuleGroup).group.canDelete)
-        viewModel.deleteModuleEntry(withID: "kept")
+        viewModel.deleteModuleEntry(withID: "kept", inGroup: "test.readOnly")
         XCTAssertEqual(readOnly.entries.map(\.id), ["kept"])
     }
 
