@@ -238,14 +238,41 @@ public enum PluginHTTPClient {
         resourceTimeout: TimeInterval?
     ) async throws -> (Data, URLResponse) {
         try ensureNetworkAccessIsAllowed()
-        guard let resourceTimeout, resourceTimeout > longRunningResourceTimeout else {
-            return try await dataWithRetries(for: request, policy: .default)
-        }
+        return try await dataWithRetries(
+            for: request,
+            policy: .default,
+            dedicatedConfiguration: dedicatedConfiguration(forResourceTimeout: resourceTimeout)
+        )
+    }
 
+    /// Like `data(for:resourceTimeout:)`, for a request a provider may act on and bill
+    /// as soon as it arrives, such as a transcription upload. It is never sent a second
+    /// time once it may have reached the server: no retry ladder for a status such as
+    /// 522, and no immediate retry after a timeout or a connection lost mid-request.
+    /// A failure before a connection existed, such as a DNS error, still gets the one
+    /// immediate retry, since nothing was sent. URLSession still follows a 307 or 308
+    /// redirect on its own, which repeats the body; use it only with endpoints that do
+    /// not redirect.
+    public static func dataSentOnce(
+        for request: URLRequest,
+        resourceTimeout: TimeInterval?
+    ) async throws -> (Data, URLResponse) {
+        try ensureNetworkAccessIsAllowed()
+        return try await dataWithRetries(
+            for: request,
+            policy: .disabled,
+            dedicatedConfiguration: dedicatedConfiguration(forResourceTimeout: resourceTimeout),
+            sendsOnce: true
+        )
+    }
+
+    /// Uploads that may take longer than the shared session's 600 s get their own session.
+    private static func dedicatedConfiguration(forResourceTimeout resourceTimeout: TimeInterval?) -> URLSessionConfiguration? {
+        guard let resourceTimeout, resourceTimeout > longRunningResourceTimeout else { return nil }
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = resourceTimeout
         config.timeoutIntervalForResource = resourceTimeout
-        return try await dataWithRetries(for: request, policy: .default, dedicatedConfiguration: config)
+        return config
     }
 
     /// A resource timeout for `data(for:resourceTimeout:)` that gives an
@@ -368,7 +395,8 @@ public enum PluginHTTPClient {
     private static func dataWithRetries(
         for request: URLRequest,
         policy: PluginHTTPRetryPolicy,
-        dedicatedConfiguration: URLSessionConfiguration? = nil
+        dedicatedConfiguration: URLSessionConfiguration? = nil,
+        sendsOnce: Bool = false
     ) async throws -> (Data, URLResponse) {
         let deadline = ContinuousClock.now + retrySchedulingBudget
         let method = request.httpMethod ?? "GET"
@@ -478,17 +506,21 @@ public enum PluginHTTPClient {
                 // timed out, the provider may still be working on it, and a second
                 // attempt would double a wait of up to hours. After a connection
                 // lost mid-request, the provider may already have accepted it, and
-                // a POST sent again can create and bill a second job. Failures
-                // before a connection existed are still retried.
-                if dedicatedConfiguration != nil,
-                   let code = (error as? URLError)?.code,
-                   code == .timedOut || (code == .networkConnectionLost && !isIdempotentMethod(method)) {
-                    logger.error("\(method) \(url) failed after \(elapsed) on a dedicated session, not retrying: \(error.localizedDescription)")
-                    throw describingRejectedLargeUpload(error, request: request)
-                }
+                // a POST sent again can create and bill a second job. A request
+                // sent once stops on both on any session. Failures before a
+                // connection existed are still retried.
+                let code = (error as? URLError)?.code
+                let mayHaveReachedServer = code == .timedOut || code == .networkConnectionLost
+                let stopsOnDedicatedSession = dedicatedConfiguration != nil
+                    && (code == .timedOut || (code == .networkConnectionLost && !isIdempotentMethod(method)))
 
                 if dedicatedConfiguration == nil {
                     resetSharedSession(matching: session, reason: "transient network error")
+                }
+
+                if stopsOnDedicatedSession || (sendsOnce && mayHaveReachedServer) {
+                    logger.error("\(method) \(url) failed after \(elapsed), may have reached the server, not retrying: \(error.localizedDescription)")
+                    throw describingRejectedLargeUpload(error, request: request)
                 }
 
                 // Compatibility, and it applies under BOTH policies: one immediate

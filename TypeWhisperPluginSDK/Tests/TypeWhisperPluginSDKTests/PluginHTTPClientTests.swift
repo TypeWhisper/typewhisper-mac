@@ -382,6 +382,66 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertTrue(delays.isEmpty)
     }
 
+    func testSentOnceSkipsTheLadderOnADedicatedSession() async throws {
+        // A long upload a provider may bill after a 522 must not be sent twice.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            store.makeSession(
+                outcomes: [.success(Self.statusResponse(522)), .success(Self.okResponse())],
+                configuration: configuration
+            )
+        }
+        let recorder = DelayRecorder()
+        PluginHTTPClient.configureRetryForTesting(sleeper: { await recorder.record($0) })
+        var request = Self.request(path: "/long-upload")
+        request.httpMethod = "POST"
+
+        let (_, response) = try await PluginHTTPClient.dataSentOnce(for: request, resourceTimeout: 1_650)
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 522)
+        XCTAssertEqual(store.configurations.map(\.timeoutIntervalForResource), [1_650])
+        XCTAssertEqual(store.sessions.flatMap(\.requestedPaths), ["/long-upload"])
+        let delays = await recorder.delays
+        XCTAssertTrue(delays.isEmpty)
+    }
+
+    func testSentOnceDoesNotSendAgainAfterATimeoutOnTheSharedSession() async throws {
+        // A transcription POST that timed out may already be running at the provider.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.failure(URLError(.timedOut)), .success(Self.okResponse())])
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        var request = Self.request(path: "/transcribe")
+        request.httpMethod = "POST"
+
+        do {
+            _ = try await PluginHTTPClient.dataSentOnce(for: request, resourceTimeout: nil)
+            XCTFail("a request sent once must not be sent again after a timeout")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .timedOut)
+        }
+        XCTAssertEqual(store.sessions.flatMap(\.requestedPaths), ["/transcribe"])
+    }
+
+    func testSentOnceStillRetriesWhenNothingWasSent() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            if store.sessions.isEmpty {
+                return store.makeSession(outcomes: [.failure(URLError(.cannotConnectToHost))])
+            }
+            return store.makeSession(outcomes: [.success(Self.okResponse())])
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        var request = Self.request(path: "/transcribe")
+        request.httpMethod = "POST"
+
+        let (_, response) = try await PluginHTTPClient.dataSentOnce(for: request, resourceTimeout: nil)
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(store.sessions.flatMap(\.requestedPaths), ["/transcribe", "/transcribe"])
+    }
+
     func testTimeoutStillGetsTheCompatibilityImmediateRetry() async throws {
         // This asserted the OPPOSITE until CodeRabbit caught it. Narrowing the
         // immediate retry to stale-pool codes ALTERED pre-existing behaviour rather

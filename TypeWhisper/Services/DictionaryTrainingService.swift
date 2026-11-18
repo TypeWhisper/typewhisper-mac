@@ -123,18 +123,21 @@ struct DictionaryTrainingDependencies {
                 audioRecordingService.discardActiveRecoveryRecording()
             },
             transcribe: { request in
-                // Training compares plain text, so engines leave out speaker labels.
+                // Training compares plain text with the spoken word, so engines leave out
+                // speaker labels and return the words as heard, without a cleanup rewrite.
                 let result = try await PluginSpeakerLabels.$areRequested.withValue(false) {
-                    try await modelManager.transcribe(
-                        audioSamples: request.audioSamples,
-                        languageSelection: request.snapshot.languageSelection,
-                        task: .transcribe,
-                        engineOverrideId: request.snapshot.providerID,
-                        cloudModelOverride: request.snapshot.modelID,
-                        prompt: request.prompt,
-                        dictionaryTermHints: request.dictionaryTermHints,
-                        normalizeNumbers: request.normalizeNumbers
-                    )
+                    try await PluginVerbatimTranscript.$isRequired.withValue(true) {
+                        try await modelManager.transcribe(
+                            audioSamples: request.audioSamples,
+                            languageSelection: request.snapshot.languageSelection,
+                            task: .transcribe,
+                            engineOverrideId: request.snapshot.providerID,
+                            cloudModelOverride: request.snapshot.modelID,
+                            prompt: request.prompt,
+                            dictionaryTermHints: request.dictionaryTermHints,
+                            normalizeNumbers: request.normalizeNumbers
+                        )
+                    }
                 }
                 return result.text
             },
