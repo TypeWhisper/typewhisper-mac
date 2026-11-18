@@ -5181,7 +5181,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(25))
         }
         secondStatus = await MainActor.run { apiContext.dictationViewModel.apiDictationSession(id: secondID)?.status }
-        XCTAssertTrue(secondStatus == .failed || secondStatus == .completed)
+        XCTAssertTrue(
+            secondStatus == .failed || secondStatus == .completed,
+            "Second dictation status: \(String(describing: secondStatus))"
+        )
         await apiContext.dictationViewModel.testingWaitForRecordingCleanup()
     }
 
@@ -15832,7 +15835,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(25))
         }
         let nextStatus = viewModel.apiDictationSession(id: nextSessionID)?.status
-        XCTAssertTrue(nextStatus == .failed || nextStatus == .completed)
+        XCTAssertTrue(
+            nextStatus == .failed || nextStatus == .completed,
+            "Next dictation status: \(String(describing: nextStatus))"
+        )
         await viewModel.testingWaitForRecordingCleanup()
     }
 
