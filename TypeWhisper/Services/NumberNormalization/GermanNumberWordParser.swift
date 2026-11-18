@@ -89,6 +89,9 @@ enum GermanNumberWordParser {
             }
 
             if ["tausend", "million", "millionen"].contains(word) {
+                // "Millionen" always counts something said before it. Without a number word there, as in
+                // "200 Millionen" or "Millionen Menschen", it is not a number on its own.
+                if word == "millionen", !consumed { break }
                 let scale = word == "tausend" ? 1_000 : 1_000_000
                 total += max(current, 1) * scale
                 current = 0
