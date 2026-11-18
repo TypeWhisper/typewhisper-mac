@@ -15863,10 +15863,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let viewModel = context.dictationViewModel
         viewModel.soundFeedbackEnabled = false
         viewModel.spokenFeedbackEnabled = false
-        var startCount = 0
+        let startCount = OSAllocatedUnfairLock(initialState: 0)
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = { startCount += 1 }
+        context.audioRecordingService.startRecordingOverride = { startCount.withLock { $0 += 1 } }
         context.audioRecordingService.stopRecordingOverride = { _ in
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
@@ -15895,17 +15895,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         // Ending the banner resets to idle before the queued start runs; the API still waits.
         viewModel.dismissActionFeedback()
         XCTAssertFalse(viewModel.canStartAPIRecording)
-        for _ in 0..<100 where startCount < 2 {
+        for _ in 0..<100 where startCount.withLock({ $0 }) < 2 {
             try await Task.sleep(for: .milliseconds(10))
         }
         await viewModel.testingWaitForRecordingStart()
-        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(startCount.withLock { $0 }, 2)
         XCTAssertEqual(viewModel.state, .recording)
 
-        _ = viewModel.apiStopRecording()
+        let queuedSessionID = try XCTUnwrap(viewModel.apiStopRecording())
+        XCTAssertNotEqual(queuedSessionID, sessionID)
         for _ in 0..<80 where viewModel.state != .inserting && viewModel.state != .idle {
             try await Task.sleep(for: .milliseconds(25))
         }
+        XCTAssertEqual(viewModel.apiDictationSession(id: queuedSessionID)?.status, .failed)
         await viewModel.testingWaitForRecordingCleanup()
     }
 
