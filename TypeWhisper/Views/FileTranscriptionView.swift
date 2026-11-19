@@ -544,8 +544,8 @@ struct FileTranscriptionView: View {
                             Divider()
                         }
                         if hasSegments {
-                            Button(String(localized: "SRT")) { viewModel.exportTranscript(for: item, format: .srt) }
-                            Button(String(localized: "VTT")) { viewModel.exportTranscript(for: item, format: .vtt) }
+                            Button(String(localized: "Subtitles with timecodes (.srt)")) { viewModel.exportTranscript(for: item, format: .srt) }
+                            Button(String(localized: "Subtitles with timecodes (.vtt)")) { viewModel.exportTranscript(for: item, format: .vtt) }
                         }
                     } label: {
                         Image(systemName: "square.and.arrow.up")

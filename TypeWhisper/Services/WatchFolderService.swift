@@ -34,9 +34,9 @@ enum WatchFolderOutputFormat: String, CaseIterable {
         case .plainText:
             String(localized: "watchFolder.plainText")
         case .srt:
-            String(localized: "SRT")
+            String(localized: "Subtitles with timecodes (.srt)")
         case .vtt:
-            String(localized: "VTT")
+            String(localized: "Subtitles with timecodes (.vtt)")
         }
     }
 }
