@@ -19,6 +19,38 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
     /// same; 0.775 merges two speakers of EN2002a into one. iOS uses 0.7 as
     /// well.
     static let clusteringThreshold = 0.7
+    /// Segmentation windows start every second, as in pyannote's community-1
+    /// pipeline; FluidAudio starts them every two seconds. VBx's weights were
+    /// tuned on one embedding per second, and with half of them the second
+    /// person of a short conversation often lacked the evidence to stay a
+    /// speaker of their own. Detection takes twice as long: 52 s instead of
+    /// 26 s for a 35-minute meeting on an M5 Pro.
+    static let segmentationStepRatio = 0.1
+    /// VBx's speaker prior weight (Fb). pyannote's 0.8 merged the two people
+    /// of 14 of 73 two-person table-microphone excerpts (AMI, 1 to 3 minutes)
+    /// into one speaker even with one embedding per second, 0.6 merged 9, and
+    /// 0.4 split some of them into three or four speakers instead. On 16 AMI
+    /// meetings 0.6 also scores best (DER 26.3 %, 27.6 % before with
+    /// two-second windows).
+    static let speakerPriorWeight = 0.6
+    /// With a fixed number of speakers K-Means re-clusters a surplus, so the
+    /// prior only needs to keep voices apart. Asked for two speakers, 0.3
+    /// found both people in 64 of the 66 excerpts of one and one and a half
+    /// minutes, 0.6 in 59. VBx can still put two people in one cluster and a
+    /// few stray seconds in another, which already counts as two speakers and
+    /// skips K-Means.
+    static let fixedCountSpeakerPriorWeight = 0.3
+
+    /// The offline diarizer's settings for automatic detection or a fixed number of speakers.
+    static func diarizerConfig(speakerCount: Int?) -> OfflineDiarizerConfig {
+        var config = OfflineDiarizerConfig(
+            clusteringThreshold: clusteringThreshold,
+            Fb: speakerCount == nil ? speakerPriorWeight : fixedCountSpeakerPriorWeight,
+            segmentationStepRatio: segmentationStepRatio
+        )
+        config.clustering.numSpeakers = speakerCount
+        return config
+    }
 
     /// The diarizer's segments as turns, without those no speaker evidence
     /// backs. A stretch no embedding voted for gets a quality of 0 and goes to
@@ -199,8 +231,7 @@ private actor DiarizationRunner {
         guard let models else { throw PluginDiarizationError.modelsNotInstalled }
         try Task.checkCancellation()
 
-        var config = OfflineDiarizerConfig(clusteringThreshold: SpeakerDiarizationPlugin.clusteringThreshold)
-        config.clustering.numSpeakers = speakerCount
+        let config = SpeakerDiarizationPlugin.diarizerConfig(speakerCount: speakerCount)
         let manager = OfflineDiarizerManager(config: config)
         manager.initialize(models: models)
 
