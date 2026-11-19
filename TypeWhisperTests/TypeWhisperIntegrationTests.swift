@@ -6471,6 +6471,30 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testLiveFieldTargetRejectsTerminalApplications() {
+        // A terminal can send live text to the shell while its field stays empty, so the final
+        // paste would insert it again (#1974). Built-in and added terminals get no live target.
+        for bundleId in ["com.umputun.agterm", "com.example.terminal", "com.example.editor"] {
+            let service = TextInsertionService()
+            let element = AXUIElementCreateSystemWide()
+
+            service.accessibilityGrantedOverride = true
+            service.captureActiveAppOverride = { ("App", bundleId, nil) }
+            service.terminalAppBundleIdentifiersProvider = { ["com.example.terminal"] }
+            service.liveFieldElectronApplicationOverride = { _ in false }
+            configureLiveFieldIdentity(service)
+            service.focusedTextElementOverride = { element }
+            service.liveFieldTargetEligibilityOverride = { _ in true }
+            service.focusedTextStateOverride = { _ in
+                (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+
+            let target = service.captureLiveFieldTarget(expectedBundleIdentifier: bundleId)
+            XCTAssertEqual(target == nil, bundleId != "com.example.editor", bundleId)
+        }
+    }
+
+    @MainActor
     func testLiveFieldSessionTreatsExposedPlaceholderAsEmptyText() async throws {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
@@ -7085,6 +7109,62 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
             XCTAssertEqual(result.missedTextField, acceptsTextAtCaret, label)
             XCTAssertEqual(result.hasUnverifiableUnchangedField, !acceptsTextAtCaret, label)
+        }
+    }
+
+    @MainActor
+    func testTerminalFieldThatStaysEmptyDoesNotReportMissedTextField() async throws {
+        // agterm shows an always-empty text area that inserts an accessibility write at the cursor
+        // and sends a paste to the shell (#1974). A terminal added in Settings behaves the same,
+        // and an ordinary app with that field still warns.
+        for bundleId in ["com.umputun.agterm", "com.example.terminal", "com.example.editor"] {
+            let service = TextInsertionService()
+            let field = AXUIElementCreateApplication(1)
+            let window = AXUIElementCreateApplication(2)
+            let pasteboard = NSPasteboard.withUniqueName()
+            var accessibilityWrites = 0
+            var pasteCount = 0
+            var pastedText: String?
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.captureActiveAppOverride = { ("Terminal", bundleId, nil) }
+            service.terminalAppBundleIdentifiersProvider = { ["com.example.terminal"] }
+            service.focusedTextElementOverride = { field }
+            service.hiddenTextInputProxyOverride = { _ in false }
+            service.accessibilityRoleOverride = { $0 == field ? "AXTextArea" : "AXWindow" }
+            service.accessibilityParentOverride = { $0 == field ? window : nil }
+            service.accessibilityValueSettableOverride = { _ in true }
+            service.selectedTextSettableOverride = { _ in true }
+            service.focusedTextStateOverride = { _ in
+                (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
+            }
+            service.insertTextAtOverride = { _, _ in
+                accessibilityWrites += 1
+                return true
+            }
+            service.accessibilityInsertionVerificationAttempts = 0
+            service.pasteVerificationAttempts = 1
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            service.pasteSimulatorOverride = {
+                pasteCount += 1
+                pastedText = pasteboard.string(forType: .string)
+            }
+
+            let result = try await service.insertText(
+                "Hello", preserveClipboard: true, detectMissedTextField: true
+            )
+
+            let isTerminal = bundleId != "com.example.editor"
+            XCTAssertEqual(pastedText, "Hello", bundleId)
+            XCTAssertEqual(pasteCount, 1, bundleId)
+            // An accessibility write before the paste would insert the text twice in agterm.
+            XCTAssertEqual(accessibilityWrites, isTerminal ? 0 : 1, bundleId)
+            XCTAssertEqual(
+                result,
+                .pasted(verification: .unverified(isTerminal ? .inputProxyUnchanged : .focusedTextUnchanged)),
+                bundleId
+            )
+            XCTAssertEqual(result.missedTextField, !isTerminal, bundleId)
         }
     }
 

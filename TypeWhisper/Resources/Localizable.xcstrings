@@ -1,6 +1,62 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Terminal Apps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminal-Apps"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps de terminal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ターミナルアプリ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端应用"
+          }
+        }
+      }
+    },
+    "TypeWhisper pastes dictations into terminal apps and does not report “No text field detected” for them, because a terminal often shows pasted text only once the shell echoes it. Terminal, iTerm2, WezTerm, Warp, Ghostty, cmux and agterm are always included. Add another terminal if dictating into it ends with that message." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper fügt Diktate in Terminal-Apps per Einsetzen ein und meldet dort nicht „Kein Textfeld erkannt“, weil ein Terminal eingesetzten Text oft erst zeigt, wenn die Shell ihn ausgibt. Terminal, iTerm2, WezTerm, Warp, Ghostty, cmux und agterm sind immer dabei. Füge ein anderes Terminal hinzu, wenn Diktate dort mit dieser Meldung enden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper pega los dictados en las apps de terminal y no muestra «No se detectó ningún campo de texto» en ellas, porque una terminal suele mostrar el texto pegado solo cuando el shell lo repite. Terminal, iTerm2, WezTerm, Warp, Ghostty, cmux y agterm siempre están incluidas. Añade otra terminal si al dictar en ella aparece ese mensaje."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper はターミナルアプリには音声入力をペーストで挿入し、「テキストフィールドが見つかりません」を表示しません。ターミナルはペーストしたテキストを、シェルがエコーしてから表示することが多いためです。Terminal、iTerm2、WezTerm、Warp、Ghostty、cmux、agterm は常に含まれます。ほかのターミナルで音声入力のたびにこのメッセージが出る場合は、ここに追加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 会把听写内容粘贴到终端应用中，并且不会对它们提示“未检测到文本字段”，因为终端通常要等 shell 回显后才显示粘贴的文本。Terminal、iTerm2、WezTerm、Warp、Ghostty、cmux 和 agterm 始终包含在内。如果在其他终端中听写后出现该提示，请将它添加到这里。"
+          }
+        }
+      }
+    },
     "askHistory.answer.omitted" : {
       "localizations" : {
         "de" : {
@@ -47066,6 +47122,12 @@
     },
     "Select Apps…" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps auswählen…"
+          }
+        },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
