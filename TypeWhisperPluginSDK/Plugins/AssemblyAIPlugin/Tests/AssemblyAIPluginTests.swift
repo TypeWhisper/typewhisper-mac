@@ -10,61 +10,59 @@ final class AssemblyAIPluginTests: XCTestCase {
         super.tearDown()
     }
 
-    func testStaticModelCatalogHasUniqueIdentifiersAndUniversal35Default() {
+    func testStaticModelCatalogHasUniqueIdentifiersAndSTT37Default() {
         let models = AssemblyAIModelCatalog.all
         let canonicalIds = models.map(\.id)
         let legacyIds = models.flatMap(\.legacyIds)
 
         XCTAssertEqual(models, [
-            AssemblyAIModelCatalog.universal35Pro,
+            AssemblyAIModelCatalog.stt37,
             AssemblyAIModelCatalog.universal2,
         ])
         XCTAssertEqual(Set(canonicalIds).count, canonicalIds.count)
         XCTAssertEqual(Set(legacyIds).count, legacyIds.count)
         XCTAssertTrue(Set(canonicalIds).isDisjoint(with: legacyIds))
-        XCTAssertEqual(AssemblyAIModelCatalog.defaultModel, AssemblyAIModelCatalog.universal35Pro)
+        XCTAssertEqual(AssemblyAIModelCatalog.defaultModel, AssemblyAIModelCatalog.stt37)
     }
 
     func testModelCatalogResolvesCanonicalLegacyUnknownEmptyAndMissingIds() {
         XCTAssertEqual(
-            AssemblyAIModelCatalog.resolve(AssemblyAIModelCatalog.universal35Pro.id),
-            AssemblyAIModelCatalog.universal35Pro
+            AssemblyAIModelCatalog.resolve(AssemblyAIModelCatalog.stt37.id),
+            AssemblyAIModelCatalog.stt37
         )
         XCTAssertEqual(
             AssemblyAIModelCatalog.resolve(AssemblyAIModelCatalog.universal2.id),
             AssemblyAIModelCatalog.universal2
         )
         XCTAssertEqual(
-            AssemblyAIModelCatalog.resolve(AssemblyAIModelCatalog.legacyUniversal3ProModelId),
-            AssemblyAIModelCatalog.universal35Pro
+            AssemblyAIModelCatalog.resolve(AssemblyAIModelCatalog.legacyUniversal35ProModelId),
+            AssemblyAIModelCatalog.stt37
         )
-        XCTAssertEqual(AssemblyAIModelCatalog.resolve("retired-model"), AssemblyAIModelCatalog.universal35Pro)
-        XCTAssertEqual(AssemblyAIModelCatalog.resolve(""), AssemblyAIModelCatalog.universal35Pro)
-        XCTAssertEqual(AssemblyAIModelCatalog.resolve(nil), AssemblyAIModelCatalog.universal35Pro)
+        XCTAssertEqual(
+            AssemblyAIModelCatalog.resolve(AssemblyAIModelCatalog.legacyUniversal3ProModelId),
+            AssemblyAIModelCatalog.stt37
+        )
+        XCTAssertEqual(AssemblyAIModelCatalog.resolve("retired-model"), AssemblyAIModelCatalog.stt37)
+        XCTAssertEqual(AssemblyAIModelCatalog.resolve(""), AssemblyAIModelCatalog.stt37)
+        XCTAssertEqual(AssemblyAIModelCatalog.resolve(nil), AssemblyAIModelCatalog.stt37)
     }
 
-    func testUniversal35ModelDefinitionContainsCompleteMetadata() {
-        let model = AssemblyAIModelCatalog.universal35Pro
-        let expectedLanguages = [
-            "en", "es", "fr", "de", "it", "pt", "tr", "nl", "sv",
-            "no", "da", "fi", "hi", "vi", "ar", "he", "ja", "zh",
-        ]
+    func testSTT37ModelDefinitionContainsCompleteMetadata() {
+        let model = AssemblyAIModelCatalog.stt37
 
-        XCTAssertEqual(model.displayName, "Universal-3.5 Pro")
-        XCTAssertEqual(model.restModelId, model.id)
-        XCTAssertEqual(model.supportedLanguages, expectedLanguages)
+        XCTAssertEqual(model.id, "assemblyai-stt-3-7")
+        XCTAssertEqual(model.displayName, "AssemblyAI-STT-3.7")
+        // Languages AssemblyAI-STT-3.7 does not support fall back to Universal-2.
+        XCTAssertEqual(model.restModelIds, ["assemblyai-stt-3-7", "universal-2"])
+        XCTAssertEqual(model.supportedLanguages, Self.stt37Languages)
         XCTAssertEqual(
             model.dictionaryTermsBudget,
             DictionaryTermsBudget(maxTerms: 1_000, maxWordsPerTerm: 6)
         )
         XCTAssertEqual(model.dictionaryPayload, .keytermsPrompt)
-        XCTAssertEqual(
-            model.streamingConfiguration,
-            .universal35Pro(
-                speechModelId: model.id,
-                supportedLanguageCodes: Set(expectedLanguages)
-            )
-        )
+        XCTAssertEqual(model.liveLanguageCodes, Set(Self.stt37Languages))
+        XCTAssertEqual(model.syncConfiguration?.modelId, "universal-3-6-pro")
+        XCTAssertEqual(model.syncConfiguration?.supportedLanguageCodes, Set(Self.stt37Languages))
     }
 
     func testUniversal2ModelDefinitionContainsCompleteMetadata() {
@@ -77,65 +75,51 @@ final class AssemblyAIPluginTests: XCTestCase {
         ]
 
         XCTAssertEqual(model.displayName, "Universal-2")
-        XCTAssertEqual(model.restModelId, model.id)
+        XCTAssertEqual(model.restModelIds, [model.id])
         XCTAssertEqual(model.supportedLanguages, expectedLanguages)
         XCTAssertEqual(
             model.dictionaryTermsBudget,
             DictionaryTermsBudget(maxTerms: 100, maxCharsPerTerm: 50)
         )
         XCTAssertEqual(model.dictionaryPayload, .wordBoost(boostParam: "high"))
-        XCTAssertEqual(
-            model.streamingConfiguration,
-            .universal2(
-                englishSpeechModelId: "universal-streaming-english",
-                multilingualSpeechModelId: "universal-streaming-multilingual"
-            )
-        )
+        XCTAssertNil(model.liveLanguageCodes)
+        XCTAssertNil(model.syncConfiguration)
     }
 
-    func testDefaultModelCatalogAndLanguagesUseUniversal35Pro() throws {
+    func testDefaultModelCatalogAndLanguagesUseSTT37() throws {
         let host = try PluginTestHostServices()
         let plugin = AssemblyAIPlugin()
 
         plugin.activate(host: host)
 
         XCTAssertEqual(plugin.transcriptionModels.map(\.id), [
-            AssemblyAIPlugin.universal35ProModelId,
+            AssemblyAIPlugin.stt37ModelId,
             AssemblyAIPlugin.universal2ModelId,
         ])
-        XCTAssertEqual(plugin.transcriptionModels.map(\.displayName), ["Universal-3.5 Pro", "Universal-2"])
-        XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.universal35ProModelId)
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, AssemblyAIPlugin.universal35ProModelId)
-        XCTAssertEqual(plugin.supportedLanguages, [
-            "en", "es", "fr", "de", "it", "pt", "tr", "nl", "sv",
-            "no", "da", "fi", "hi", "vi", "ar", "he", "ja", "zh",
-        ])
+        XCTAssertEqual(plugin.transcriptionModels.map(\.displayName), ["AssemblyAI-STT-3.7", "Universal-2"])
+        XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.stt37ModelId)
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, AssemblyAIPlugin.stt37ModelId)
+        XCTAssertEqual(plugin.supportedLanguages, Self.stt37Languages)
     }
 
     func testActivationMigratesLegacyAndUnknownModelIds() throws {
-        let legacyHost = try PluginTestHostServices(defaults: [
-            "selectedModel": AssemblyAIPlugin.legacyUniversal3ProModelId,
-        ])
-        let legacyPlugin = AssemblyAIPlugin()
+        for storedModelId in [
+            AssemblyAIModelCatalog.legacyUniversal35ProModelId,
+            AssemblyAIModelCatalog.legacyUniversal3ProModelId,
+            "retired-model",
+        ] {
+            let host = try PluginTestHostServices(defaults: ["selectedModel": storedModelId])
+            let plugin = AssemblyAIPlugin()
 
-        legacyPlugin.activate(host: legacyHost)
+            plugin.activate(host: host)
 
-        XCTAssertEqual(legacyPlugin.selectedModelId, AssemblyAIPlugin.universal35ProModelId)
-        XCTAssertEqual(
-            legacyHost.userDefault(forKey: "selectedModel") as? String,
-            AssemblyAIPlugin.universal35ProModelId
-        )
-
-        let unknownHost = try PluginTestHostServices(defaults: ["selectedModel": "retired-model"])
-        let unknownPlugin = AssemblyAIPlugin()
-
-        unknownPlugin.activate(host: unknownHost)
-
-        XCTAssertEqual(unknownPlugin.selectedModelId, AssemblyAIPlugin.universal35ProModelId)
-        XCTAssertEqual(
-            unknownHost.userDefault(forKey: "selectedModel") as? String,
-            AssemblyAIPlugin.universal35ProModelId
-        )
+            XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.stt37ModelId, storedModelId)
+            XCTAssertEqual(
+                host.userDefault(forKey: "selectedModel") as? String,
+                AssemblyAIPlugin.stt37ModelId,
+                storedModelId
+            )
+        }
     }
 
     func testSelectModelNormalizesLegacyAndUnknownModelIds() throws {
@@ -143,16 +127,36 @@ final class AssemblyAIPluginTests: XCTestCase {
         let plugin = AssemblyAIPlugin()
         plugin.activate(host: host)
 
-        plugin.selectModel(AssemblyAIPlugin.legacyUniversal3ProModelId)
-        XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.universal35ProModelId)
+        plugin.selectModel(AssemblyAIModelCatalog.legacyUniversal35ProModelId)
+        XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.stt37ModelId)
 
         plugin.selectModel("retired-model")
-        XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.universal35ProModelId)
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, AssemblyAIPlugin.universal35ProModelId)
+        XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.stt37ModelId)
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, AssemblyAIPlugin.stt37ModelId)
 
         plugin.selectModel(AssemblyAIPlugin.universal2ModelId)
         XCTAssertEqual(plugin.selectedModelId, AssemblyAIPlugin.universal2ModelId)
         XCTAssertTrue(plugin.supportedLanguages.contains("uk"))
+    }
+
+    func testLiveModelDefaultsToRealtimeAgentAndPersists() throws {
+        let host = try PluginTestHostServices()
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.liveModel, .realtimeAgent)
+
+        plugin.setLiveModel(.realtime)
+
+        XCTAssertEqual(host.userDefault(forKey: AssemblyAIPlugin.liveModelKey) as? String, "assemblyai-stt-3-7-realtime")
+        let reloadedPlugin = AssemblyAIPlugin()
+        reloadedPlugin.activate(host: host)
+        XCTAssertEqual(reloadedPlugin.liveModel, .realtime)
+
+        let unknownHost = try PluginTestHostServices(defaults: [AssemblyAIPlugin.liveModelKey: "retired-model"])
+        let unknownPlugin = AssemblyAIPlugin()
+        unknownPlugin.activate(host: unknownHost)
+        XCTAssertEqual(unknownPlugin.liveModel, .realtimeAgent)
     }
 
     func testSpeakerDiarizationSettingPersistsAndNotifies() throws {
@@ -183,7 +187,7 @@ final class AssemblyAIPluginTests: XCTestCase {
     func testSubmitBodyIncludesSpeakerLabelsOnlyWhenEnabled() {
         var disabledBody = AssemblyAIPlugin.makeSubmitTranscriptionBody(
             audioURL: "https://example.test/audio.wav",
-            modelId: AssemblyAIPlugin.universal35ProModelId,
+            modelId: AssemblyAIPlugin.stt37ModelId,
             language: nil,
             prompt: nil,
             speakerDiarizationEnabled: false
@@ -192,44 +196,61 @@ final class AssemblyAIPluginTests: XCTestCase {
 
         var enabledBody = AssemblyAIPlugin.makeSubmitTranscriptionBody(
             audioURL: "https://example.test/audio.wav",
-            modelId: AssemblyAIPlugin.universal35ProModelId,
+            modelId: AssemblyAIPlugin.stt37ModelId,
             language: "en",
             prompt: nil,
             speakerDiarizationEnabled: true
         )
         XCTAssertEqual(enabledBody["speaker_labels"] as? Bool, true)
         XCTAssertEqual(enabledBody["language_code"] as? String, "en")
-        XCTAssertEqual(
-            enabledBody["speech_models"] as? [String],
-            [AssemblyAIPlugin.universal35ProModelId]
-        )
 
         AssemblyAIPlugin.applyDictionaryTerms(
             prompt: "TypeWhisper",
-            modelId: AssemblyAIPlugin.universal35ProModelId,
+            modelId: AssemblyAIPlugin.stt37ModelId,
             to: &disabledBody
         )
         AssemblyAIPlugin.applyDictionaryTerms(
             prompt: "TypeWhisper",
-            modelId: AssemblyAIPlugin.universal35ProModelId,
+            modelId: AssemblyAIPlugin.stt37ModelId,
             to: &enabledBody
         )
         XCTAssertEqual(disabledBody["keyterms_prompt"] as? [String], ["TypeWhisper"])
         XCTAssertEqual(enabledBody["keyterms_prompt"] as? [String], ["TypeWhisper"])
     }
 
-    func testSubmitBodyCanonicalizesLegacyModelId() {
+    func testSTT37SubmitBodyFallsBackToUniversal2AndLeavesOutDisfluencies() {
+        // AssemblyAI-STT-3.7 keeps filler words by default and, with language detection,
+        // falls back to Universal-2 only when the request lists it.
         let body = AssemblyAIPlugin.makeSubmitTranscriptionBody(
             audioURL: "https://example.test/audio.wav",
-            modelId: AssemblyAIPlugin.legacyUniversal3ProModelId,
+            modelId: AssemblyAIPlugin.stt37ModelId,
             language: nil,
-            prompt: "TypeWhisper",
+            prompt: nil,
             speakerDiarizationEnabled: false
         )
 
-        XCTAssertEqual(body["speech_models"] as? [String], [AssemblyAIPlugin.universal35ProModelId])
-        XCTAssertEqual(body["keyterms_prompt"] as? [String], ["TypeWhisper"])
-        XCTAssertNil(body["word_boost"])
+        XCTAssertEqual(body["speech_models"] as? [String], ["assemblyai-stt-3-7", "universal-2"])
+        XCTAssertEqual(body["language_detection"] as? Bool, true)
+        XCTAssertEqual(body["disfluencies"] as? Bool, false)
+    }
+
+    func testSubmitBodyCanonicalizesLegacyModelIds() {
+        for legacyModelId in [
+            AssemblyAIModelCatalog.legacyUniversal35ProModelId,
+            AssemblyAIModelCatalog.legacyUniversal3ProModelId,
+        ] {
+            let body = AssemblyAIPlugin.makeSubmitTranscriptionBody(
+                audioURL: "https://example.test/audio.wav",
+                modelId: legacyModelId,
+                language: nil,
+                prompt: "TypeWhisper",
+                speakerDiarizationEnabled: false
+            )
+
+            XCTAssertEqual(body["speech_models"] as? [String], ["assemblyai-stt-3-7", "universal-2"], legacyModelId)
+            XCTAssertEqual(body["keyterms_prompt"] as? [String], ["TypeWhisper"], legacyModelId)
+            XCTAssertNil(body["word_boost"], legacyModelId)
+        }
     }
 
     func testUniversal2SubmitBodyUsesWordBoost() {
@@ -247,30 +268,37 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertNil(body["keyterms_prompt"])
     }
 
-    func testUniversal35StreamingURLUsesModelLanguageAndKeyterms() throws {
-        let url = try XCTUnwrap(AssemblyAIPlugin.makeStreamingURL(
-            modelId: AssemblyAIPlugin.universal35ProModelId,
-            language: "DE",
-            keytermsPromptJSON: #"["TypeWhisper"]"#
-        ))
-        let query = Self.queryItems(in: url)
+    func testStreamingURLUsesLiveModelLanguageAndKeyterms() throws {
+        for liveModel in AssemblyAILiveModel.allCases {
+            let url = try XCTUnwrap(AssemblyAIPlugin.makeStreamingURL(
+                modelId: AssemblyAIPlugin.stt37ModelId,
+                liveModel: liveModel,
+                language: "DE",
+                keytermsPromptJSON: #"["TypeWhisper"]"#
+            ))
+            let query = Self.queryItems(in: url)
 
-        XCTAssertEqual(query["sample_rate"], "16000")
-        XCTAssertEqual(query["speech_model"], AssemblyAIPlugin.universal35ProModelId)
-        XCTAssertEqual(query["language_codes"], #"["de"]"#)
-        XCTAssertEqual(query["keyterms_prompt"], #"["TypeWhisper"]"#)
-        XCTAssertNil(query["format_turns"])
+            XCTAssertEqual(query["sample_rate"], "16000")
+            XCTAssertEqual(query["speech_model"], liveModel.speechModelId)
+            XCTAssertEqual(query["language_codes"], #"["de"]"#)
+            XCTAssertEqual(query["keyterms_prompt"], #"["TypeWhisper"]"#)
+            XCTAssertNil(query["format_turns"])
+        }
+        XCTAssertEqual(AssemblyAILiveModel.realtimeAgent.speechModelId, "assemblyai-stt-3-7-realtime-agent")
+        XCTAssertEqual(AssemblyAILiveModel.realtime.speechModelId, "assemblyai-stt-3-7-realtime")
     }
 
-    func testUniversal35StreamingURLOmitsUnsupportedOrAutomaticLanguage() throws {
+    func testStreamingURLOmitsUnsupportedOrAutomaticLanguage() throws {
         let automaticURL = try XCTUnwrap(AssemblyAIPlugin.makeStreamingURL(
-            modelId: AssemblyAIPlugin.universal35ProModelId,
+            modelId: AssemblyAIPlugin.stt37ModelId,
+            liveModel: .realtimeAgent,
             language: nil,
             keytermsPromptJSON: nil
         ))
         let unsupportedURL = try XCTUnwrap(AssemblyAIPlugin.makeStreamingURL(
-            modelId: AssemblyAIPlugin.universal35ProModelId,
-            language: "ru",
+            modelId: AssemblyAIPlugin.stt37ModelId,
+            liveModel: .realtimeAgent,
+            language: "pl",
             keytermsPromptJSON: nil
         ))
 
@@ -278,38 +306,26 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertNil(Self.queryItems(in: unsupportedURL)["language_codes"])
     }
 
-    func testUniversal2StreamingURLPreservesEnglishAndMultilingualModels() throws {
-        let englishURL = try XCTUnwrap(AssemblyAIPlugin.makeStreamingURL(
+    func testUniversal2HasNoStreamingURL() {
+        XCTAssertNil(AssemblyAIPlugin.makeStreamingURL(
             modelId: AssemblyAIPlugin.universal2ModelId,
+            liveModel: .realtimeAgent,
             language: "en",
             keytermsPromptJSON: nil
         ))
-        let multilingualURL = try XCTUnwrap(AssemblyAIPlugin.makeStreamingURL(
-            modelId: AssemblyAIPlugin.universal2ModelId,
-            language: "de",
-            keytermsPromptJSON: nil
-        ))
-        let englishQuery = Self.queryItems(in: englishURL)
-        let multilingualQuery = Self.queryItems(in: multilingualURL)
-
-        XCTAssertEqual(englishQuery["speech_model"], "universal-streaming-english")
-        XCTAssertEqual(englishQuery["format_turns"], "true")
-        XCTAssertNil(englishQuery["language_codes"])
-        XCTAssertEqual(multilingualQuery["speech_model"], "universal-streaming-multilingual")
-        XCTAssertEqual(multilingualQuery["format_turns"], "true")
-        XCTAssertNil(multilingualQuery["language_codes"])
     }
 
-    func testLegacyStreamingModelIdUsesUniversal35Pro() throws {
+    func testLegacyStreamingModelIdsUseSTT37() throws {
         let url = try XCTUnwrap(AssemblyAIPlugin.makeStreamingURL(
-            modelId: AssemblyAIPlugin.legacyUniversal3ProModelId,
-            language: "en",
+            modelId: AssemblyAIModelCatalog.legacyUniversal35ProModelId,
+            liveModel: .realtime,
+            language: "ru",
             keytermsPromptJSON: nil
         ))
         let query = Self.queryItems(in: url)
 
-        XCTAssertEqual(query["speech_model"], AssemblyAIPlugin.universal35ProModelId)
-        XCTAssertNil(query["format_turns"])
+        XCTAssertEqual(query["speech_model"], "assemblyai-stt-3-7-realtime")
+        XCTAssertEqual(query["language_codes"], #"["ru"]"#)
     }
 
     func testCompletedResponseBuildsSpeakerLabeledStructuredSegments() {
@@ -418,7 +434,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(submitBody["speaker_labels"] as? Bool, true)
         XCTAssertEqual(
             submitBody["speech_models"] as? [String],
-            [AssemblyAIPlugin.universal35ProModelId]
+            ["assemblyai-stt-3-7", "universal-2"]
         )
     }
 
@@ -516,7 +532,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(submitBody["keyterms_prompt"] as? [String], ["TypeWhisper"])
         XCTAssertEqual(
             submitBody["speech_models"] as? [String],
-            [AssemblyAIPlugin.universal35ProModelId]
+            ["assemblyai-stt-3-7", "universal-2"]
         )
     }
 
@@ -551,7 +567,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         let request = requests[0]
         XCTAssertEqual(request.url?.absoluteString, "https://sync.assemblyai.com/v1/transcribe")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "assembly-key")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "X-AAI-Model"), "universal-3-5-pro")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-AAI-Model"), "universal-3-6-pro")
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains(#"name="audio"; filename="audio.m4a""#))
         XCTAssertTrue(body.contains("Content-Type: audio/mp4"))
@@ -834,7 +850,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
         let request = requests[0]
         XCTAssertEqual(request.url?.absoluteString, "https://sync.assemblyai.com/v1/transcribe")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "X-AAI-Model"), "universal-3-5-pro")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-AAI-Model"), "universal-3-6-pro")
         XCTAssertLessThanOrEqual(request.timeoutInterval, 45)
         XCTAssertGreaterThan(request.timeoutInterval, 30)
     }
@@ -866,7 +882,7 @@ final class AssemblyAIPluginTests: XCTestCase {
     }
 
     func testSyncAPIIsSkippedWhenTheAsyncAPIKeepsMoreOfTheRequest() {
-        let model = AssemblyAIPlugin.universal35ProModelId
+        let model = AssemblyAIPlugin.stt37ModelId
         func request(
             modelId: String = model,
             language: String? = "de",
@@ -922,10 +938,10 @@ final class AssemblyAIPluginTests: XCTestCase {
 
         // The preview rule follows the mode alone: TypeWhisper reads it for the saved model
         // when a profile overrides it with a model without live session, so a saved
-        // Universal-2 must not let a Universal-3.5 Pro override preview in the Async mode.
+        // Universal-2 must not let an AssemblyAI-STT-3.7 override preview in the Async mode.
         plugin.selectModel(AssemblyAIPlugin.universal2ModelId)
         XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
-        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: AssemblyAIPlugin.universal35ProModelId))
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: AssemblyAIPlugin.stt37ModelId))
         XCTAssertFalse(plugin.allowsTranscriptPreviewFallback)
         plugin.setTranscriptionMode(.live)
         XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
@@ -1105,7 +1121,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         let terms = (1...101).map { "Term\($0)" }
         let keyterms = AssemblyAIPlugin.streamingKeyterms(
             fromPrompt: (terms + [String(repeating: "x", count: 51)]).joined(separator: ", "),
-            modelId: AssemblyAIPlugin.universal35ProModelId
+            modelId: AssemblyAIPlugin.stt37ModelId
         )
         XCTAssertEqual(keyterms.terms, Array(terms.prefix(100)))
         XCTAssertEqual(keyterms.droppedCount, 2)
@@ -1338,8 +1354,15 @@ private final class SampleCountRecorder: @unchecked Sendable {
     }
 }
 
+private extension AssemblyAIPluginTests {
+    static let stt37Languages = [
+        "en", "es", "de", "fr", "it", "pt", "tr", "nl", "sv", "no", "da",
+        "fi", "hi", "vi", "ar", "he", "ja", "ur", "zh", "ko", "ca", "gl",
+        "ru", "ro", "et", "fa", "yue", "af", "mr", "zu", "xh", "nn",
+    ]
+}
+
 private extension AssemblyAIPlugin {
-    static var universal35ProModelId: String { AssemblyAIModelCatalog.universal35Pro.id }
+    static var stt37ModelId: String { AssemblyAIModelCatalog.stt37.id }
     static var universal2ModelId: String { AssemblyAIModelCatalog.universal2.id }
-    static var legacyUniversal3ProModelId: String { AssemblyAIModelCatalog.legacyUniversal3ProModelId }
 }

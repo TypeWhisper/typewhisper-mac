@@ -6,10 +6,11 @@ import TypeWhisperPluginSDK
 // MARK: - Transcription Mode
 
 /// How finished recordings are transcribed and whether dictations stream, with
-/// AssemblyAI's list prices: Universal-3.5 Pro, and Universal-3.6 Pro for Dictation.
+/// AssemblyAI's list prices for AssemblyAI-STT-3.7 and its realtime models, and for
+/// Universal-3.6 Pro on the Sync and Dictation APIs.
 enum AssemblyAITranscriptionMode: String, CaseIterable, Sendable {
-    /// Dictations stream to the realtime API ($0.45/h of connection time);
-    /// recordings and files go to the Sync API.
+    /// Dictations stream to the realtime API ($0.45/h of connection time with the
+    /// Realtime-Agent model, $0.30/h with Realtime); recordings and files go to the Sync API.
     case live
     /// Recordings go to the Sync API ($0.30/h); no live preview from AssemblyAI.
     case sync
@@ -136,12 +137,14 @@ final class AssemblyAIPlugin: NSObject,
     static let pluginName = "AssemblyAI"
     static let speakerDiarizationEnabledKey = "speakerDiarizationEnabled"
     static let transcriptionModeKey = "transcriptionMode"
+    static let liveModelKey = "liveModel"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedModelId: String?
     fileprivate var _speakerDiarizationEnabled = false
     fileprivate var _transcriptionMode = AssemblyAITranscriptionMode.live
+    fileprivate var _liveModel = AssemblyAILiveModel.defaultModel
 
     private let logger = Logger(subsystem: "com.typewhisper.assemblyai", category: "Plugin")
 
@@ -161,6 +164,8 @@ final class AssemblyAIPlugin: NSObject,
         _speakerDiarizationEnabled = host.userDefault(forKey: Self.speakerDiarizationEnabledKey) as? Bool ?? false
         _transcriptionMode = (host.userDefault(forKey: Self.transcriptionModeKey) as? String)
             .flatMap(AssemblyAITranscriptionMode.init(rawValue:)) ?? .live
+        _liveModel = (host.userDefault(forKey: Self.liveModelKey) as? String)
+            .flatMap(AssemblyAILiveModel.init(rawValue:)) ?? .defaultModel
     }
 
     func deactivate() {
@@ -214,6 +219,7 @@ final class AssemblyAIPlugin: NSObject,
             && !PluginVerbatimTranscript.isRequired ? .dictation : .sync
     }
     var transcriptionMode: AssemblyAITranscriptionMode { _transcriptionMode }
+    var liveModel: AssemblyAILiveModel { _liveModel }
 
     var supportedLanguages: [String] {
         AssemblyAIModelCatalog.resolve(_selectedModelId).supportedLanguages
@@ -221,14 +227,11 @@ final class AssemblyAIPlugin: NSObject,
 
     // MARK: - Live Sessions
 
-    /// Universal-3.5 Pro streams while the dictation is recorded in the Live mode.
+    /// AssemblyAI-STT-3.7 dictations stream to the selected realtime model in the Live mode.
     /// Universal-2 and recordings with speaker labels transcribe after the recording.
     func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
         guard _transcriptionMode == .live, !_speakerDiarizationEnabled else { return false }
-        if case .universal35Pro = AssemblyAIModelCatalog.resolve(modelId ?? _selectedModelId).streamingConfiguration {
-            return true
-        }
-        return false
+        return AssemblyAIModelCatalog.resolve(modelId ?? _selectedModelId).liveLanguageCodes != nil
     }
 
     /// Finished turns plus the current partial turn cover the whole recording.
@@ -268,6 +271,7 @@ final class AssemblyAIPlugin: NSObject,
         }
         guard let url = Self.makeStreamingURL(
             modelId: modelId,
+            liveModel: _liveModel,
             language: language,
             keytermsPromptJSON: Self.jsonString(from: keyterms.terms)
         ) else {
@@ -314,7 +318,7 @@ final class AssemblyAIPlugin: NSObject,
 
     /// The language the realtime session is steered to, as the transcript reports it.
     static func streamingLanguage(_ language: String?, modelId: String) -> String? {
-        guard case .universal35Pro(_, let supportedLanguageCodes) = AssemblyAIModelCatalog.resolve(modelId).streamingConfiguration,
+        guard let supportedLanguageCodes = AssemblyAIModelCatalog.resolve(modelId).liveLanguageCodes,
               let code = languageCode(language),
               supportedLanguageCodes.contains(code) else {
             return nil
@@ -790,7 +794,10 @@ final class AssemblyAIPlugin: NSObject,
         let model = AssemblyAIModelCatalog.resolve(modelId)
         var body: [String: Any] = [
             "audio_url": audioURL,
-            "speech_models": [model.restModelId],
+            "speech_models": model.restModelIds,
+            // AssemblyAI-STT-3.7 keeps filler words and false starts by default, unlike
+            // the models before it; Universal-2 already leaves them out.
+            "disfluencies": false,
         ]
 
         if let lang = language, !lang.isEmpty {
@@ -964,29 +971,24 @@ final class AssemblyAIPlugin: NSObject,
 
     // MARK: - Realtime URL
 
+    /// Nil for a model without live sessions.
     static func makeStreamingURL(
         modelId: String,
+        liveModel: AssemblyAILiveModel,
         language: String?,
         keytermsPromptJSON: String?
     ) -> URL? {
-        let model = AssemblyAIModelCatalog.resolve(modelId)
-        let normalizedLanguage = languageCode(language)
-        var queryItems = [URLQueryItem(name: "sample_rate", value: "16000")]
-
-        switch model.streamingConfiguration {
-        case .universal2(let englishSpeechModelId, let multilingualSpeechModelId):
-            let streamingModel = normalizedLanguage == nil || normalizedLanguage == "en"
-                ? englishSpeechModelId
-                : multilingualSpeechModelId
-            queryItems.append(URLQueryItem(name: "speech_model", value: streamingModel))
-            queryItems.append(URLQueryItem(name: "format_turns", value: "true"))
-        case .universal35Pro(let speechModelId, let supportedLanguageCodes):
-            queryItems.append(URLQueryItem(name: "speech_model", value: speechModelId))
-            if let normalizedLanguage,
-               supportedLanguageCodes.contains(normalizedLanguage),
-               let languageCodesJSON = jsonString(from: [normalizedLanguage]) {
-                queryItems.append(URLQueryItem(name: "language_codes", value: languageCodesJSON))
-            }
+        guard let supportedLanguageCodes = AssemblyAIModelCatalog.resolve(modelId).liveLanguageCodes else {
+            return nil
+        }
+        var queryItems = [
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "speech_model", value: liveModel.speechModelId),
+        ]
+        if let normalizedLanguage = languageCode(language),
+           supportedLanguageCodes.contains(normalizedLanguage),
+           let languageCodesJSON = jsonString(from: [normalizedLanguage]) {
+            queryItems.append(URLQueryItem(name: "language_codes", value: languageCodesJSON))
         }
 
         if let keytermsPromptJSON {
@@ -1070,6 +1072,12 @@ final class AssemblyAIPlugin: NSObject,
         _transcriptionMode = mode
         host?.setUserDefault(mode.rawValue, forKey: Self.transcriptionModeKey)
         host?.notifyCapabilitiesChanged()
+    }
+
+    func setLiveModel(_ model: AssemblyAILiveModel) {
+        guard _liveModel != model else { return }
+        _liveModel = model
+        host?.setUserDefault(model.rawValue, forKey: Self.liveModelKey)
     }
 
     func setSpeakerDiarizationEnabled(_ enabled: Bool) {
@@ -1605,6 +1613,7 @@ private struct AssemblyAISettingsView: View {
     @State private var selectedModel: String = ""
     @State private var speakerDiarizationEnabled = false
     @State private var transcriptionMode = AssemblyAITranscriptionMode.live
+    @State private var liveModel = AssemblyAILiveModel.defaultModel
     private let bundle = Bundle(for: AssemblyAIPlugin.self)
 
     var body: some View {
@@ -1713,10 +1722,11 @@ private struct AssemblyAISettingsView: View {
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
             speakerDiarizationEnabled = plugin.isSpeakerDiarizationEnabled
             transcriptionMode = plugin.transcriptionMode
+            liveModel = plugin.liveModel
         }
     }
 
-    /// Universal-2 has only the async API, so the modes apply to Universal-3.5 Pro.
+    /// Universal-2 has only the async API, so the modes apply to AssemblyAI-STT-3.7.
     private var selectedModelHasModes: Bool {
         AssemblyAIModelCatalog.resolve(selectedModel).syncConfiguration != nil
     }
@@ -1727,8 +1737,13 @@ private struct AssemblyAISettingsView: View {
                 .font(.headline)
 
             Picker(String(localized: "Transcription", bundle: bundle), selection: $transcriptionMode) {
-                Text("Live – $0.45/h", bundle: bundle)
-                    .tag(AssemblyAITranscriptionMode.live)
+                Group {
+                    switch liveModel {
+                    case .realtimeAgent: Text("Live – $0.45/h", bundle: bundle)
+                    case .realtime: Text("Live – $0.30/h", bundle: bundle)
+                    }
+                }
+                .tag(AssemblyAITranscriptionMode.live)
                 Text("Sync – $0.30/h", bundle: bundle)
                     .tag(AssemblyAITranscriptionMode.sync)
                 Text("Dictation – $0.62/h", bundle: bundle)
@@ -1743,6 +1758,19 @@ private struct AssemblyAISettingsView: View {
                 plugin.setTranscriptionMode(transcriptionMode)
             }
 
+            if selectedModelHasModes, transcriptionMode == .live {
+                Picker(String(localized: "Live model", bundle: bundle), selection: $liveModel) {
+                    Text("Realtime-Agent – $0.45/h", bundle: bundle)
+                        .tag(AssemblyAILiveModel.realtimeAgent)
+                    Text("Realtime – $0.30/h", bundle: bundle)
+                        .tag(AssemblyAILiveModel.realtime)
+                }
+                .fixedSize()
+                .onChange(of: liveModel) {
+                    plugin.setLiveModel(liveModel)
+                }
+            }
+
             Group {
                 if !selectedModelHasModes {
                     Text("Universal-2 always uses the async API, at $0.15/h.", bundle: bundle)
@@ -1750,6 +1778,12 @@ private struct AssemblyAISettingsView: View {
                     switch transcriptionMode {
                     case .live:
                         Text("Streams dictations that show a live preview: the preview shows AssemblyAI's text, and the final text is ready right after you stop. Billed for the time the connection is open. Recordings, files and dictations without a preview use the Sync API. With more than 100 dictionary terms or a term longer than 50 characters, the recording is also transcribed with all of them, which is billed in addition.", bundle: bundle)
+                        switch liveModel {
+                        case .realtimeAgent:
+                            Text("Realtime-Agent keeps the preview steady as you speak.", bundle: bundle)
+                        case .realtime:
+                            Text("Realtime costs less, but the preview changes more while you speak. The final text is as accurate.", bundle: bundle)
+                        }
                     case .sync:
                         Text("Uploads the recording when you stop; the text is usually ready in under half a second. No live preview from AssemblyAI.", bundle: bundle)
                     case .dictation:
