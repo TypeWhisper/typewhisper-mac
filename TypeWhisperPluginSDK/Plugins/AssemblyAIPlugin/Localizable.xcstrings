@@ -700,6 +700,174 @@
           }
         }
       }
+    },
+    "Live – $0.30/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,30 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – 0,30 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.30/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live – $0.30/小时"
+          }
+        }
+      }
+    },
+    "Live model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo en vivo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブモデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时模型"
+          }
+        }
+      }
+    },
+    "Realtime-Agent – $0.45/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime-Agent – 0,45 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime-Agent – 0,45 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime-Agent – $0.45/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime-Agent – $0.45/小时"
+          }
+        }
+      }
+    },
+    "Realtime – $0.30/h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime – 0,30 $/h"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime – 0,30 US$/h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime – $0.30/時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime – $0.30/小时"
+          }
+        }
+      }
+    },
+    "Realtime-Agent keeps the preview steady as you speak.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Realtime-Agent bleibt die Vorschau beim Sprechen ruhig."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con Realtime-Agent, la vista previa se mantiene estable mientras hablas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime-Agent では、話している間もプレビューが安定します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Realtime-Agent 时，说话过程中预览保持稳定。"
+          }
+        }
+      }
+    },
+    "Realtime costs less, but the preview changes more while you speak. The final text is as accurate.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime ist günstiger, aber die Vorschau ändert sich beim Sprechen häufiger. Der fertige Text ist genauso gut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime cuesta menos, pero la vista previa cambia más mientras hablas. El texto final es igual de preciso."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime は料金が安い一方、話している間にプレビューがより頻繁に変わります。最終的なテキストの精度は同じです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Realtime 价格更低，但说话时预览变化更频繁。最终文本同样准确。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
