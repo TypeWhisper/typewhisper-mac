@@ -26,8 +26,8 @@ enum TranscriptExportFormat: String, CaseIterable {
         switch self {
         case .plainText: String(localized: "Plain Text (.txt)")
         case .markdown: String(localized: "Markdown (.md)")
-        case .srt: String(localized: "SRT")
-        case .vtt: String(localized: "VTT")
+        case .srt: String(localized: "Subtitles with timecodes (.srt)")
+        case .vtt: String(localized: "Subtitles with timecodes (.vtt)")
         }
     }
 
