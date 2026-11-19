@@ -28,8 +28,8 @@ public protocol SpokenLanguageIdentificationProviderPlugin: TypeWhisperPlugin {
 
     /// Picks the spoken language among `candidates` (ISO 639-1 codes such as `de`, region or
     /// script suffixes allowed). `samples` are 16 kHz mono; the provider decides how much of
-    /// them it needs. Returns nil when fewer than two candidates are languages it knows, so the
-    /// host keeps its own choice.
+    /// them it needs. Returns nil when fewer than two candidates are languages it knows or when
+    /// it hears no speech, so the host keeps its own choice.
     func identifySpokenLanguage(
         samples: [Float],
         among candidates: [String]

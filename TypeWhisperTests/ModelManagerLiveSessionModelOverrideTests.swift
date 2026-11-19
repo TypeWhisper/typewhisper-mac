@@ -516,8 +516,14 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
             languageSelection: .hints(["de", "en"]),
             task: .transcribe
         )
-        XCTAssertEqual(engine.receivedLanguages, ["de", "en"])
-        XCTAssertEqual(detector.receivedCandidates, [["de", "en"]])
+        detector.margin = 0.1
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe
+        )
+        XCTAssertEqual(engine.receivedLanguages, ["de", "en", "de"], "An unclear answer keeps the first selected language")
+        XCTAssertEqual(detector.receivedCandidates, [["de", "en"], ["de", "en"]])
     }
 
     func testLanguageDetectionPicksALanguageOnlyWhenClearForEnginesWithoutAutomaticDetection() async throws {
