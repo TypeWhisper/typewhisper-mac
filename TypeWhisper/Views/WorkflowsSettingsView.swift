@@ -3234,7 +3234,16 @@ private struct WorkflowEditorPage: View {
 
     private var workflowTranscriptionModelBinding: Binding<String?> {
         Binding(
-            get: { draft.transcriptionModelId },
+            // A plugin that loads after the editor opened can still rename the saved model;
+            // the picker shows the current one, and save() writes it.
+            get: {
+                guard let modelId = draft.transcriptionModelId,
+                      let engineId = draft.transcriptionEngineId,
+                      let engine = pluginManager.transcriptionEngine(for: engineId) else {
+                    return draft.transcriptionModelId
+                }
+                return engine.currentModelId(for: modelId)
+            },
             set: { modelId in
                 draft.transcriptionModelId = modelId
             }
