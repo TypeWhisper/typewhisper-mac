@@ -425,6 +425,42 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertEqual(draft.transcriptionEngineId, "removed-engine", "The override is kept for later")
     }
 
+    func testWorkflowWithARenamedModelSavesTheCurrentModel() {
+        let manager = PluginManager(appSupportDirectory: directory)
+        manager.loadedPlugins = [
+            loaded(RenamedModelEngine(), id: "com.typewhisper.tests.renamed", locality: "cloud", categories: ["transcription"]),
+            loaded(PairTestEngine(providerID: "plain-engine", models: ["small"]), id: "com.typewhisper.tests.plain", locality: "cloud", categories: ["transcription"]),
+        ]
+        let workflowService = WorkflowService(appSupportDirectory: directory.appendingPathComponent("Workflows", isDirectory: true))
+        let hotkeyService = HotkeyService()
+        func validationError(_ draft: WorkflowDraft) -> String? {
+            draft.validationError(
+                hotkeyService: hotkeyService, workflowService: workflowService, pluginManager: manager, existingWorkflowId: nil
+            )
+        }
+        let unavailableModel = "The selected transcription model is not available for this engine."
+        var draft = WorkflowDraft(template: .dictation)
+        draft.transcriptionEngineId = "renamed-engine"
+        draft.transcriptionModelId = "old-model"
+
+        XCTAssertNotEqual(validationError(draft), unavailableModel, "The plugin still knows the old ID")
+        draft.adoptCurrentTranscriptionModelId(pluginManager: manager)
+        XCTAssertEqual(draft.transcriptionModelId, "new-model")
+        XCTAssertNotEqual(validationError(draft), unavailableModel)
+
+        draft.transcriptionModelId = "unknown-model"
+        draft.adoptCurrentTranscriptionModelId(pluginManager: manager)
+        XCTAssertEqual(draft.transcriptionModelId, "unknown-model")
+        XCTAssertEqual(validationError(draft), unavailableModel)
+
+        // Engines without the selector keep the saved ID.
+        draft.transcriptionEngineId = "plain-engine"
+        draft.transcriptionModelId = "old-model"
+        draft.adoptCurrentTranscriptionModelId(pluginManager: manager)
+        XCTAssertEqual(draft.transcriptionModelId, "old-model")
+        XCTAssertEqual(validationError(draft), unavailableModel)
+    }
+
     // MARK: Transient model selections
 
     func testRemovingThePairRestoresNoSelectionThroughATransientSelection() {
@@ -774,6 +810,32 @@ private final class CatalogPairEngine: NSObject, TranscriptionEnginePlugin, Tran
     func selectModel(_ modelId: String) { selectedModelId = modelId }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+/// Offers "new-model", which replaced "old-model".
+private final class RenamedModelEngine: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.renamed-engine"
+    static let pluginName = "Renamed Model Engine"
+
+    required override init() {}
+
+    var providerId: String { "renamed-engine" }
+    var providerDisplayName: String { "Renamed Model Engine" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "new-model", displayName: "New Model")] }
+    var selectedModelId: String? { "new-model" }
+    var supportsTranslation: Bool { false }
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+
+    @objc(currentModelIdForModelId:)
+    func currentModelId(forModelId modelId: String) -> String? {
+        ["old-model": "new-model", "new-model": "new-model"][modelId]
     }
 }
 

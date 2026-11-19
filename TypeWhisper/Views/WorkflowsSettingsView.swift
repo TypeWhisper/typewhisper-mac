@@ -1353,7 +1353,8 @@ private struct WorkflowEditorPage: View {
 
     init(workflow: Workflow?) {
         self.workflow = workflow
-        let initialDraft = workflow.map(WorkflowDraft.init) ?? WorkflowDraft(template: .cleanedText)
+        var initialDraft = workflow.map(WorkflowDraft.init) ?? WorkflowDraft(template: .cleanedText)
+        initialDraft.adoptCurrentTranscriptionModelId(pluginManager: PluginManager.shared)
         _draft = State(initialValue: initialDraft)
         _savedDraft = State(initialValue: initialDraft)
     }
@@ -4011,6 +4012,18 @@ struct WorkflowDraft {
         }
     }
 
+    /// A workflow saved with a model the plugin has since renamed shows and saves the
+    /// current model, so the picker shows it and saving does not fail on the old ID.
+    @MainActor
+    mutating func adoptCurrentTranscriptionModelId(pluginManager: PluginManager) {
+        guard let transcriptionEngineId,
+              let transcriptionModelId,
+              let engine = pluginManager.transcriptionEngine(for: transcriptionEngineId) else {
+            return
+        }
+        self.transcriptionModelId = engine.currentModelId(for: transcriptionModelId)
+    }
+
     @MainActor
     func validationError(
         hotkeyService: HotkeyService,
@@ -4040,7 +4053,7 @@ struct WorkflowDraft {
 
             if let transcriptionModelId,
                !transcriptionModelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !engine.modelCatalog.contains(where: { $0.id == transcriptionModelId }) {
+               !engine.modelCatalog.contains(where: { $0.id == engine.currentModelId(for: transcriptionModelId) }) {
                 return localizedAppText(
                     "The selected transcription model is not available for this engine.",
                     de: "Das ausgewählte Transkriptionsmodell ist für diese Engine nicht verfügbar."

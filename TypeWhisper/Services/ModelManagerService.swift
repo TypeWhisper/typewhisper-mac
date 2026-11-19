@@ -96,6 +96,7 @@ private let supportsDictionaryTermsForModelSelector = NSSelectorFromString("supp
 private let translationTargetLanguagesForModelSelector = NSSelectorFromString("translationTargetLanguagesForModelId:")
 private let setLiveTranscriptionTurnEndHandlerSelector = NSSelectorFromString("setLiveTranscriptionTurnEndHandler:")
 private let reportsLiveTranscriptionTurnEndsSelector = NSSelectorFromString("reportsLiveTranscriptionTurnEndsForModelId:")
+private let currentModelIdForModelSelector = NSSelectorFromString("currentModelIdForModelId:")
 
 /// The language the user picked to translate into, for engines that translate into more
 /// than English. The Recorder, file transcription, recovery and the local API set it
@@ -118,6 +119,21 @@ extension TranscriptionEnginePlugin {
         self is LanguageHintTranscriptionEnginePlugin
             || self is StructuredLanguageHintTranscriptionEnginePlugin
             || self is LiveLanguageHintTranscriptionCapablePlugin
+    }
+
+    /// The model a saved model ID stands for now, after a plugin renamed or replaced it.
+    /// Plugins opt in through the Objective-C selector `currentModelIdForModelId:`, which
+    /// returns an ID from their model list, or nil for an ID they do not know; otherwise
+    /// the saved ID stays.
+    func currentModelId(for modelId: String) -> String {
+        guard let object = self as? NSObject,
+              object.responds(to: currentModelIdForModelSelector),
+              let current = object.perform(currentModelIdForModelSelector, with: modelId)?
+                .takeUnretainedValue() as? String,
+              !current.isEmpty else {
+            return modelId
+        }
+        return current
     }
 
     /// Languages of a specific model, for flows that override the plugin's selected model.
