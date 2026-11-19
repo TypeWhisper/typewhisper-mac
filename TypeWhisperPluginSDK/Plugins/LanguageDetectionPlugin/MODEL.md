@@ -18,6 +18,11 @@ the plugin the engine gets the first selected language.
   117 languages in the `languages` metadata
 - the plugin adds `fusion_beta` times Whisper's log-probs to its own only when Whisper knows every
   candidate (`whisper_languages` metadata)
+- the model hears English in non-speech (ring tones, clicks, room noise, mains hum, silence) with a
+  margin near 1, so the plugin first finds the first second that holds speech with the system's
+  sound classifier (SoundAnalysis, speech score of at least 0.3) and starts the window 0.1 s
+  before the first frame within 35 dB of the loudest frame of that second; without speech it gives
+  no answer
 
 ## Training data
 

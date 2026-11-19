@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.language-detection",
     "name": "Language Detection",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "minHostVersion": "1.8.1",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",

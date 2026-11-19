@@ -140,7 +140,7 @@ struct LanguageSelectionEditor: View {
         case .acceptsHints:
             return localizedAppText("This engine uses the ordered list as language hints.", de: "Diese Engine verwendet die sortierte Liste als Sprachhinweise.")
         case .detectsSpokenLanguage:
-            return localizedAppText("This engine takes one language. The Language Detection plugin picks the one you speak from this list.", de: "Diese Engine nimmt nur eine Sprache. Das Plugin „Language Detection“ wählt daraus die Sprache, die du sprichst.")
+            return localizedAppText("This engine takes one language. The Language Detection plugin picks the one you speak from this list. When the plugin is unsure or hears no speech, the engine uses #1.", de: "Diese Engine nimmt nur eine Sprache. Das Plugin „Language Detection“ wählt daraus die Sprache, die du sprichst. Ist das Plugin unsicher oder hört es keine Sprache, verwendet die Engine Nr. 1.")
         case .firstSelectedFallback:
             return localizedAppText("This engine does not support multiple language hints. It will use #1 as the spoken language. The Language Detection plugin can pick the one you speak instead.", de: "Diese Engine unterstützt nicht mehrere Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache. Das Plugin „Language Detection“ kann stattdessen die Sprache wählen, die du sprichst.")
         case .unknown:

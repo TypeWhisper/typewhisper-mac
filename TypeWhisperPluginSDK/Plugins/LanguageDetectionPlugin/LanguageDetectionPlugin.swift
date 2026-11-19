@@ -1,5 +1,7 @@
+import AVFoundation
 import CoreML
 import Foundation
+import SoundAnalysis
 import TypeWhisperPluginSDK
 import os
 
@@ -48,17 +50,45 @@ actor EarModel {
 
     private var model: MLModel?
     private var labels: EarLabels?
+    private var speechRequest: SNClassifySoundRequest?
 
     func unload() {
         model = nil
+        speechRequest = nil
     }
 
     func identify(samples: [Float], among candidates: [String]) throws -> PluginSpokenLanguageIdentification? {
+        let (_, labels) = try loaded()
+        guard EarScoring.columns(for: candidates, labels: labels.languages).count >= 2 else { return nil }
+
+        // The model hears English in ringing, clicks, room noise and silence with a margin near 1,
+        // so it only judges audio from the first speech on, and nothing when there is none.
+        let speechSecond: Range<Int>?
+        do {
+            guard let start = try SpeechOnset.firstSpeech(in: samples, request: loadedSpeechRequest()) else {
+                Self.logger.info("No speech in \(samples.count / EarScoring.sampleRate) s of audio")
+                return nil
+            }
+            speechSecond = start ..< min(samples.count, start + SpeechOnset.windowSamples)
+        } catch {
+            Self.logger.error("Speech search failed, judging from the first loud sound: \(error.localizedDescription, privacy: .public)")
+            speechSecond = nil
+        }
+        return try identify(samples: samples, among: candidates, speechSecond: speechSecond)
+    }
+
+    /// The model's answer for the window at `speechSecond`, or from the first loud sound when it
+    /// is nil, without looking for speech.
+    func identify(
+        samples: [Float],
+        among candidates: [String],
+        speechSecond: Range<Int>?
+    ) throws -> PluginSpokenLanguageIdentification? {
         let (model, labels) = try loaded()
         let columns = EarScoring.columns(for: candidates, labels: labels.languages)
         guard columns.count >= 2 else { return nil }
 
-        let window = EarScoring.speechWindow(samples)
+        let window = EarScoring.speechWindow(samples, speechSecond: speechSecond)
         guard !window.isEmpty else { return nil }
 
         let audio = try MLMultiArray(shape: [1, NSNumber(value: EarScoring.windowSamples)], dataType: .float32)
@@ -92,9 +122,19 @@ actor EarModel {
         )
         let milliseconds = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
         Self.logger.info(
-            "Spoken language \(result.language, privacy: .public) among \(columns.count) known of \(candidates.count) candidates: p=\(result.confidence, format: .fixed(precision: 2)) margin=\(result.margin, format: .fixed(precision: 2)) in \(milliseconds) ms"
+            "Spoken language \(result.language, privacy: .public) among \(columns.count) known of \(candidates.count) candidates: p=\(result.confidence, format: .fixed(precision: 2)) margin=\(result.margin, format: .fixed(precision: 2)) from \((speechSecond?.lowerBound ?? 0) / EarScoring.sampleRate) s in \(milliseconds) ms"
         )
         return result
+    }
+
+    /// Creating the request loads the classifier (about 65 ms), so it is kept.
+    private func loadedSpeechRequest() throws -> SNClassifySoundRequest {
+        if let speechRequest {
+            return speechRequest
+        }
+        let request = try SpeechOnset.makeRequest()
+        speechRequest = request
+        return request
     }
 
     private func loaded() throws -> (MLModel, EarLabels) {
@@ -112,6 +152,92 @@ actor EarModel {
         model = loaded
         self.labels = labels
         return (loaded, labels)
+    }
+}
+
+/// Finds the first speech with the system's sound classifier, which tells speech from ringing,
+/// clicks and noise that are as loud.
+enum SpeechOnset {
+    /// Classifier windows of one second; shorter audio is padded with silence to one window.
+    static let windowSamples = EarScoring.sampleRate
+    /// Speech scores 0.8 to 0.95 per second in clean and telephone recordings and above 0.3 in
+    /// most seconds of quiet or noisy speech; ring tones, clicks and room noise score 0.01 to 0.02.
+    static let minimumConfidence = 0.3
+    static let speechLabels = ["speech", "whispering", "shout", "yell"]
+
+    static func makeRequest() throws -> SNClassifySoundRequest {
+        let request = try SNClassifySoundRequest(classifierIdentifier: .version1)
+        request.windowDuration = CMTime(value: CMTimeValue(windowSamples), timescale: CMTimeScale(EarScoring.sampleRate))
+        request.overlapFactor = 0
+        return request
+    }
+
+    /// The first sample of the first second that holds speech, or nil when none does. Stops at
+    /// the first speech, so a long recording costs only the time until someone speaks.
+    static func firstSpeech(in samples: [Float], request: SNClassifySoundRequest) throws -> Int? {
+        guard !samples.isEmpty,
+              let format = AVAudioFormat(
+                  commonFormat: .pcmFormatFloat32,
+                  sampleRate: Double(EarScoring.sampleRate),
+                  channels: 1,
+                  interleaved: false
+              ) else {
+            return nil
+        }
+        let analyzer = SNAudioStreamAnalyzer(format: format)
+        let observer = SpeechObserver()
+        try analyzer.add(request, withObserver: observer)
+        defer { analyzer.removeAllRequests() }
+
+        var offset = 0
+        // The analyzer classifies on the calling thread, so each whole window reports before
+        // the next one is fed.
+        while offset < samples.count, observer.firstSpeech == nil {
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(windowSamples)),
+                  let channel = buffer.floatChannelData?[0] else {
+                return nil
+            }
+            buffer.frameLength = AVAudioFrameCount(windowSamples)
+            let count = min(windowSamples, samples.count - offset)
+            channel.initialize(repeating: 0, count: windowSamples)
+            samples.withUnsafeBufferPointer { source in
+                if let base = source.baseAddress {
+                    channel.update(from: base + offset, count: count)
+                }
+            }
+            analyzer.analyze(buffer, atAudioFramePosition: AVAudioFramePosition(offset))
+            if let failure = observer.failure {
+                throw failure
+            }
+            offset += windowSamples
+        }
+        if observer.firstSpeech == nil {
+            analyzer.completeAnalysis()
+            if let failure = observer.failure {
+                throw failure
+            }
+        }
+        guard let start = observer.firstSpeech else { return nil }
+        return min(samples.count, max(0, Int((start.seconds * Double(EarScoring.sampleRate)).rounded())))
+    }
+
+    private final class SpeechObserver: NSObject, SNResultsObserving {
+        private(set) var firstSpeech: CMTime?
+        private(set) var failure: Error?
+
+        func request(_ request: SNRequest, didProduce result: SNResult) {
+            guard firstSpeech == nil, let result = result as? SNClassificationResult else { return }
+            let confidence = SpeechOnset.speechLabels
+                .compactMap { result.classification(forIdentifier: $0)?.confidence }
+                .max() ?? 0
+            if confidence >= SpeechOnset.minimumConfidence {
+                firstSpeech = result.timeRange.start
+            }
+        }
+
+        func request(_ request: SNRequest, didFailWithError error: Error) {
+            failure = error
+        }
     }
 }
 
@@ -180,27 +306,32 @@ enum EarScoring {
         return columns
     }
 
-    /// Up to 30 s starting shortly before the first speech, the way the model was trained:
-    /// 20 ms frames within 35 dB of the loudest frame count as speech.
-    static func speechWindow(_ samples: [Float]) -> [Float] {
+    /// Up to 30 s starting shortly before the first speech, the way the model was trained: the
+    /// window starts 0.1 s before the first 20 ms frame within 35 dB of the loudest frame. With
+    /// `speechSecond` (sample indices of the second the classifier heard speech in), both the
+    /// loudest and the first frame come from that second, so louder sounds elsewhere in the
+    /// recording cannot move the window off quiet speech; without it, from the whole recording.
+    static func speechWindow(_ samples: [Float], speechSecond: Range<Int>? = nil) -> [Float] {
         let frame = samplesPerEncoderFrame
         let frameCount = samples.count / frame
-        var start = 0
-        if frameCount >= 2 {
-            var levels = [Float](repeating: 0, count: frameCount)
-            samples.withUnsafeBufferPointer { buffer in
-                for index in 0 ..< frameCount {
+        let searched = speechSecond.map { second in
+            min(max(second.lowerBound, 0), samples.count) / frame ..< min(frameCount, (second.upperBound + frame - 1) / frame)
+        } ?? 0 ..< frameCount
+        var start = min(max(speechSecond?.lowerBound ?? 0, 0), samples.count)
+        if searched.count >= 2 {
+            let levels = samples.withUnsafeBufferPointer { buffer in
+                searched.map { index -> Float in
                     var energy: Float = 0
                     let offset = index * frame
                     for sample in buffer[offset ..< offset + frame] {
                         energy += sample * sample
                     }
-                    levels[index] = 10 * log10(energy / Float(frame) + 1e-12)
+                    return 10 * log10(energy / Float(frame) + 1e-12)
                 }
             }
             let threshold = (levels.max() ?? 0) - 35
             if let first = levels.firstIndex(where: { $0 > threshold }) {
-                start = max(0, first * frame - sampleRate / 10)
+                start = max(0, (searched.lowerBound + first) * frame - sampleRate / 10)
             }
         }
         let end = min(samples.count, start + windowSamples)

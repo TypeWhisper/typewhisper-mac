@@ -51926,30 +51926,30 @@
         }
       }
     },
-    "This engine takes one language. The Language Detection plugin picks the one you speak from this list." : {
+    "This engine takes one language. The Language Detection plugin picks the one you speak from this list. When the plugin is unsure or hears no speech, the engine uses #1." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diese Engine nimmt nur eine Sprache. Das Plugin „Language Detection“ wählt daraus die Sprache, die du sprichst."
+            "value" : "Diese Engine nimmt nur eine Sprache. Das Plugin „Language Detection“ wählt daraus die Sprache, die du sprichst. Ist das Plugin unsicher oder hört es keine Sprache, verwendet die Engine Nr. 1."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este motor admite un solo idioma. El plugin Language Detection elige de esta lista el idioma que hablas."
+            "value" : "Este motor admite un solo idioma. El plugin Language Detection elige de esta lista el idioma que hablas. Si el plugin no está seguro o no oye voz, el motor usa el n.º 1."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このエンジンは1つの言語しか受け付けません。Language Detection プラグインがこのリストから話している言語を選びます。"
+            "value" : "このエンジンは1つの言語しか受け付けません。Language Detection プラグインがこのリストから話している言語を選びます。プラグインが判断できない場合や音声が聞き取れない場合は、1番目を使います。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此引擎只接受一种语言。Language Detection 插件会从此列表中选择你正在说的语言。"
+            "value" : "此引擎只接受一种语言。Language Detection 插件会从此列表中选择你正在说的语言。插件无法确定或未听到语音时，引擎会使用第一种语言。"
           }
         }
       }

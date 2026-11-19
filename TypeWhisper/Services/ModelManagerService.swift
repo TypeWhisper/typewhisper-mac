@@ -1978,6 +1978,16 @@ final class ModelManagerService: ObservableObject {
     /// and keeps its old behavior.
     static let hostLanguageDetectionMinimumMargin = 0.25
 
+    /// The smallest probability gap to the runner-up for which an engine without language hints
+    /// gets the detected one of the user's selected languages; below it the engine gets the first
+    /// selected language, as without a detector. Measured on held-out speech for all pairs of 20
+    /// common languages: overall accuracy stays the same when both languages are spoken equally
+    /// often (1 s clips 82.6 % to 82.5 %, 2 s and longer unchanged) and rises when the first is
+    /// spoken more often; speech in the second language gets it 2.9 points less often in 1 s
+    /// clips and 0.2 points less often from 5 s on. Unclear answers, such as speech in loud
+    /// noise, then follow the order the user chose.
+    static let selectedLanguagesDetectionMinimumMargin = 0.25
+
     private static let allLanguageCodes = Locale.LanguageCode.isoLanguageCodes.map(\.identifier)
 
     /// Whether an engine that cannot detect languages gets the user's preferred macOS language
@@ -2012,10 +2022,10 @@ final class ModelManagerService: ObservableObject {
 
     /// A language detection plugin, when enabled, picks the spoken language for engines that would
     /// otherwise get the wrong one or none: among the user's selected languages for engines without
-    /// language hints (they used the first one), and among the engine's languages when the user asked
-    /// for automatic detection but the engine cannot detect languages itself. When nothing picks a
-    /// language for such an engine, it gets the first of the user's preferred macOS languages it
-    /// supports.
+    /// language hints (they get the first one when the answer is unclear or the plugin hears no
+    /// speech), and among the engine's languages when the user asked for automatic detection but the
+    /// engine cannot detect languages itself. When nothing picks a language for such an engine, it
+    /// gets the first of the user's preferred macOS languages it supports.
     private func spokenLanguageSelection(
         for languageSelection: LanguageSelection,
         plugin: TranscriptionEnginePlugin,
@@ -2029,7 +2039,7 @@ final class ModelManagerService: ObservableObject {
         case .hints(let codes) where !plugin.acceptsLanguageHints:
             accepted = codes
             candidates = codes
-            minimumMargin = 0
+            minimumMargin = Self.selectedLanguagesDetectionMinimumMargin
         case .auto, .inheritGlobal:
             guard let engine = plugin as? HostLanguageDetectionEnginePlugin else { return languageSelection }
             let supported = Set(plugin.supportedLanguages)

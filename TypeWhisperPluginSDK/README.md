@@ -420,8 +420,9 @@ final class MyAction: NSObject, ActionPlugin, @unchecked Sendable {
 ### SpokenLanguageIdentificationProviderPlugin
 
 Tell which of the user's selected languages is spoken. The host asks before a transcription when
-the user selected several languages and the engine accepts only one; without a provider the engine
-gets the first selected language. Audio must stay on the Mac.
+the user selected several languages and the engine accepts only one; without a provider, or when
+the answer's `margin` is below 0.25, the engine gets the first selected language. Return nil when
+the audio holds no speech. Audio must stay on the Mac.
 
 ```swift
 var spokenLanguageIdentificationProviderId: String { "my-language-id" }
