@@ -3029,6 +3029,8 @@ private struct WorkflowEditorPage: View {
     }
 
     private func save() {
+        // Again here: the plugin may have loaded or renamed the model after the editor opened.
+        draft.adoptCurrentTranscriptionModelId(pluginManager: pluginManager)
         if let validationError = draft.validationError(
             hotkeyService: hotkeyService,
             workflowService: workflowService,
