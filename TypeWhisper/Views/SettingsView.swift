@@ -1431,6 +1431,8 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+                TerminalAppsSettingsSection()
+
                 Section(String(localized: "Output Formatting")) {
                 Toggle(String(localized: "App-aware formatting"), isOn: Binding(
                     get: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.appFormattingEnabled) },
@@ -1572,6 +1574,66 @@ struct RecordingSettingsView: View {
         }
     }
 
+}
+
+// MARK: - Terminal Apps
+
+/// Terminals the user adds to the built-in ones (#1974). TypeWhisper pastes into them instead of
+/// writing through accessibility, and an unchanged window after the paste does not count as a
+/// missed text field. The list lives in UserDefaults, so a restored backup shows up here too.
+private struct TerminalAppsSettingsSection: View {
+    @ObservedObject private var installedAppsViewModel = ServiceContainer.shared.installedAppsViewModel
+    @State private var bundleIdentifiers = TerminalAppsSettingsSection.savedBundleIdentifiers()
+    @State private var isPickingApps = false
+
+    var body: some View {
+        Section(String(localized: "Terminal Apps")) {
+            ForEach(bundleIdentifiers, id: \.self) { bundleId in
+                WorkflowSelectionRow(
+                    title: appName(for: bundleId),
+                    subtitle: bundleId,
+                    icon: installedApp(for: bundleId)?.icon
+                ) {
+                    bundleIdentifiers.removeAll { $0 == bundleId }
+                }
+            }
+
+            Button(String(localized: "Select Apps…")) {
+                isPickingApps = true
+            }
+            .sheet(isPresented: $isPickingApps) {
+                WorkflowAppPickerSheet(
+                    installedApps: installedAppsViewModel.installedApps,
+                    selectedBundleIdentifiers: $bundleIdentifiers
+                )
+            }
+
+            Text(String(localized: "TypeWhisper pastes dictations into terminal apps and does not report “No text field detected” for them, because a terminal often shows pasted text only once the shell echoes it. Terminal, iTerm2, WezTerm, Warp, Ghostty, cmux and agterm are always included. Add another terminal if dictating into it ends with that message."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .task {
+            await installedAppsViewModel.loadIfNeeded()
+        }
+        .onAppear {
+            bundleIdentifiers = Self.savedBundleIdentifiers()
+        }
+        .onChange(of: bundleIdentifiers) { _, newValue in
+            UserDefaults.standard.set(newValue, forKey: UserDefaultsKeys.terminalAppBundleIdentifiers)
+        }
+    }
+
+    private static func savedBundleIdentifiers() -> [String] {
+        UserDefaults.standard.stringArray(forKey: UserDefaultsKeys.terminalAppBundleIdentifiers) ?? []
+    }
+
+    private func installedApp(for bundleId: String) -> InstalledApp? {
+        installedAppsViewModel.installedApps.first { $0.id == bundleId }
+    }
+
+    private func appName(for bundleId: String) -> String {
+        installedApp(for: bundleId)?.name ?? workflowAppDisplayName(for: bundleId)
+    }
 }
 
 // MARK: - Silence Duration

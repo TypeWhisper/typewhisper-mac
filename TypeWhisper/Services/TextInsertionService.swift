@@ -207,7 +207,9 @@ final class TextInsertionService {
 
     private let browserURLResolver: BrowserURLResolver
     private let chromiumAccessibilityObservationController: ChromiumAccessibilityObservationController
-    private let syntheticPastePreferredBundleIdentifiers: Set<String> = [
+    /// Terminals get a paste instead of an accessibility write, and an unchanged field after the
+    /// paste does not count as a missed text field. Settings let users add more (#1974).
+    static let builtInTerminalBundleIdentifiers: [String] = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
         "com.github.wez.wezterm",
@@ -216,7 +218,10 @@ final class TextInsertionService {
         "dev.warp.Warp-Preview",
         "dev.warp.WarpPreview",
         "com.mitchellh.ghostty",
-        "com.cmuxterm.app"
+        "com.cmuxterm.app",
+        // agterm shows an always-empty text area whose value and selected text are settable and
+        // insert at the cursor, so an accessibility write that it applies looks ignored (#1974).
+        "com.umputun.agterm"
     ]
     private static let geckoBundleIdentifiers =
         SupportedMeetingBrowser.reminderOnlyBundleIdentifiers.union([
@@ -272,6 +277,9 @@ final class TextInsertionService {
     var copySimulatorOverride: (() -> Void)?
     var returnSimulatorOverride: (() -> Void)?
     var captureActiveAppOverride: (() -> (name: String?, bundleId: String?, url: String?))?
+    var terminalAppBundleIdentifiersProvider: () -> [String] = {
+        UserDefaults.standard.stringArray(forKey: UserDefaultsKeys.terminalAppBundleIdentifiers) ?? []
+    }
     var selectedTextOverride: (() -> String?)?
     var textSelectionViaCopyOverride: (() -> String?)?
     var pasteVerificationAttempts = 10
@@ -402,7 +410,8 @@ final class TextInsertionService {
         /// Web editors and terminal input proxies can consume a paste without retaining it here.
         case webContentUnchanged = "web-content-unchanged"
         /// A native field that takes a new value but no text at the caret, such as a terminal
-        /// that forwards input to a shell and shows it only once the shell echoes it.
+        /// that forwards input to a shell and shows it only once the shell echoes it, or any field
+        /// of a known terminal app.
         case inputProxyUnchanged = "input-proxy-unchanged"
         /// Accessibility could inspect the focused app, and no text element was focused.
         case noFocusedTextElement = "no-focused-text-element"
@@ -561,6 +570,9 @@ final class TextInsertionService {
         /// query failed, could not run (for example without access to other apps), or the app
         /// hid its focused element.
         fileprivate let noTextElementFocused: Bool
+        /// The app is a terminal: it sends a paste to the shell, so its field shows the text only
+        /// once the shell echoes it, or never if the field stays empty.
+        fileprivate let forwardsPasteToShell: Bool
 
         /// Readable fields can confirm a paste even when an unchanged value cannot prove a miss.
         /// Keep awaiting that positive evidence so callers can safely record undo snapshots.
@@ -1109,15 +1121,20 @@ final class TextInsertionService {
         return defaultPasteFallbackRestoreDelay
     }
 
-    /// `acceptsPasteWithoutTextElement` is for apps such as terminals that take a paste even though
-    /// accessibility shows no text element.
-    func capturePasteVerificationState(acceptsPasteWithoutTextElement: Bool = false) -> PasteVerificationState {
+    private func isTerminalBundleIdentifier(_ bundleId: String) -> Bool {
+        Self.builtInTerminalBundleIdentifiers.contains(bundleId)
+            || terminalAppBundleIdentifiersProvider().contains(bundleId)
+    }
+
+    /// `isTerminalApp` is for terminals, which take a paste even though accessibility shows no
+    /// text element or a field that the paste leaves unchanged.
+    func capturePasteVerificationState(isTerminalApp: Bool = false) -> PasteVerificationState {
         let query = queryFocusedTextElement()
         return PasteVerificationState(
             focusedTextState: query.element.flatMap { captureFocusedTextState(for: $0) },
             // A found element whose state could not be captured is not proof of a missing field.
-            noTextElementFocused: query.focusIsKnown && query.element == nil
-                && !acceptsPasteWithoutTextElement
+            noTextElementFocused: query.focusIsKnown && query.element == nil && !isTerminalApp,
+            forwardsPasteToShell: isTerminalApp
         )
     }
 
@@ -1599,7 +1616,7 @@ final class TextInsertionService {
         let activeApp = captureActiveApp()
         let appName = activeApp.name
         let bundleId = activeApp.bundleId
-        let isTerminalApp = bundleId.map { syntheticPastePreferredBundleIdentifiers.contains($0) } ?? false
+        let isTerminalApp = bundleId.map { isTerminalBundleIdentifier($0) } ?? false
         let requiresSyntheticPaste = bundleId.map {
             accessibilityInsertionExcludedBundleIdentifiers.contains($0)
         } ?? false
@@ -1652,7 +1669,7 @@ final class TextInsertionService {
             : []
         let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
             || detectMissedTextField
-            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
+            ? capturePasteVerificationState(isTerminalApp: isTerminalApp)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
             || (detectMissedTextField && pasteVerificationState?.canVerifyPaste == true)
@@ -1783,6 +1800,10 @@ final class TextInsertionService {
               let currentState = captureFocusedTextState(for: initialState.element),
               currentState.keepsReadableText(of: initialState) else {
             return .unverified(.focusedTextStateUnavailable)
+        }
+        // A terminal field that stayed unchanged does not show that the paste missed (#1974).
+        if state.forwardsPasteToShell {
+            return .unverified(.inputProxyUnchanged)
         }
         // Classify only unchanged fields, after the paste and positive verification attempts.
         // Web input proxies can consume the paste without exposing a text or selection change.

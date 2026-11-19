@@ -3332,7 +3332,7 @@ private struct WorkflowTemplateCard: View {
     }
 }
 
-private struct WorkflowSelectionRow: View {
+struct WorkflowSelectionRow: View {
     let title: String
     let subtitle: String?
     var icon: NSImage? = nil
@@ -3441,7 +3441,7 @@ private struct WorkflowTextEditorField: View {
     }
 }
 
-private struct WorkflowAppPickerSheet: View {
+struct WorkflowAppPickerSheet: View {
     let installedApps: [InstalledApp]
     @Binding var selectedBundleIdentifiers: [String]
 
@@ -4658,7 +4658,7 @@ private func workflowReviewText(for workflow: Workflow) -> String {
     )
 }
 
-private func workflowAppDisplayName(for bundleIdentifier: String) -> String {
+func workflowAppDisplayName(for bundleIdentifier: String) -> String {
     if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
        let bundle = Bundle(url: appURL),
        let name = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String

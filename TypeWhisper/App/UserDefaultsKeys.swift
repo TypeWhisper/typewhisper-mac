@@ -18,6 +18,8 @@ enum UserDefaultsKeys {
     static let indicatorTranscriptPreviewFontSizeOffset = "indicatorTranscriptPreviewFontSizeOffset"
     static let livePreviewEngineId = "livePreviewEngineId"
     static let preserveClipboard = "preserveClipboard"
+    /// Bundle identifiers of terminals the user added to the built-in ones (#1974).
+    static let terminalAppBundleIdentifiers = "terminalAppBundleIdentifiers"
     static let mediaPauseEnabled = "mediaPauseEnabled"
     static let dictationHotkeysPaused = "dictationHotkeysPaused"
     static let toggleDictationSilenceStopEnabled = "toggleDictationSilenceStopEnabled"
