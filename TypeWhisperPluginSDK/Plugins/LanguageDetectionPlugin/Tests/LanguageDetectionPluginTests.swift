@@ -8,7 +8,7 @@ final class LanguageDetectionPluginTests: XCTestCase {
         // the plugin bundle and pick a candidate as the host passed it.
         let samples = (0 ..< 32_000).map { Float(sin(Double($0) * 0.05) * 0.1) }
 
-        let result = try await EarModel().identify(samples: samples, among: ["de-DE", "en"], from: 0)
+        let result = try await EarModel().identify(samples: samples, among: ["de-DE", "en"], speechSecond: nil)
         let pairResult = try XCTUnwrap(result)
         XCTAssertTrue(["de-DE", "en"].contains(pairResult.language))
         XCTAssertGreaterThanOrEqual(pairResult.confidence, 0.5)
@@ -44,9 +44,24 @@ final class LanguageDetectionPluginTests: XCTestCase {
         for index in 56_000 ..< samples.count { samples[index] = index.isMultiple(of: 2) ? 0.1 : -0.1 }
 
         XCTAssertEqual(EarScoring.speechWindow(samples).count, samples.count - 1_600, "From 0.1 s before the click")
-        let window = EarScoring.speechWindow(samples, from: 3 * 16_000)
+        let window = EarScoring.speechWindow(samples, speechSecond: 48_000 ..< 64_000)
         XCTAssertEqual(window.count, samples.count - 54_400, "From 0.1 s before the sound in the speech second")
-        XCTAssertEqual(EarScoring.speechWindow(samples, from: samples.count).count, 0)
+        XCTAssertEqual(EarScoring.speechWindow(samples, speechSecond: samples.count ..< samples.count).count, 0)
+    }
+
+    func testQuietSpeechKeepsTheWindowAgainstLouderSoundsElsewhere() {
+        var samples = [Float](repeating: 0, count: 100 * 16_000)
+        // Speech at about -46 dB from 3 to 8 s, clicks at 1 s and 90 s more than 35 dB louder.
+        for index in 48_000 ..< 128_000 { samples[index] = index.isMultiple(of: 2) ? 0.005 : -0.005 }
+        for click in [16_000, 1_440_000] {
+            for index in click ..< click + 320 { samples[index] = 0.9 }
+        }
+
+        let window = EarScoring.speechWindow(samples, speechSecond: 48_000 ..< 64_000)
+        XCTAssertEqual(
+            window, Array(samples[46_400 ..< 46_400 + EarScoring.windowSamples]),
+            "From 0.1 s before the speech, not before the click at 90 s"
+        )
     }
 
     func testWhisperGuessOnlyJoinsWhenItKnowsEveryCandidate() {

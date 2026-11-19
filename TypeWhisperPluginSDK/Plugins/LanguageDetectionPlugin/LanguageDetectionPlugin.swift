@@ -63,31 +63,32 @@ actor EarModel {
 
         // The model hears English in ringing, clicks, room noise and silence with a margin near 1,
         // so it only judges audio from the first speech on, and nothing when there is none.
-        let speechStart: Int
+        let speechSecond: Range<Int>?
         do {
             guard let start = try SpeechOnset.firstSpeech(in: samples, request: loadedSpeechRequest()) else {
                 Self.logger.info("No speech in \(samples.count / EarScoring.sampleRate) s of audio")
                 return nil
             }
-            speechStart = start
+            speechSecond = start ..< min(samples.count, start + SpeechOnset.windowSamples)
         } catch {
             Self.logger.error("Speech search failed, judging from the first loud sound: \(error.localizedDescription, privacy: .public)")
-            speechStart = 0
+            speechSecond = nil
         }
-        return try identify(samples: samples, among: candidates, from: speechStart)
+        return try identify(samples: samples, among: candidates, speechSecond: speechSecond)
     }
 
-    /// The model's answer for the window from `speechStart` on, without looking for speech.
+    /// The model's answer for the window at `speechSecond`, or from the first loud sound when it
+    /// is nil, without looking for speech.
     func identify(
         samples: [Float],
         among candidates: [String],
-        from speechStart: Int
+        speechSecond: Range<Int>?
     ) throws -> PluginSpokenLanguageIdentification? {
         let (model, labels) = try loaded()
         let columns = EarScoring.columns(for: candidates, labels: labels.languages)
         guard columns.count >= 2 else { return nil }
 
-        let window = EarScoring.speechWindow(samples, from: speechStart)
+        let window = EarScoring.speechWindow(samples, speechSecond: speechSecond)
         guard !window.isEmpty else { return nil }
 
         let audio = try MLMultiArray(shape: [1, NSNumber(value: EarScoring.windowSamples)], dataType: .float32)
@@ -121,7 +122,7 @@ actor EarModel {
         )
         let milliseconds = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
         Self.logger.info(
-            "Spoken language \(result.language, privacy: .public) among \(columns.count) known of \(candidates.count) candidates: p=\(result.confidence, format: .fixed(precision: 2)) margin=\(result.margin, format: .fixed(precision: 2)) from \(speechStart / EarScoring.sampleRate) s in \(milliseconds) ms"
+            "Spoken language \(result.language, privacy: .public) among \(columns.count) known of \(candidates.count) candidates: p=\(result.confidence, format: .fixed(precision: 2)) margin=\(result.margin, format: .fixed(precision: 2)) from \((speechSecond?.lowerBound ?? 0) / EarScoring.sampleRate) s in \(milliseconds) ms"
         )
         return result
     }
@@ -305,29 +306,32 @@ enum EarScoring {
         return columns
     }
 
-    /// Up to 30 s starting shortly before the speech that starts in the second at `speechStart`
-    /// (a sample index), the way the model was trained: the window starts 0.1 s before the first
-    /// 20 ms frame from there that is within 35 dB of the loudest frame.
-    static func speechWindow(_ samples: [Float], from speechStart: Int = 0) -> [Float] {
+    /// Up to 30 s starting shortly before the first speech, the way the model was trained: the
+    /// window starts 0.1 s before the first 20 ms frame within 35 dB of the loudest frame. With
+    /// `speechSecond` (sample indices of the second the classifier heard speech in), both the
+    /// loudest and the first frame come from that second, so louder sounds elsewhere in the
+    /// recording cannot move the window off quiet speech; without it, from the whole recording.
+    static func speechWindow(_ samples: [Float], speechSecond: Range<Int>? = nil) -> [Float] {
         let frame = samplesPerEncoderFrame
         let frameCount = samples.count / frame
-        var start = min(max(speechStart, 0), samples.count)
-        if frameCount >= 2 {
-            var levels = [Float](repeating: 0, count: frameCount)
-            samples.withUnsafeBufferPointer { buffer in
-                for index in 0 ..< frameCount {
+        let searched = speechSecond.map { second in
+            min(max(second.lowerBound, 0), samples.count) / frame ..< min(frameCount, (second.upperBound + frame - 1) / frame)
+        } ?? 0 ..< frameCount
+        var start = min(max(speechSecond?.lowerBound ?? 0, 0), samples.count)
+        if searched.count >= 2 {
+            let levels = samples.withUnsafeBufferPointer { buffer in
+                searched.map { index -> Float in
                     var energy: Float = 0
                     let offset = index * frame
                     for sample in buffer[offset ..< offset + frame] {
                         energy += sample * sample
                     }
-                    levels[index] = 10 * log10(energy / Float(frame) + 1e-12)
+                    return 10 * log10(energy / Float(frame) + 1e-12)
                 }
             }
             let threshold = (levels.max() ?? 0) - 35
-            let searchStart = min(start / frame, frameCount)
-            if let first = levels[searchStart...].firstIndex(where: { $0 > threshold }) {
-                start = max(0, first * frame - sampleRate / 10)
+            if let first = levels.firstIndex(where: { $0 > threshold }) {
+                start = max(0, (searched.lowerBound + first) * frame - sampleRate / 10)
             }
         }
         let end = min(samples.count, start + windowSamples)
