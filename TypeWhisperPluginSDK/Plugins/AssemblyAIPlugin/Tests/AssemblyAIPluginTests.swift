@@ -139,6 +139,18 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertTrue(plugin.supportedLanguages.contains("uk"))
     }
 
+    func testCurrentModelIdMapsRetiredModelsForSavedWorkflows() {
+        let plugin = AssemblyAIPlugin()
+
+        XCTAssertEqual(plugin.currentModelId(forModelId: "universal-3-5-pro"), "assemblyai-stt-3-7")
+        XCTAssertEqual(plugin.currentModelId(forModelId: "universal-3-pro"), "assemblyai-stt-3-7")
+        XCTAssertEqual(plugin.currentModelId(forModelId: "assemblyai-stt-3-7"), "assemblyai-stt-3-7")
+        XCTAssertEqual(plugin.currentModelId(forModelId: "universal-2"), "universal-2")
+        XCTAssertNil(plugin.currentModelId(forModelId: "retired-model"))
+        // The host calls it through the Objective-C runtime.
+        XCTAssertTrue(plugin.responds(to: NSSelectorFromString("currentModelIdForModelId:")))
+    }
+
     func testLiveModelDefaultsToRealtimeAgentAndPersists() throws {
         let host = try PluginTestHostServices()
         let plugin = AssemblyAIPlugin()

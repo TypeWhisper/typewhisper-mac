@@ -199,6 +199,13 @@ final class AssemblyAIPlugin: NSObject,
         }
     }
 
+    /// The current model for a saved ID, so a workflow saved with Universal-3.5 Pro or
+    /// Universal-3 Pro shows and saves AssemblyAI-STT-3.7. Nil for an ID AssemblyAI never had.
+    @objc(currentModelIdForModelId:)
+    func currentModelId(forModelId modelId: String) -> String? {
+        AssemblyAIModelCatalog.all.first { $0.id == modelId || $0.legacyIds.contains(modelId) }?.id
+    }
+
     var supportsTranslation: Bool { false }
     /// Dictations stream through live sessions; finished audio goes to the Sync, Dictation
     /// or async API, which are faster than replaying it at the realtime API's 1.25x limit.
