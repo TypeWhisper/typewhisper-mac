@@ -2687,7 +2687,10 @@ final class TextInsertionService {
             return liveFieldApplicationEligibilityOverride(bundleIdentifier)
         }
 
+        // A terminal can send a partial write to the shell while its field stays unchanged, and
+        // the final paste would then add the text again (#1974).
         return !accessibilityInsertionExcludedBundleIdentifiers.contains(bundleIdentifier)
+            && !isTerminalBundleIdentifier(bundleIdentifier)
             && !isElectronApplication(bundleIdentifier)
     }
 

@@ -1618,6 +1618,12 @@ private struct TerminalAppsSettingsSection: View {
         .onAppear {
             bundleIdentifiers = Self.savedBundleIdentifiers()
         }
+        // A backup restored while this page stays open changes the saved list; editing a stale
+        // copy would drop the restored terminals.
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            let saved = Self.savedBundleIdentifiers()
+            if saved != bundleIdentifiers { bundleIdentifiers = saved }
+        }
         .onChange(of: bundleIdentifiers) { _, newValue in
             UserDefaults.standard.set(newValue, forKey: UserDefaultsKeys.terminalAppBundleIdentifiers)
         }
