@@ -1353,7 +1353,8 @@ private struct WorkflowEditorPage: View {
 
     init(workflow: Workflow?) {
         self.workflow = workflow
-        let initialDraft = workflow.map(WorkflowDraft.init) ?? WorkflowDraft(template: .cleanedText)
+        var initialDraft = workflow.map(WorkflowDraft.init) ?? WorkflowDraft(template: .cleanedText)
+        initialDraft.adoptCurrentTranscriptionModelId(pluginManager: PluginManager.shared)
         _draft = State(initialValue: initialDraft)
         _savedDraft = State(initialValue: initialDraft)
     }
@@ -3028,6 +3029,8 @@ private struct WorkflowEditorPage: View {
     }
 
     private func save() {
+        // Again here: the plugin may have loaded or renamed the model after the editor opened.
+        draft.adoptCurrentTranscriptionModelId(pluginManager: pluginManager)
         if let validationError = draft.validationError(
             hotkeyService: hotkeyService,
             workflowService: workflowService,
@@ -3231,7 +3234,16 @@ private struct WorkflowEditorPage: View {
 
     private var workflowTranscriptionModelBinding: Binding<String?> {
         Binding(
-            get: { draft.transcriptionModelId },
+            // A plugin that loads after the editor opened can still rename the saved model;
+            // the picker shows the current one, and save() writes it.
+            get: {
+                guard let modelId = draft.transcriptionModelId,
+                      let engineId = draft.transcriptionEngineId,
+                      let engine = pluginManager.transcriptionEngine(for: engineId) else {
+                    return draft.transcriptionModelId
+                }
+                return engine.currentModelId(for: modelId)
+            },
             set: { modelId in
                 draft.transcriptionModelId = modelId
             }
@@ -4011,6 +4023,18 @@ struct WorkflowDraft {
         }
     }
 
+    /// A workflow saved with a model the plugin has since renamed shows and saves the
+    /// current model, so the picker shows it and saving does not fail on the old ID.
+    @MainActor
+    mutating func adoptCurrentTranscriptionModelId(pluginManager: PluginManager) {
+        guard let transcriptionEngineId,
+              let transcriptionModelId,
+              let engine = pluginManager.transcriptionEngine(for: transcriptionEngineId) else {
+            return
+        }
+        self.transcriptionModelId = engine.currentModelId(for: transcriptionModelId)
+    }
+
     @MainActor
     func validationError(
         hotkeyService: HotkeyService,
@@ -4040,7 +4064,7 @@ struct WorkflowDraft {
 
             if let transcriptionModelId,
                !transcriptionModelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !engine.modelCatalog.contains(where: { $0.id == transcriptionModelId }) {
+               !engine.modelCatalog.contains(where: { $0.id == engine.currentModelId(for: transcriptionModelId) }) {
                 return localizedAppText(
                     "The selected transcription model is not available for this engine.",
                     de: "Das ausgewählte Transkriptionsmodell ist für diese Engine nicht verfügbar."
