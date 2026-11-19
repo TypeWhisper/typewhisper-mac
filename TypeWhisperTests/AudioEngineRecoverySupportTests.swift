@@ -2,6 +2,7 @@ import AudioToolbox
 import AudioUnit
 @preconcurrency import AVFoundation
 import Combine
+import os
 import XCTest
 @testable import TypeWhisper
 
@@ -3283,6 +3284,42 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: error))
         }
         XCTAssertGreaterThanOrEqual(engineRunningProbeCalls, 2)
+    }
+
+    /// An idle engine on the default route sits on an aggregate that follows the system default
+    /// input, and that rebuild alone switches AirPods to call-quality audio (#1958).
+    func testPreparedBuiltInInputIsBoundToTheDeviceInsteadOfTheDefaultRoute() async {
+        let deviceID = AudioDeviceID(733)
+        let preferenceKey = UserDefaultsKeys.microphonePrerollEnabled
+        let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set(false, forKey: preferenceKey)
+        defer {
+            if let originalPreference {
+                UserDefaults.standard.set(originalPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+        let service = AudioRecordingService(
+            defaultInputController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: deviceID),
+            inputTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [deviceID: kAudioDeviceTransportTypeBuiltIn]
+            )
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.engineTeardownOverride = { _ in }
+        // Binding a real device would ask for microphone access and block coreaudiod until the
+        // prompt is answered, so the preparation stops right after recording the binding.
+        let boundDeviceIDs = OSAllocatedUnfairLock(initialState: [AudioDeviceID]())
+        service.pinnedInputDeviceBindingOverride = { deviceID in
+            boundDeviceIDs.withLock { $0.append(deviceID) }
+            throw CancellationError()
+        }
+
+        service.prepareRecordingInputIfEligible()
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertEqual(boundDeviceIDs.withLock { $0 }, [deviceID])
     }
 
     func testIneligibleBluetoothClaimPreservesPreparedBuiltInInputAcrossDictations() {

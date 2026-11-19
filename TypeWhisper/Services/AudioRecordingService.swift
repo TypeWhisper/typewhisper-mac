@@ -524,6 +524,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private(set) var testingLastBluetoothStopBehavior: BluetoothStopBehavior?
 #endif
     var engineTeardownOverride: ((AVAudioEngine) -> Void)?
+    /// Replaces binding an idle engine to its input device, so tests never touch real hardware.
+    var pinnedInputDeviceBindingOverride: ((AudioDeviceID) throws -> Void)?
     /// Called on the main queue with the uptime at which the first audio buffer arrived.
     var onFirstRecordingAudioBuffer: ((UInt64) -> Void)?
 
@@ -1161,11 +1163,17 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         do {
             // A voice-processing input ducks other apps' audio (for example a call) for as long
             // as it exists, even when it is only prepared, so it is set up at recording start.
+            // The idle prewarm is bound to the built-in microphone itself. On the default route
+            // it would sit on an aggregate that follows the system default input, and when
+            // AirPods become the default that rebuild alone switches them to call-quality
+            // audio (#1958). The opt-in pre-roll stays on the default route: its configuration
+            // observer releases it when the default input changes.
             let configuredCapture = try configureEngineCapture(
                 engine,
                 label: wantsStreaming ? "built-in-preroll" : "built-in-prewarm",
                 readinessDeadline: nil,
                 allowsVoiceProcessing: false,
+                pinnedInputDeviceID: wantsStreaming ? nil : defaultInputDeviceID,
                 shouldCancel: { false }
             )
 
@@ -2938,6 +2946,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         readinessDeadline: TimeInterval?,
         allowsVoiceProcessing: Bool = true,
         bindsCurrentDefaultInput: Bool = false,
+        pinnedInputDeviceID: AudioDeviceID? = nil,
         shouldCancel: @escaping () -> Bool
     ) throws -> ConfiguredEngineCapture {
         try throwIfRecordingStartCancelled(shouldCancel)
@@ -2951,6 +2960,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             try configureExplicitInputDevice(deviceID, on: engine, label: label)
         } else if inputRoute.selectedDeviceID != nil {
             logger.info("\(label, privacy: .public) using default aggregate input route for selected Bluetooth input")
+        } else if let pinnedInputDeviceID {
+            if let pinnedInputDeviceBindingOverride {
+                try pinnedInputDeviceBindingOverride(pinnedInputDeviceID)
+            } else {
+                try configureExplicitInputDevice(pinnedInputDeviceID, on: engine, label: label)
+            }
+            formatDeviceID = pinnedInputDeviceID
         } else if bindsCurrentDefaultInput {
             formatDeviceID = bindCurrentDefaultInput(on: engine, label: label)
         }
