@@ -46,6 +46,25 @@ final class SpeakerDiarizationPluginTests: XCTestCase {
         }
     }
 
+    /// FluidAudio's defaults (a window every two seconds, Fb 0.8) merged the
+    /// two people of short table recordings into one speaker (#1966).
+    func testDiarizerUsesOneSecondWindowsAndALowerSpeakerPrior() {
+        let automatic = SpeakerDiarizationPlugin.diarizerConfig(speakerCount: nil)
+        XCTAssertEqual(automatic.segmentation.stepRatio, 0.1)
+        XCTAssertEqual(automatic.samplesPerStep, 16_000)
+        XCTAssertEqual(automatic.clustering.threshold, 0.7)
+        XCTAssertEqual(automatic.clustering.warmStartFa, 0.07)
+        XCTAssertEqual(automatic.clustering.warmStartFb, 0.6)
+        XCTAssertNil(automatic.clustering.numSpeakers)
+
+        let fixed = SpeakerDiarizationPlugin.diarizerConfig(speakerCount: 2)
+        XCTAssertEqual(fixed.segmentation.stepRatio, 0.1)
+        XCTAssertEqual(fixed.clustering.warmStartFb, 0.3)
+        XCTAssertEqual(fixed.clustering.numSpeakers, 2)
+        XCTAssertNoThrow(try automatic.validate())
+        XCTAssertNoThrow(try fixed.validate())
+    }
+
     func testTurnsLeaveOutSegmentsWithoutSpeakerEvidence() {
         func segment(_ speaker: String, _ start: Float, _ end: Float, quality: Float) -> TimedSpeakerSegment {
             TimedSpeakerSegment(
