@@ -309,7 +309,13 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
             let audioArray = MLXArray(audio.samples)
             let languageName = Self.resolveLanguageName(language)
-            let context = Self.contextBiasString(from: prompt)
+            // Rumble-2-Flash reads its output style from control tokens at the start of the system prompt.
+            // A tokenizer may map an unknown token to its unknown-token id, so the id has to lead back to the token.
+            let controlTokens = Self.controlTokenPrefix(hasToken: { token in
+                guard let tokenizer = model.tokenizer, let id = tokenizer.convertTokenToId(token) else { return false }
+                return tokenizer.convertIdToToken(id) == token
+            })
+            let context = controlTokens + Self.contextBiasString(from: prompt)
 
             // mlx-audio-swift treats maxTokens as one shared budget across every
             // internally generated chunk. Split here so long files receive a fresh
@@ -347,7 +353,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                         model: model,
                         audio: chunk,
                         params: Self.fallbackParams,
-                        context: "",
+                        context: controlTokens,
                         language: languageName
                     )
                 }
@@ -848,6 +854,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             ramRequirement: "32 GB+",
             usageHint: "Largest unquantized model; use for max-fidelity validation."
         ),
+        // Reson8's fine-tune of Qwen3-ASR 0.6B with a 14-layer decoder, converted to MLX by
+        // typewhisper-benchmark's bench/scripts/convert-rumble-2-flash.py.
+        Qwen3ModelDef(
+            id: "rumble-2-flash-8bit",
+            displayName: "Rumble-2-Flash (8-bit)",
+            repoId: "TypeWhisper/Rumble-2-Flash-8bit",
+            sizeDescription: "~0.7 GB",
+            ramRequirement: "8 GB+",
+            usageHint: "Reson8's fine-tune of Qwen3 0.6B: nearly 1.7B accuracy, faster than 0.6B."
+        ),
     ]
 
     // MARK: - Helpers
@@ -907,6 +923,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     static func contextBiasString(from prompt: String?) -> String {
         Qwen3ContextBiasFormatter.format(prompt: prompt)
+    }
+
+    /// Rumble-2-Flash's default output style from its chat template: numbers as digits, no filler words,
+    /// repeated words kept. The model was trained with these tokens first in the system prompt.
+    static let rumbleControlTokens = "<digits><nofiller><verbatim>"
+
+    /// The control tokens for models whose vocabulary has them (Rumble-2-Flash, also when imported),
+    /// nothing for Qwen3-ASR.
+    static func controlTokenPrefix(hasToken: (String) -> Bool) -> String {
+        ["<digits>", "<nofiller>", "<verbatim>"].allSatisfy(hasToken) ? rumbleControlTokens : ""
     }
 
     private static let sampleRate = 16_000
@@ -1640,6 +1666,8 @@ private struct Qwen3SettingsView: View {
             String(localized: "Higher-quality pick for 32 GB+ Macs.", bundle: bundle)
         case "qwen3-asr-1.7b-bf16":
             String(localized: "Largest unquantized model; use for max-fidelity validation.", bundle: bundle)
+        case "rumble-2-flash-8bit":
+            String(localized: "Reson8's fine-tune of Qwen3 0.6B: nearly 1.7B accuracy, faster than 0.6B.", bundle: bundle)
         default:
             modelDef.id.hasPrefix("custom-") ? String(localized: "Imported model", bundle: bundle) : modelDef.usageHint
         }

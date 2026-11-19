@@ -36,7 +36,7 @@ packages:
     revision: 80d96762fa727f816ffceab76a6529cd12c2726f
   MLXAudio:
     url: https://github.com/TypeWhisper/mlx-audio-swift.git
-    revision: 56abd969a481b909efbb0a20fc762d701df196aa
+    revision: 4cd7b792e9d0ab6d8af30119b4de16b303f67334
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm.git
     exactVersion: 3.31.4

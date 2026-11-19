@@ -1795,6 +1795,34 @@
           }
         }
       }
+    },
+    "Reson8's fine-tune of Qwen3 0.6B: nearly 1.7B accuracy, faster than 0.6B.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8s Feinabstimmung von Qwen3 0.6B: fast so genau wie 1.7B, schneller als 0.6B."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajuste de Reson8 sobre Qwen3 0.6B: casi la precisión de 1.7B, más rápido que 0.6B."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8がQwen3 0.6Bを調整したモデル。1.7Bに近い精度で、0.6Bより高速です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reson8 基于 Qwen3 0.6B 的微调模型:准确度接近 1.7B,速度快于 0.6B。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
