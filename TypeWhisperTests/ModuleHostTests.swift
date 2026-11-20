@@ -343,6 +343,10 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertEqual(requirements.map(reading.meets), [true, true, false])
         access.value = AppPremiumAccessReading.State(hasPremiumAccount: true)
         XCTAssertEqual(requirements.map(reading.meets), [true, false, true])
+        // The App Store edition shows the access it mirrors, before StoreKit answers too.
+        access.value = AppPremiumAccessReading.State(combinedAccess: true)
+        XCTAssertTrue(reading.hasPremiumAccess)
+        XCTAssertEqual(requirements.map(reading.meets), [true, false, false])
     }
 
     func testPremiumAccessReportsANewSignedEntitlement() {

@@ -354,11 +354,14 @@ extension ManagedPolicyDefinition {
 final class AppPremiumAccessReading: PremiumAccessReading {
     /// What a module can read about the access. A change of any part is reported.
     struct State: Equatable {
+        /// Access the app verifies without a signed account envelope.
         var hasCommercialLicense = false
         var hasPremiumAccount = false
         var signedAccountEntitlement: String?
+        /// The access the app shows, when it is not just the two above combined.
+        var combinedAccess: Bool?
 
-        var hasPremiumAccess: Bool { hasCommercialLicense || hasPremiumAccount }
+        var hasPremiumAccess: Bool { combinedAccess ?? (hasCommercialLicense || hasPremiumAccount) }
     }
 
     private let state: @MainActor () -> State
@@ -392,6 +395,37 @@ final class AppPremiumAccessReading: PremiumAccessReading {
             .eraseToAnyPublisher()
         )
     }
+
+    #if APPSTORE
+    /// The App Store edition mirrors all Premium access into the license
+    /// service, account access included. Only a purchase on this Mac is
+    /// verified by the app (through StoreKit); account access is the signed
+    /// envelope's.
+    convenience init(
+        appStorePremiumService: AppStorePremiumService,
+        licenseService: LicenseService,
+        premiumAccountService: PremiumAccountService
+    ) {
+        self.init(
+            state: { [appStorePremiumService, licenseService, premiumAccountService] in
+                State(
+                    hasCommercialLicense: appStorePremiumService.isStoreKitPremiumActive,
+                    hasPremiumAccount: premiumAccountService.hasPremiumEntitlement,
+                    signedAccountEntitlement: premiumAccountService.signedEntitlement,
+                    combinedAccess: licenseService.hasCommercialLicense
+                )
+            },
+            accessChanges: Publishers.Merge3(
+                appStorePremiumService.objectWillChange.map { _ in () },
+                licenseService.objectWillChange.map { _ in () },
+                premiumAccountService.objectWillChange.map { _ in () }
+            )
+            .eraseToAnyPublisher()
+        )
+    }
+    #endif
+
+    var current: State { state() }
 
     var hasPremiumAccess: Bool { state().hasPremiumAccess }
 
