@@ -365,6 +365,25 @@ final class DictationShortSpeechTests: XCTestCase {
         wait(for: [released], timeout: 0.5)
     }
 
+    func testProcessLifetimeRetainer_neverReleasesAndCountsEachObjectOnce() throws {
+        let retainer = ProcessLifetimeRetainer<ReleaseProbe>()
+        let releaseLock = NSLock()
+        var didRelease = false
+        var probe: ReleaseProbe? = ReleaseProbe {
+            releaseLock.withLock {
+                didRelease = true
+            }
+        }
+
+        XCTAssertEqual(retainer.retain(try XCTUnwrap(probe)), 1)
+        XCTAssertEqual(retainer.retain(try XCTUnwrap(probe)), 1)
+        probe = nil
+
+        Thread.sleep(forTimeInterval: 0.05)
+        XCTAssertFalse(releaseLock.withLock { didRelease })
+        XCTAssertEqual(retainer.count, 1)
+    }
+
     private func makeSamples(duration: TimeInterval) -> [Float] {
         let count = Int(duration * AudioRecordingService.targetSampleRate)
         return [Float](repeating: 0.1, count: count)

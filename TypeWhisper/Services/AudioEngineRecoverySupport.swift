@@ -406,6 +406,27 @@ final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
     }
 }
 
+/// Keeps objects alive until the process exits.
+final class ProcessLifetimeRetainer<Object: AnyObject>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var objects: [Object] = []
+
+    /// Returns how many objects are retained, including this one.
+    @discardableResult
+    func retain(_ object: Object) -> Int {
+        lock.withLock {
+            if !objects.contains(where: { $0 === object }) {
+                objects.append(object)
+            }
+            return objects.count
+        }
+    }
+
+    var count: Int {
+        lock.withLock { objects.count }
+    }
+}
+
 final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
     private enum LifecycleState {
         case idle
