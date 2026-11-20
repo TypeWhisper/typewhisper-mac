@@ -310,8 +310,9 @@ final class PremiumAccountService: ObservableObject {
     var hasPremiumEntitlement: Bool { entitlement?.isActive == true }
 
     /// The verified entitlement exactly as the server signed it, for modules
-    /// that check it themselves.
-    var signedEntitlement: String? { entitlement?.signature }
+    /// that check it themselves. Nil without a signed-in account, also while
+    /// the stored token is still being read at launch.
+    var signedEntitlement: String? { isSignedIn ? entitlement?.signature : nil }
 
     #if DEBUG
     func prepareScreenshotFixture(hasPremiumAccess: Bool) {

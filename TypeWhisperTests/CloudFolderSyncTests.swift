@@ -623,6 +623,30 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPremiumAccountPassesTheSignedEnvelopeOnlyWhileSignedIn() throws {
+        let suiteName = "PremiumSignedEnvelope-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        defaults.set(try Self.entitlementEncoder.encode(entitlement), forKey: "premium.account.cachedEntitlement")
+
+        func service(signedIn: Bool) -> PremiumAccountService {
+            PremiumAccountService(
+                defaults: defaults,
+                keychainService: suiteName,
+                entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+                isSignedInOverride: signedIn,
+                automaticallyRefresh: false
+            )
+        }
+
+        // A cached entitlement without an account token stays with the host.
+        XCTAssertNil(service(signedIn: false).signedEntitlement)
+        XCTAssertEqual(service(signedIn: true).signedEntitlement, entitlement.signature)
+    }
+
+    @MainActor
     func testPremiumAccountRefreshesOncePerDayWhileRunning() async throws {
         let privateKey = P256.Signing.PrivateKey()
         let entitlement = try Self.signedEntitlement(privateKey: privateKey)
