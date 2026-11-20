@@ -305,11 +305,11 @@ final class ModuleHostTests: XCTestCase {
     // MARK: - Premium access
 
     func testPremiumAccessReportsOnlyRealChanges() {
-        let hasAccess = Flag(false)
+        let access = PremiumState()
         let changes = PassthroughSubject<Void, Never>()
         var shown = 0
         let reading = AppPremiumAccessReading(
-            hasAccess: { hasAccess.value },
+            state: { access.value },
             accessChanges: changes.eraseToAnyPublisher(),
             showAccess: { shown += 1 }
         )
@@ -317,7 +317,7 @@ final class ModuleHostTests: XCTestCase {
         let observation = reading.observeChanges { reported.append($0) }
 
         changes.send()
-        hasAccess.value = true
+        access.value.hasPremiumAccount = true
         changes.send()
         changes.send()
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
@@ -326,6 +326,56 @@ final class ModuleHostTests: XCTestCase {
         XCTAssertTrue(reading.hasPremiumAccess)
         XCTAssertEqual(reported, [true])
         XCTAssertEqual(shown, 1)
+        observation.cancel()
+    }
+
+    func testPremiumAccessTellsTheKindOfAccessApart() {
+        let access = PremiumState()
+        let reading = AppPremiumAccessReading(
+            state: { access.value },
+            accessChanges: Empty().eraseToAnyPublisher(),
+            showAccess: {}
+        )
+        let requirements: [ModulePremiumRequirement] = [.commercialOrPremium, .commercial, .premiumAccount]
+
+        XCTAssertEqual(requirements.map(reading.meets), [false, false, false])
+        access.value.hasCommercialLicense = true
+        XCTAssertEqual(requirements.map(reading.meets), [true, true, false])
+        access.value = AppPremiumAccessReading.State(hasPremiumAccount: true)
+        XCTAssertEqual(requirements.map(reading.meets), [true, false, true])
+        // The App Store edition shows the access it mirrors, before StoreKit answers too.
+        access.value = AppPremiumAccessReading.State(combinedAccess: true)
+        XCTAssertTrue(reading.hasPremiumAccess)
+        XCTAssertEqual(requirements.map(reading.meets), [true, false, false])
+    }
+
+    func testPremiumAccessReportsANewSignedEntitlement() {
+        let access = PremiumState(AppPremiumAccessReading.State(
+            hasPremiumAccount: true,
+            signedAccountEntitlement: "claims.first"
+        ))
+        let changes = PassthroughSubject<Void, Never>()
+        let reading = AppPremiumAccessReading(
+            state: { access.value },
+            accessChanges: changes.eraseToAnyPublisher(),
+            showAccess: {}
+        )
+        var reported: [Bool] = []
+        let observation = reading.observeChanges { reported.append($0) }
+
+        XCTAssertEqual(reading.signedAccountEntitlement, "claims.first")
+        // The access stays the same, a renewed envelope is still reported.
+        access.value.signedAccountEntitlement = "claims.second"
+        changes.send()
+        changes.send()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        access.value.signedAccountEntitlement = nil
+        access.value.hasPremiumAccount = false
+        changes.send()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+        XCTAssertNil(reading.signedAccountEntitlement)
+        XCTAssertEqual(reported, [true, false])
         observation.cancel()
     }
 
@@ -759,6 +809,15 @@ final class ModuleHostTests: XCTestCase {
 @MainActor
 private final class Log {
     var items: [String] = []
+}
+
+@MainActor
+private final class PremiumState {
+    var value: AppPremiumAccessReading.State
+
+    init(_ value: AppPremiumAccessReading.State = AppPremiumAccessReading.State()) {
+        self.value = value
+    }
 }
 
 @MainActor

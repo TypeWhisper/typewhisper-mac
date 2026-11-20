@@ -3,6 +3,7 @@ import AuthenticationServices
 import Combine
 import CryptoKit
 import Foundation
+import Network
 import Security
 import SwiftUI
 
@@ -276,7 +277,9 @@ final class PremiumAccountService: ObservableObject {
         static let deviceID = "premium.account.deviceID"
     }
 
-    @Published private(set) var entitlement: CrossDevicePremiumEntitlement?
+    @Published private(set) var entitlement: CrossDevicePremiumEntitlement? {
+        didSet { scheduleExpiryChange() }
+    }
     @Published private(set) var isSignedIn: Bool
     @Published private(set) var isWorking = false
     @Published var errorMessage: String?
@@ -291,11 +294,31 @@ final class PremiumAccountService: ObservableObject {
     private let entitlementVerifier: CrossDevicePremiumEntitlementVerifier?
     private let appleWebAuthenticator: any AppleWebAuthenticating
     private var startupTokenTask: Task<Void, Never>?
+    private let now: @Sendable () -> Date
+    private let dailyRefreshTriggers: @Sendable () -> AsyncStream<Void>
+    private var dailyRefreshTask: Task<Void, Never>?
+    private var signedInObservation: AnyCancellable?
+    private var isRefreshing = false
+    private var lastFailedRefresh: Date?
+    private var expiryTask: Task<Void, Never>?
+    /// Advances on sign-out and whenever an entitlement is stored, so a
+    /// refresh answer that started before either is discarded.
+    private var entitlementGeneration = 0
+
+    /// How often the entitlement is refreshed while the app runs.
+    static let refreshInterval: TimeInterval = 24 * 60 * 60
+    /// How long a failed refresh waits before the next attempt.
+    static let refreshRetryInterval: TimeInterval = 15 * 60
 
     private static let productionEntitlementPublicKeyBase64 =
         "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ=="
 
     var hasPremiumEntitlement: Bool { entitlement?.isActive == true }
+
+    /// The verified entitlement exactly as the server signed it, for modules
+    /// that check it themselves. Nil without a signed-in account, also while
+    /// the stored token is still being read at launch.
+    var signedEntitlement: String? { isSignedIn ? entitlement?.signature : nil }
 
     #if DEBUG
     func prepareScreenshotFixture(hasPremiumAccess: Bool) {
@@ -328,9 +351,15 @@ final class PremiumAccountService: ObservableObject {
         entitlementPublicKeyBase64: String = PremiumAccountService.productionEntitlementPublicKeyBase64,
         isSignedInOverride: Bool? = nil,
         automaticallyRefresh: Bool = true,
-        startupTokenReader: @escaping @Sendable (String) -> String? = readPremiumAccountToken
+        startupTokenReader: @escaping @Sendable (String) -> String? = readPremiumAccountToken,
+        now: @escaping @Sendable () -> Date = { Date() },
+        dailyRefreshTriggers: @escaping @Sendable () -> AsyncStream<Void> = {
+            PremiumAccountService.dailyRefreshTriggers()
+        }
     ) {
         self.defaults = defaults
+        self.now = now
+        self.dailyRefreshTriggers = dailyRefreshTriggers
         self.baseURL = baseURL
             ?? (Bundle.main.object(forInfoDictionaryKey: "TypeWhisperAccountBaseURL") as? String)
                 .flatMap(URL.init(string:))
@@ -379,6 +408,16 @@ final class PremiumAccountService: ObservableObject {
                     await self.refreshIfNeeded()
                 }
             }
+        }
+        scheduleExpiryChange()
+        if automaticallyRefresh {
+            signedInObservation = $isSignedIn
+                .removeDuplicates()
+                .sink { [weak self] isSignedIn in
+                    MainActor.assumeIsolated {
+                        self?.setDailyRefreshRunning(isSignedIn)
+                    }
+                }
         }
     }
 
@@ -453,13 +492,135 @@ final class PremiumAccountService: ObservableObject {
         }
     }
 
+    /// Refreshes at launch and after sign-in: always without an active
+    /// entitlement, otherwise once per `refreshInterval`.
     func refreshIfNeeded() async {
         guard isSignedIn else { return }
-        if hasPremiumEntitlement,
-           let last = defaults.object(forKey: Keys.lastRefresh) as? Date,
-           Date().timeIntervalSince(last) < 7 * 24 * 60 * 60 { return }
-        do { try await refresh() }
-        catch { if entitlement == nil { errorMessage = error.localizedDescription } }
+        if hasPremiumEntitlement, !isRefreshDue(at: now()) { return }
+        await refreshKeepingLastState()
+    }
+
+    /// Refreshes while the app runs, once per `refreshInterval`. After a
+    /// failed attempt, also one that launch or sign-in started early, it
+    /// retries once `refreshRetryInterval` has passed.
+    func refreshIfDue() async {
+        let now = now()
+        guard isSignedIn else { return }
+        if let lastFailedRefresh {
+            let age = now.timeIntervalSince(lastFailedRefresh)
+            if age >= 0, age < Self.refreshRetryInterval { return }
+        } else if !isRefreshDue(at: now) {
+            return
+        }
+        await refreshKeepingLastState()
+    }
+
+    private func isRefreshDue(at now: Date) -> Bool {
+        guard let last = defaults.object(forKey: Keys.lastRefresh) as? Date else { return true }
+        let age = now.timeIntervalSince(last)
+        // A clock set back must not postpone the refresh.
+        return age < 0 || age >= Self.refreshInterval
+    }
+
+    /// A failure keeps the last entitlement.
+    private func refreshKeepingLastState() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        let generation = entitlementGeneration
+        do {
+            try await refresh()
+            lastFailedRefresh = nil
+        } catch is CancellationError {
+            // Signed out or a newer entitlement arrived while the request ran.
+        } catch {
+            // A failure that arrives after a sign-out or a newer entitlement
+            // says nothing about the current state. A rejected token does: it
+            // has just signed the account out.
+            let failure = error as NSError
+            let rejectedToken = failure.domain == "PremiumAccount" && [401, 403].contains(failure.code)
+            guard generation == entitlementGeneration || rejectedToken else { return }
+            lastFailedRefresh = now()
+            if entitlement == nil { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// `hasPremiumEntitlement` turns false when `expiresAt` passes, so publish
+    /// then, before observers read the new state.
+    private func scheduleExpiryChange() {
+        expiryTask?.cancel()
+        expiryTask = nil
+        guard let expiresAt = entitlement?.expiresAt else { return }
+        let delay = expiresAt.timeIntervalSinceNow
+        guard delay > 0 else { return }
+        expiryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            self.objectWillChange.send()
+        }
+    }
+
+    private func setDailyRefreshRunning(_ running: Bool) {
+        guard running else {
+            dailyRefreshTask?.cancel()
+            dailyRefreshTask = nil
+            return
+        }
+        guard dailyRefreshTask == nil else { return }
+        let triggers = dailyRefreshTriggers()
+        dailyRefreshTask = Task { [weak self] in
+            for await _ in triggers {
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshIfDue()
+            }
+        }
+    }
+
+    /// Yields every hour, after the Mac wakes and when a network becomes
+    /// available, until its consumer stops iterating. `refreshIfDue()`
+    /// decides whether a trigger reaches the server.
+    nonisolated static func dailyRefreshTriggers(
+        every interval: Duration = .seconds(60 * 60),
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+    ) -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let timer = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: interval)
+                    continuation.yield()
+                }
+            }
+            nonisolated(unsafe) let wake = workspaceNotificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: nil
+            ) { _ in
+                continuation.yield()
+            }
+            let monitor = NWPathMonitor()
+            let path = PathUpdates()
+            monitor.pathUpdateHandler = { update in
+                // The first update reports the network the app started with.
+                if path.consumeFirst() { return }
+                if update.status == .satisfied { continuation.yield() }
+            }
+            monitor.start(queue: DispatchQueue(label: "com.typewhisper.premium-account.network", qos: .utility))
+            continuation.onTermination = { _ in
+                timer.cancel()
+                workspaceNotificationCenter.removeObserver(wake)
+                monitor.cancel()
+            }
+        }
+    }
+
+    /// Touched only on the monitor's serial queue.
+    private final class PathUpdates: @unchecked Sendable {
+        private var sawFirst = false
+
+        func consumeFirst() -> Bool {
+            defer { sawFirst = true }
+            return !sawFirst
+        }
     }
 
     func signOut() {
@@ -497,9 +658,11 @@ final class PremiumAccountService: ObservableObject {
     }
 
     private func refresh() async throws {
+        let generation = entitlementGeneration
         let response: EntitlementResponse = try await request(path: "/v1/entitlements/current")
+        guard generation == entitlementGeneration, isSignedIn else { throw CancellationError() }
         try acceptEntitlement(response.entitlement)
-        defaults.set(Date(), forKey: Keys.lastRefresh)
+        defaults.set(now(), forKey: Keys.lastRefresh)
     }
 
     private func acceptAccountSession(
@@ -523,7 +686,14 @@ final class PremiumAccountService: ObservableObject {
                 throw error
             }
         } else {
-            try await refresh()
+            do {
+                try await refresh()
+                lastFailedRefresh = nil
+            } catch {
+                // The triggers wait `refreshRetryInterval` before trying again.
+                if !(error is CancellationError) { lastFailedRefresh = now() }
+                throw error
+            }
         }
     }
 
@@ -543,15 +713,16 @@ final class PremiumAccountService: ObservableObject {
 
     private func acceptEntitlement(_ value: CrossDevicePremiumEntitlement?) throws {
         guard let value else {
+            entitlementGeneration += 1
             entitlement = nil
             defaults.removeObject(forKey: Keys.cachedEntitlement)
             return
         }
+        // An answer that fails verification leaves the verified entitlement in place.
         guard let verified = entitlementVerifier?.verified(value) else {
-            entitlement = nil
-            defaults.removeObject(forKey: Keys.cachedEntitlement)
             throw PremiumAccountServiceError.invalidEntitlementSignature
         }
+        entitlementGeneration += 1
         entitlement = verified
         if let data = try? encoder.encode(verified) {
             defaults.set(data, forKey: Keys.cachedEntitlement)
@@ -565,6 +736,7 @@ final class PremiumAccountService: ObservableObject {
         defer { isWorking = false }
         do { try await operation() }
         catch PremiumAccountServiceError.appleSignInCancelled {}
+        catch is CancellationError {}
         catch { errorMessage = error.localizedDescription }
     }
 
@@ -584,16 +756,21 @@ final class PremiumAccountService: ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
         }
+        var sentToken: String?
         if authenticated {
             guard let token = Self.readToken(service: keychainService) else {
                 throw NSError(domain: "PremiumAccount", code: 401, userInfo: [NSLocalizedDescriptionKey: "Sign in with Apple first."])
             }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            sentToken = token
         }
         let (data, response) = try await requestExecutor(request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard (200..<300).contains(http.statusCode) else {
             if authenticated, http.statusCode == 401 || http.statusCode == 403 {
+                // A rejected token from before a sign-out or a new sign-in
+                // must not end the current session.
+                guard Self.readToken(service: keychainService) == sentToken else { throw CancellationError() }
                 clearAuthorizationState()
             }
             let message = (try? decoder.decode(ErrorResponse.self, from: data).error) ?? "Account request failed (HTTP \(http.statusCode))."
@@ -615,6 +792,8 @@ final class PremiumAccountService: ObservableObject {
         entitlement = nil
         defaults.removeObject(forKey: Keys.cachedEntitlement)
         defaults.removeObject(forKey: Keys.lastRefresh)
+        lastFailedRefresh = nil
+        entitlementGeneration += 1
     }
 
     private static func readToken(service: String) -> String? {
@@ -689,6 +868,7 @@ extension PremiumAccountService {
         defaults.set(Date(), forKey: Keys.lastRefresh)
         // A subscription answer must not replace an active lifetime entitlement.
         if let entitlement, entitlement.isActive, entitlement.isLifetime, !synced.isLifetime {
+            entitlementGeneration += 1
             return
         }
         try acceptEntitlement(synced)

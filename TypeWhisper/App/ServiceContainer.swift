@@ -636,6 +636,18 @@ final class ServiceContainer: ObservableObject {
 
         // The stub package, linked by default, has no modules.
         let moduleUserData = AppModuleUserDataLifecycle()
+        #if APPSTORE
+        let premiumAccessReading = AppPremiumAccessReading(
+            appStorePremiumService: appStorePremiumService,
+            licenseService: licenseService,
+            premiumAccountService: premiumAccountService
+        )
+        #else
+        let premiumAccessReading = AppPremiumAccessReading(
+            licenseService: licenseService,
+            premiumAccountService: premiumAccountService
+        )
+        #endif
         self.moduleUserData = moduleUserData
         moduleRegistry = ModuleRegistry(host: AppModuleHost(
             historyReading: AppHistoryReading(historyService: historyService),
@@ -649,10 +661,7 @@ final class ServiceContainer: ObservableObject {
             },
             languageModelAnswering: AppLanguageModelAnswering(service: promptProcessingService),
             managedPolicyReading: AppModuleManagedPolicyReading(service: managedPolicyService),
-            premiumAccessReading: AppPremiumAccessReading(
-                licenseService: licenseService,
-                premiumAccountService: premiumAccountService
-            ),
+            premiumAccessReading: premiumAccessReading,
             userDataLifecycle: moduleUserData
         ))
         historyViewModel.setModuleSidebarGroups(moduleRegistry.contributions.historySidebarGroups)

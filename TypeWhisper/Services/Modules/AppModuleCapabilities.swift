@@ -352,25 +352,41 @@ extension ManagedPolicyDefinition {
 
 @MainActor
 final class AppPremiumAccessReading: PremiumAccessReading {
-    private let hasAccess: @MainActor () -> Bool
+    /// What a module can read about the access. A change of any part is reported.
+    struct State: Equatable {
+        /// Access the app verifies without a signed account envelope.
+        var hasCommercialLicense = false
+        var hasPremiumAccount = false
+        var signedAccountEntitlement: String?
+        /// The access the app shows, when it is not just the two above combined.
+        var combinedAccess: Bool?
+
+        var hasPremiumAccess: Bool { combinedAccess ?? (hasCommercialLicense || hasPremiumAccount) }
+    }
+
+    private let state: @MainActor () -> State
     private let accessChanges: AnyPublisher<Void, Never>
     private let showAccess: @MainActor () -> Void
 
     /// - Parameter accessChanges: Publishes before the access may change, like `objectWillChange`.
     init(
-        hasAccess: @escaping @MainActor () -> Bool,
+        state: @escaping @MainActor () -> State,
         accessChanges: AnyPublisher<Void, Never>,
         showAccess: @escaping @MainActor () -> Void = { PremiumSettingsWindowManager.shared.present(.access) }
     ) {
-        self.hasAccess = hasAccess
+        self.state = state
         self.accessChanges = accessChanges
         self.showAccess = showAccess
     }
 
     convenience init(licenseService: LicenseService, premiumAccountService: PremiumAccountService) {
         self.init(
-            hasAccess: { [licenseService, premiumAccountService] in
-                licenseService.hasCommercialLicense || premiumAccountService.hasPremiumEntitlement
+            state: { [licenseService, premiumAccountService] in
+                State(
+                    hasCommercialLicense: licenseService.hasCommercialLicense,
+                    hasPremiumAccount: premiumAccountService.hasPremiumEntitlement,
+                    signedAccountEntitlement: premiumAccountService.signedEntitlement
+                )
             },
             accessChanges: Publishers.Merge(
                 licenseService.objectWillChange.map { _ in () },
@@ -380,19 +396,61 @@ final class AppPremiumAccessReading: PremiumAccessReading {
         )
     }
 
-    var hasPremiumAccess: Bool { hasAccess() }
+    #if APPSTORE
+    /// The App Store edition mirrors all Premium access into the license
+    /// service, account access included. Only a purchase on this Mac is
+    /// verified by the app (through StoreKit); account access is the signed
+    /// envelope's.
+    convenience init(
+        appStorePremiumService: AppStorePremiumService,
+        licenseService: LicenseService,
+        premiumAccountService: PremiumAccountService
+    ) {
+        self.init(
+            state: { [appStorePremiumService, licenseService, premiumAccountService] in
+                State(
+                    hasCommercialLicense: appStorePremiumService.isStoreKitPremiumActive,
+                    hasPremiumAccount: premiumAccountService.hasPremiumEntitlement,
+                    signedAccountEntitlement: premiumAccountService.signedEntitlement,
+                    combinedAccess: licenseService.hasCommercialLicense
+                )
+            },
+            accessChanges: Publishers.Merge3(
+                appStorePremiumService.objectWillChange.map { _ in () },
+                licenseService.objectWillChange.map { _ in () },
+                premiumAccountService.objectWillChange.map { _ in () }
+            )
+            .eraseToAnyPublisher()
+        )
+    }
+    #endif
+
+    var current: State { state() }
+
+    var hasPremiumAccess: Bool { state().hasPremiumAccess }
+
+    func meets(_ requirement: ModulePremiumRequirement) -> Bool {
+        let current = state()
+        return switch requirement {
+        case .commercialOrPremium: current.hasPremiumAccess
+        case .commercial: current.hasCommercialLicense
+        case .premiumAccount: current.hasPremiumAccount
+        }
+    }
+
+    var signedAccountEntitlement: String? { state().signedAccountEntitlement }
 
     func observeChanges(_ handler: @escaping @MainActor (Bool) -> Void) -> AnyCancellable {
-        var last = hasAccess()
+        var last = state()
         // The services publish before they change, so read the state after the change.
         return accessChanges
             .receive(on: DispatchQueue.main)
-            .sink { [hasAccess] _ in
+            .sink { [state] _ in
                 MainActor.assumeIsolated {
-                    let current = hasAccess()
+                    let current = state()
                     guard current != last else { return }
                     last = current
-                    handler(current)
+                    handler(current.hasPremiumAccess)
                 }
             }
     }
