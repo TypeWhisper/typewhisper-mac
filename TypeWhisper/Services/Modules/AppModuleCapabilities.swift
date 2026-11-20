@@ -352,25 +352,38 @@ extension ManagedPolicyDefinition {
 
 @MainActor
 final class AppPremiumAccessReading: PremiumAccessReading {
-    private let hasAccess: @MainActor () -> Bool
+    /// What a module can read about the access. A change of any part is reported.
+    struct State: Equatable {
+        var hasCommercialLicense = false
+        var hasPremiumAccount = false
+        var signedAccountEntitlement: String?
+
+        var hasPremiumAccess: Bool { hasCommercialLicense || hasPremiumAccount }
+    }
+
+    private let state: @MainActor () -> State
     private let accessChanges: AnyPublisher<Void, Never>
     private let showAccess: @MainActor () -> Void
 
     /// - Parameter accessChanges: Publishes before the access may change, like `objectWillChange`.
     init(
-        hasAccess: @escaping @MainActor () -> Bool,
+        state: @escaping @MainActor () -> State,
         accessChanges: AnyPublisher<Void, Never>,
         showAccess: @escaping @MainActor () -> Void = { PremiumSettingsWindowManager.shared.present(.access) }
     ) {
-        self.hasAccess = hasAccess
+        self.state = state
         self.accessChanges = accessChanges
         self.showAccess = showAccess
     }
 
     convenience init(licenseService: LicenseService, premiumAccountService: PremiumAccountService) {
         self.init(
-            hasAccess: { [licenseService, premiumAccountService] in
-                licenseService.hasCommercialLicense || premiumAccountService.hasPremiumEntitlement
+            state: { [licenseService, premiumAccountService] in
+                State(
+                    hasCommercialLicense: licenseService.hasCommercialLicense,
+                    hasPremiumAccount: premiumAccountService.hasPremiumEntitlement,
+                    signedAccountEntitlement: premiumAccountService.signedEntitlement
+                )
             },
             accessChanges: Publishers.Merge(
                 licenseService.objectWillChange.map { _ in () },
@@ -380,19 +393,30 @@ final class AppPremiumAccessReading: PremiumAccessReading {
         )
     }
 
-    var hasPremiumAccess: Bool { hasAccess() }
+    var hasPremiumAccess: Bool { state().hasPremiumAccess }
+
+    func meets(_ requirement: ModulePremiumRequirement) -> Bool {
+        let current = state()
+        return switch requirement {
+        case .commercialOrPremium: current.hasPremiumAccess
+        case .commercial: current.hasCommercialLicense
+        case .premiumAccount: current.hasPremiumAccount
+        }
+    }
+
+    var signedAccountEntitlement: String? { state().signedAccountEntitlement }
 
     func observeChanges(_ handler: @escaping @MainActor (Bool) -> Void) -> AnyCancellable {
-        var last = hasAccess()
+        var last = state()
         // The services publish before they change, so read the state after the change.
         return accessChanges
             .receive(on: DispatchQueue.main)
-            .sink { [hasAccess] _ in
+            .sink { [state] _ in
                 MainActor.assumeIsolated {
-                    let current = hasAccess()
+                    let current = state()
                     guard current != last else { return }
                     last = current
-                    handler(current)
+                    handler(current.hasPremiumAccess)
                 }
             }
     }

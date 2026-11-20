@@ -3,6 +3,7 @@ import AuthenticationServices
 import Combine
 import CryptoKit
 import Foundation
+import Network
 import Security
 import SwiftUI
 
@@ -291,11 +292,26 @@ final class PremiumAccountService: ObservableObject {
     private let entitlementVerifier: CrossDevicePremiumEntitlementVerifier?
     private let appleWebAuthenticator: any AppleWebAuthenticating
     private var startupTokenTask: Task<Void, Never>?
+    private let now: @Sendable () -> Date
+    private let dailyRefreshTriggers: @Sendable () -> AsyncStream<Void>
+    private var dailyRefreshTask: Task<Void, Never>?
+    private var signedInObservation: AnyCancellable?
+    private var isRefreshing = false
+    private var lastFailedRefresh: Date?
+
+    /// How often the entitlement is refreshed while the app runs.
+    static let refreshInterval: TimeInterval = 24 * 60 * 60
+    /// How long a failed refresh waits before the next attempt.
+    static let refreshRetryInterval: TimeInterval = 15 * 60
 
     private static let productionEntitlementPublicKeyBase64 =
         "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ=="
 
     var hasPremiumEntitlement: Bool { entitlement?.isActive == true }
+
+    /// The verified entitlement exactly as the server signed it, for modules
+    /// that check it themselves.
+    var signedEntitlement: String? { entitlement?.signature }
 
     #if DEBUG
     func prepareScreenshotFixture(hasPremiumAccess: Bool) {
@@ -328,9 +344,15 @@ final class PremiumAccountService: ObservableObject {
         entitlementPublicKeyBase64: String = PremiumAccountService.productionEntitlementPublicKeyBase64,
         isSignedInOverride: Bool? = nil,
         automaticallyRefresh: Bool = true,
-        startupTokenReader: @escaping @Sendable (String) -> String? = readPremiumAccountToken
+        startupTokenReader: @escaping @Sendable (String) -> String? = readPremiumAccountToken,
+        now: @escaping @Sendable () -> Date = { Date() },
+        dailyRefreshTriggers: @escaping @Sendable () -> AsyncStream<Void> = {
+            PremiumAccountService.dailyRefreshTriggers()
+        }
     ) {
         self.defaults = defaults
+        self.now = now
+        self.dailyRefreshTriggers = dailyRefreshTriggers
         self.baseURL = baseURL
             ?? (Bundle.main.object(forInfoDictionaryKey: "TypeWhisperAccountBaseURL") as? String)
                 .flatMap(URL.init(string:))
@@ -379,6 +401,15 @@ final class PremiumAccountService: ObservableObject {
                     await self.refreshIfNeeded()
                 }
             }
+        }
+        if automaticallyRefresh {
+            signedInObservation = $isSignedIn
+                .removeDuplicates()
+                .sink { [weak self] isSignedIn in
+                    MainActor.assumeIsolated {
+                        self?.setDailyRefreshRunning(isSignedIn)
+                    }
+                }
         }
     }
 
@@ -453,13 +484,108 @@ final class PremiumAccountService: ObservableObject {
         }
     }
 
+    /// Refreshes at launch and after sign-in: always without an active
+    /// entitlement, otherwise once per `refreshInterval`.
     func refreshIfNeeded() async {
         guard isSignedIn else { return }
-        if hasPremiumEntitlement,
-           let last = defaults.object(forKey: Keys.lastRefresh) as? Date,
-           Date().timeIntervalSince(last) < 7 * 24 * 60 * 60 { return }
-        do { try await refresh() }
-        catch { if entitlement == nil { errorMessage = error.localizedDescription } }
+        if hasPremiumEntitlement, !isRefreshDue(at: now()) { return }
+        await refreshKeepingLastState()
+    }
+
+    /// Refreshes while the app runs, once per `refreshInterval`, and after a
+    /// failure again after `refreshRetryInterval`.
+    func refreshIfDue() async {
+        let now = now()
+        guard isSignedIn, isRefreshDue(at: now) else { return }
+        if let lastFailedRefresh {
+            let age = now.timeIntervalSince(lastFailedRefresh)
+            if age >= 0, age < Self.refreshRetryInterval { return }
+        }
+        await refreshKeepingLastState()
+    }
+
+    private func isRefreshDue(at now: Date) -> Bool {
+        guard let last = defaults.object(forKey: Keys.lastRefresh) as? Date else { return true }
+        let age = now.timeIntervalSince(last)
+        // A clock set back must not postpone the refresh.
+        return age < 0 || age >= Self.refreshInterval
+    }
+
+    /// A failure keeps the last entitlement.
+    private func refreshKeepingLastState() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            try await refresh()
+            lastFailedRefresh = nil
+        } catch {
+            lastFailedRefresh = now()
+            if entitlement == nil { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func setDailyRefreshRunning(_ running: Bool) {
+        guard running else {
+            dailyRefreshTask?.cancel()
+            dailyRefreshTask = nil
+            return
+        }
+        guard dailyRefreshTask == nil else { return }
+        let triggers = dailyRefreshTriggers()
+        dailyRefreshTask = Task { [weak self] in
+            for await _ in triggers {
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshIfDue()
+            }
+        }
+    }
+
+    /// Yields every hour, after the Mac wakes and when a network becomes
+    /// available, until its consumer stops iterating. `refreshIfDue()`
+    /// decides whether a trigger reaches the server.
+    nonisolated static func dailyRefreshTriggers(
+        every interval: Duration = .seconds(60 * 60),
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+    ) -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let timer = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: interval)
+                    continuation.yield()
+                }
+            }
+            nonisolated(unsafe) let wake = workspaceNotificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: nil
+            ) { _ in
+                continuation.yield()
+            }
+            let monitor = NWPathMonitor()
+            let path = PathUpdates()
+            monitor.pathUpdateHandler = { update in
+                // The first update reports the network the app started with.
+                if path.consumeFirst() { return }
+                if update.status == .satisfied { continuation.yield() }
+            }
+            monitor.start(queue: DispatchQueue(label: "com.typewhisper.premium-account.network", qos: .utility))
+            continuation.onTermination = { _ in
+                timer.cancel()
+                workspaceNotificationCenter.removeObserver(wake)
+                monitor.cancel()
+            }
+        }
+    }
+
+    /// Touched only on the monitor's serial queue.
+    private final class PathUpdates: @unchecked Sendable {
+        private var sawFirst = false
+
+        func consumeFirst() -> Bool {
+            defer { sawFirst = true }
+            return !sawFirst
+        }
     }
 
     func signOut() {
@@ -499,7 +625,7 @@ final class PremiumAccountService: ObservableObject {
     private func refresh() async throws {
         let response: EntitlementResponse = try await request(path: "/v1/entitlements/current")
         try acceptEntitlement(response.entitlement)
-        defaults.set(Date(), forKey: Keys.lastRefresh)
+        defaults.set(now(), forKey: Keys.lastRefresh)
     }
 
     private func acceptAccountSession(
@@ -615,6 +741,7 @@ final class PremiumAccountService: ObservableObject {
         entitlement = nil
         defaults.removeObject(forKey: Keys.cachedEntitlement)
         defaults.removeObject(forKey: Keys.lastRefresh)
+        lastFailedRefresh = nil
     }
 
     private static func readToken(service: String) -> String? {

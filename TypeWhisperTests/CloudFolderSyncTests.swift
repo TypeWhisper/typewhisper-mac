@@ -229,6 +229,40 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
     }
 }
 
+private final class PremiumAccountTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Date
+
+    init(_ date: Date) { value = date }
+
+    var date: Date {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
+    }
+}
+
+private final class PremiumAccountTestTriggers: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: AsyncStream<Void>.Continuation?
+    private var terminated = false
+
+    var wasTerminated: Bool { lock.withLock { terminated } }
+
+    func stream() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            lock.withLock { self.continuation = continuation }
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.lock.withLock { self.terminated = true }
+            }
+        }
+    }
+
+    func yield() {
+        _ = lock.withLock { continuation }?.yield()
+    }
+}
+
 private actor PremiumAccountHTTPRecorder {
     private let responses: [String: String]
     private let statusCodes: [String: Int]
@@ -586,6 +620,156 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertEqual(service.entitlement, entitlement)
         let requests = await recorder.recordedRequests()
         XCTAssertTrue(requests.isEmpty)
+    }
+
+    @MainActor
+    func testPremiumAccountRefreshesOncePerDayWhileRunning() async throws {
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let clock = PremiumAccountTestClock(Self.date(0))
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/entitlements/current": try Self.entitlementResponse(entitlement),
+        ])
+        let service = try makeSignedInPremiumAccount(
+            cached: entitlement,
+            lastRefresh: Self.date(0),
+            privateKey: privateKey,
+            recorder: recorder,
+            clock: clock
+        )
+        defer { service.signOut() }
+
+        XCTAssertEqual(service.signedEntitlement, entitlement.signature)
+        clock.date = Self.date(PremiumAccountService.refreshInterval - 60)
+        await service.refreshIfDue()
+        var requests = await recorder.recordedRequests()
+        XCTAssertTrue(requests.isEmpty)
+
+        clock.date = Self.date(PremiumAccountService.refreshInterval)
+        await service.refreshIfDue()
+        await service.refreshIfDue()
+        requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.compactMap(\.url?.path), ["/v1/entitlements/current"])
+        XCTAssertEqual(service.entitlement, entitlement)
+
+        // A launch the same day does not reach the server either.
+        await service.refreshIfNeeded()
+        requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+    }
+
+    @MainActor
+    func testPremiumAccountKeepsEntitlementWhenDailyRefreshFails() async throws {
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let clock = PremiumAccountTestClock(Self.date(PremiumAccountService.refreshInterval))
+        let recorder = PremiumAccountHTTPRecorder(
+            responses: ["/v1/entitlements/current": #"{"error": "unavailable"}"#],
+            statusCodes: ["/v1/entitlements/current": 503]
+        )
+        let service = try makeSignedInPremiumAccount(
+            cached: entitlement,
+            lastRefresh: Self.date(0),
+            privateKey: privateKey,
+            recorder: recorder,
+            clock: clock
+        )
+        defer { service.signOut() }
+
+        await service.refreshIfDue()
+        XCTAssertEqual(service.entitlement, entitlement)
+        XCTAssertTrue(service.isSignedIn)
+        XCTAssertNil(service.errorMessage)
+
+        clock.date = clock.date.addingTimeInterval(PremiumAccountService.refreshRetryInterval - 60)
+        await service.refreshIfDue()
+        clock.date = clock.date.addingTimeInterval(60)
+        await service.refreshIfDue()
+
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(service.entitlement, entitlement)
+    }
+
+    @MainActor
+    func testPremiumAccountFollowsDailyRefreshTriggersWhileSignedIn() async throws {
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let clock = PremiumAccountTestClock(Self.date(0))
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/entitlements/current": try Self.entitlementResponse(entitlement),
+        ])
+        let triggers = PremiumAccountTestTriggers()
+        let service = try makeSignedInPremiumAccount(
+            cached: entitlement,
+            lastRefresh: Self.date(0),
+            privateKey: privateKey,
+            recorder: recorder,
+            clock: clock,
+            triggers: triggers
+        )
+        defer { service.signOut() }
+        // Let the launch refresh find the entitlement current.
+        try await Task.sleep(for: .milliseconds(50))
+        let launchRequests = await recorder.recordedRequests()
+        XCTAssertTrue(launchRequests.isEmpty)
+
+        // Waking after a night asleep.
+        clock.date = Self.date(PremiumAccountService.refreshInterval + 8 * 60 * 60)
+        triggers.yield()
+        for _ in 0..<200 {
+            if await recorder.recordedRequests().count == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.compactMap(\.url?.path), ["/v1/entitlements/current"])
+
+        service.signOut()
+        for _ in 0..<200 where !triggers.wasTerminated {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(triggers.wasTerminated)
+    }
+
+    @MainActor
+    private func makeSignedInPremiumAccount(
+        cached entitlement: CrossDevicePremiumEntitlement,
+        lastRefresh: Date,
+        privateKey: P256.Signing.PrivateKey,
+        recorder: PremiumAccountHTTPRecorder,
+        clock: PremiumAccountTestClock,
+        triggers: PremiumAccountTestTriggers? = nil
+    ) throws -> PremiumAccountService {
+        let suiteName = "PremiumDailyRefresh-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(try Self.entitlementEncoder.encode(entitlement), forKey: "premium.account.cachedEntitlement")
+        defaults.set(lastRefresh, forKey: "premium.account.lastRefresh")
+        // Requests need a stored account token; signing out removes it.
+        XCTAssertEqual(SecItemAdd([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: suiteName,
+            kSecAttrAccount as String: "access-token",
+            kSecValueData as String: Data("account-token".utf8),
+        ] as CFDictionary, nil), errSecSuccess)
+
+        return PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: triggers != nil,
+            now: { clock.date },
+            dailyRefreshTriggers: { triggers?.stream() ?? AsyncStream { $0.finish() } }
+        )
+    }
+
+    private static func entitlementResponse(_ entitlement: CrossDevicePremiumEntitlement) throws -> String {
+        let object = try JSONSerialization.jsonObject(with: entitlementEncoder.encode(entitlement))
+        let data = try JSONSerialization.data(withJSONObject: ["entitlement": object])
+        return try XCTUnwrap(String(data: data, encoding: .utf8))
     }
 
     @MainActor
