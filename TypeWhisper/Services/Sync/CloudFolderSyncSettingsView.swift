@@ -686,7 +686,14 @@ final class PremiumAccountService: ObservableObject {
                 throw error
             }
         } else {
-            try await refresh()
+            do {
+                try await refresh()
+                lastFailedRefresh = nil
+            } catch {
+                // The triggers wait `refreshRetryInterval` before trying again.
+                if !(error is CancellationError) { lastFailedRefresh = now() }
+                throw error
+            }
         }
     }
 

@@ -764,6 +764,56 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPremiumAccountWaitsBeforeRetryingAFailedSignInRefresh() async throws {
+        let suiteName = "PremiumSignInRefreshRetry-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let clock = PremiumAccountTestClock(Self.date(0))
+        let recorder = PremiumAccountHTTPRecorder(
+            responses: [
+                "/v1/auth/apple/web/start": """
+                {
+                  "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+                  "state": "server-state",
+                  "expiresAt": "2099-07-19T12:10:00.000Z"
+                }
+                """,
+                "/v1/auth/apple/web/exchange": #"{"accessToken": "account-token", "entitlement": null}"#,
+                "/v1/entitlements/current": #"{"error": "unavailable"}"#,
+            ],
+            statusCodes: ["/v1/entitlements/current": 503]
+        )
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: PremiumAppleWebAuthenticator(
+                callbackURL: try XCTUnwrap(URL(
+                    string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
+                ))
+            ),
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: P256.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: false,
+            automaticallyRefresh: false,
+            now: { clock.date }
+        )
+        defer { service.signOut() }
+
+        await service.signInWithApple(commercialLicenseProof: nil)
+        XCTAssertTrue(service.isSignedIn)
+        clock.date = Self.date(PremiumAccountService.refreshRetryInterval - 60)
+        await service.refreshIfDue()
+        var refreshes = await recorder.recordedRequests().filter { $0.url?.path == "/v1/entitlements/current" }
+        XCTAssertEqual(refreshes.count, 1)
+
+        clock.date = Self.date(PremiumAccountService.refreshRetryInterval)
+        await service.refreshIfDue()
+        refreshes = await recorder.recordedRequests().filter { $0.url?.path == "/v1/entitlements/current" }
+        XCTAssertEqual(refreshes.count, 2)
+    }
+
+    @MainActor
     func testPremiumAccountFollowsDailyRefreshTriggersWhileSignedIn() async throws {
         let privateKey = P256.Signing.PrivateKey()
         let entitlement = try Self.signedEntitlement(privateKey: privateKey)
