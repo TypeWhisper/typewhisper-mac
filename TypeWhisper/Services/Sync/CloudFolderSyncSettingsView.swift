@@ -500,14 +500,17 @@ final class PremiumAccountService: ObservableObject {
         await refreshKeepingLastState()
     }
 
-    /// Refreshes while the app runs, once per `refreshInterval`, and after a
-    /// failure again after `refreshRetryInterval`.
+    /// Refreshes while the app runs, once per `refreshInterval`. After a
+    /// failed attempt, also one that launch or sign-in started early, it
+    /// retries once `refreshRetryInterval` has passed.
     func refreshIfDue() async {
         let now = now()
-        guard isSignedIn, isRefreshDue(at: now) else { return }
+        guard isSignedIn else { return }
         if let lastFailedRefresh {
             let age = now.timeIntervalSince(lastFailedRefresh)
             if age >= 0, age < Self.refreshRetryInterval { return }
+        } else if !isRefreshDue(at: now) {
+            return
         }
         await refreshKeepingLastState()
     }

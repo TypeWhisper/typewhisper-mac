@@ -734,6 +734,36 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPremiumAccountRetriesAFailedLaunchRefreshBeforeTheDailyInterval() async throws {
+        let privateKey = P256.Signing.PrivateKey()
+        let clock = PremiumAccountTestClock(Self.date(60 * 60))
+        let recorder = PremiumAccountHTTPRecorder(
+            responses: ["/v1/entitlements/current": #"{"error": "unavailable"}"#],
+            statusCodes: ["/v1/entitlements/current": 503]
+        )
+        // Refreshed an hour ago, but no active entitlement, so launch refreshes early.
+        let service = try makeSignedInPremiumAccount(
+            cached: nil,
+            lastRefresh: Self.date(0),
+            privateKey: privateKey,
+            recorder: recorder,
+            clock: clock
+        )
+        defer { service.signOut() }
+
+        await service.refreshIfNeeded()
+        clock.date = clock.date.addingTimeInterval(PremiumAccountService.refreshRetryInterval - 60)
+        await service.refreshIfDue()
+        var requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+
+        clock.date = clock.date.addingTimeInterval(60)
+        await service.refreshIfDue()
+        requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.count, 2)
+    }
+
+    @MainActor
     func testPremiumAccountFollowsDailyRefreshTriggersWhileSignedIn() async throws {
         let privateKey = P256.Signing.PrivateKey()
         let entitlement = try Self.signedEntitlement(privateKey: privateKey)
