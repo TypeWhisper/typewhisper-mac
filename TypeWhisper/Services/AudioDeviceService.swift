@@ -3789,6 +3789,16 @@ final class AudioInputDeviceActivationGuard: AudioInputDeviceActivating, @unchec
     }
 }
 
+/// Engines whose input device switch failed; they are never released.
+///
+/// A switch can fail after the AUHAL has already left its previous device (for example
+/// AVAudioEngine's default aggregate) without removing its listeners there. CoreAudio
+/// identifies those listeners by the AUHAL's address. Once the engine is freed, the next
+/// AUHAL allocated at that address cannot connect to the same device ("listener was already
+/// added", 'nope'), and AVAudioEngine then loops forever reading its input format, so every
+/// later recording start hangs. Keeping the engine alive keeps that address taken.
+let failedInputDeviceSwitchEngines = ProcessLifetimeRetainer<AVAudioEngine>()
+
 /// Sets the CoreAudio input device on an AVAudioEngine's input node AUHAL.
 /// Checks the return status and verifies the device was actually set.
 /// Returns true if the device was set successfully.
@@ -3809,6 +3819,8 @@ func setInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine, label: 
 
     if setStatus != noErr {
         deviceHelperLogger.error("[\(label)] AudioUnitSetProperty failed: status=\(setStatus) (\(audioStatusString(setStatus))), deviceID=\(deviceID)")
+        let retainedCount = failedInputDeviceSwitchEngines.retain(engine)
+        deviceHelperLogger.warning("[\(label)] Keeping the engine of the failed device switch alive (\(retainedCount) kept)")
         return false
     }
 
