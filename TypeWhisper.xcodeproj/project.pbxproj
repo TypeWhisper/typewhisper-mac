@@ -550,6 +550,7 @@
 		5A4F4F4D0000000000000001 /* ZoomPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000011 /* ZoomPlugin.swift */; };
 		5A4F4F4D0000000000000005 /* ZoomLiveTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000015 /* ZoomLiveTranscriptionSession.swift */; };
 		RESB00000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = RESS00000000000000002 /* manifest.json */; };
+		5A4F4F4D0000000000000006 /* zoom.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000016 /* zoom.svg */; };
 		5A4F4F4D0000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000012 /* manifest.json */; };
 		RESB00000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = RESS00000000000000003 /* Localizable.xcstrings */; };
 		5A4F4F4D0000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000013 /* Localizable.xcstrings */; };
@@ -1324,6 +1325,7 @@
 		5A4F4F4D0000000000000011 /* ZoomPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomPlugin.swift; sourceTree = "<group>"; };
 		5A4F4F4D0000000000000015 /* ZoomLiveTranscriptionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomLiveTranscriptionSession.swift; sourceTree = "<group>"; };
 		RESS00000000000000002 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		5A4F4F4D0000000000000016 /* zoom.svg */ = {isa = PBXFileReference; lastKnownFileType = text.xml.svg; path = zoom.svg; sourceTree = "<group>"; };
 		5A4F4F4D0000000000000012 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		RESS00000000000000003 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		5A4F4F4D0000000000000013 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -2969,6 +2971,7 @@
 				5A4F4F4D0000000000000015 /* ZoomLiveTranscriptionSession.swift */,
 				5A4F4F4D0000000000000012 /* manifest.json */,
 				5A4F4F4D0000000000000013 /* Localizable.xcstrings */,
+				5A4F4F4D0000000000000016 /* zoom.svg */,
 			);
 			name = ZoomPlugin;
 			path = TypeWhisperPluginSDK/Plugins/ZoomPlugin;
@@ -5281,6 +5284,7 @@
 			files = (
 				5A4F4F4D0000000000000002 /* manifest.json in Resources */,
 				5A4F4F4D0000000000000003 /* Localizable.xcstrings in Resources */,
+				5A4F4F4D0000000000000006 /* zoom.svg in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

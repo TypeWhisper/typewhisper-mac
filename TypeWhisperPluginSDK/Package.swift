@@ -447,6 +447,7 @@ let package = Package(
             path: "Plugins/ZoomPlugin",
             exclude: ["Tests"],
             resources: [
+                .copy("zoom.svg"),
                 .process("Localizable.xcstrings"),
                 .process("manifest.json"),
             ]
