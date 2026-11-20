@@ -300,6 +300,9 @@ struct ZoomAPIClient: Sendable {
     /// Fast mode takes at most 2 MB of request body for audio sent inline. Three
     /// minutes of the 48 kbit/s M4A upload are about 1.4 MB in base64.
     static let maximumChunkDuration: TimeInterval = 180
+    /// 16 kHz PCM16 WAV, the fallback when M4A encoding fails, is about 43 KB
+    /// per second in base64, so 45 seconds stay under 2 MB.
+    static let maximumWavChunkDuration: TimeInterval = 45
     static let maximumBodySize = 2 * 1024 * 1024
 
     /// The locale Scribe expects for a two-letter language code.
@@ -366,8 +369,19 @@ struct ZoomAPIClient: Sendable {
     }
 
     func transcribe(audio: AudioData, request transcription: Request) async throws -> PluginTranscriptionResult {
-        let upload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
-            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        if let upload = try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio) {
+            return try await transcribe(upload: upload, request: transcription)
+        }
+        // WAV takes about four times the space, so it goes in shorter pieces.
+        return try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: Self.maximumWavChunkDuration
+        ) { piece in
+            try await transcribe(upload: PluginAudioUploadEncoder.wavUpload(from: piece), request: transcription)
+        }
+    }
+
+    private func transcribe(upload: PluginAudioUploadFile, request transcription: Request) async throws -> PluginTranscriptionResult {
         let body = try JSONSerialization.data(withJSONObject: [
             "file": "data:\(upload.contentType);base64,\(upload.data.base64EncodedString())",
             "config": transcription.config,

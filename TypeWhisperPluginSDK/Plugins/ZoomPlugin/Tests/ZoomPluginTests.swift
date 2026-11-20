@@ -302,6 +302,12 @@ final class ZoomPluginTests: XCTestCase {
         } catch PluginTranscriptionError.networkError {}
     }
 
+    func testLiveItemsJoinWithoutSpacesBetweenChineseOrJapaneseText() {
+        XCTAssertEqual(ZoomLiveTranscriptionSession.joinedText(["今日は晴れです。", "明日は雨です。"]), "今日は晴れです。明日は雨です。")
+        XCTAssertEqual(ZoomLiveTranscriptionSession.joinedText(["First item.", "", "Second item."]), "First item. Second item.")
+        XCTAssertEqual(ZoomLiveTranscriptionSession.joinedText(["안녕하세요.", "반갑습니다."]), "안녕하세요. 반갑습니다.")
+    }
+
     // MARK: - Helpers
 
     private static func audio() -> AudioData {

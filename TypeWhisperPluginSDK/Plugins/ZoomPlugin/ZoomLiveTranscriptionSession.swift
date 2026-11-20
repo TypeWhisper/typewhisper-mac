@@ -132,9 +132,39 @@ actor ZoomLiveTranscriptionSession: LiveTranscriptionSession {
     /// The final text of every finished item and the partial text of the others,
     /// in the order the items started.
     var currentText: String {
-        itemOrder.compactMap { items[$0]?.text }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
+        Self.joinedText(itemOrder.compactMap { items[$0]?.text })
+    }
+
+    /// Joins item texts with a space, except between Chinese or Japanese
+    /// characters, which Zoom writes without spaces.
+    static func joinedText(_ texts: [String]) -> String {
+        var joined = ""
+        for text in texts where !text.isEmpty {
+            if let last = joined.last, let first = text.first,
+               !(isWrittenWithoutSpaces(last) && isWrittenWithoutSpaces(first)) {
+                joined += " "
+            }
+            joined += text
+        }
+        return joined
+    }
+
+    /// Chinese and Japanese put no spaces between words or after their
+    /// punctuation. Korean does, so Hangul is not included.
+    private static func isWrittenWithoutSpaces(_ character: Character) -> Bool {
+        guard let scalar = character.unicodeScalars.first else { return false }
+        switch scalar.value {
+        case 0x3000...0x303F, // CJK symbols and punctuation
+             0x3040...0x30FF, // Hiragana and Katakana
+             0x3400...0x4DBF, // CJK extension A
+             0x4E00...0x9FFF, // CJK ideographs
+             0xF900...0xFAFF, // CJK compatibility ideographs
+             0xFF00...0xFFEF, // Halfwidth and fullwidth forms
+             0x20000...0x323AF: // CJK extensions B to H
+            return true
+        default:
+            return false
+        }
     }
 
     func appendAudio(samples: [Float]) async throws {
