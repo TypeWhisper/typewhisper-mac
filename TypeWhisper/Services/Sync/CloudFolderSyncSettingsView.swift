@@ -301,8 +301,9 @@ final class PremiumAccountService: ObservableObject {
     private var isRefreshing = false
     private var lastFailedRefresh: Date?
     private var expiryTask: Task<Void, Never>?
-    /// Advances on sign-out, so a refresh that started before it is discarded.
-    private var accountGeneration = 0
+    /// Advances on sign-out and whenever an entitlement is stored, so a
+    /// refresh answer that started before either is discarded.
+    private var entitlementGeneration = 0
 
     /// How often the entitlement is refreshed while the app runs.
     static let refreshInterval: TimeInterval = 24 * 60 * 60
@@ -527,7 +528,7 @@ final class PremiumAccountService: ObservableObject {
             try await refresh()
             lastFailedRefresh = nil
         } catch is CancellationError {
-            // Signed out while the request ran.
+            // Signed out or a newer entitlement arrived while the request ran.
         } catch {
             lastFailedRefresh = now()
             if entitlement == nil { errorMessage = error.localizedDescription }
@@ -647,9 +648,9 @@ final class PremiumAccountService: ObservableObject {
     }
 
     private func refresh() async throws {
-        let generation = accountGeneration
+        let generation = entitlementGeneration
         let response: EntitlementResponse = try await request(path: "/v1/entitlements/current")
-        guard generation == accountGeneration, isSignedIn else { throw CancellationError() }
+        guard generation == entitlementGeneration, isSignedIn else { throw CancellationError() }
         try acceptEntitlement(response.entitlement)
         defaults.set(now(), forKey: Keys.lastRefresh)
     }
@@ -695,6 +696,7 @@ final class PremiumAccountService: ObservableObject {
 
     private func acceptEntitlement(_ value: CrossDevicePremiumEntitlement?) throws {
         guard let value else {
+            entitlementGeneration += 1
             entitlement = nil
             defaults.removeObject(forKey: Keys.cachedEntitlement)
             return
@@ -703,6 +705,7 @@ final class PremiumAccountService: ObservableObject {
         guard let verified = entitlementVerifier?.verified(value) else {
             throw PremiumAccountServiceError.invalidEntitlementSignature
         }
+        entitlementGeneration += 1
         entitlement = verified
         if let data = try? encoder.encode(verified) {
             defaults.set(data, forKey: Keys.cachedEntitlement)
@@ -767,7 +770,7 @@ final class PremiumAccountService: ObservableObject {
         defaults.removeObject(forKey: Keys.cachedEntitlement)
         defaults.removeObject(forKey: Keys.lastRefresh)
         lastFailedRefresh = nil
-        accountGeneration += 1
+        entitlementGeneration += 1
     }
 
     private static func readToken(service: String) -> String? {
@@ -842,6 +845,7 @@ extension PremiumAccountService {
         defaults.set(Date(), forKey: Keys.lastRefresh)
         // A subscription answer must not replace an active lifetime entitlement.
         if let entitlement, entitlement.isActive, entitlement.isLifetime, !synced.isLifetime {
+            entitlementGeneration += 1
             return
         }
         try acceptEntitlement(synced)

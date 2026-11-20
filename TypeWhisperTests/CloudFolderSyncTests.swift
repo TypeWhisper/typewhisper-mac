@@ -829,6 +829,40 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPremiumAccountKeepsALinkedEntitlementOverAnOlderRefreshAnswer() async throws {
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/entitlements/current": #"{"entitlement": null}"#,
+            "/v1/entitlements/polar/device/attach": try Self.entitlementResponse(entitlement),
+        ])
+        let gate = PremiumAccountRequestGate()
+        let service = try makeSignedInPremiumAccount(
+            cached: nil,
+            lastRefresh: Self.date(0),
+            privateKey: privateKey,
+            recorder: recorder,
+            clock: PremiumAccountTestClock(Self.date(60)),
+            gate: gate
+        )
+        defer { service.signOut() }
+
+        // The refresh sent before the license was linked answers last.
+        let refresh = Task { await service.refreshIfNeeded() }
+        for _ in 0..<200 {
+            if await gate.isWaiting { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await service.linkCommercialLicense(CommercialLicenseLinkProof(key: "polar-license", activationId: "polar-activation"))
+        XCTAssertEqual(service.entitlement, entitlement)
+        await gate.open()
+        await refresh.value
+
+        XCTAssertEqual(service.entitlement, entitlement)
+        XCTAssertNil(service.errorMessage)
+    }
+
+    @MainActor
     func testPremiumAccountPublishesWhenTheEntitlementExpires() async throws {
         let suiteName = "PremiumEntitlementExpiry-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -861,7 +895,7 @@ final class CloudFolderSyncTests: XCTestCase {
 
     @MainActor
     private func makeSignedInPremiumAccount(
-        cached entitlement: CrossDevicePremiumEntitlement,
+        cached entitlement: CrossDevicePremiumEntitlement?,
         lastRefresh: Date,
         privateKey: P256.Signing.PrivateKey,
         recorder: PremiumAccountHTTPRecorder,
@@ -872,7 +906,9 @@ final class CloudFolderSyncTests: XCTestCase {
         let suiteName = "PremiumDailyRefresh-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(try Self.entitlementEncoder.encode(entitlement), forKey: "premium.account.cachedEntitlement")
+        if let entitlement {
+            defaults.set(try Self.entitlementEncoder.encode(entitlement), forKey: "premium.account.cachedEntitlement")
+        }
         defaults.set(lastRefresh, forKey: "premium.account.lastRefresh")
         // Requests need a stored account token; signing out removes it.
         XCTAssertEqual(SecItemAdd([
@@ -886,7 +922,8 @@ final class CloudFolderSyncTests: XCTestCase {
             defaults: defaults,
             baseURL: URL(string: "https://app.typewhisper.com"),
             requestExecutor: { request in
-                await gate?.wait()
+                // The gate holds only the refresh.
+                if request.url?.path == "/v1/entitlements/current" { await gate?.wait() }
                 return try await recorder.execute(request)
             },
             keychainService: suiteName,
