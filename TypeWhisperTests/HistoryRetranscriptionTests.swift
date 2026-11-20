@@ -546,6 +546,54 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertNil(f.record.transcriptionVersionsData)
     }
 
+    /// The entry's own sync file brings a promotion back with its dates
+    /// rounded to the millisecond, here half a millisecond later.
+    func testOwnPromotionReadBackFromSyncKeepsWordTimingAndSpeakerDetection() async throws {
+        let suite = "HistoryRetranscriptionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = HistorySyncPreferences(defaults: defaults)
+        preferences.isEnabled = true
+        let f = try await fixture(sync: preferences)
+        defer { TestSupport.remove(f.directory) }
+        let version = alternative()
+        try append(version, to: f)
+        try f.history.promoteTranscriptionVersion(version.id, in: f.record)
+        let promotedAt = Date(timeIntervalSinceReferenceDate: 816_878_248.4996)
+        f.record.transcriptionAlignmentResetAt = promotedAt
+        f.record.contentUpdatedAt = promotedAt
+        let timing = try JSONEncoder().encode([
+            TimedTextEntry(text: "new", start: 0, end: 1, utf16Location: 0, utf16Length: 3)
+        ])
+        f.record.timedTextData = timing
+        f.record.timedTextGranularityRaw = TimedTextGranularity.word.rawValue
+        f.record.speakerTranscriptState = .pending
+
+        let exported = try XCTUnwrap(f.history.userDataSyncHistoryRecords().first).content
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var container = encoder.singleValueContainer()
+            try container.encode(formatter.string(from: date))
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return formatter.date(from: try decoder.singleValueContainer().decode(String.self)) ?? .distantPast
+        }
+        let echo = try decoder.decode(UserDataSyncHistoryContentV1.self, from: encoder.encode(exported))
+        XCTAssertGreaterThan(try XCTUnwrap(echo.alignmentResetAt), promotedAt)
+
+        try f.history.applyUserDataSyncMutations([.upsertHistoryContent(echo)])
+
+        XCTAssertEqual(f.record.timedTextData, timing)
+        XCTAssertEqual(f.record.timedTextGranularityRaw, TimedTextGranularity.word.rawValue)
+        XCTAssertEqual(f.record.speakerTranscriptState, .pending)
+        XCTAssertEqual(f.record.activeTranscriptionVersionID, version.id)
+    }
+
     func testOnlyPromotedTextIsSearchedExportedAndSyncedAndOldAlignmentIsRejected() async throws {
         let suite = "HistoryRetranscriptionTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
