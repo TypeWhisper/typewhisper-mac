@@ -1550,7 +1550,7 @@ final class HistoryService: ObservableObject {
                 upsertedIDs.insert(content.recordID)
                 let previousContent = HistoryTranscriptionVersion.capture(record)
                 if let reset = content.alignmentResetAt,
-                   reset > (record.transcriptionAlignmentResetAt ?? .distantPast) {
+                   Self.isSyncedDate(reset, laterThan: record.transcriptionAlignmentResetAt) {
                     // Microphone-channel evidence describes the unchanged audio and survives this reset.
                     record.speakerTranscriptData = nil
                     record.speakerTranscriptStateRaw = nil
@@ -1833,6 +1833,17 @@ final class HistoryService: ObservableObject {
         record.historySyncAudioEligible = false
         modelContext.insert(record)
         return record
+    }
+
+    /// Sync files keep dates to the millisecond and round them, so this
+    /// Mac's own change reads back up to half a millisecond later than it
+    /// happened. Taken for another device's newer choice of version, it threw
+    /// away the word timing and speakers of the version just chosen. At the
+    /// files' precision both are the same moment.
+    static func isSyncedDate(_ synced: Date, laterThan local: Date?) -> Bool {
+        guard let local else { return true }
+        return (synced.timeIntervalSinceReferenceDate * 1_000).rounded()
+            > (local.timeIntervalSinceReferenceDate * 1_000).rounded()
     }
 
     private func synchronizedTimestamp(_ value: Date, fallback: Date) -> Date {
