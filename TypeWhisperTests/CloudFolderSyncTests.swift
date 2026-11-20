@@ -800,32 +800,53 @@ final class CloudFolderSyncTests: XCTestCase {
 
     @MainActor
     func testPremiumAccountDiscardsARefreshThatFinishesAfterSignOut() async throws {
-        let privateKey = P256.Signing.PrivateKey()
-        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
-        let recorder = PremiumAccountHTTPRecorder(responses: [
-            "/v1/entitlements/current": try Self.entitlementResponse(entitlement),
-        ])
-        let gate = PremiumAccountRequestGate()
-        let service = try makeSignedInPremiumAccount(
-            cached: entitlement,
-            lastRefresh: Self.date(0),
-            privateKey: privateKey,
-            recorder: recorder,
-            clock: PremiumAccountTestClock(Self.date(PremiumAccountService.refreshInterval)),
-            gate: gate
-        )
+        // A late answer, a late failure and a late rejection of the old token.
+        let answers: [(body: String?, status: Int)] = [
+            (nil, 200),
+            (#"{"error": "unavailable"}"#, 503),
+            (#"{"error": "unauthorized"}"#, 401),
+        ]
+        for answer in answers {
+            let privateKey = P256.Signing.PrivateKey()
+            let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+            let body = try answer.body ?? Self.entitlementResponse(entitlement)
+            let recorder = PremiumAccountHTTPRecorder(
+                responses: ["/v1/entitlements/current": body],
+                statusCodes: ["/v1/entitlements/current": answer.status]
+            )
+            let gate = PremiumAccountRequestGate()
+            let suiteName = "PremiumLateRefresh-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+            let service = try makeSignedInPremiumAccount(
+                cached: entitlement,
+                lastRefresh: Self.date(0),
+                privateKey: privateKey,
+                recorder: recorder,
+                clock: PremiumAccountTestClock(Self.date(PremiumAccountService.refreshInterval)),
+                gate: gate,
+                suiteName: suiteName
+            )
 
-        let refresh = Task { await service.refreshIfDue() }
-        for _ in 0..<200 {
-            if await gate.isWaiting { break }
-            try await Task.sleep(for: .milliseconds(10))
+            let refresh = Task { await service.refreshIfDue() }
+            for _ in 0..<200 {
+                if await gate.isWaiting { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            let reachedServer = await gate.isWaiting
+            XCTAssertTrue(reachedServer, "HTTP \(answer.status)")
+            service.signOut()
+            // Signed in again with a new token before the old answer arrives.
+            Self.storeAccountToken("new-account-token", service: suiteName)
+            await gate.open()
+            await refresh.value
+
+            XCTAssertNil(service.entitlement, "HTTP \(answer.status)")
+            XCTAssertNil(service.errorMessage, "HTTP \(answer.status)")
+            XCTAssertNil(defaults.data(forKey: "premium.account.cachedEntitlement"), "HTTP \(answer.status)")
+            XCTAssertNil(defaults.object(forKey: "premium.account.lastRefresh"), "HTTP \(answer.status)")
+            XCTAssertEqual(Self.accountToken(service: suiteName), "new-account-token", "HTTP \(answer.status)")
+            service.signOut()
         }
-        service.signOut()
-        await gate.open()
-        await refresh.value
-
-        XCTAssertNil(service.entitlement)
-        XCTAssertNil(service.errorMessage)
     }
 
     @MainActor
@@ -901,9 +922,9 @@ final class CloudFolderSyncTests: XCTestCase {
         recorder: PremiumAccountHTTPRecorder,
         clock: PremiumAccountTestClock,
         triggers: PremiumAccountTestTriggers? = nil,
-        gate: PremiumAccountRequestGate? = nil
+        gate: PremiumAccountRequestGate? = nil,
+        suiteName: String = "PremiumDailyRefresh-\(UUID().uuidString)"
     ) throws -> PremiumAccountService {
-        let suiteName = "PremiumDailyRefresh-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
         if let entitlement {
@@ -911,12 +932,7 @@ final class CloudFolderSyncTests: XCTestCase {
         }
         defaults.set(lastRefresh, forKey: "premium.account.lastRefresh")
         // Requests need a stored account token; signing out removes it.
-        XCTAssertEqual(SecItemAdd([
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: suiteName,
-            kSecAttrAccount as String: "access-token",
-            kSecValueData as String: Data("account-token".utf8),
-        ] as CFDictionary, nil), errSecSuccess)
+        Self.storeAccountToken("account-token", service: suiteName)
 
         return PremiumAccountService(
             defaults: defaults,
@@ -933,6 +949,30 @@ final class CloudFolderSyncTests: XCTestCase {
             now: { clock.date },
             dailyRefreshTriggers: { triggers?.stream() ?? AsyncStream { $0.finish() } }
         )
+    }
+
+    private static func storeAccountToken(_ token: String, service: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: "access-token",
+        ]
+        SecItemDelete(query as CFDictionary)
+        var item = query
+        item[kSecValueData as String] = Data(token.utf8)
+        XCTAssertEqual(SecItemAdd(item as CFDictionary, nil), errSecSuccess)
+    }
+
+    private static func accountToken(service: String) -> String? {
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: "access-token",
+            kSecReturnData as String: true,
+        ] as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     private static func entitlementResponse(_ entitlement: CrossDevicePremiumEntitlement) throws -> String {

@@ -524,12 +524,19 @@ final class PremiumAccountService: ObservableObject {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
+        let generation = entitlementGeneration
         do {
             try await refresh()
             lastFailedRefresh = nil
         } catch is CancellationError {
             // Signed out or a newer entitlement arrived while the request ran.
         } catch {
+            // A failure that arrives after a sign-out or a newer entitlement
+            // says nothing about the current state. A rejected token does: it
+            // has just signed the account out.
+            let failure = error as NSError
+            let rejectedToken = failure.domain == "PremiumAccount" && [401, 403].contains(failure.code)
+            guard generation == entitlementGeneration || rejectedToken else { return }
             lastFailedRefresh = now()
             if entitlement == nil { errorMessage = error.localizedDescription }
         }
@@ -719,6 +726,7 @@ final class PremiumAccountService: ObservableObject {
         defer { isWorking = false }
         do { try await operation() }
         catch PremiumAccountServiceError.appleSignInCancelled {}
+        catch is CancellationError {}
         catch { errorMessage = error.localizedDescription }
     }
 
@@ -738,16 +746,21 @@ final class PremiumAccountService: ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
         }
+        var sentToken: String?
         if authenticated {
             guard let token = Self.readToken(service: keychainService) else {
                 throw NSError(domain: "PremiumAccount", code: 401, userInfo: [NSLocalizedDescriptionKey: "Sign in with Apple first."])
             }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            sentToken = token
         }
         let (data, response) = try await requestExecutor(request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard (200..<300).contains(http.statusCode) else {
             if authenticated, http.statusCode == 401 || http.statusCode == 403 {
+                // A rejected token from before a sign-out or a new sign-in
+                // must not end the current session.
+                guard Self.readToken(service: keychainService) == sentToken else { throw CancellationError() }
                 clearAuthorizationState()
             }
             let message = (try? decoder.decode(ErrorResponse.self, from: data).error) ?? "Account request failed (HTTP \(http.statusCode))."
