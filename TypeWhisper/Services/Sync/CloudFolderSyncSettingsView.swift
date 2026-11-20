@@ -277,7 +277,9 @@ final class PremiumAccountService: ObservableObject {
         static let deviceID = "premium.account.deviceID"
     }
 
-    @Published private(set) var entitlement: CrossDevicePremiumEntitlement?
+    @Published private(set) var entitlement: CrossDevicePremiumEntitlement? {
+        didSet { scheduleExpiryChange() }
+    }
     @Published private(set) var isSignedIn: Bool
     @Published private(set) var isWorking = false
     @Published var errorMessage: String?
@@ -298,6 +300,9 @@ final class PremiumAccountService: ObservableObject {
     private var signedInObservation: AnyCancellable?
     private var isRefreshing = false
     private var lastFailedRefresh: Date?
+    private var expiryTask: Task<Void, Never>?
+    /// Advances on sign-out, so a refresh that started before it is discarded.
+    private var accountGeneration = 0
 
     /// How often the entitlement is refreshed while the app runs.
     static let refreshInterval: TimeInterval = 24 * 60 * 60
@@ -403,6 +408,7 @@ final class PremiumAccountService: ObservableObject {
                 }
             }
         }
+        scheduleExpiryChange()
         if automaticallyRefresh {
             signedInObservation = $isSignedIn
                 .removeDuplicates()
@@ -520,9 +526,26 @@ final class PremiumAccountService: ObservableObject {
         do {
             try await refresh()
             lastFailedRefresh = nil
+        } catch is CancellationError {
+            // Signed out while the request ran.
         } catch {
             lastFailedRefresh = now()
             if entitlement == nil { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// `hasPremiumEntitlement` turns false when `expiresAt` passes, so publish
+    /// then, before observers read the new state.
+    private func scheduleExpiryChange() {
+        expiryTask?.cancel()
+        expiryTask = nil
+        guard let expiresAt = entitlement?.expiresAt else { return }
+        let delay = expiresAt.timeIntervalSinceNow
+        guard delay > 0 else { return }
+        expiryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            self.objectWillChange.send()
         }
     }
 
@@ -624,7 +647,9 @@ final class PremiumAccountService: ObservableObject {
     }
 
     private func refresh() async throws {
+        let generation = accountGeneration
         let response: EntitlementResponse = try await request(path: "/v1/entitlements/current")
+        guard generation == accountGeneration, isSignedIn else { throw CancellationError() }
         try acceptEntitlement(response.entitlement)
         defaults.set(now(), forKey: Keys.lastRefresh)
     }
@@ -674,9 +699,8 @@ final class PremiumAccountService: ObservableObject {
             defaults.removeObject(forKey: Keys.cachedEntitlement)
             return
         }
+        // An answer that fails verification leaves the verified entitlement in place.
         guard let verified = entitlementVerifier?.verified(value) else {
-            entitlement = nil
-            defaults.removeObject(forKey: Keys.cachedEntitlement)
             throw PremiumAccountServiceError.invalidEntitlementSignature
         }
         entitlement = verified
@@ -743,6 +767,7 @@ final class PremiumAccountService: ObservableObject {
         defaults.removeObject(forKey: Keys.cachedEntitlement)
         defaults.removeObject(forKey: Keys.lastRefresh)
         lastFailedRefresh = nil
+        accountGeneration += 1
     }
 
     private static func readToken(service: String) -> String? {

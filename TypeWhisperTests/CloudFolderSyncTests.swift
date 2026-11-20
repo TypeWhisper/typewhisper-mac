@@ -263,6 +263,24 @@ private final class PremiumAccountTestTriggers: @unchecked Sendable {
     }
 }
 
+private actor PremiumAccountRequestGate {
+    private var waiter: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    var isWaiting: Bool { waiter != nil }
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+
+    func open() {
+        isOpen = true
+        waiter?.resume()
+        waiter = nil
+    }
+}
+
 private actor PremiumAccountHTTPRecorder {
     private let responses: [String: String]
     private let statusCodes: [String: Int]
@@ -756,13 +774,100 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPremiumAccountKeepsEntitlementWhenRefreshSignatureFails() async throws {
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let forged = try Self.signedEntitlement(privateKey: P256.Signing.PrivateKey())
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/entitlements/current": try Self.entitlementResponse(forged),
+        ])
+        let service = try makeSignedInPremiumAccount(
+            cached: entitlement,
+            lastRefresh: Self.date(0),
+            privateKey: privateKey,
+            recorder: recorder,
+            clock: PremiumAccountTestClock(Self.date(PremiumAccountService.refreshInterval))
+        )
+        defer { service.signOut() }
+
+        await service.refreshIfDue()
+
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(service.entitlement, entitlement)
+        XCTAssertEqual(service.signedEntitlement, entitlement.signature)
+    }
+
+    @MainActor
+    func testPremiumAccountDiscardsARefreshThatFinishesAfterSignOut() async throws {
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/entitlements/current": try Self.entitlementResponse(entitlement),
+        ])
+        let gate = PremiumAccountRequestGate()
+        let service = try makeSignedInPremiumAccount(
+            cached: entitlement,
+            lastRefresh: Self.date(0),
+            privateKey: privateKey,
+            recorder: recorder,
+            clock: PremiumAccountTestClock(Self.date(PremiumAccountService.refreshInterval)),
+            gate: gate
+        )
+
+        let refresh = Task { await service.refreshIfDue() }
+        for _ in 0..<200 {
+            if await gate.isWaiting { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        service.signOut()
+        await gate.open()
+        await refresh.value
+
+        XCTAssertNil(service.entitlement)
+        XCTAssertNil(service.errorMessage)
+    }
+
+    @MainActor
+    func testPremiumAccountPublishesWhenTheEntitlementExpires() async throws {
+        let suiteName = "PremiumEntitlementExpiry-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(
+            privateKey: privateKey,
+            expiresAt: Date().addingTimeInterval(0.3)
+        )
+        defaults.set(try Self.entitlementEncoder.encode(entitlement), forKey: "premium.account.cachedEntitlement")
+        let service = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+        var changes = 0
+        let observation = service.objectWillChange.sink { changes += 1 }
+        defer { observation.cancel() }
+        XCTAssertTrue(service.hasPremiumEntitlement)
+
+        for _ in 0..<200 where changes == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(changes, 1)
+        XCTAssertFalse(service.hasPremiumEntitlement)
+    }
+
+    @MainActor
     private func makeSignedInPremiumAccount(
         cached entitlement: CrossDevicePremiumEntitlement,
         lastRefresh: Date,
         privateKey: P256.Signing.PrivateKey,
         recorder: PremiumAccountHTTPRecorder,
         clock: PremiumAccountTestClock,
-        triggers: PremiumAccountTestTriggers? = nil
+        triggers: PremiumAccountTestTriggers? = nil,
+        gate: PremiumAccountRequestGate? = nil
     ) throws -> PremiumAccountService {
         let suiteName = "PremiumDailyRefresh-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -780,7 +885,10 @@ final class CloudFolderSyncTests: XCTestCase {
         return PremiumAccountService(
             defaults: defaults,
             baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
+            requestExecutor: { request in
+                await gate?.wait()
+                return try await recorder.execute(request)
+            },
             keychainService: suiteName,
             entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
             isSignedInOverride: true,
@@ -5681,14 +5789,15 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     private static func signedEntitlement(
-        privateKey: P256.Signing.PrivateKey
+        privateKey: P256.Signing.PrivateKey,
+        expiresAt: Date? = nil
     ) throws -> CrossDevicePremiumEntitlement {
         let entitlement = CrossDevicePremiumEntitlement(
             status: "active",
             tier: "individual",
             source: "polar",
-            isLifetime: true,
-            expiresAt: nil,
+            isLifetime: expiresAt == nil,
+            expiresAt: expiresAt,
             deviceLimit: 3,
             verifiedAt: date(10),
             signature: nil
