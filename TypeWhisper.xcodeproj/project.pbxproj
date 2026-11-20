@@ -547,9 +547,15 @@
 		AA00000000000000000215 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000206 /* Localizable.xcstrings */; };
 		AA00000000000000000216 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000024 /* TypeWhisperPluginSDK */; };
 		RESB00000000000000001 /* Reson8Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = RESS00000000000000001 /* Reson8Plugin.swift */; };
+		5A4F4F4D0000000000000001 /* ZoomPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000011 /* ZoomPlugin.swift */; };
+		5A4F4F4D0000000000000005 /* ZoomLiveTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000015 /* ZoomLiveTranscriptionSession.swift */; };
 		RESB00000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = RESS00000000000000002 /* manifest.json */; };
+		5A4F4F4D0000000000000006 /* zoom.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000016 /* zoom.svg */; };
+		5A4F4F4D0000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000012 /* manifest.json */; };
 		RESB00000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = RESS00000000000000003 /* Localizable.xcstrings */; };
+		5A4F4F4D0000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 5A4F4F4D0000000000000013 /* Localizable.xcstrings */; };
 		RESB00000000000000004 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = RESK00000000000000001 /* TypeWhisperPluginSDK */; };
+		5A4F4F4D0000000000000004 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5A4F4F4D0000000000000026 /* TypeWhisperPluginSDK */; };
 		5A1100000000000000000001 /* SmallestAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1100000000000000000010 /* SmallestAIPlugin.swift */; };
 		5A1100000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A1100000000000000000011 /* manifest.json */; };
 		5A1100000000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 5A1100000000000000000012 /* Localizable.xcstrings */; };
@@ -1316,9 +1322,15 @@
 		BB00000000000000000205 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000206 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		RESS00000000000000001 /* Reson8Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reson8Plugin.swift; sourceTree = "<group>"; };
+		5A4F4F4D0000000000000011 /* ZoomPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomPlugin.swift; sourceTree = "<group>"; };
+		5A4F4F4D0000000000000015 /* ZoomLiveTranscriptionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomLiveTranscriptionSession.swift; sourceTree = "<group>"; };
 		RESS00000000000000002 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		5A4F4F4D0000000000000016 /* zoom.svg */ = {isa = PBXFileReference; lastKnownFileType = text.xml.svg; path = zoom.svg; sourceTree = "<group>"; };
+		5A4F4F4D0000000000000012 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		RESS00000000000000003 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		5A4F4F4D0000000000000013 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		RESS00000000000000004 /* Reson8Plugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Reson8Plugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A4F4F4D0000000000000014 /* ZoomPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ZoomPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A1100000000000000000010 /* SmallestAIPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmallestAIPlugin.swift; sourceTree = "<group>"; };
 		5A1100000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		5A1100000000000000000012 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -1817,6 +1829,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A4F4F4D0000000000000024 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A4F4F4D0000000000000004 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5A1100000000000000000051 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -2190,6 +2210,7 @@
 				CC00000000000000000028 /* DeepgramPlugin */,
 				CC00000000000000000029 /* AssemblyAIPlugin */,
 				RESG00000000000000001 /* Reson8Plugin */,
+				5A4F4F4D0000000000000020 /* ZoomPlugin */,
 				5A1100000000000000000020 /* SmallestAIPlugin */,
 				5B2200000000000000000020 /* SaluteSpeechPlugin */,
 				5C3300000000000000000020 /* R2T2Plugin */,
@@ -2943,6 +2964,19 @@
 			path = TypeWhisperPluginSDK/Plugins/Reson8Plugin;
 			sourceTree = "<group>";
 		};
+		5A4F4F4D0000000000000020 /* ZoomPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				5A4F4F4D0000000000000011 /* ZoomPlugin.swift */,
+				5A4F4F4D0000000000000015 /* ZoomLiveTranscriptionSession.swift */,
+				5A4F4F4D0000000000000012 /* manifest.json */,
+				5A4F4F4D0000000000000013 /* Localizable.xcstrings */,
+				5A4F4F4D0000000000000016 /* zoom.svg */,
+			);
+			name = ZoomPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ZoomPlugin;
+			sourceTree = "<group>";
+		};
 		5A1100000000000000000020 /* SmallestAIPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -3428,6 +3462,7 @@
 				BB00000000000000000290 /* LocalLLMPlugin.bundle */,
 				BB00000000000000000294 /* SpeechmaticsPlugin.bundle */,
 				RESS00000000000000004 /* Reson8Plugin.bundle */,
+				5A4F4F4D0000000000000014 /* ZoomPlugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
 				E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */,
 				5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */,
@@ -4120,6 +4155,26 @@
 			);
 			productName = Reson8Plugin;
 			productReference = RESS00000000000000004 /* Reson8Plugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		5A4F4F4D0000000000000021 /* ZoomPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A4F4F4D0000000000000022 /* Build configuration list for PBXNativeTarget "ZoomPlugin" */;
+			buildPhases = (
+				5A4F4F4D0000000000000023 /* Sources */,
+				5A4F4F4D0000000000000024 /* Frameworks */,
+				5A4F4F4D0000000000000025 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZoomPlugin;
+			packageProductDependencies = (
+				5A4F4F4D0000000000000026 /* TypeWhisperPluginSDK */,
+			);
+			productName = ZoomPlugin;
+			productReference = 5A4F4F4D0000000000000014 /* ZoomPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		5A1100000000000000000040 /* SmallestAIPlugin */ = {
@@ -4991,6 +5046,7 @@
 				DD00000000000000000033 /* LocalLLMPlugin */,
 				DD00000000000000000034 /* SpeechmaticsPlugin */,
 				RESN00000000000000001 /* Reson8Plugin */,
+				5A4F4F4D0000000000000021 /* ZoomPlugin */,
 				DD00000000000000000014 /* TypeWhisperWidgetExtension */,
 				E1A000000000000000000050 /* TypeWhisperTranscribeAction */,
 				40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */,
@@ -5219,6 +5275,16 @@
 			files = (
 				RESB00000000000000002 /* manifest.json in Resources */,
 				RESB00000000000000003 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A4F4F4D0000000000000025 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A4F4F4D0000000000000002 /* manifest.json in Resources */,
+				5A4F4F4D0000000000000003 /* Localizable.xcstrings in Resources */,
+				5A4F4F4D0000000000000006 /* zoom.svg in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -6226,6 +6292,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				RESB00000000000000001 /* Reson8Plugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A4F4F4D0000000000000023 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A4F4F4D0000000000000001 /* ZoomPlugin.swift in Sources */,
+				5A4F4F4D0000000000000005 /* ZoomLiveTranscriptionSession.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -7908,6 +7983,29 @@
 			};
 			name = Debug;
 		};
+		5A4F4F4D0000000000000027 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Zoom Scribe";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ZoomPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.zoom;
+				PRODUCT_NAME = ZoomPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
 		RESCONF00000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -7924,6 +8022,29 @@
 				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.reson8;
 				PRODUCT_NAME = Reson8Plugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		5A4F4F4D0000000000000028 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Zoom Scribe";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ZoomPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.zoom;
+				PRODUCT_NAME = ZoomPlugin;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -10066,6 +10187,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		5A4F4F4D0000000000000022 /* Build configuration list for PBXNativeTarget "ZoomPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A4F4F4D0000000000000027 /* Debug */,
+				5A4F4F4D0000000000000028 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		5A1100000000000000000062 /* Build configuration list for PBXNativeTarget "SmallestAIPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -10830,6 +10960,10 @@
 			productName = onnxruntime;
 		};
 		RESK00000000000000001 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		5A4F4F4D0000000000000026 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

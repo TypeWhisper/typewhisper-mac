@@ -442,6 +442,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "ZoomPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/ZoomPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .copy("zoom.svg"),
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "SmallestAIPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/SmallestAIPlugin",
@@ -846,6 +857,15 @@ let package = Package(
                 "Reson8Plugin",
             ],
             path: "Plugins/Reson8Plugin/Tests"
+        ),
+        .testTarget(
+            name: "ZoomPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ZoomPlugin",
+            ],
+            path: "Plugins/ZoomPlugin/Tests"
         ),
         .testTarget(
             name: "SmallestAIPluginTests",

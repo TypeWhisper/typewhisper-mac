@@ -140,6 +140,7 @@ jobs:
             soniox) TARGET="SonioxPlugin" ;;
             sber-salutespeech) TARGET="SaluteSpeechPlugin" ;;
             reson8) TARGET="Reson8Plugin" ;;
+            zoom) TARGET="ZoomPlugin" ;;
             cohere) TARGET="CoherePlugin" ;;
             cohere-transcribe) TARGET="CohereLocalPlugin" ;;
             speechmatics) TARGET="SpeechmaticsPlugin" ;;
