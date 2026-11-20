@@ -608,6 +608,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         /// When the microphone carried the user's own speech; empty unless
         /// microphone and system audio were both captured.
         var ownSpeech: [ClosedRange<TimeInterval>] = []
+        /// Frames of the mic file that repeated the audio of a frozen capture; the finished
+        /// recording has silence there.
+        var micSilencedFrameRanges: [Range<AVAudioFramePosition>] = []
     }
 
     @Published private(set) var isRecording = false
@@ -615,6 +618,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     @Published private(set) var micLevel: Float = 0
     @Published private(set) var systemLevel: Float = 0
     @Published private(set) var systemAudioWarningMessage: String?
+    /// The latest time the microphone track stopped updating in this recording.
+    @Published private(set) var microphoneIncident: RecorderMicrophoneIncident?
 
     /// Caps how often `micLevel`/`systemLevel` are actually published while
     /// recording. Audio buffers can arrive tens of times per second (mic
@@ -639,15 +644,21 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     var stopRecordingOverride: ((_ outputURL: URL) async throws -> URL?)?
     var currentBufferOverride: (() -> [Float])?
     var hasMicrophonePermissionOverride: Bool?
+    /// The clock of the microphone watchdog, in uptime nanoseconds, which stops while the Mac
+    /// sleeps. Tests move it by hand.
+    var microphoneWatchdogUptime: @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }
+    /// Tests run the watchdog's checks themselves.
+    var runsMicrophoneWatchdogTimer = true
 
-    private var audioEngine: AVAudioEngine?
-    private var micInputCaptureSession: AudioInputCaptureSession?
+    /// The running microphone capture, which the watchdog replaces when it stops updating.
+    private let micCaptureLock = OSAllocatedUnfairLock(uncheckedState: MicrophoneCaptureState())
+    private let micWatchdogQueue = DispatchQueue(label: "com.typewhisper.recorder-mic-watchdog", qos: .utility)
     private let micDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController()
     private let micTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver()
     private let micBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let micInputCaptureFactory: AudioInputCaptureFactory
     private let micInputActivationGuard: AudioInputDeviceActivating
-    private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(uncheckedState: nil)
+    private let micFileLock = OSAllocatedUnfairLock(uncheckedState: MicrophoneFileState())
     private var scStream: SCStream?
     private var streamOutput: SystemAudioStreamOutput?
     private var systemLevelSetter: SystemLevelSetter?
@@ -818,6 +829,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         self.systemAudioEnabled = systemAudioEnabled
         self.outputFormat = format
         resetSystemAudioMonitoring(systemAudioEnabled: systemAudioEnabled)
+        DispatchQueue.main.async { [weak self] in
+            self?.microphoneIncident = nil
+        }
 
         // Clear transcription buffer
         transcriptionBufferLock.withLock { $0.reset() }
@@ -875,6 +889,10 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 await rollbackFailedStart()
                 throw error
             }
+
+            if micEnabled {
+                startMicrophoneWatchdog()
+            }
         }
 
         // Start duration timer
@@ -919,15 +937,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         // Test overrides own their capture lifecycle. Production capture must be fully
         // stopped before any live-session or file finalization work begins.
-        if !usesFinalizationOverride, stoppedMicEnabled {
-            audioEngine?.inputNode.removeTap(onBus: 0)
-            audioEngine?.stop()
-            audioEngine = nil
-            // The HAL session's stop drains its ring into the mic file, so it must
-            // finish before the file is closed or the recording loses its tail.
-            micInputCaptureSession?.stop()
-            micInputCaptureSession = nil
-            micFileLock.withLock { $0 = nil }
+        var micSilencedFrameRanges: [Range<AVAudioFramePosition>] = []
+        if !usesFinalizationOverride {
+            let silencedFrameRanges = await stopMicrophoneCapture()
+            if stoppedMicEnabled {
+                micSilencedFrameRanges = silencedFrameRanges
+            }
         }
 
         if !usesFinalizationOverride, stoppedSystemAudioEnabled, let stream = scStream {
@@ -942,13 +957,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
 
         if !usesFinalizationOverride {
-            audioEngine?.inputNode.removeTap(onBus: 0)
-            audioEngine?.stop()
-            audioEngine = nil
-            micInputCaptureSession?.stop()
-            micInputCaptureSession = nil
             micInputActivationGuard.restore(reason: "recorder-mic-stop")
-            micFileLock.withLock { $0 = nil }
         }
 
         let transcriptionSamples = includeTranscriptionSamples ? getCurrentBuffer() : []
@@ -990,7 +999,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             micDuckingMode: stoppedMicDuckingMode,
             transcriptionSamples: transcriptionSamples,
             usesFinalizationOverride: usesFinalizationOverride,
-            ownSpeech: ownSpeech
+            ownSpeech: ownSpeech,
+            micSilencedFrameRanges: micSilencedFrameRanges
         )
     }
 
@@ -1058,13 +1068,6 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         microphoneSelection: ResolvedRecordingInputSelection
     ) throws {
         if microphoneSelection.hasExplicitDeviceSelection,
-           !microphoneSelection.usesBluetoothTransport,
-           let deviceID = microphoneSelection.deviceID {
-            try startInputOnlyMicRecording(deviceID: deviceID, outputURL: outputURL)
-            return
-        }
-
-        if microphoneSelection.hasExplicitDeviceSelection,
            microphoneSelection.usesBluetoothTransport {
             guard micInputActivationGuard.activateIfNeeded(
                 deviceID: microphoneSelection.deviceID,
@@ -1083,6 +1086,66 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             }
         }
 
+        let generation = micCaptureLock.withLock { $0.generation + 1 }
+        let capture = try makeMicrophoneCapture(
+            selection: microphoneSelection,
+            newFileURL: outputURL,
+            generation: generation,
+            resumesAfterUptime: nil
+        )
+        let startedAt = microphoneWatchdogUptime()
+        let previous = micCaptureLock.withLock { state -> (RecorderMicrophoneCapture?, DispatchSourceTimer?) in
+            let previous = (state.capture, state.watchdogTimer)
+            state = MicrophoneCaptureState()
+            state.isActive = true
+            state.generation = generation
+            state.selection = microphoneSelection
+            state.fileFormat = capture.pipeline.fileFormat
+            state.capture = capture
+            state.recordingStartUptime = startedAt
+            state.captureStartUptime = startedAt
+            state.nextRepetitionCheckUptime = RecorderMicrophoneWatchdogPolicy.uptime(
+                startedAt,
+                advancedBy: RecorderMicrophoneWatchdogPolicy.repetitionCheckInterval
+            )
+            return previous
+        }
+        // A finished recording leaves nothing behind; this only guards against a missed stop.
+        previous.1?.cancel()
+        previous.0?.pipeline.token.retire()
+        previous.0?.stop()
+    }
+
+    /// Starts capturing `selection`. The first capture of a recording creates the mic file at its
+    /// own sample rate (`newFileURL`); a restarted capture writes into the existing file.
+    private func makeMicrophoneCapture(
+        selection: ResolvedRecordingInputSelection,
+        newFileURL: URL?,
+        generation: Int,
+        resumesAfterUptime: UInt64?
+    ) throws -> RecorderMicrophoneCapture {
+        if selection.hasExplicitDeviceSelection,
+           !selection.usesBluetoothTransport,
+           let deviceID = selection.deviceID {
+            return try makeInputOnlyMicrophoneCapture(
+                deviceID: deviceID,
+                newFileURL: newFileURL,
+                generation: generation,
+                resumesAfterUptime: resumesAfterUptime
+            )
+        }
+        return try makeEngineMicrophoneCapture(
+            newFileURL: newFileURL,
+            generation: generation,
+            resumesAfterUptime: resumesAfterUptime
+        )
+    }
+
+    private func makeEngineMicrophoneCapture(
+        newFileURL: URL?,
+        generation: Int,
+        resumesAfterUptime: UInt64?
+    ) throws -> RecorderMicrophoneCapture {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         var inputFormat = inputNode.outputFormat(forBus: 0)
@@ -1095,26 +1158,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             inputFormat = inputNode.outputFormat(forBus: 0)
         }
 
-        // Write at native format to preserve quality
-        let audioFile = try AVAudioFile(
-            forWriting: outputURL,
-            settings: [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: inputFormat.sampleRate,
-                AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-            ]
-        )
-
-        // Mono format for writing
-        let monoFormat = AVAudioFormat(
+        // Mono at the input's own rate, which is also the rate of a new mic file
+        guard let monoFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: inputFormat.sampleRate,
             channels: 1,
             interleaved: false
-        )!
+        ) else {
+            throw RecorderError.engineStartFailed(String(localized: "No audio input available"))
+        }
 
         let tapFormat = Self.micTapFormat(for: inputFormat)
         let converterInputFormat = tapFormat.channelCount == 1
@@ -1127,132 +1179,56 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             converter = AVAudioConverter(from: converterInputFormat, to: monoFormat)
         }
 
-        // 16kHz converter for transcription buffer
-        guard let transcriptionFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Self.transcriptionSampleRate,
-            channels: 1,
-            interleaved: false
-        ) else {
-            throw RecorderError.engineStartFailed(String(localized: "Cannot create transcription format"))
-        }
-        let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
-
-        micFileLock.withLock { $0 = audioFile }
+        let pipeline = try makeMicrophonePipeline(
+            captureFormat: monoFormat,
+            newFileURL: newFileURL,
+            generation: generation,
+            resumesAfterUptime: resumesAfterUptime
+        )
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            guard let micBuffer = Self.normalizedMicInputBuffer(buffer) else { return }
-
-            let writeBuffer: AVAudioPCMBuffer
+            guard let self, let micBuffer = Self.normalizedMicInputBuffer(buffer) else { return }
+            let monoBuffer: AVAudioPCMBuffer
             if let converter {
-                let frameCount = AVAudioFrameCount(micBuffer.frameLength)
-                guard let converted = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: frameCount) else { return }
-                var error: NSError?
-                let consumed = OSAllocatedUnfairLock(initialState: false)
-                converter.convert(to: converted, error: &error) { _, outStatus in
-                    let wasConsumed = consumed.withLock { flag in
-                        let prev = flag
-                        flag = true
-                        return prev
-                    }
-                    if wasConsumed {
-                        outStatus.pointee = .noDataNow
-                        return nil
-                    }
-                    outStatus.pointee = .haveData
-                    return micBuffer
-                }
-                guard error == nil, converted.frameLength > 0 else { return }
-                writeBuffer = converted
+                guard let converted = RecorderMicrophonePipeline.convert(
+                    micBuffer,
+                    using: converter,
+                    to: monoFormat,
+                    frameCapacity: micBuffer.frameLength
+                ) else { return }
+                monoBuffer = converted
             } else {
-                writeBuffer = micBuffer
+                monoBuffer = micBuffer
             }
-
-            // Calculate level
-            if let channelData = writeBuffer.floatChannelData?[0] {
-                let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
-                let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
-                let level = min(1.0, rms * 5)
-                self.micLevelThrottle.publish(level) { [weak self] level in
-                    self?.micLevel = level
-                }
-            }
-
-            // Write to file
-            self.micFileLock.withLock { file in
-                guard let file else { return }
-                do {
-                    try file.write(from: writeBuffer)
-                } catch {
-                    logger.error("Failed to write mic audio: \(error.localizedDescription)")
-                }
-            }
-
-            // Convert to 16kHz mono for transcription buffer
-            if let transcriptionConverter {
-                let targetFrameCount = AVAudioFrameCount(
-                    Double(writeBuffer.frameLength) * Self.transcriptionSampleRate / monoFormat.sampleRate
-                )
-                guard targetFrameCount > 0,
-                      let convertedBuffer = AVAudioPCMBuffer(pcmFormat: transcriptionFormat, frameCapacity: targetFrameCount) else { return }
-                var convError: NSError?
-                let convConsumed = OSAllocatedUnfairLock(initialState: false)
-                transcriptionConverter.convert(to: convertedBuffer, error: &convError) { _, outStatus in
-                    let wasConsumed = convConsumed.withLock { flag in
-                        let prev = flag
-                        flag = true
-                        return prev
-                    }
-                    if wasConsumed {
-                        outStatus.pointee = .noDataNow
-                        return nil
-                    }
-                    outStatus.pointee = .haveData
-                    return writeBuffer
-                }
-                if convError == nil, convertedBuffer.frameLength > 0,
-                   let data = convertedBuffer.floatChannelData?[0] {
-                    let samples = Array(UnsafeBufferPointer(start: data, count: Int(convertedBuffer.frameLength)))
-                    self.appendMicTranscriptionSamples(samples)
-                }
-            }
+            self.handleMicrophoneBuffer(monoBuffer, pipeline: pipeline)
         }
 
-        try engine.start()
-        audioEngine = engine
+        do {
+            try engine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            throw error
+        }
+        return RecorderMicrophoneCapture(pipeline: pipeline, engine: engine)
     }
 
-    private func startInputOnlyMicRecording(deviceID: AudioDeviceID, outputURL: URL) throws {
+    private func makeInputOnlyMicrophoneCapture(
+        deviceID: AudioDeviceID,
+        newFileURL: URL?,
+        generation: Int,
+        resumesAfterUptime: UInt64?
+    ) throws -> RecorderMicrophoneCapture {
         let inputFormat = try micInputCaptureFactory.inputOnlyCaptureFormat(deviceID: deviceID)
         guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat) else {
             throw RecorderError.engineStartFailed(String(localized: "Cannot create input-only microphone format"))
         }
 
-        let audioFile = try AVAudioFile(
-            forWriting: outputURL,
-            settings: [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: monoFormat.sampleRate,
-                AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-            ]
+        let pipeline = try makeMicrophonePipeline(
+            captureFormat: monoFormat,
+            newFileURL: newFileURL,
+            generation: generation,
+            resumesAfterUptime: resumesAfterUptime
         )
-
-        guard let transcriptionFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Self.transcriptionSampleRate,
-            channels: 1,
-            interleaved: false
-        ) else {
-            throw RecorderError.engineStartFailed(String(localized: "Cannot create transcription format"))
-        }
-        let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
-
-        micFileLock.withLock { $0 = audioFile }
-
         let session = try micInputCaptureFactory.startInputOnlyCapture(
             deviceID: deviceID,
             label: "recorder-mic",
@@ -1260,56 +1236,432 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             deliveryQueue: nil
         ) { [weak self] buffer in
             guard let self,
-                  let writeBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else { return }
+                  let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else { return }
+            self.handleMicrophoneBuffer(monoBuffer, pipeline: pipeline)
+        }
+        return RecorderMicrophoneCapture(pipeline: pipeline, session: session)
+    }
 
-            if let channelData = writeBuffer.floatChannelData?[0] {
-                let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
-                let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
-                let level = min(1.0, rms * 5)
-                self.micLevelThrottle.publish(level) { [weak self] level in
-                    self?.micLevel = level
-                }
-            }
-
-            self.micFileLock.withLock { file in
-                guard let file else { return }
-                do {
-                    try file.write(from: writeBuffer)
-                } catch {
-                    logger.error("Failed to write input-only mic audio: \(error.localizedDescription)")
-                }
-            }
-
-            if let transcriptionConverter {
-                let targetFrameCount = AVAudioFrameCount(
-                    Double(writeBuffer.frameLength) * Self.transcriptionSampleRate / monoFormat.sampleRate
-                )
-                guard targetFrameCount > 0,
-                      let convertedBuffer = AVAudioPCMBuffer(pcmFormat: transcriptionFormat, frameCapacity: targetFrameCount) else { return }
-                var convError: NSError?
-                let convConsumed = OSAllocatedUnfairLock(initialState: false)
-                transcriptionConverter.convert(to: convertedBuffer, error: &convError) { _, outStatus in
-                    let wasConsumed = convConsumed.withLock { flag in
-                        let prev = flag
-                        flag = true
-                        return prev
-                    }
-                    if wasConsumed {
-                        outStatus.pointee = .noDataNow
-                        return nil
-                    }
-                    outStatus.pointee = .haveData
-                    return writeBuffer
-                }
-                if convError == nil, convertedBuffer.frameLength > 0,
-                   let data = convertedBuffer.floatChannelData?[0] {
-                    let samples = Array(UnsafeBufferPointer(start: data, count: Int(convertedBuffer.frameLength)))
-                    self.appendMicTranscriptionSamples(samples)
-                }
-            }
+    private func makeMicrophonePipeline(
+        captureFormat: AVAudioFormat,
+        newFileURL: URL?,
+        generation: Int,
+        resumesAfterUptime: UInt64?
+    ) throws -> RecorderMicrophonePipeline {
+        let fileFormat: AVAudioFormat
+        if let newFileURL {
+            // Write at the input's rate to preserve quality
+            let audioFile = try AVAudioFile(
+                forWriting: newFileURL,
+                settings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVSampleRateKey: captureFormat.sampleRate,
+                    AVNumberOfChannelsKey: 1,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false,
+                ]
+            )
+            fileFormat = audioFile.processingFormat
+            micFileLock.withLock { $0 = MicrophoneFileState(file: audioFile) }
+        } else if let existingFormat = micCaptureLock.withLockUnchecked({ $0.fileFormat }) {
+            fileFormat = existingFormat
+        } else {
+            throw RecorderError.engineStartFailed("The recording has no microphone file to continue.")
         }
 
-        micInputCaptureSession = session
+        // 16kHz mono for the transcription buffer
+        guard let transcriptionFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Self.transcriptionSampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw RecorderError.engineStartFailed(String(localized: "Cannot create transcription format"))
+        }
+
+        // A restarted capture can run at another rate than the mic file, for example after the
+        // input switched devices.
+        let fileConverter: AVAudioConverter?
+        if Self.audioFormatsMatch(captureFormat, fileFormat) {
+            fileConverter = nil
+        } else if let converter = AVAudioConverter(from: captureFormat, to: fileFormat) {
+            fileConverter = converter
+        } else {
+            throw RecorderError.engineStartFailed("Cannot convert the microphone to the recording's sample rate.")
+        }
+
+        let pipeline = RecorderMicrophonePipeline(
+            generation: generation,
+            captureFormat: captureFormat,
+            fileFormat: fileFormat,
+            fileConverter: fileConverter,
+            transcriptionFormat: transcriptionFormat,
+            transcriptionConverter: AVAudioConverter(from: captureFormat, to: transcriptionFormat),
+            resumesAfterUptime: resumesAfterUptime
+        )
+#if DEBUG
+        if newFileURL != nil {
+            pipeline.debugFault = RecorderMicrophoneDebugFault.configured()
+        }
+#endif
+        return pipeline
+    }
+
+    /// Writes one mono buffer of a capture to the mic file and the transcription buffer.
+    private func handleMicrophoneBuffer(_ incoming: AVAudioPCMBuffer, pipeline: RecorderMicrophonePipeline) {
+        guard !pipeline.token.isRetired else { return }
+        var buffer = incoming
+#if DEBUG
+        if let debugFault = pipeline.debugFault {
+            guard let faulted = debugFault.apply(to: buffer) else { return }
+            buffer = faulted
+        }
+#endif
+        guard buffer.frameLength > 0, let channelData = buffer.floatChannelData?[0] else { return }
+
+        let now = microphoneWatchdogUptime()
+        let isFirstBuffer = pipeline.noteBuffer(at: now)
+
+        // Calculate level
+        let samples = UnsafeBufferPointer(start: channelData, count: Int(buffer.frameLength))
+        let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
+        micLevelThrottle.publish(min(1.0, rms * 5)) { [weak self] level in
+            self?.micLevel = level
+        }
+
+        // A restarted capture first fills the time the microphone delivered nothing with
+        // silence, so the microphone track stays in step with the recording.
+        let resumesRecording = isFirstBuffer && pipeline.resumesAfterUptime != nil
+        let gap: TimeInterval
+        if resumesRecording, let resumesAfterUptime = pipeline.resumesAfterUptime {
+            let bufferDuration = Double(buffer.frameLength) / buffer.format.sampleRate
+            gap = max(0, RecorderMicrophoneWatchdogPolicy.seconds(from: resumesAfterUptime, to: now) - bufferDuration)
+        } else {
+            gap = 0
+        }
+
+        // Write to file
+        let fileBuffer = pipeline.fileBuffer(from: buffer)
+        let fileSampleRate = pipeline.fileFormat.sampleRate
+        let bufferFileFrame = micFileLock.withLock { state -> AVAudioFramePosition? in
+            guard !pipeline.token.isRetired, let file = state.file else { return nil }
+            do {
+                if gap > 0 {
+                    let gapFrames = AVAudioFramePosition((gap * fileSampleRate).rounded())
+                    try RecorderMicrophonePipeline.writeSilence(frameCount: gapFrames, to: file)
+                    state.framesWritten += gapFrames
+                }
+            } catch {
+                logger.error("Failed to fill the mic gap with silence: \(error.localizedDescription)")
+            }
+            let bufferFileFrame = state.framesWritten
+            if let fileBuffer {
+                do {
+                    try file.write(from: fileBuffer)
+                    state.framesWritten += AVAudioFramePosition(fileBuffer.frameLength)
+                    state.lastWriteUptime = now
+                } catch {
+                    logger.error("Failed to write mic audio: \(error.localizedDescription)")
+                }
+            }
+            return bufferFileFrame
+        }
+
+        // 16kHz mono for the transcription buffer
+        let transcriptionSamples = pipeline.transcriptionSamples(from: buffer)
+        let gapSampleCount = Int((gap * Self.transcriptionSampleRate).rounded())
+        let bufferTranscriptionIndex = transcriptionBufferLock.withLock { transcription -> Int? in
+            guard !pipeline.token.isRetired else { return nil }
+            transcription.appendMicSilence(count: gapSampleCount)
+            let bufferTranscriptionIndex = transcription.micSamples.count
+            transcription.appendMic(transcriptionSamples)
+            return bufferTranscriptionIndex
+        }
+
+        if isFirstBuffer, let bufferFileFrame, let bufferTranscriptionIndex {
+            pipeline.noteStart(RecorderMicrophonePipeline.StartPosition(
+                fileFrame: bufferFileFrame,
+                transcriptionIndex: bufferTranscriptionIndex
+            ))
+            if resumesRecording {
+                microphoneCaptureResumed(
+                    generation: pipeline.generation,
+                    at: TimeInterval(bufferFileFrame) / fileSampleRate
+                )
+            }
+        }
+        pipeline.appendToHistory(buffer)
+    }
+
+    // MARK: - Microphone Watchdog
+
+    /// Checks the microphone every second while it records: a capture can stop delivering
+    /// audio, or freeze into a looping buffer that repeats the same audio (#1863), while the
+    /// recording itself keeps running.
+    private func startMicrophoneWatchdog() {
+        guard runsMicrophoneWatchdogTimer else { return }
+        micCaptureLock.withLock { state in
+            guard state.isActive, state.watchdogTimer == nil else { return }
+            let timer = DispatchSource.makeTimerSource(queue: micWatchdogQueue)
+            timer.schedule(
+                deadline: .now() + RecorderMicrophoneWatchdogPolicy.checkInterval,
+                repeating: RecorderMicrophoneWatchdogPolicy.checkInterval,
+                leeway: .milliseconds(100)
+            )
+            timer.setEventHandler { [weak self] in
+                self?.checkMicrophoneHealth()
+            }
+            state.watchdogTimer = timer
+            timer.resume()
+        }
+    }
+
+#if DEBUG
+    /// Runs one watchdog check now, as the timer would.
+    func testingCheckMicrophoneHealth() {
+        micWatchdogQueue.sync { checkMicrophoneHealth() }
+    }
+#endif
+
+    /// Restarts the microphone capture when it stopped delivering audio or keeps repeating it.
+    /// Runs on the watchdog queue, like every restart.
+    private func checkMicrophoneHealth() {
+        let now = microphoneWatchdogUptime()
+        let snapshot = micCaptureLock.withLock { state -> MicrophoneWatchdogSnapshot? in
+            guard state.isActive else { return nil }
+            let checksRepetition = now >= state.nextRepetitionCheckUptime
+            if checksRepetition {
+                state.nextRepetitionCheckUptime = RecorderMicrophoneWatchdogPolicy.uptime(
+                    now,
+                    advancedBy: RecorderMicrophoneWatchdogPolicy.repetitionCheckInterval
+                )
+            }
+            return MicrophoneWatchdogSnapshot(
+                pipeline: state.capture?.pipeline,
+                generation: state.generation,
+                captureStartUptime: state.captureStartUptime,
+                checksRepetition: checksRepetition,
+                retryUptime: state.retryUptime
+            )
+        }
+        guard let snapshot else { return }
+
+        guard let pipeline = snapshot.pipeline else {
+            // The microphone could not be restarted yet.
+            if let retryUptime = snapshot.retryUptime, now >= retryUptime {
+                startReplacementMicrophoneCapture(generation: snapshot.generation)
+            }
+            return
+        }
+
+        if RecorderMicrophoneWatchdogPolicy.hasStalled(
+            lastBufferUptime: pipeline.lastBufferUptime,
+            captureStartUptime: snapshot.captureStartUptime,
+            now: now
+        ) {
+            let framesWritten = micFileLock.withLock { $0.framesWritten }
+            restartMicrophoneCapture(
+                cause: .noAudio,
+                stoppedAt: TimeInterval(framesWritten) / pipeline.fileFormat.sampleRate,
+                repeatedFrom: nil,
+                generation: snapshot.generation
+            )
+            return
+        }
+
+        guard snapshot.checksRepetition,
+              let repeatedFrom = repeatingMicrophoneAudioStart(in: pipeline) else { return }
+        restartMicrophoneCapture(
+            cause: .repeatedAudio,
+            stoppedAt: TimeInterval(repeatedFrom.fileFrame) / pipeline.fileFormat.sampleRate,
+            repeatedFrom: repeatedFrom,
+            generation: snapshot.generation
+        )
+    }
+
+    /// Where the capture started repeating audio, once it has repeated long enough to restart it.
+    private func repeatingMicrophoneAudioStart(
+        in pipeline: RecorderMicrophonePipeline
+    ) -> RecorderMicrophonePipeline.StartPosition? {
+        let configuration = RecorderMicrophoneRepetitionDetector.Configuration(sampleRate: pipeline.historySampleRate)
+        let recent = pipeline.recentHistory(last: configuration.maximumLag + configuration.probeLength)
+        guard let lag = recent.samples.withUnsafeBufferPointer({
+            RecorderMicrophoneRepetitionDetector.repeatingLag(in: $0, configuration: configuration)
+        }) else { return nil }
+
+        // The whole history, so the repetition's start is found even when it began a while ago.
+        let history = pipeline.recentHistory()
+        let repeatingCount = history.samples.withUnsafeBufferPointer {
+            RecorderMicrophoneRepetitionDetector.repeatingSampleCount(in: $0, lag: lag, configuration: configuration)
+        }
+        let requiredCount = Int(RecorderMicrophoneWatchdogPolicy.repetitionDuration * pipeline.historySampleRate)
+        guard repeatingCount >= requiredCount else { return nil }
+        return pipeline.position(ofHistorySample: history.startIndex + history.samples.count - repeatingCount)
+    }
+
+    /// Replaces the current microphone capture with a new one that writes into the same file.
+    private func restartMicrophoneCapture(
+        cause: RecorderMicrophoneIncident.Cause,
+        stoppedAt: TimeInterval,
+        repeatedFrom: RecorderMicrophonePipeline.StartPosition?,
+        generation: Int
+    ) {
+        let restart = micCaptureLock.withLock { state -> MicrophoneRestart? in
+            guard state.isActive, state.generation == generation else { return nil }
+            var incident: RecorderMicrophoneIncident
+            if let openIncident = state.openIncident {
+                // The capture of the last restart did not deliver audio either.
+                incident = openIncident
+                incident.failedRestarts += 1
+            } else {
+                state.incidentCount += 1
+                incident = RecorderMicrophoneIncident(number: state.incidentCount, cause: cause, stoppedAt: stoppedAt)
+            }
+            state.openIncident = incident
+            state.generation += 1
+            let capture = state.capture
+            state.capture = nil
+            return MicrophoneRestart(capture: capture, incident: incident, generation: state.generation)
+        }
+        guard let restart else { return }
+
+        switch cause {
+        case .repeatedAudio:
+            logger.warning("Recorder microphone repeats the same audio since \(stoppedAt, privacy: .public)s; restarting it")
+        case .noAudio:
+            logger.warning("Recorder microphone delivers no audio since \(stoppedAt, privacy: .public)s; restarting it")
+        }
+
+        if let capture = restart.capture {
+            // Repeated audio must not reach the file anymore. A stalled capture may still hand
+            // over audio it captured before it stopped.
+            if cause == .repeatedAudio {
+                capture.pipeline.token.retire()
+            }
+            capture.stop()
+            capture.pipeline.token.retire()
+        }
+        if let repeatedFrom {
+            silenceRepeatedMicrophoneAudio(from: repeatedFrom)
+        }
+        publishMicrophoneIncident(restart.incident)
+        startReplacementMicrophoneCapture(generation: restart.generation)
+    }
+
+    /// Silences the repeated audio up to now: right away in the transcription buffer, and in
+    /// the mic file when the recording is finished.
+    private func silenceRepeatedMicrophoneAudio(from position: RecorderMicrophonePipeline.StartPosition) {
+        transcriptionBufferLock.withLock { $0.silenceMic(from: position.transcriptionIndex) }
+        micFileLock.withLock { state in
+            guard position.fileFrame < state.framesWritten else { return }
+            state.silencedRanges.append(position.fileFrame..<state.framesWritten)
+        }
+    }
+
+    /// Starts the capture that replaces a stopped one, or schedules another attempt.
+    private func startReplacementMicrophoneCapture(generation: Int) {
+        guard let restart = micCaptureLock.withLock({ state -> (ResolvedRecordingInputSelection, UInt64)? in
+            guard state.isActive, state.generation == generation else { return nil }
+            return (state.selection, state.recordingStartUptime)
+        }) else { return }
+        // The gap starts where the last written audio ended, or at the start of the recording.
+        let resumesAfterUptime = micFileLock.withLock { $0.lastWriteUptime } ?? restart.1
+
+        do {
+            let capture = try makeMicrophoneCapture(
+                selection: restart.0,
+                newFileURL: nil,
+                generation: generation,
+                resumesAfterUptime: resumesAfterUptime
+            )
+            let startedAt = microphoneWatchdogUptime()
+            let installed = micCaptureLock.withLock { state -> Bool in
+                guard state.isActive, state.generation == generation else { return false }
+                state.capture = capture
+                state.captureStartUptime = startedAt
+                state.retryUptime = nil
+                return true
+            }
+            guard installed else {
+                capture.pipeline.token.retire()
+                capture.stop()
+                return
+            }
+            logger.info("Restarted the Recorder microphone")
+        } catch {
+            let now = microphoneWatchdogUptime()
+            let incident = micCaptureLock.withLock { state -> RecorderMicrophoneIncident? in
+                guard state.isActive, state.generation == generation, var incident = state.openIncident else {
+                    return nil
+                }
+                incident.failedRestarts += 1
+                state.openIncident = incident
+                state.retryUptime = RecorderMicrophoneWatchdogPolicy.uptime(
+                    now,
+                    advancedBy: RecorderMicrophoneWatchdogPolicy.retryDelay(afterFailedRestarts: incident.failedRestarts)
+                )
+                return incident
+            }
+            logger.error("Could not restart the Recorder microphone: \(error.localizedDescription, privacy: .public)")
+            if let incident {
+                publishMicrophoneIncident(incident)
+            }
+        }
+    }
+
+    private func microphoneCaptureResumed(generation: Int, at position: TimeInterval) {
+        let incident = micCaptureLock.withLock { state -> RecorderMicrophoneIncident? in
+            // Also while the recording stops: its last audio can be the restarted capture's first.
+            guard state.generation == generation, var incident = state.openIncident else {
+                return nil
+            }
+            incident.resumedAt = position
+            state.openIncident = nil
+            return incident
+        }
+        guard let incident else { return }
+        logger.info("Recorder microphone records again at \(position, privacy: .public)s")
+        publishMicrophoneIncident(incident)
+    }
+
+    private func publishMicrophoneIncident(_ incident: RecorderMicrophoneIncident) {
+        DispatchQueue.main.async { [weak self] in
+            self?.microphoneIncident = incident
+        }
+    }
+
+    /// Stops the microphone capture for good, after any restart that is running, and closes the
+    /// mic file. Returns the frames to silence when the recording is finished.
+    private func stopMicrophoneCapture() async -> [Range<AVAudioFramePosition>] {
+        let stopped = micCaptureLock.withLock { state -> (RecorderMicrophoneCapture?, DispatchSourceTimer?) in
+            state.isActive = false
+            let stopped = (state.capture, state.watchdogTimer)
+            state.capture = nil
+            state.watchdogTimer = nil
+            return stopped
+        }
+        stopped.1?.cancel()
+        // A restart that is running finishes first. It stops the capture it started, so nothing
+        // writes into the mic file after it closed.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            micWatchdogQueue.async { continuation.resume() }
+        }
+        // The HAL session's stop drains its ring into the mic file, so it must finish before the
+        // file is closed or the recording loses its tail. A restarted capture whose first audio
+        // arrives only now still reports where the microphone records again.
+        stopped.0?.stop()
+        stopped.0?.pipeline.token.retire()
+        micCaptureLock.withLock { state in
+            let generation = state.generation
+            state = MicrophoneCaptureState()
+            state.generation = generation + 1
+        }
+        return micFileLock.withLock { state in
+            let silencedRanges = state.silencedRanges
+            state = MicrophoneFileState()
+            return silencedRanges
+        }
     }
 
     private func enableMicVoiceProcessingIfNeeded(
@@ -1446,12 +1798,19 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         outputURL: URL,
         trackMode: TrackMode,
         micDuckingMode: MicDuckingMode,
-        outputFormat: OutputFormat
+        outputFormat: OutputFormat,
+        micSilencedFrameRanges: [Range<AVAudioFramePosition>]
     ) throws {
         let micFile = try AVAudioFile(forReading: micURL)
         let sysFile = try AVAudioFile(forReading: systemURL)
 
         let targetSampleRate = max(micFile.processingFormat.sampleRate, sysFile.processingFormat.sampleRate)
+        // The mic reader converts to the target rate, so the silenced frames scale with it.
+        let micSilencedRanges = Self.scaled(
+            micSilencedFrameRanges,
+            by: targetSampleRate / micFile.processingFormat.sampleRate
+        )
+        var micReadPosition: AVAudioFramePosition = 0
         let targetChannels: AVAudioChannelCount = 2
 
         guard let mixFormat = AVAudioFormat(
@@ -1498,6 +1857,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         while true {
             let micBuffer = try micReader.read()
+            Self.silence(micBuffer, startingAt: micReadPosition, in: micSilencedRanges)
+            micReadPosition += AVAudioFramePosition(micBuffer.frameLength)
             let systemBuffer = try systemReader.read()
             let frameCount = max(micBuffer.frameLength, systemBuffer.frameLength)
             guard frameCount > 0 else { break }
@@ -1645,13 +2006,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 outputURL: finalURL,
                 trackMode: stoppedRecording.trackMode,
                 micDuckingMode: stoppedRecording.micDuckingMode,
-                outputFormat: stoppedRecording.outputFormat
+                outputFormat: stoppedRecording.outputFormat,
+                micSilencedFrameRanges: stoppedRecording.micSilencedFrameRanges
             )
         } else if let micURL = stoppedRecording.micTempURL {
             try copyOrConvert(
                 from: micURL,
                 to: finalURL,
-                outputFormat: stoppedRecording.outputFormat
+                outputFormat: stoppedRecording.outputFormat,
+                silencedFrameRanges: stoppedRecording.micSilencedFrameRanges
             )
         } else if let systemURL = stoppedRecording.systemTempURL {
             try copyOrConvert(
@@ -1662,10 +2025,17 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func copyOrConvert(from sourceURL: URL, to destinationURL: URL, outputFormat: OutputFormat) throws {
+    private func copyOrConvert(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        outputFormat: OutputFormat,
+        silencedFrameRanges: [Range<AVAudioFramePosition>] = []
+    ) throws {
         switch outputFormat {
-        case .wav:
+        case .wav where silencedFrameRanges.isEmpty:
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        case .wav:
+            try copySilencing(silencedFrameRanges, from: sourceURL, to: destinationURL)
         case .m4a:
             let sourceFile = try AVAudioFile(forReading: sourceURL)
             let sourceFormat = sourceFile.processingFormat
@@ -1688,10 +2058,14 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 clientFormat: outputFile.processingFormat,
                 chunkFrameCount: Self.finalizationChunkFrameCount
             )
+            // The output keeps the source's sample rate, so the silenced frames need no scaling.
+            var readPosition: AVAudioFramePosition = 0
 
             while true {
                 let buffer = try reader.read()
                 guard buffer.frameLength > 0 else { break }
+                Self.silence(buffer, startingAt: readPosition, in: silencedFrameRanges)
+                readPosition += AVAudioFramePosition(buffer.frameLength)
                 do {
                     try outputFile.write(from: buffer)
                 } catch {
@@ -1700,6 +2074,63 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                     )
                 }
             }
+        }
+    }
+
+    /// Copies a WAV file with silence in `silencedFrameRanges`.
+    private func copySilencing(
+        _ silencedFrameRanges: [Range<AVAudioFramePosition>],
+        from sourceURL: URL,
+        to destinationURL: URL
+    ) throws {
+        let sourceFile = try AVAudioFile(forReading: sourceURL)
+        let outputFile = try AVAudioFile(forWriting: destinationURL, settings: sourceFile.fileFormat.settings)
+        let reader = try AudioFileChunkReader(
+            url: sourceURL,
+            clientFormat: outputFile.processingFormat,
+            chunkFrameCount: Self.finalizationChunkFrameCount
+        )
+        var readPosition: AVAudioFramePosition = 0
+        while true {
+            let buffer = try reader.read()
+            guard buffer.frameLength > 0 else { break }
+            Self.silence(buffer, startingAt: readPosition, in: silencedFrameRanges)
+            readPosition += AVAudioFramePosition(buffer.frameLength)
+            try outputFile.write(from: buffer)
+        }
+    }
+
+    /// Zeroes the frames of `buffer`, which starts at frame `position` of its file, that fall
+    /// into `ranges`.
+    private static func silence(
+        _ buffer: AVAudioPCMBuffer,
+        startingAt position: AVAudioFramePosition,
+        in ranges: [Range<AVAudioFramePosition>]
+    ) {
+        guard !ranges.isEmpty, buffer.frameLength > 0, let channels = buffer.floatChannelData else { return }
+        let bufferRange = position..<(position + AVAudioFramePosition(buffer.frameLength))
+        let channelCount = buffer.format.isInterleaved ? 1 : Int(buffer.format.channelCount)
+        let samplesPerFrame = buffer.format.isInterleaved ? Int(buffer.format.channelCount) : 1
+        for range in ranges {
+            let overlap = range.clamped(to: bufferRange)
+            guard !overlap.isEmpty else { continue }
+            let firstFrame = Int(overlap.lowerBound - position)
+            for channel in 0..<channelCount {
+                (channels[channel] + firstFrame * samplesPerFrame)
+                    .update(repeating: 0, count: Int(overlap.count) * samplesPerFrame)
+            }
+        }
+    }
+
+    private static func scaled(
+        _ ranges: [Range<AVAudioFramePosition>],
+        by factor: Double
+    ) -> [Range<AVAudioFramePosition>] {
+        guard factor != 1 else { return ranges }
+        return ranges.map { range in
+            let lowerBound = AVAudioFramePosition((Double(range.lowerBound) * factor).rounded(.down))
+            let upperBound = AVAudioFramePosition((Double(range.upperBound) * factor).rounded(.up))
+            return lowerBound..<max(lowerBound, upperBound)
         }
     }
 
@@ -1842,13 +2273,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         streamOutput = nil
         sysFileLock.withLock { $0 = nil }
 
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
-        micInputCaptureSession?.stop()
-        micInputCaptureSession = nil
+        _ = await stopMicrophoneCapture()
         micInputActivationGuard.restore(reason: "recorder-mic-rollback")
-        micFileLock.withLock { $0 = nil }
 
         cleanupTempFile(micTempURL)
         cleanupTempFile(systemTempURL)
@@ -2042,5 +2468,268 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput, SCStreamD
     func stream(_ stream: SCStream, didStopWithError error: any Error) {
         processingErrorCallback?(error)
         logger.error("SCStream stopped with error: \(error.localizedDescription)")
+    }
+}
+
+// MARK: - Microphone Capture
+
+/// The mic temp file and how far it got.
+private struct MicrophoneFileState {
+    var file: AVAudioFile?
+    var framesWritten: AVAudioFramePosition = 0
+    /// When the last buffer reached the file; a restarted capture fills the time since then
+    /// with silence.
+    var lastWriteUptime: UInt64?
+    /// Frames that repeated the audio of a frozen capture; the finished recording has silence there.
+    var silencedRanges: [Range<AVAudioFramePosition>] = []
+}
+
+/// The running microphone capture and what the watchdog knows about it.
+private struct MicrophoneCaptureState {
+    var isActive = false
+    /// Advances with every capture, so a replaced or stopped capture changes nothing anymore.
+    var generation = 0
+    var selection = ResolvedRecordingInputSelection.systemDefault
+    /// The mic file's processing format, which restarted captures convert to.
+    var fileFormat: AVAudioFormat?
+    var capture: RecorderMicrophoneCapture?
+    var watchdogTimer: DispatchSourceTimer?
+    var recordingStartUptime: UInt64 = 0
+    var captureStartUptime: UInt64 = 0
+    var nextRepetitionCheckUptime: UInt64 = 0
+    /// When to try again while the microphone could not be restarted.
+    var retryUptime: UInt64?
+    /// The incident whose restarted capture has not delivered audio yet.
+    var openIncident: RecorderMicrophoneIncident?
+    var incidentCount = 0
+}
+
+private struct MicrophoneWatchdogSnapshot: Sendable {
+    let pipeline: RecorderMicrophonePipeline?
+    let generation: Int
+    let captureStartUptime: UInt64
+    let checksRepetition: Bool
+    let retryUptime: UInt64?
+}
+
+private struct MicrophoneRestart: Sendable {
+    let capture: RecorderMicrophoneCapture?
+    let incident: RecorderMicrophoneIncident
+    let generation: Int
+}
+
+/// One running microphone capture of a recording. A restart replaces it with a new one that
+/// writes into the same mic file.
+private final class RecorderMicrophoneCapture: @unchecked Sendable {
+    let pipeline: RecorderMicrophonePipeline
+    private let engine: AVAudioEngine?
+    private let session: AudioInputCaptureSession?
+
+    init(pipeline: RecorderMicrophonePipeline, engine: AVAudioEngine) {
+        self.pipeline = pipeline
+        self.engine = engine
+        self.session = nil
+    }
+
+    init(pipeline: RecorderMicrophonePipeline, session: AudioInputCaptureSession) {
+        self.pipeline = pipeline
+        self.engine = nil
+        self.session = session
+    }
+
+    /// Stops the capture. A HAL session first hands its pending audio to the pipeline.
+    func stop() {
+        if let engine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+        session?.stop()
+    }
+}
+
+/// Carries one capture's mono audio to the mic file and the transcription buffer.
+private final class RecorderMicrophonePipeline: @unchecked Sendable {
+    /// Where the capture's first audio landed in the mic file and the transcription buffer.
+    struct StartPosition: Sendable {
+        let fileFrame: AVAudioFramePosition
+        let transcriptionIndex: Int
+    }
+
+    /// The capture's recent audio for the repetition check, every `historyDecimation`-th sample.
+    private struct History {
+        var samples: [Float] = []
+        /// Samples dropped from the front, so that indices count from the capture's start.
+        var droppedCount = 0
+        /// Where in the next buffer the next sample is picked.
+        var phase = 0
+    }
+
+    private static let historyDuration: TimeInterval = 60
+
+    let generation: Int
+    /// Retired when the capture is replaced or stopped, so its late buffers are dropped.
+    let token = CaptureStreamToken()
+    let captureFormat: AVAudioFormat
+    let fileFormat: AVAudioFormat
+    /// Where the previous capture's audio ended; nil for the first capture of a recording.
+    let resumesAfterUptime: UInt64?
+    let historyDecimation: Int
+    var historySampleRate: Double { captureFormat.sampleRate / Double(historyDecimation) }
+    private let fileConverter: AVAudioConverter?
+    private let transcriptionFormat: AVAudioFormat
+    private let transcriptionConverter: AVAudioConverter?
+    private let lastBuffer = OSAllocatedUnfairLock<UInt64?>(initialState: nil)
+    private let start = OSAllocatedUnfairLock<StartPosition?>(initialState: nil)
+    private let history = OSAllocatedUnfairLock(initialState: History())
+#if DEBUG
+    var debugFault: RecorderMicrophoneDebugFault?
+#endif
+
+    init(
+        generation: Int,
+        captureFormat: AVAudioFormat,
+        fileFormat: AVAudioFormat,
+        fileConverter: AVAudioConverter?,
+        transcriptionFormat: AVAudioFormat,
+        transcriptionConverter: AVAudioConverter?,
+        resumesAfterUptime: UInt64?
+    ) {
+        self.generation = generation
+        self.captureFormat = captureFormat
+        self.fileFormat = fileFormat
+        self.fileConverter = fileConverter
+        self.transcriptionFormat = transcriptionFormat
+        self.transcriptionConverter = transcriptionConverter
+        self.resumesAfterUptime = resumesAfterUptime
+        self.historyDecimation = RecorderMicrophoneRepetitionDetector.decimation(forSampleRate: captureFormat.sampleRate)
+    }
+
+    /// When the capture last delivered audio; nil until its first buffer.
+    var lastBufferUptime: UInt64? {
+        lastBuffer.withLock { $0 }
+    }
+
+    /// Notes a buffer's arrival; true for the capture's first buffer.
+    func noteBuffer(at uptime: UInt64) -> Bool {
+        lastBuffer.withLock { last in
+            defer { last = uptime }
+            return last == nil
+        }
+    }
+
+    var startPosition: StartPosition? {
+        start.withLock { $0 }
+    }
+
+    func noteStart(_ position: StartPosition) {
+        start.withLock { $0 = $0 ?? position }
+    }
+
+    /// Where a sample of the history lies in the mic file and the transcription buffer.
+    func position(ofHistorySample index: Int) -> StartPosition? {
+        guard let startPosition else { return nil }
+        let seconds = Double(index * historyDecimation) / captureFormat.sampleRate
+        return StartPosition(
+            fileFrame: startPosition.fileFrame + AVAudioFramePosition((seconds * fileFormat.sampleRate).rounded(.down)),
+            transcriptionIndex: startPosition.transcriptionIndex
+                + Int((seconds * AudioRecorderService.transcriptionSampleRate).rounded(.down))
+        )
+    }
+
+    func appendToHistory(_ buffer: AVAudioPCMBuffer) {
+        guard let data = buffer.floatChannelData?[0] else { return }
+        let frameCount = Int(buffer.frameLength)
+        let decimation = historyDecimation
+        let capacity = Int(Self.historyDuration * historySampleRate)
+        history.withLockUnchecked { history in
+            var index = history.phase
+            while index < frameCount {
+                history.samples.append(data[index])
+                index += decimation
+            }
+            history.phase = index - frameCount
+            if history.samples.count > 2 * capacity {
+                let excess = history.samples.count - capacity
+                history.samples.removeFirst(excess)
+                history.droppedCount += excess
+            }
+        }
+    }
+
+    /// The newest `count` samples of the history, and the index of the first one.
+    func recentHistory(last count: Int = .max) -> (samples: [Float], startIndex: Int) {
+        history.withLock { history in
+            let first = max(0, history.samples.count - count)
+            return (Array(history.samples[first...]), history.droppedCount + first)
+        }
+    }
+
+    func fileBuffer(from buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let fileConverter else { return buffer }
+        let frameCapacity = AVAudioFrameCount(
+            (Double(buffer.frameLength) * fileFormat.sampleRate / captureFormat.sampleRate).rounded(.up)
+        ) + 1
+        return Self.convert(buffer, using: fileConverter, to: fileFormat, frameCapacity: frameCapacity)
+    }
+
+    func transcriptionSamples(from buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let transcriptionConverter else { return [] }
+        let frameCapacity = AVAudioFrameCount(
+            Double(buffer.frameLength) * transcriptionFormat.sampleRate / captureFormat.sampleRate
+        )
+        guard let converted = Self.convert(
+            buffer,
+            using: transcriptionConverter,
+            to: transcriptionFormat,
+            frameCapacity: frameCapacity
+        ), let data = converted.floatChannelData?[0] else { return [] }
+        return Array(UnsafeBufferPointer(start: data, count: Int(converted.frameLength)))
+    }
+
+    /// Converts one buffer with a converter that keeps its state from one buffer to the next.
+    static func convert(
+        _ buffer: AVAudioPCMBuffer,
+        using converter: AVAudioConverter,
+        to format: AVAudioFormat,
+        frameCapacity: AVAudioFrameCount
+    ) -> AVAudioPCMBuffer? {
+        guard frameCapacity > 0,
+              let converted = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else { return nil }
+        var error: NSError?
+        let consumed = OSAllocatedUnfairLock(initialState: false)
+        converter.convert(to: converted, error: &error) { _, outStatus in
+            let wasConsumed = consumed.withLock { flag in
+                let previous = flag
+                flag = true
+                return previous
+            }
+            if wasConsumed {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            outStatus.pointee = .haveData
+            return buffer
+        }
+        guard error == nil, converted.frameLength > 0 else { return nil }
+        return converted
+    }
+
+    static func writeSilence(frameCount: AVAudioFramePosition, to file: AVAudioFile) throws {
+        let format = file.processingFormat
+        let chunkCapacity = AVAudioFrameCount(max(1, Int(format.sampleRate)))
+        guard frameCount > 0,
+              let chunk = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunkCapacity) else { return }
+        if let channels = chunk.floatChannelData {
+            for channel in 0..<Int(format.channelCount) {
+                channels[channel].update(repeating: 0, count: Int(chunkCapacity))
+            }
+        }
+        var remaining = frameCount
+        while remaining > 0 {
+            let count = AVAudioFrameCount(min(AVAudioFramePosition(chunkCapacity), remaining))
+            chunk.frameLength = count
+            try file.write(from: chunk)
+            remaining -= AVAudioFramePosition(count)
+        }
     }
 }

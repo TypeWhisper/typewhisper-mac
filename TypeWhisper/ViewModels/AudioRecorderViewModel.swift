@@ -449,6 +449,8 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published var recordings: [RecordingItem] = []
     @Published var errorMessage: String?
     @Published var systemAudioWarningMessage: String?
+    /// Says where the microphone track stopped updating and whether it was restarted.
+    @Published var microphoneWarningMessage: String?
     @Published var partialText: String = ""
     /// The live preview runs, or a stopped recording's transcript is not saved yet.
     @Published var isTranscribing: Bool = false
@@ -568,6 +570,9 @@ final class AudioRecorderViewModel: ObservableObject {
     private let streamingHandler: StreamingHandler
     private let livePreviewStartObserver: (() -> Void)?
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService?
+    private let microphoneIncidentNotifier: RecorderMicrophoneIncidentNotifying
+    /// The incident of this recording that was notified last, and whether it had been restarted.
+    private var notifiedMicrophoneIncident: (number: Int, restarted: Bool)?
     private var cancellables = Set<AnyCancellable>()
     private var currentOutputURL: URL?
     private var activeCalendarMeetingHandle: CalendarMeetingRecordingHandle?
@@ -611,9 +616,11 @@ final class AudioRecorderViewModel: ObservableObject {
         recorderCompletionsLoader: RecorderCompletionsLoader? = nil,
         recordingFileTrasher: RecordingFileTrasher? = nil,
         livePreviewStartObserver: (() -> Void)? = nil,
-        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil,
+        microphoneIncidentNotifier: RecorderMicrophoneIncidentNotifying? = nil
     ) {
         self.recorderService = recorderService
+        self.microphoneIncidentNotifier = microphoneIncidentNotifier ?? RecorderMicrophoneIncidentNotifier()
         self.audioDeviceService = audioDeviceService
         self.modelManager = modelManager
         self.dictionaryService = dictionaryService
@@ -766,6 +773,11 @@ final class AudioRecorderViewModel: ObservableObject {
             .sink { [weak self] value in self?.systemAudioWarningMessage = value }
             .store(in: &cancellables)
 
+        recorderService.$microphoneIncident
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] incident in self?.showMicrophoneIncident(incident) }
+            .store(in: &cancellables)
+
         // Recorder errors and warnings appear on the Recorder page, which VoiceOver
         // users rarely have in front of them while a recording runs. Duplicates are
         // removed before nil is dropped, so a message that was cleared in between
@@ -786,6 +798,14 @@ final class AudioRecorderViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        $microphoneWarningMessage
+            .removeDuplicates()
+            .compactMap { $0 }
+            .sink { [weak self] message in
+                self?.accessibilityAnnouncementService?.announceWarning(message, isUrgent: true)
+            }
+            .store(in: &cancellables)
+
         modelManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -795,6 +815,24 @@ final class AudioRecorderViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    /// Shows where the microphone track stopped updating. The notification comes once the
+    /// restart worked or failed, and again when a failed restart works later.
+    func showMicrophoneIncident(_ incident: RecorderMicrophoneIncident?) {
+        // A new recording clears the warning itself.
+        guard let incident else { return }
+        microphoneWarningMessage = incident.warningMessage
+
+        let restarted = incident.resumedAt != nil
+        guard restarted || incident.failedRestarts > 0 else { return }
+        if let notified = notifiedMicrophoneIncident,
+           notified.number == incident.number,
+           notified.restarted || !restarted {
+            return
+        }
+        notifiedMicrophoneIncident = (incident.number, restarted)
+        microphoneIncidentNotifier.notify(incident)
     }
 
     func observePluginManager() {
@@ -930,6 +968,8 @@ final class AudioRecorderViewModel: ObservableObject {
 
         errorMessage = nil
         systemAudioWarningMessage = nil
+        microphoneWarningMessage = nil
+        notifiedMicrophoneIncident = nil
         partialText = ""
         // The preview is this recording's now, also while an earlier transcript is pending.
         recordingGeneration += 1
