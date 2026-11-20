@@ -1,0 +1,21 @@
+{
+    "id": "com.typewhisper.zoom",
+    "name": "Zoom Scribe",
+    "version": "1.0.0",
+    "minHostVersion": "1.8.3",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Cloud transcription with Zoom Scribe: a multilingual model for ten languages, single-language models with dictionary terms, English Pro, and live streaming for dictations. Requires an API key from Zoom AI Services.",
+    "descriptions": {
+        "de": "Cloud-Transkription mit Zoom Scribe: ein mehrsprachiges Modell für zehn Sprachen, Einzelsprachmodelle mit Wörterbuchbegriffen, English Pro und Live-Streaming für Diktate. Erfordert einen API-Schlüssel von Zoom AI Services.",
+        "es": "Transcripción en la nube con Zoom Scribe: un modelo multilingüe para diez idiomas, modelos por idioma con términos del diccionario, English Pro y streaming en directo para dictados. Requiere una clave de API de Zoom AI Services.",
+        "ja": "Zoom Scribeによるクラウド文字起こしです。10言語に対応する多言語モデル、辞書の用語を使える単一言語モデル、English Pro、音声入力のライブストリーミングに対応します。Zoom AI ServicesのAPIキーが必要です。"
+    },
+    "category": "transcription",
+    "hosting": "cloud",
+    "locality": "cloud",
+    "iconSystemName": "waveform.badge.mic",
+    "principalClass": "ZoomPlugin",
+    "requiresAPIKey": true
+}

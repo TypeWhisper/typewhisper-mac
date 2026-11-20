@@ -121,6 +121,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "webhook", target: "WebhookPlugin", id: "com.typewhisper.webhook" },
   { slug: "whisperkit", target: "WhisperKitPlugin", id: "com.typewhisper.whisperkit", size: [560, 557] },
   { slug: "xai-grok", target: "XAIPlugin", id: "com.typewhisper.xai" },
+  { slug: "zoom", target: "ZoomPlugin", id: "com.typewhisper.zoom" },
 ].freeze
 FREE_SCREENSHOT_NAMES = %w[
   home
