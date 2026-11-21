@@ -1257,6 +1257,35 @@ final class OpenAIPluginTests: XCTestCase {
         try await waitTask.value
     }
 
+    func testOpenAIRealtimeSocketOpenWaiterEndsWhenTheWaitIsCancelled() async throws {
+        let waiter = OpenAIRealtimeWebSocketOpenWaiter()
+
+        let waitTask = Task {
+            try await waiter.waitForOpen()
+        }
+        try await Task.sleep(for: .milliseconds(10))
+        waitTask.cancel()
+
+        do {
+            try await waitTask.value
+            XCTFail("Expected the cancelled wait to throw")
+        } catch is CancellationError {}
+    }
+
+    func testOpenAIRealtimeSocketOpenTimeoutEndsAWaitThatNeverOpens() async throws {
+        let waiter = OpenAIRealtimeWebSocketOpenWaiter()
+        let clock = ContinuousClock()
+        let start = clock.now
+
+        do {
+            try await OpenAIRealtimeTranscriptionSession.waitForSocketOpen(waiter, timeoutNanoseconds: 50_000_000)
+            XCTFail("Expected the open wait to time out")
+        } catch PluginTranscriptionError.networkError(let message) {
+            XCTAssertEqual(message, "Realtime WebSocket did not open.")
+        }
+        XCTAssertLessThan(start.duration(to: clock.now), .seconds(2))
+    }
+
     func testOpenAITTSUsesTheRealtimeModelWithTenVoices() throws {
         XCTAssertEqual(OpenAITTSConfiguration.modelId, "gpt-realtime-2.1-mini")
         XCTAssertEqual(OpenAITTSConfiguration.defaultVoiceId, "marin")

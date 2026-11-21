@@ -1054,21 +1054,27 @@ final class OpenAIRealtimeWebSocketOpenWaiter: @unchecked Sendable {
 
     private let state = OSAllocatedUnfairLock(initialState: State())
 
+    /// Returns once the socket opens. A cancelled wait, such as the open timeout or a stopped
+    /// readback, ends right away instead of waiting for URLSession's own timeout.
     func waitForOpen() async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            let result = state.withLock { state -> Result<Void, Error>? in
-                if state.opened {
-                    return .success(())
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let result = state.withLock { state -> Result<Void, Error>? in
+                    if state.opened {
+                        return .success(())
+                    }
+                    if let failure = state.failure {
+                        return .failure(failure)
+                    }
+                    state.continuations.append(continuation)
+                    return nil
                 }
-                if let failure = state.failure {
-                    return .failure(failure)
+                if let result {
+                    continuation.resume(with: result)
                 }
-                state.continuations.append(continuation)
-                return nil
             }
-            if let result {
-                continuation.resume(with: result)
-            }
+        } onCancel: {
+            markFailed(CancellationError())
         }
     }
 
@@ -1298,7 +1304,13 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
         let collector = OpenAIRealtimeTranscriptCollector()
 
         webSocketTask.resume()
-        try await waitForSocketOpen(openWaiter)
+        do {
+            try await waitForSocketOpen(openWaiter)
+        } catch {
+            webSocketTask.cancel(with: .goingAway, reason: nil)
+            urlSession.finishTasksAndInvalidate()
+            throw error
+        }
 
         let receiveTask = Task { [webSocketTask, collector, onProgress] in
             do {
@@ -1528,13 +1540,16 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
         urlSession?.finishTasksAndInvalidate()
     }
 
-    static func waitForSocketOpen(_ waiter: OpenAIRealtimeWebSocketOpenWaiter) async throws {
+    static func waitForSocketOpen(
+        _ waiter: OpenAIRealtimeWebSocketOpenWaiter,
+        timeoutNanoseconds: UInt64 = OpenAIRealtimeTranscriptionSession.socketOpenTimeoutNanoseconds
+    ) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await waiter.waitForOpen()
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: socketOpenTimeoutNanoseconds)
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
                 throw PluginTranscriptionError.networkError("Realtime WebSocket did not open.")
             }
 
