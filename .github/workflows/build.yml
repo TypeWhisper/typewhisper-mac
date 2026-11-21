@@ -136,6 +136,9 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       - name: Restore Swift package cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -338,6 +341,9 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       # The nightly release workflow seeds this cache on main. Caches saved here would
       # be scoped to this pull request and unreachable for every other one.
       - name: Restore Swift package cache
@@ -419,6 +425,9 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
 
@@ -447,6 +456,9 @@ jobs:
 
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
+
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
 
       - name: Install XcodeGen
         run: |

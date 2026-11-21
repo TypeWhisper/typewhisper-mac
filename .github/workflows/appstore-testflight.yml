@@ -151,6 +151,15 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      # Release tags from before the mirror have no seed script.
+      - name: Seed onnxruntime binaries
+        run: |
+          if [[ -f scripts/seed_onnxruntime_artifacts.sh ]]; then
+            bash scripts/seed_onnxruntime_artifacts.sh
+          else
+            echo "::warning title=onnxruntime mirror::This checkout has no scripts/seed_onnxruntime_artifacts.sh, so SwiftPM downloads onnxruntime from download.onnxruntime.ai."
+          fi
+
       - name: Install XcodeGen
         run: |
           archive="$RUNNER_TEMP/xcodegen.zip"
@@ -162,6 +171,27 @@ jobs:
 
       - name: Generate App Store project
         run: scripts/appstore/generate_project.sh
+
+      # Signed builds resolve from scratch, without the shared package cache.
+      # GitHub clones and the onnxruntime binary downloads fail now and then,
+      # so retry here instead of failing the archive.
+      - name: Resolve Swift packages
+        run: |
+          for attempt in 1 2 3 4; do
+            echo "Attempt $attempt of 4"
+            if xcodebuild -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 4 ]]; then
+              delay=$(( attempt * 30 ))
+              echo "Package resolution failed, retrying in ${delay}s..."
+              sleep "$delay"
+            fi
+          done
+          exit 1
 
       - name: Set build number
         env:
@@ -252,6 +282,8 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=macOS' \
             -archivePath "$ARCHIVE_PATH" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             ARCHS='arm64 x86_64' \

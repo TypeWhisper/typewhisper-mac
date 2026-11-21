@@ -97,6 +97,9 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       # Resolve before CodeQL initialization; the traced build must not fetch or
       # resolve packages again. The project has one package graph for all targets.
       - name: Resolve Swift packages
