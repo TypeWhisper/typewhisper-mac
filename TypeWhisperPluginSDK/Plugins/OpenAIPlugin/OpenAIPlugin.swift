@@ -677,6 +677,13 @@ private struct OpenAITranscriptionModelCapability: Sendable {
     let modelInfo: PluginModelInfo
     let transport: Transport
     let supportsTranslation: Bool
+    /// The day OpenAI shuts the model down. From then on the list leaves it out and a saved
+    /// selection uses GPT Transcribe.
+    var shutdownDate: Date? = nil
+
+    func isShutDown(at date: Date) -> Bool {
+        shutdownDate.map { date >= $0 } ?? false
+    }
 
     var usesContextAwareHints: Bool {
         switch transport {
@@ -700,6 +707,10 @@ private struct OpenAITranscriptionModelCapability: Sendable {
     static let gptLiveTranscribeModelID = "gpt-live-transcribe"
     static let legacyRealtimeModelID = "gpt-realtime-whisper"
 
+    /// 26 February 2027, 00:00 UTC. OpenAI shuts down Whisper 1, GPT-4o Transcribe and
+    /// GPT-4o Mini Transcribe that day and names GPT Transcribe or GPT Live Transcribe as replacements.
+    static let legacyFileModelsShutdownDate = Date(timeIntervalSince1970: 1_803_600_000)
+
     static let all: [OpenAITranscriptionModelCapability] = [
         OpenAITranscriptionModelCapability(
             modelInfo: PluginModelInfo(id: gptTranscribeModelID, displayName: "GPT Transcribe"),
@@ -714,17 +725,20 @@ private struct OpenAITranscriptionModelCapability: Sendable {
         OpenAITranscriptionModelCapability(
             modelInfo: PluginModelInfo(id: "whisper-1", displayName: "Whisper 1"),
             transport: .legacyFile(responseFormat: "verbose_json"),
-            supportsTranslation: true
+            supportsTranslation: true,
+            shutdownDate: legacyFileModelsShutdownDate
         ),
         OpenAITranscriptionModelCapability(
             modelInfo: PluginModelInfo(id: "gpt-4o-transcribe", displayName: "GPT-4o Transcribe"),
             transport: .legacyFile(responseFormat: "json"),
-            supportsTranslation: false
+            supportsTranslation: false,
+            shutdownDate: legacyFileModelsShutdownDate
         ),
         OpenAITranscriptionModelCapability(
             modelInfo: PluginModelInfo(id: "gpt-4o-mini-transcribe", displayName: "GPT-4o Mini Transcribe"),
             transport: .legacyFile(responseFormat: "json"),
-            supportsTranslation: false
+            supportsTranslation: false,
+            shutdownDate: legacyFileModelsShutdownDate
         ),
         OpenAITranscriptionModelCapability(
             modelInfo: PluginModelInfo(id: legacyRealtimeModelID, displayName: "GPT Realtime Whisper"),
@@ -735,6 +749,18 @@ private struct OpenAITranscriptionModelCapability: Sendable {
 
     static func capability(for modelID: String) -> OpenAITranscriptionModelCapability? {
         all.first { $0.modelInfo.id == modelID }
+    }
+
+    static func available(at date: Date) -> [OpenAITranscriptionModelCapability] {
+        all.filter { !$0.isShutDown(at: date) }
+    }
+
+    /// The model a saved ID uses at `date`: the model itself until OpenAI shuts it down,
+    /// GPT Transcribe afterwards, and nil for an ID OpenAI never offered here.
+    static func current(for modelID: String, at date: Date) -> OpenAITranscriptionModelCapability? {
+        guard let saved = capability(for: modelID) else { return nil }
+        guard saved.isShutDown(at: date) else { return saved }
+        return capability(for: gptTranscribeModelID)
     }
 }
 
@@ -2087,6 +2113,8 @@ final class OpenAIPlugin: NSObject,
     fileprivate var _fetchedChatGPTModels: [OpenAIChatGPTModel] = []
     fileprivate var _selectedVoiceId: String?
     fileprivate var _ttsInstructions: String = ""
+    /// The current time, for models OpenAI shuts down on a date. Tests replace it.
+    var currentDate: @Sendable () -> Date = { Date() }
     /// Turns text into 24 kHz PCM16. Tests replace it to run speech without a network connection.
     var speechSynthesizer: @Sendable (
         _ apiKey: String,
@@ -2305,17 +2333,30 @@ final class OpenAIPlugin: NSObject,
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        OpenAITranscriptionModelCapability.all.map(\.modelInfo)
+        OpenAITranscriptionModelCapability.available(at: currentDate()).map(\.modelInfo)
     }
 
-    var selectedModelId: String? { _selectedModelId }
+    /// A saved model that OpenAI has shut down reads as GPT Transcribe. The saved setting stays.
+    var selectedModelId: String? {
+        _selectedModelId.map { currentModelId(forModelId: $0) ?? $0 }
+    }
 
     func selectModel(_ modelId: String) {
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: Self.storageKeys.selectedModel)
     }
 
-    var supportsTranslation: Bool { true }
+    /// The current model for a saved ID, so a workflow saved with a model OpenAI has shut down
+    /// shows and saves GPT Transcribe. Nil for an ID OpenAI never offered here.
+    @objc(currentModelIdForModelId:)
+    func currentModelId(forModelId modelId: String) -> String? {
+        OpenAITranscriptionModelCapability.current(for: modelId, at: currentDate())?.modelInfo.id
+    }
+
+    /// Only Whisper 1 translates, until OpenAI shuts it down.
+    var supportsTranslation: Bool {
+        OpenAITranscriptionModelCapability.available(at: currentDate()).contains { $0.supportsTranslation }
+    }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
@@ -2620,7 +2661,7 @@ final class OpenAIPlugin: NSObject,
         guard let modelID = _selectedModelId else {
             throw PluginTranscriptionError.noModelSelected
         }
-        guard let capability = OpenAITranscriptionModelCapability.capability(for: modelID) else {
+        guard let capability = OpenAITranscriptionModelCapability.current(for: modelID, at: currentDate()) else {
             throw PluginTranscriptionError.apiError(
                 "Unsupported OpenAI transcription model: \(modelID)"
             )

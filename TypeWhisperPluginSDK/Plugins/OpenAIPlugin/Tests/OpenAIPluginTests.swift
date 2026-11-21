@@ -4,6 +4,20 @@ import TypeWhisperPluginSDK
 @testable import OpenAIPlugin
 import os
 
+enum OpenAITestDates {
+    /// OpenAI shuts down Whisper 1, GPT-4o Transcribe and GPT-4o Mini Transcribe on this day.
+    static let legacyShutdown = Date(timeIntervalSince1970: 1_803_600_000)
+    /// A fixed day before that, so tests that use those models keep passing afterwards.
+    static let beforeLegacyShutdown = legacyShutdown.addingTimeInterval(-86_400)
+}
+
+/// A plugin with a fixed clock, so the tests do not depend on today's date.
+func makeOpenAIPlugin(at date: Date = OpenAITestDates.beforeLegacyShutdown) -> OpenAIPlugin {
+    let plugin = OpenAIPlugin()
+    plugin.currentDate = { date }
+    return plugin
+}
+
 final class OpenAIPluginTests: XCTestCase {
     override func tearDown() {
         PluginHTTPClientTestHarness.reset()
@@ -59,7 +73,7 @@ final class OpenAIPluginTests: XCTestCase {
     }
 
     func testOpenAIPluginAdvertisesLiveSTTAndTTSProtocols() {
-        let plugin: Any = OpenAIPlugin()
+        let plugin: Any = makeOpenAIPlugin()
 
         XCTAssertTrue(plugin is any LiveTranscriptionCapablePlugin)
         XCTAssertTrue(plugin is any LanguageHintDictionaryTermHintTranscriptionEnginePlugin)
@@ -69,7 +83,7 @@ final class OpenAIPluginTests: XCTestCase {
 
     func testOpenAINewInstallDefaultsToGPTTranscribeAndKeepsLegacyModels() throws {
         let host = try PluginTestHostServices()
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
 
         plugin.activate(host: host)
 
@@ -90,7 +104,7 @@ final class OpenAIPluginTests: XCTestCase {
 
     func testOpenAIActivationPreservesPersistedLegacyModelSelection() throws {
         let host = try PluginTestHostServices(defaults: ["selectedModel": "gpt-4o-mini-transcribe"])
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
 
         plugin.activate(host: host)
 
@@ -98,9 +112,68 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gpt-4o-mini-transcribe")
     }
 
+    func testOpenAILeavesOutLegacyFileModelsFromTheirShutdownDate() throws {
+        let host = try PluginTestHostServices()
+        let plugin = makeOpenAIPlugin(at: OpenAITestDates.legacyShutdown)
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(
+            plugin.transcriptionModels.map(\.id),
+            ["gpt-transcribe", "gpt-live-transcribe", "gpt-realtime-whisper"]
+        )
+        XCTAssertFalse(plugin.supportsTranslation)
+
+        plugin.currentDate = { OpenAITestDates.beforeLegacyShutdown }
+        XCTAssertTrue(plugin.transcriptionModels.contains { $0.id == "whisper-1" })
+        XCTAssertTrue(plugin.supportsTranslation)
+    }
+
+    func testOpenAIUsesGPTTranscribeForASavedModelAfterItsShutdownAndKeepsTheSetting() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "whisper-1"],
+            secrets: ["api-key": "sk-live"]
+        )
+        let plugin = makeOpenAIPlugin(at: OpenAITestDates.legacyShutdown)
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "gpt-transcribe")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "whisper-1")
+        XCTAssertEqual(plugin.currentModelId(forModelId: "whisper-1"), "gpt-transcribe")
+        XCTAssertEqual(plugin.currentModelId(forModelId: "gpt-4o-transcribe"), "gpt-transcribe")
+        XCTAssertEqual(plugin.currentModelId(forModelId: "gpt-4o-mini-transcribe"), "gpt-transcribe")
+        XCTAssertEqual(plugin.currentModelId(forModelId: "gpt-live-transcribe"), "gpt-live-transcribe")
+        XCTAssertNil(plugin.currentModelId(forModelId: "unknown-model"))
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"Hallo"}"#.utf8),
+                    Self.httpResponse(url: "https://api.openai.com/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: Self.testAudio(),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Hallo")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("name=\"model\"\r\n\r\ngpt-transcribe"))
+
+        plugin.currentDate = { OpenAITestDates.beforeLegacyShutdown }
+        XCTAssertEqual(plugin.selectedModelId, "whisper-1")
+    }
+
     func testOpenAIContextAndLiveDelayPersistWithLowAsDefault() throws {
         let host = try PluginTestHostServices()
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         XCTAssertEqual(plugin.transcriptionContext, "")
@@ -115,14 +188,14 @@ final class OpenAIPluginTests: XCTestCase {
         )
         XCTAssertEqual(host.userDefault(forKey: "liveTranscriptionDelay") as? String, "high")
 
-        let restoredPlugin = OpenAIPlugin()
+        let restoredPlugin = makeOpenAIPlugin()
         restoredPlugin.activate(host: host)
         XCTAssertEqual(restoredPlugin.transcriptionContext, "A TypeWhisper product interview.")
         XCTAssertEqual(restoredPlugin.liveTranscriptionDelay, .high)
     }
 
     func testOpenAIFallbackModelsIncludeGPT55First() {
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
 
         XCTAssertEqual(plugin.supportedModels.first?.id, "gpt-5.5")
         XCTAssertTrue(plugin.supportedModels.contains { $0.id == "gpt-5.5" })
@@ -130,7 +203,7 @@ final class OpenAIPluginTests: XCTestCase {
 
     func testOpenAIChatGPTLoginFallbackIncludesCurrentGPT56Models() throws {
         let host = try PluginTestHostServices(defaults: ["authMode": "chatgpt"])
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         XCTAssertEqual(
@@ -146,7 +219,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["authMode": "chatgpt"],
             secrets: ["oauth-refresh-token": "refresh-token"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         XCTAssertTrue(plugin.authStatus(for: .llm).isAvailable)
@@ -166,7 +239,7 @@ final class OpenAIPluginTests: XCTestCase {
 
     func testOpenAIAPIKeyMakesLLMTranscriptionAndTTSAuthRolesAvailable() throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "sk-live"])
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         XCTAssertTrue(plugin.authStatus(for: .llm).isAvailable)
@@ -179,7 +252,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "whisper-1"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -216,7 +289,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "whisper-1"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -264,7 +337,7 @@ final class OpenAIPluginTests: XCTestCase {
             ],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -323,7 +396,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "gpt-transcribe"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let url = "https://api.openai.com/v1/audio/transcriptions"
@@ -358,7 +431,7 @@ final class OpenAIPluginTests: XCTestCase {
             ],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -404,7 +477,7 @@ final class OpenAIPluginTests: XCTestCase {
             ],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -455,7 +528,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "gpt-4o-transcribe"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -497,7 +570,7 @@ final class OpenAIPluginTests: XCTestCase {
                 defaults: ["selectedModel": "gpt-transcribe"],
                 secrets: ["api-key": "sk-live"]
             )
-            let plugin = OpenAIPlugin()
+            let plugin = makeOpenAIPlugin()
             plugin.activate(host: host)
 
             let store = PluginHTTPClientSessionStore()
@@ -543,7 +616,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "gpt-transcribe"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -581,7 +654,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "gpt-transcribe"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -615,7 +688,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "whisper-1"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -650,7 +723,7 @@ final class OpenAIPluginTests: XCTestCase {
 
     func testOpenAIWithoutCredentialsMakesCloudAuthRolesUnavailable() throws {
         let host = try PluginTestHostServices()
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         XCTAssertFalse(plugin.authStatus(for: .llm).isAvailable)
@@ -717,7 +790,7 @@ final class OpenAIPluginTests: XCTestCase {
             ],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -1028,7 +1101,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedModel": "gpt-transcribe"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -1380,7 +1453,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedVoice": "nova"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
         let calls = OpenAIFileTranscriptionPreviewRecorder()
         plugin.speechSynthesizer = { _, text, _, _ in
@@ -1489,7 +1562,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["selectedLLMModel": "stale-model"],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -1569,7 +1642,7 @@ final class OpenAIPluginTests: XCTestCase {
                 "oauth-refresh-token": "refresh-token",
             ]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -1643,7 +1716,7 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertEqual(cache.accountID, "account-123")
         XCTAssertEqual(cache.models.map(\.id), ["gpt-5.7", "gpt-5.6-sol"])
 
-        let restoredPlugin = OpenAIPlugin()
+        let restoredPlugin = makeOpenAIPlugin()
         restoredPlugin.activate(host: host)
         XCTAssertEqual(restoredPlugin.supportedModels.map(\.id), ["gpt-5.7", "gpt-5.6-sol"])
         XCTAssertEqual(restoredPlugin.selectedLLMModelId, "gpt-5.6-sol")
@@ -1662,7 +1735,7 @@ final class OpenAIPluginTests: XCTestCase {
                 "oauth-refresh-token": "refresh-token",
             ]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
@@ -1697,7 +1770,7 @@ final class OpenAIPluginTests: XCTestCase {
             "oauthAccountID": "new-account",
             "fetchedChatGPTModels": try JSONEncoder().encode(cache),
         ])
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
 
         plugin.activate(host: host)
 
@@ -1739,7 +1812,7 @@ final class OpenAIPluginTests: XCTestCase {
         secrets: [String: String] = ["api-key": "sk-live"]
     ) throws -> OpenAIPlugin {
         let host = try PluginTestHostServices(defaults: defaults, secrets: secrets)
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
         return plugin
     }
@@ -1791,7 +1864,7 @@ final class OpenAIPluginTests: XCTestCase {
             defaults: ["reasoningEffort": reasoningEffort],
             secrets: ["api-key": "sk-live"]
         )
-        let plugin = OpenAIPlugin()
+        let plugin = makeOpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
