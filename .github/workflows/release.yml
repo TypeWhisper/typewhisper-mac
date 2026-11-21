@@ -129,6 +129,9 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       # Scheduled runs on main seed the package cache that pull request builds restore.
       # The signed build job below always resolves packages from scratch.
       - name: Cache Swift packages
@@ -180,6 +183,9 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
 
@@ -223,6 +229,9 @@ jobs:
 
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
+
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
 
       - name: Resolve Swift packages
         run: |

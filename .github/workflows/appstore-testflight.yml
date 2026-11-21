@@ -151,6 +151,9 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       - name: Install XcodeGen
         run: |
           archive="$RUNNER_TEMP/xcodegen.zip"

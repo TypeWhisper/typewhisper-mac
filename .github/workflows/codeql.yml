@@ -159,6 +159,9 @@ jobs:
           build-mode: manual
           queries: security-and-quality
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       - name: Build Swift for CodeQL
         env:
           SOURCE_PACKAGES_DIR: ${{ runner.temp }}/SourcePackages

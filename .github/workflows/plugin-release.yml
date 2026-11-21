@@ -237,6 +237,9 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      - name: Seed onnxruntime binaries
+        run: bash scripts/seed_onnxruntime_artifacts.sh
+
       - name: Resolve Swift packages
         run: |
           xcodebuild -resolvePackageDependencies \
