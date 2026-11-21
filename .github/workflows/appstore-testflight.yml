@@ -151,8 +151,14 @@ jobs:
       - name: Ensure Metal toolchain
         run: bash scripts/ensure_metal_toolchain.sh
 
+      # Release tags from before the mirror have no seed script.
       - name: Seed onnxruntime binaries
-        run: bash scripts/seed_onnxruntime_artifacts.sh
+        run: |
+          if [[ -f scripts/seed_onnxruntime_artifacts.sh ]]; then
+            bash scripts/seed_onnxruntime_artifacts.sh
+          else
+            echo "::warning title=onnxruntime mirror::This checkout has no scripts/seed_onnxruntime_artifacts.sh, so SwiftPM downloads onnxruntime from download.onnxruntime.ai."
+          fi
 
       - name: Install XcodeGen
         run: |
