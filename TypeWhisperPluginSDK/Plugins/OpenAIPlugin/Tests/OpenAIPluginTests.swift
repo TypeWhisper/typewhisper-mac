@@ -1331,6 +1331,32 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertTrue(socket.isClosed)
     }
 
+    func testOpenAIRealtimeSpeechReportsAnInvalidKeyWhenOpenAIClosesBeforeTheTextIsSent() async throws {
+        // OpenAI accepts the connection with an invalid key, sends this error event and closes it.
+        let socket = ScriptedOpenAISpeechSocket(
+            messages: [
+                .success(.string(
+                    #"{"type":"error","error":{"type":"invalid_request_error","code":"invalid_api_key","message":"Incorrect API key"}}"#
+                )),
+                .failure(URLError(.networkConnectionLost)),
+            ],
+            sendHangsUntilClosed: true
+        )
+
+        do {
+            _ = try await OpenAIRealtimeSpeech.synthesize(
+                connect: { socket },
+                text: "Hallo",
+                voice: "marin",
+                instructions: nil,
+                timeoutNanoseconds: 5_000_000_000
+            )
+            XCTFail("Expected an invalid key")
+        } catch PluginTranscriptionError.invalidApiKey {
+        }
+        XCTAssertTrue(socket.isClosed)
+    }
+
     func testOpenAIRealtimeSpeechTimesOutWhenTheResponseNeverCompletes() async throws {
         let socket = ScriptedOpenAISpeechSocket(messages: [])
 
@@ -1889,18 +1915,34 @@ private final class ScriptedOpenAISpeechSocket: OpenAIRealtimeSpeechSocket, @unc
         var sent: [String] = []
         var closed = false
         var waiting: CheckedContinuation<URLSessionWebSocketTask.Message, Error>?
+        var waitingSend: CheckedContinuation<Void, Error>?
     }
 
     private let state: OSAllocatedUnfairLock<State>
+    private let sendHangsUntilClosed: Bool
 
-    init(messages: [Result<URLSessionWebSocketTask.Message, Error>]) {
+    /// With `sendHangsUntilClosed`, a send behaves like one on a socket the server closed: it returns only
+    /// once the socket is closed on this side, and then fails.
+    init(messages: [Result<URLSessionWebSocketTask.Message, Error>], sendHangsUntilClosed: Bool = false) {
         state = OSAllocatedUnfairLock(initialState: State(messages: messages))
+        self.sendHangsUntilClosed = sendHangsUntilClosed
     }
 
     var sentEvents: [String] { state.withLock { $0.sent } }
     var isClosed: Bool { state.withLock { $0.closed } }
 
     func send(_ text: String) async throws {
+        if sendHangsUntilClosed {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let closed = state.withLock { state -> Bool in
+                    if !state.closed { state.waitingSend = continuation }
+                    return state.closed
+                }
+                if closed {
+                    continuation.resume(throwing: URLError(.cancelled))
+                }
+            }
+        }
         state.withLock { $0.sent.append(text) }
     }
 
@@ -1919,12 +1961,19 @@ private final class ScriptedOpenAISpeechSocket: OpenAIRealtimeSpeechSocket, @unc
     }
 
     func close() {
-        let waiting = state.withLock { state -> CheckedContinuation<URLSessionWebSocketTask.Message, Error>? in
+        let waiting = state.withLock { state -> (
+            CheckedContinuation<URLSessionWebSocketTask.Message, Error>?,
+            CheckedContinuation<Void, Error>?
+        ) in
             state.closed = true
-            defer { state.waiting = nil }
-            return state.waiting
+            defer {
+                state.waiting = nil
+                state.waitingSend = nil
+            }
+            return (state.waiting, state.waitingSend)
         }
-        waiting?.resume(throwing: URLError(.cancelled))
+        waiting.0?.resume(throwing: URLError(.cancelled))
+        waiting.1?.resume(throwing: URLError(.cancelled))
     }
 }
 

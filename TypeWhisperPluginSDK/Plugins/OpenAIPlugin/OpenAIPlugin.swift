@@ -1839,15 +1839,19 @@ enum OpenAIRealtimeSpeech {
         do {
             return try await withThrowingTaskGroup(of: Data.self) { group in
                 group.addTask {
-                    for event in events {
-                        try await socket.send(event)
-                    }
+                    // Receive while sending: with an invalid key OpenAI accepts the connection, sends an
+                    // error event and closes it, so a later send fails before that event would be read.
+                    // The send is not awaited on failure, because a send on a closed socket may never return;
+                    // closing the socket below ends it.
+                    let sender = Task { try await Self.send(events, over: socket) }
+                    defer { sender.cancel() }
                     var collector = OpenAIRealtimeSpeechCollector()
                     while true {
                         try Task.checkCancellation()
                         let message = try await socket.receive()
                         guard let data = Self.data(from: message) else { continue }
                         if try collector.apply(data) {
+                            try await sender.value
                             return collector.pcm
                         }
                     }
@@ -1875,6 +1879,12 @@ enum OpenAIRealtimeSpeech {
             throw PluginTranscriptionError.networkError(
                 "OpenAI closed the speech connection before the audio was complete."
             )
+        }
+    }
+
+    private static func send(_ events: [String], over socket: any OpenAIRealtimeSpeechSocket) async throws {
+        for event in events {
+            try await socket.send(event)
         }
     }
 
