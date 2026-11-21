@@ -174,12 +174,14 @@ jobs:
 
       # Signed builds resolve from scratch, without the shared package cache.
       # GitHub clones and the onnxruntime binary downloads fail now and then,
-      # so retry here instead of failing the archive.
+      # so retry here instead of failing the archive. The Package.resolved copied
+      # from the direct-distribution project does not match this project's
+      # requirements exactly, so the resolver must be allowed to update it.
       - name: Resolve Swift packages
         run: |
           for attempt in 1 2 3 4; do
             echo "Attempt $attempt of 4"
-            if xcodebuild -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile \
+            if xcodebuild -resolvePackageDependencies \
               -project "$PROJECT" \
               -scheme "$SCHEME" \
               -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"; then
