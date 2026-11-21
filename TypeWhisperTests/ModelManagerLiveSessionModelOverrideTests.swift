@@ -89,6 +89,34 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "alpha")
     }
 
+    func testOverrideWithAReplacedModelUsesItsReplacementWhenThatIsAlreadySelected() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = LiveModelOverrideTranscriptionPlugin(modelAliases: ["legacy-beta": "beta"])
+        plugin.selectModel("beta")
+        let modelManager = installLivePlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 1,
+            busyAttempts: 0,
+            pollInterval: .milliseconds(10)
+        )
+
+        // A workflow saved with a model the plugin has since replaced, while the
+        // replacement is already the selected model.
+        let sessionHandle = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: "legacy-beta",
+            onProgress: { _ in true }
+        )
+        let handle = try XCTUnwrap(sessionHandle)
+
+        XCTAssertEqual(plugin.selectedModelId, "beta")
+        await modelManager.cancelLiveTranscriptionSession(handle)
+        XCTAssertEqual(plugin.selectedModelId, "beta")
+    }
+
     func testLiveSessionNormalizesLanguageForOverrideModel() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1176,8 +1204,14 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
     func deactivate() {}
 
     func selectModel(_ modelId: String) {
+        currentModelId = resolvedModelId(forModelId: modelId)
+    }
+
+    /// The model an alias stands for now, like a plugin that renamed or replaced a model.
+    @objc(currentModelIdForModelId:)
+    func resolvedModelId(forModelId modelId: String) -> String? {
         let resolvedModelId = modelAliases[modelId] ?? modelId
-        currentModelId = models.contains { $0.id == resolvedModelId } ? resolvedModelId : nil
+        return models.contains { $0.id == resolvedModelId } ? resolvedModelId : nil
     }
 
     func transcribe(

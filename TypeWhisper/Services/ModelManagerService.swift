@@ -2488,7 +2488,8 @@ final class ModelManagerService: ObservableObject {
                 } else {
                     // If selection was rejected and the old ID remained unchanged, keep
                     // checking the requested ID so a different loaded model is not accepted.
-                    expectedModelId = cloudModelOverride
+                    // A replaced model counts as its replacement, which may already be selected.
+                    expectedModelId = plugin.currentModelId(for: cloudModelOverride)
                 }
 
                 if pluginConfiguredState(

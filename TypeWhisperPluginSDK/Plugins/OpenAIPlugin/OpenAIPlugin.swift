@@ -3905,6 +3905,9 @@ private struct OpenAISettingsView: View {
                     }
                     .labelsHidden()
                     .onChange(of: selectedModel) {
+                        // Showing the current model for a saved one OpenAI has shut down
+                        // must not replace the saved setting.
+                        guard selectedModel != plugin.selectedModelId else { return }
                         plugin.selectModel(selectedModel)
                     }
 
