@@ -1,6 +1,62 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ (not available)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (nicht verfügbar)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (no disponible)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（利用不可）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（不可用）"
+          }
+        }
+      }
+    },
+    "OpenAI no longer offers this voice. Choose another voice.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAI bietet diese Stimme nicht mehr an. Wähle eine andere Stimme."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAI ya no ofrece esta voz. Elige otra voz."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAIはこの音声の提供を終了しました。別の音声を選んでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAI 已不再提供此语音。请选择其他语音。"
+          }
+        }
+      }
+    },
     "Hide API key": {
       "localizations": {
         "de": {
