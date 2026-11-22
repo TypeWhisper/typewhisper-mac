@@ -15,7 +15,10 @@ final class NotchGeometry: ObservableObject {
         if hasNotch,
            let left = screen.auxiliaryTopLeftArea?.width,
            let right = screen.auxiliaryTopRightArea?.width {
-            notchWidth = screen.frame.width - left - right + 4
+            notchWidth = NotchIndicatorLayout.reservedNotchWidth(
+                cutoutWidth: screen.frame.width - left - right + 4,
+                pointsPerMillimeter: Self.pointsPerMillimeter(of: screen)
+            )
         } else {
             notchWidth = 0
         }
@@ -23,6 +26,19 @@ final class NotchGeometry: ObservableObject {
             hasNotch: hasNotch,
             safeAreaTopInset: screen.safeAreaInsets.top
         )
+    }
+
+    /// Points per millimetre across the screen's width at its current scaling,
+    /// or nil when the display reports no physical size.
+    private static func pointsPerMillimeter(of screen: NSScreen) -> CGFloat? {
+        guard let screenNumber = screen.deviceDescription[
+            NSDeviceDescriptionKey("NSScreenNumber")
+        ] as? NSNumber else {
+            return nil
+        }
+        let physicalWidth = CGDisplayScreenSize(CGDirectDisplayID(screenNumber.uint32Value)).width
+        guard physicalWidth > 0 else { return nil }
+        return screen.frame.width / physicalWidth
     }
 }
 

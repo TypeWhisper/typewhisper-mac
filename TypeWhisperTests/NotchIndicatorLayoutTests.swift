@@ -18,6 +18,17 @@ final class NotchIndicatorLayoutTests: XCTestCase {
         XCTAssertEqual(NotchIndicatorLayout.closedWidth(hasNotch: true, notchWidth: 185), 305)
     }
 
+    func testReservedNotchWidthLeavesRoomForTheExpandedSystemIsland() {
+        // A classic notch is wider than the expanded island at default and larger-text scaling.
+        XCTAssertEqual(NotchIndicatorLayout.reservedNotchWidth(cutoutWidth: 189, pointsPerMillimeter: 5), 189)
+        XCTAssertEqual(NotchIndicatorLayout.reservedNotchWidth(cutoutWidth: 144, pointsPerMillimeter: 1147 / 302.4), 144)
+        // A Dynamic Island cutout reserves the 145-pt island plus clearance (#2001),
+        // and more points at a denser scaling.
+        XCTAssertEqual(NotchIndicatorLayout.reservedNotchWidth(cutoutWidth: 100, pointsPerMillimeter: 5), 161)
+        XCTAssertEqual(NotchIndicatorLayout.reservedNotchWidth(cutoutWidth: 100, pointsPerMillimeter: nil), 161)
+        XCTAssertEqual(NotchIndicatorLayout.reservedNotchWidth(cutoutWidth: 120, pointsPerMillimeter: 1800 / 302.4), 189)
+    }
+
     func testClosedWidthUsesFallbackWithoutNotch() {
         XCTAssertEqual(NotchIndicatorLayout.closedWidth(hasNotch: false, notchWidth: 0), 200)
     }
