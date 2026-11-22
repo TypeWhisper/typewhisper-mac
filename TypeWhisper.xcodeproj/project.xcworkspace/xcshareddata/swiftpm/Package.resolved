@@ -33,7 +33,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/TypeWhisper/mlx-audio-swift.git",
       "state" : {
-        "revision" : "4cd7b792e9d0ab6d8af30119b4de16b303f67334"
+        "revision" : "2f019d8ec7b603dcff0257a879322a64e60576a0"
       }
     },
     {

@@ -28,6 +28,9 @@ holding two large models in memory. If validation fails, select/load the previou
 model again. Canary checks cancellation between shards and individual tensor
 loads; an in-progress native tensor read must finish before cancellation returns.
 Importing a model does not add support for a new architecture.
+Qwen3 ASR loads MLX conversions, Qwen's original checkpoints and native
+Transformers checkpoints such as `Qwen/Qwen3-ASR-1.7B-hf`, whose weights it
+renames and whose convolution kernels it transposes while loading.
 Canary, including `KIEFERSA/Sophea-Canary-ASR-mlx`, is supported by the Canary ASR
 plugin. Select an explicit source language in Dictation settings: **Greek** for
 Greek Sophea audio and **English** for English audio. The Canary plugin does not
