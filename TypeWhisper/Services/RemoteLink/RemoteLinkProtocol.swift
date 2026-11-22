@@ -475,13 +475,24 @@ struct RemoteLinkPairingInvitation: Equatable, Sendable {
         self.init(serverID: serverID, secret: secret, name: values["n"])
     }
 
+    /// Percent encoding can make a long non-ASCII name exceed
+    /// `maxPayloadLength`, so the name is shortened until the payload fits.
     var payload: String {
+        var name = self.name
+        while true {
+            let payload = Self.payload(serverID: serverID, secret: secret, name: name)
+            guard payload.utf8.count > Self.maxPayloadLength, let longName = name else { return payload }
+            name = longName.count > 1 ? String(longName.dropLast()) : nil
+        }
+    }
+
+    private static func payload(serverID: String, secret: Data, name: String?) -> String {
         var components = URLComponents()
-        components.scheme = Self.scheme
-        components.path = Self.version
+        components.scheme = scheme
+        components.path = version
         var items = [
             URLQueryItem(name: "id", value: serverID),
-            URLQueryItem(name: "s", value: Self.encodeBase64URL(secret)),
+            URLQueryItem(name: "s", value: encodeBase64URL(secret)),
         ]
         if let name {
             items.append(URLQueryItem(name: "n", value: name))
