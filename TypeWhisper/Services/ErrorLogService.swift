@@ -436,6 +436,7 @@ private struct DiagnosticsReport: Encodable {
     struct ErrorEntrySnapshot: Encodable {
         let timestamp: Date
         let category: String
+        let code: String?
         let message: String
     }
 
@@ -477,8 +478,8 @@ final class ErrorLogService: ObservableObject {
         loadEntries()
     }
 
-    func addEntry(message: String, category: String = "general") {
-        let entry = ErrorLogEntry(message: message, category: category)
+    func addEntry(message: String, category: String = "general", code: String? = nil) {
+        let entry = ErrorLogEntry(message: message, category: category, code: code)
         entries.insert(entry, at: 0)
 
         if entries.count > Self.maxEntries {
@@ -590,7 +591,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 11,
+            schemaVersion: 12,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -705,7 +706,7 @@ final class ErrorLogService: ObservableObject {
                 errorEntries: entries.count
             ),
             errors: entries.map {
-                .init(timestamp: $0.timestamp, category: $0.category, message: $0.message)
+                .init(timestamp: $0.timestamp, category: $0.category, code: $0.code, message: $0.message)
             }
         )
     }

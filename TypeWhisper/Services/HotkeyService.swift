@@ -478,6 +478,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             lock.withLock { port.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
         }
 
+        /// Whether the tap can hold keys back, and if not, whether it exists at all.
+        var suppressionState: EventTapSuppressionState {
+            lock.withLock {
+                guard let tap = port, CFMachPortIsValid(tap) else { return .missing }
+                return CGEvent.tapIsEnabled(tap: tap) ? .enabled : .disabled
+            }
+        }
+
         var isValid: Bool {
             lock.withLock { port.map { CFMachPortIsValid($0) } ?? false }
         }
@@ -855,17 +863,57 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 #endif
     var secureInputEnabledProvider: () -> Bool = { IsSecureEventInputEnabled() }
 
+    nonisolated enum EventTapSuppressionState: Sendable {
+        case enabled, disabled, missing
+    }
+
+    /// Why keys cannot be held back from other apps. The raw values are privacy-safe codes for
+    /// logs and support diagnostics.
+    nonisolated enum KeySuppressionUnavailableReason: String, Sendable {
+        case accessibilityNotGranted = "accessibility-not-granted"
+        case secureInput = "secure-input"
+        /// No usable tap: creation failed, its port died or monitoring is suspended.
+        case eventTapUnavailable = "event-tap-unavailable"
+        /// The tap exists, but macOS switched it off or it is in a timeout backoff.
+        case eventTapDisabled = "event-tap-disabled"
+        /// The App Store edition only has a listen-only tap.
+        case listenOnlyEventTap = "listen-only-event-tap"
+
+        var isEventTapFailure: Bool {
+            self == .eventTapUnavailable || self == .eventTapDisabled
+        }
+    }
+
     var canSuppressExternalKeyEvents: Bool {
+        keySuppressionUnavailableReason == nil
+    }
+
+    /// Nil while keys can be held back. Asks for the permission only when the tap is not
+    /// usable, so the recording-time check stays as cheap as before.
+    var keySuppressionUnavailableReason: KeySuppressionUnavailableReason? {
 #if APPSTORE
         // A listen-only tap cannot hold back events from other apps.
-        return false
+        return .listenOnlyEventTap
 #else
-        guard !secureInputEnabledProvider() else { return false }
+        let secureInputEnabled = secureInputEnabledProvider()
+        let tapState = eventTapSuppressionState
+        if tapState == .enabled {
+            return secureInputEnabled ? .secureInput : nil
+        }
+        // Without the permission no tap can exist, so a missing tap says nothing more.
+        if !accessibilityTrustedProvider() { return .accessibilityNotGranted }
+        if secureInputEnabled { return .secureInput }
+        return tapState == .missing ? .eventTapUnavailable : .eventTapDisabled
+#endif
+    }
+
+    private var eventTapSuppressionState: EventTapSuppressionState {
 #if DEBUG
-        if let externalKeySuppressionAvailableOverride { return externalKeySuppressionAvailableOverride }
+        if let externalKeySuppressionAvailableOverride {
+            return externalKeySuppressionAvailableOverride ? .enabled : .disabled
+        }
 #endif
-        return eventTapHandle.isEnabled
-#endif
+        return eventTapHandle.suppressionState
     }
 
 #if DEBUG
@@ -1858,21 +1906,50 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 self.resyncHotkeyStateAfterEventTapRecovery()
                 self.recoverReleasedActiveHotkeyAfterEventTapDisable()
             case .retrySetup:
-                guard !self.eventTapHandle.isValid, self.accessibilityTrustedProvider() else { return }
-                // Preserve Carbon registrations, local monitoring, pending holds,
-                // deduplication, and press latches even during a permission upgrade.
-                self.tearDownEventTap()
-#if APPSTORE
-                _ = self.setupEventTap(includeMouse: self.needsMouseEventMonitoring)
-#else
-                _ = self.setupEventTap(includeMouse: self.needsSuppressingMouseEventTap)
-                if !self.hasEventMonitorFallback {
-                    self.installGlobalEventMonitor(includeMouse: self.needsMouseEventMonitoring)
-                }
-#endif
+                guard self.replaceUnusableEventTap() else { return }
                 self.resyncHotkeyStateAfterEventTapRecovery()
                 self.recoverReleasedActiveHotkeyAfterEventTapDisable()
             }
+        }
+    }
+
+    /// Creates a new tap when the current one is missing or its port died. Returns false when
+    /// there is nothing to replace or no permission to create one.
+    private func replaceUnusableEventTap() -> Bool {
+        guard !eventTapHandle.isValid, accessibilityTrustedProvider() else { return false }
+        // Preserve Carbon registrations, local monitoring, pending holds,
+        // deduplication, and press latches even during a permission upgrade.
+        tearDownEventTap()
+#if APPSTORE
+        _ = setupEventTap(includeMouse: needsMouseEventMonitoring)
+#else
+        _ = setupEventTap(includeMouse: needsSuppressingMouseEventTap)
+        if !hasEventMonitorFallback {
+            installGlobalEventMonitor(includeMouse: needsMouseEventMonitoring)
+        }
+#endif
+        return true
+    }
+
+    /// Runs the next watchdog pass now, so a recording that needs the tap does not wait up to
+    /// two seconds for it. Keeps a timeout backoff in place and does nothing while monitoring
+    /// is suspended. Hotkey state is reconciled on the next main-queue turn, as the watchdog
+    /// does, so a missed release never stops a dictation from inside its own start.
+    func recoverEventTapNow() {
+        guard let generation = eventTapHandle.currentWatchdogGeneration else { return }
+        switch eventTapHandle.watchdogTick(generation: generation) {
+        case .none:
+            return
+        case .recovered:
+            logger.warning("CGEventTap was found disabled on demand, re-enabling")
+        case .retrySetup:
+            guard replaceUnusableEventTap() else { return }
+            logger.warning("CGEventTap was missing on demand, replaced: enabled=\(self.eventTapHandle.isEnabled, privacy: .public)")
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.eventTapHandle.isCurrentWatchdog(generation) else { return }
+            self.resyncHotkeyStateAfterEventTapRecovery()
+            self.recoverReleasedActiveHotkeyAfterEventTapDisable()
         }
     }
 
