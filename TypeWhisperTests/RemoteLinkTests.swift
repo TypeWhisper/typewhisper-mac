@@ -969,6 +969,101 @@ final class RemoteLinkTests: XCTestCase {
         XCTAssertTrue(store.devices().isEmpty)
     }
 
+    func testFailedKeyReplacementKeepsThePreviousKey() throws {
+        // Like `KeychainService.save`, a failing save has already deleted the old item.
+        let keychain = RemoteLinkLockedValue<[String: String]>([:])
+        let failingSaves = RemoteLinkLockedValue(0)
+        let store = RemoteLinkDeviceStore(
+            defaults: UserDefaults(suiteName: "RemoteLinkTests-\(UUID().uuidString)")!,
+            loadKey: { keychain.get()[$0] },
+            saveKey: { id, key in
+                var values = keychain.get()
+                values[id] = nil
+                keychain.set(values)
+                if failingSaves.get() > 0 {
+                    failingSaves.set(failingSaves.get() - 1)
+                    throw KeychainError.saveFailed(-1)
+                }
+                values[id] = key
+                keychain.set(values)
+            },
+            deleteKey: { id in
+                var values = keychain.get()
+                values[id] = nil
+                keychain.set(values)
+            }
+        )
+        let deviceID = UUID().uuidString
+        let oldKey = SymmetricKey(size: .bits256)
+        try store.addDevice(RemoteLinkDevice(id: deviceID, name: "Old", pairedAt: Date(), lastSeenAt: nil), key: oldKey)
+        let new = RemoteLinkDevice(id: deviceID, name: "New", pairedAt: Date(), lastSeenAt: nil)
+
+        failingSaves.set(1)
+        XCTAssertThrowsError(try store.addDevice(new, key: SymmetricKey(size: .bits256)))
+        XCTAssertEqual(store.pairingKey(for: deviceID), oldKey)
+        XCTAssertEqual(store.devices().map(\.name), ["Old"])
+
+        // The Keychain keeps failing, also for the old key: no device is
+        // left listed without a key.
+        failingSaves.set(2)
+        XCTAssertThrowsError(try store.addDevice(new, key: SymmetricKey(size: .bits256)))
+        XCTAssertTrue(store.devices().isEmpty)
+        XCTAssertNil(keychain.get()[deviceID])
+    }
+
+    func testOverlappingPairingsOfOneDeviceKeepTheOriginalPairing() async throws {
+        // A Keychain that lets the device pair again by QR code while the
+        // code pairing stores its key, and then fails that store.
+        let keychain = RemoteLinkLockedValue<[String: String]>([:])
+        let duringSave = RemoteLinkLockedValue<(@Sendable () -> Void)?>(nil)
+        let store = RemoteLinkDeviceStore(
+            defaults: UserDefaults(suiteName: "RemoteLinkTests-\(UUID().uuidString)")!,
+            loadKey: { keychain.get()[$0] },
+            saveKey: { id, key in
+                if let hook = duringSave.get() {
+                    duringSave.set(nil)
+                    hook()
+                    throw KeychainError.saveFailed(-1)
+                }
+                var values = keychain.get()
+                values[id] = key
+                keychain.set(values)
+            },
+            deleteKey: { id in
+                var values = keychain.get()
+                values[id] = nil
+                keychain.set(values)
+            }
+        )
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Studio Mac" }, advertises: false)
+        try server.start()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        let deviceID = UUID().uuidString
+        let originalKey = SymmetricKey(size: .bits256)
+        try store.addDevice(RemoteLinkDevice(id: deviceID, name: "Original", pairedAt: Date(), lastSeenAt: nil), key: originalKey)
+        server.openPairing { _ in true }
+        let secret = try XCTUnwrap(server.pairingInvitation).secret
+
+        let secretResult = RemoteLinkLockedValue<PairingResult?>(nil)
+        duringSave.set {
+            let done = DispatchSemaphore(value: 0)
+            Task {
+                secretResult.set(try? await Self.pair(endpoint: endpoint, deviceID: deviceID, methods: Self.secretMethods, secret: secret))
+                done.signal()
+            }
+            _ = done.wait(timeout: .now() + 3)
+        }
+        let code = try await Self.pair(endpoint: endpoint, deviceID: deviceID)
+
+        XCTAssertNil(code.key)
+        XCTAssertNil(duringSave.get(), "The code pairing must have reached its store")
+        XCTAssertEqual(secretResult.get()?.error, .remoteError("pairing-busy"))
+        XCTAssertEqual(store.pairingKey(for: deviceID), originalKey)
+        XCTAssertEqual(store.devices().map(\.name), ["Original"])
+        XCTAssertEqual(server.pairingInvitation?.secret, secret, "A busy device must not use up the QR code")
+    }
+
     func testRemovalDuringARollbackIsNotUndone() throws {
         // A Keychain whose read inside the rollback lets a removal from
         // another thread try to run before the old pairing is put back.
@@ -1215,7 +1310,7 @@ final class RemoteLinkTests: XCTestCase {
         throw RemoteLinkError.timedOut
     }
 
-    private struct PairingResult {
+    private struct PairingResult: Sendable {
         var key: SymmetricKey?
         var code: String?
         var error: RemoteLinkError?

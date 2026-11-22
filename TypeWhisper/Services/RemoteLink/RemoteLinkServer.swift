@@ -109,7 +109,22 @@ final class RemoteLinkDeviceStore: @unchecked Sendable {
 
     /// Call with `writeLock` held.
     private func addDeviceLocked(_ device: RemoteLinkDevice, key: SymmetricKey) throws {
-        try saveKey(device.id, key.withUnsafeBytes { Data($0) }.base64EncodedString())
+        let previousKey = loadKey(device.id)
+        do {
+            try saveKey(device.id, key.withUnsafeBytes { Data($0) }.base64EncodedString())
+        } catch {
+            // `KeychainService.save` deletes the old item before it adds the
+            // new one, so a failed save can leave the device without a key.
+            // The previous key is put back; if the Keychain keeps failing,
+            // the device is no longer listed, since it cannot connect anyway.
+            if let previousKey, (try? saveKey(device.id, previousKey)) == nil {
+                lock.withLock {
+                    store(storedDevices().filter { $0.id != device.id })
+                }
+                deleteKey(device.id)
+            }
+            throw error
+        }
         lock.withLock {
             var devices = storedDevices().filter { $0.id != device.id }
             devices.append(device)
@@ -249,6 +264,10 @@ final class RemoteLinkServer: @unchecked Sendable {
     private var secretAttempts: [UUID: RemoteLinkConnection] = [:]
     /// Hosts whose secret attempt failed, with the end of their lockout.
     private var lockedOutPairingHosts: [String: Date] = [:]
+    /// Devices whose pairing is being stored and answered. A second pairing
+    /// of the same device in that time could roll back to the first one's
+    /// key instead of the original, so it is answered with pairing-busy.
+    private var devicesBeingStored: Set<String> = []
 
     private struct PairingSecret {
         let value: Data
@@ -795,6 +814,12 @@ final class RemoteLinkServer: @unchecked Sendable {
             return
         }
 
+        guard beginStoringPairing(of: deviceID) else {
+            try? await connection.send(.error(.pairingBusy))
+            return
+        }
+        defer { endStoringPairing(of: deviceID) }
+
         let device = RemoteLinkDevice(id: deviceID, name: deviceName, pairedAt: Date(), lastSeenAt: nil)
         let replaced = try store.addDevice(device, key: pairingKey)
         do {
@@ -914,6 +939,13 @@ final class RemoteLinkServer: @unchecked Sendable {
         // From here on the device has proved the secret, so nothing that
         // follows locks it out.
 
+        // Before the secret is burnt, so a busy device keeps a usable QR code.
+        guard beginStoringPairing(of: deviceID) else {
+            try? await connection.send(.error(.pairingBusy))
+            return
+        }
+        defer { endStoringPairing(of: deviceID) }
+
         // Burns the secret, so only one device pairs with it. The new
         // generation also keeps a code request that is still waiting from
         // storing its device.
@@ -968,6 +1000,16 @@ final class RemoteLinkServer: @unchecked Sendable {
             pending.connection.close()
             pending.task.cancel()
         }
+    }
+
+    /// Claims the device ID from storing its pairing until the approval was
+    /// sent or rolled back.
+    private func beginStoringPairing(of deviceID: String) -> Bool {
+        lock.withLock { devicesBeingStored.insert(deviceID).inserted }
+    }
+
+    private func endStoringPairing(of deviceID: String) {
+        lock.withLock { _ = devicesBeingStored.remove(deviceID) }
     }
 
     /// Locks the host out, but only for the sheet that admitted the attempt.
