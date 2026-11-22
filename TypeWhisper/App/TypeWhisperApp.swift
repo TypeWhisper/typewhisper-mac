@@ -1043,6 +1043,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.presentInitialWindow(isNormalLaunch: isNormalLaunch)
         }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--remote-link-open-pairing") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.openRemoteLinkPairingForDebugging()
+            }
+        }
+        #endif
 
         // Observe appearance preference changes
         menuBarIconObserver = UserDefaults.standard.observe(\.showMenuBarIcon, options: [.new]) { [weak self] _, _ in
@@ -1244,6 +1251,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // An unfocused overview still counts as an open window for Dock policy.
         applyActivationPolicy()
     }
+
+    #if DEBUG
+    /// Debug builds only: `--remote-link-open-pairing` turns on Remote Link
+    /// and opens the pairing sheet with its QR code, so it can be shown
+    /// without clicking. The secret stays in memory like a normal pairing.
+    private func openRemoteLinkPairingForDebugging() {
+        // `--debug-premium` grants Premium in memory for this run, like the
+        // screenshot fixtures, so a dev build without an account can pair.
+        if ProcessInfo.processInfo.arguments.contains("--debug-premium") {
+            ServiceContainer.shared.premiumAccountService.prepareScreenshotFixture(hasPremiumAccess: true)
+        }
+        let remoteLink = ServiceContainer.shared.remoteLinkViewModel
+        // Without Premium the listener never starts, so the setting is left
+        // as it was and no QR code is shown that no phone could use.
+        guard remoteLink.hasPremiumAccess else {
+            fputs("--remote-link-open-pairing: Remote Link needs Premium; add --debug-premium.\n", stderr)
+            return
+        }
+        remoteLink.setEnabled(true)
+        PremiumSettingsWindowManager.shared.present(.pairedDevices)
+        openRemoteLinkPairingWhenListening(remainingAttempts: 40)
+    }
+
+    private func openRemoteLinkPairingWhenListening(remainingAttempts: Int) {
+        let remoteLink = ServiceContainer.shared.remoteLinkViewModel
+        if remoteLink.isRunning {
+            remoteLink.beginPairing()
+            return
+        }
+        guard remainingAttempts > 0 else {
+            let reason = remoteLink.errorMessage ?? "the listener did not start"
+            fputs("--remote-link-open-pairing: pairing not opened, \(reason).\n", stderr)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.openRemoteLinkPairingWhenListening(remainingAttempts: remainingAttempts - 1)
+        }
+    }
+    #endif
 
     private func presentInitialWindow(isNormalLaunch: Bool) {
         guard let whatsNew = WhatsNewCoordinator.shared else { return }

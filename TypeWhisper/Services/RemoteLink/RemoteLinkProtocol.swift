@@ -16,6 +16,10 @@ import Foundation
 // Each session mixes a fresh X25519 exchange (hello and welcome carry one
 // ephemeral public key each) into the pairing key, so traffic recorded today
 // stays private even if the pairing key leaks later.
+//
+// Pairing methods (docs/specs/remote-link-pairing-v2.md in the iOS repository)
+// are optional handshake fields on top of version 1. A peer that does not know
+// them ignores them, so every method falls back to comparing the code.
 
 enum RemoteLink {
     static let protocolVersion = 1
@@ -23,11 +27,15 @@ enum RemoteLink {
     static let txtVersionKey = "v"
     static let txtServerIDKey = "id"
     static let txtPairingKey = "pair"
+    /// Comma-separated pairing methods the Mac offers. Unauthenticated, so it
+    /// only decides what the iPhone suggests, never what it accepts.
+    static let txtPairingMethodsKey = "pm"
 
     static let maxHandshakePayloadSize = 16 * 1024
     static let maxChunkSize = 1 << 20
     static let maxMessageSize = 300 * 1024 * 1024
     static let nonceSize = 32
+    static let pairingSecretSize = 16
 
     static let maxSealedPayloadSize = maxChunkSize + 1 + 16
 }
@@ -46,6 +54,17 @@ enum RemoteLinkError: Error, Equatable, Sendable {
     case connectionClosed
     case timedOut
     case connectionFailed(String)
+}
+
+/// How the two users confirm a pairing. The Mac picks one per attempt.
+enum RemoteLinkPairingMethod: String, Sendable, CaseIterable {
+    /// Both devices show the code, the user approves on both. A missing
+    /// `method` means this one.
+    case compare
+    /// The Mac asks for the code the iPhone shows.
+    case codeEntry = "code-entry"
+    /// The iPhone scanned the Mac's one-time secret; both prove they know it.
+    case secret
 }
 
 // MARK: - Frames
@@ -126,6 +145,12 @@ struct RemoteLinkHandshake: Codable, Equatable, Sendable {
     var commitment: Data?
     var proof: Data?
     var code: String?
+    /// `pair-request`: the pairing methods the client can use in this attempt.
+    var methods: [String]?
+    /// `pair-challenge`: the pairing method the server chose.
+    var method: String?
+    /// `pair-confirm` and `pair-approved`: proof of the scanned secret.
+    var secretProof: Data?
 
     init(
         type: MessageType,
@@ -137,7 +162,10 @@ struct RemoteLinkHandshake: Codable, Equatable, Sendable {
         key: Data? = nil,
         commitment: Data? = nil,
         proof: Data? = nil,
-        code: String? = nil
+        code: String? = nil,
+        methods: [String]? = nil,
+        method: String? = nil,
+        secretProof: Data? = nil
     ) {
         self.type = type
         self.version = version
@@ -149,6 +177,9 @@ struct RemoteLinkHandshake: Codable, Equatable, Sendable {
         self.commitment = commitment
         self.proof = proof
         self.code = code
+        self.methods = methods
+        self.method = method
+        self.secretProof = secretProof
     }
 
     static func error(_ code: ErrorCode) -> RemoteLinkHandshake {
@@ -374,6 +405,133 @@ struct RemoteLinkPairingTranscript: Sendable {
             using: key
         )
     }
+
+    /// Proves knowledge of the scanned secret for exactly this transcript.
+    /// The digest covers both public keys, so a proof made for a connection
+    /// with someone in the middle is worthless on the other leg.
+    func secretProof(_ role: RemoteLinkRole, secret: Data) -> Data {
+        Data(HMAC<SHA256>.authenticationCode(
+            for: RemoteLinkCrypto.fields([Data(RemoteLinkCrypto.secretProofLabel(role).utf8), digest]),
+            using: SymmetricKey(data: secret)
+        ))
+    }
+
+    func isValidSecretProof(_ proof: Data, role: RemoteLinkRole, secret: Data) -> Bool {
+        secret.count == RemoteLink.pairingSecretSize && HMAC<SHA256>.isValidAuthenticationCode(
+            proof,
+            authenticating: RemoteLinkCrypto.fields([Data(RemoteLinkCrypto.secretProofLabel(role).utf8), digest]),
+            using: SymmetricKey(data: secret)
+        )
+    }
+}
+
+/// What the Mac's pairing QR code carries:
+/// `typewhisper-pair:1?id=<server ID>&s=<secret, base64url without padding>&n=<Mac name>`.
+/// No app registers the scheme; only the in-app scanner reads it.
+struct RemoteLinkPairingInvitation: Equatable, Sendable {
+    static let scheme = "typewhisper-pair"
+    static let version = "1"
+    static let maxPayloadLength = 512
+    static let maxNameLength = 64
+
+    let serverID: String
+    let secret: Data
+    /// For display only.
+    let name: String?
+
+    init(serverID: String, secret: Data, name: String? = nil) {
+        self.serverID = serverID
+        self.secret = secret
+        self.name = Self.sanitizedName(name)
+    }
+
+    static func randomSecret() -> Data {
+        SymmetricKey(size: SymmetricKeySize(bitCount: RemoteLink.pairingSecretSize * 8)).withUnsafeBytes { Data($0) }
+    }
+
+    init?(payload: String) {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.utf8.count <= Self.maxPayloadLength,
+              let components = URLComponents(string: trimmed),
+              components.scheme?.lowercased() == Self.scheme,
+              components.host == nil,
+              components.path == Self.version else {
+            return nil
+        }
+        var values: [String: String] = [:]
+        for item in components.queryItems ?? [] {
+            // A repeated key is ambiguous; reject it instead of picking one.
+            guard values[item.name] == nil, let value = item.value else { return nil }
+            values[item.name] = value
+        }
+        guard let serverID = values["id"],
+              Self.isValidServerID(serverID),
+              let encoded = values["s"],
+              let secret = Self.decodeBase64URL(encoded),
+              secret.count == RemoteLink.pairingSecretSize,
+              Self.encodeBase64URL(secret) == encoded else {
+            return nil
+        }
+        self.init(serverID: serverID, secret: secret, name: values["n"])
+    }
+
+    /// Percent encoding can make a long non-ASCII name exceed
+    /// `maxPayloadLength`, so the name is shortened until the payload fits.
+    var payload: String {
+        var name = self.name
+        while true {
+            let payload = Self.payload(serverID: serverID, secret: secret, name: name)
+            guard payload.utf8.count > Self.maxPayloadLength, let longName = name else { return payload }
+            name = longName.count > 1 ? String(longName.dropLast()) : nil
+        }
+    }
+
+    private static func payload(serverID: String, secret: Data, name: String?) -> String {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.path = version
+        var items = [
+            URLQueryItem(name: "id", value: serverID),
+            URLQueryItem(name: "s", value: encodeBase64URL(secret)),
+        ]
+        if let name {
+            items.append(URLQueryItem(name: "n", value: name))
+        }
+        components.queryItems = items
+        return components.string ?? ""
+    }
+
+    static func isValidServerID(_ serverID: String) -> Bool {
+        (1...64).contains(serverID.utf8.count) && serverID.utf8.allSatisfy { byte in
+            (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A) || byte == 0x2D
+        }
+    }
+
+    static func encodeBase64URL(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    static func decodeBase64URL(_ text: String) -> Data? {
+        guard !text.isEmpty, text.utf8.allSatisfy({ byte in
+            (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A) || byte == 0x2D || byte == 0x5F
+        }) else {
+            return nil
+        }
+        var base64 = text.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        return Data(base64Encoded: base64)
+    }
+
+    private static func sanitizedName(_ name: String?) -> String? {
+        let cleaned = (name ?? "")
+            .components(separatedBy: .controlCharacters)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : String(cleaned.prefix(maxNameLength))
+    }
 }
 
 enum RemoteLinkCrypto {
@@ -383,6 +541,13 @@ enum RemoteLinkCrypto {
     }
 
     static let sealedAAD = Data("typewhisper-remote-link-v1 sealed".utf8)
+
+    static func secretProofLabel(_ role: RemoteLinkRole) -> String {
+        switch role {
+        case .client: "typewhisper-remote-link-v1 secret client"
+        case .server: "typewhisper-remote-link-v1 secret server"
+        }
+    }
 
     static func commitment(clientKey: Data, clientNonce: Data) -> Data {
         Data(SHA256.hash(data: fields([Data("typewhisper-remote-link-v1 commit".utf8), clientKey, clientNonce])))
