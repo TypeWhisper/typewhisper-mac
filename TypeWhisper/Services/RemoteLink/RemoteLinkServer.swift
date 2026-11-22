@@ -821,7 +821,14 @@ final class RemoteLinkServer: @unchecked Sendable {
         defer { endStoringPairing(of: deviceID) }
 
         let device = RemoteLinkDevice(id: deviceID, name: deviceName, pairedAt: Date(), lastSeenAt: nil)
-        let replaced = try store.addDevice(device, key: pairingKey)
+        let replaced: RemoteLinkDeviceStore.Pairing?
+        do {
+            replaced = try store.addDevice(device, key: pairingKey)
+        } catch {
+            // A failed save can drop a device whose key could not be restored.
+            onDevicesChange?()
+            throw error
+        }
         do {
             try await connection.send(RemoteLinkHandshake(
                 type: .pairApproved,
@@ -988,6 +995,8 @@ final class RemoteLinkServer: @unchecked Sendable {
             // The used secret stays invalid, since the device may have seen
             // the approval; the sheet that is still open gets a new QR code.
             renewPairingSecretAfterFailure(session: session)
+            // A failed save can drop a device whose key could not be restored.
+            onDevicesChange?()
             throw error
         }
         onDevicesChange?()
