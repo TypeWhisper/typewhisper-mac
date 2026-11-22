@@ -249,12 +249,13 @@ private struct RemoteLinkPairingSheet: View {
         ServiceContainer.shared.accessibilityAnnouncementService.announce(message)
     }
 
-    /// The QR code stays visible while a code request waits, so a device
-    /// that only sends requests cannot hide it.
+    /// The QR code stays visible while a code request waits or after one
+    /// failed, so a device that only sends requests cannot hide it.
     private var showsQRCode: Bool {
         switch viewModel.pairingState {
         case .closed, .waiting, .confirming: true
-        case .finishing, .paired, .failed: false
+        case .failed: viewModel.pairingInvitation != nil
+        case .finishing, .paired: false
         }
     }
 
@@ -298,47 +299,66 @@ private struct RemoteLinkPairingSheet: View {
 
     static func listFallbackText(_ computerName: String) -> String {
         localizedAppText(
-            "No QR scanner in TypeWhisper on your device? Choose “\(computerName)” under Settings → Mac there and compare the code.",
-            de: "Kein QR-Scanner in TypeWhisper auf deinem Gerät? Wähle dort unter Einstellungen → Mac „\(computerName)“ und vergleiche den Code.",
-            ja: "デバイスの TypeWhisper に QR スキャナがない場合は、設定 → Mac で「\(computerName)」を選び、コードを照合してください。",
-            zh: "设备上的 TypeWhisper 没有二维码扫描器？请在其“设置”→“Mac”中选择“\(computerName)”，然后核对代码。",
-            es: "¿No hay escáner QR en TypeWhisper en tu dispositivo? Elige “\(computerName)” en Ajustes → Mac y compara el código."
+            "Can’t scan the code? In TypeWhisper on your device, choose “\(computerName)” under Settings → Mac and compare the code.",
+            de: "Du kannst den Code nicht scannen? Wähle in TypeWhisper auf deinem Gerät unter Einstellungen → Mac „\(computerName)“ und vergleiche den Code.",
+            ja: "コードをスキャンできない場合は、デバイスの TypeWhisper で設定 → Mac から「\(computerName)」を選び、コードを照合してください。",
+            zh: "无法扫描此二维码？请在设备上的 TypeWhisper 中，于“设置”→“Mac”中选择“\(computerName)”，然后核对代码。",
+            es: "¿No puedes escanear el código? En TypeWhisper en tu dispositivo, elige “\(computerName)” en Ajustes → Mac y compara el código."
         )
     }
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.pairingState {
-        case .closed, .waiting, .confirming:
-            HStack(alignment: .center, spacing: 20) {
-                if let invitation = viewModel.pairingInvitation {
-                    RemoteLinkPairingQRCode(payload: invitation.payload)
+        if showsQRCode {
+            qrCodeContent
+        } else {
+            statusContent
+        }
+    }
+
+    private var qrCodeContent: some View {
+        HStack(alignment: .center, spacing: 20) {
+            if let invitation = viewModel.pairingInvitation {
+                RemoteLinkPairingQRCode(payload: invitation.payload)
+            } else {
+                ProgressView()
+                    .frame(width: RemoteLinkPairingQRCode.maxSide, height: RemoteLinkPairingQRCode.maxSide)
+                    .accessibilityLabel(localizedAppText(
+                        "Waiting for a device",
+                        de: "Warte auf ein Gerät",
+                        ja: "デバイスを待っています",
+                        zh: "正在等待设备"
+                    ))
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                if case .confirming(let request) = viewModel.pairingState {
+                    codeRequest(request)
                 } else {
-                    ProgressView()
-                        .frame(width: RemoteLinkPairingQRCode.maxSide, height: RemoteLinkPairingQRCode.maxSide)
-                        .accessibilityLabel(localizedAppText(
-                            "Waiting for a device",
-                            de: "Warte auf ein Gerät",
-                            ja: "デバイスを待っています",
-                            zh: "正在等待设备"
-                        ))
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    if case .confirming(let request) = viewModel.pairingState {
-                        codeRequest(request)
-                    } else {
-                        Text(viewModel.pairingInvitation?.name ?? viewModel.computerName)
-                            .font(.title3.weight(.semibold))
-                        Text(Self.scanText)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(Self.listFallbackText(viewModel.computerName))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                    if viewModel.pairingState == .failed {
+                        // A failed code request; the QR code still works.
+                        Label(Self.failedText, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    Text(viewModel.pairingInvitation?.name ?? viewModel.computerName)
+                        .font(.title3.weight(.semibold))
+                    Text(Self.scanText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(Self.listFallbackText(viewModel.computerName))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var statusContent: some View {
+        switch viewModel.pairingState {
+        case .closed, .waiting, .confirming:
+            EmptyView()
         case .finishing:
             VStack(spacing: 12) {
                 ProgressView()
@@ -420,7 +440,7 @@ private struct RemoteLinkPairingSheet: View {
                 viewModel.endPairing()
             }
             Button(localizedAppText("Try Again", de: "Erneut versuchen", ja: "再試行", zh: "重试")) {
-                viewModel.beginPairing()
+                viewModel.retryPairing()
             }
             .keyboardShortcut(.defaultAction)
         case .closed, .waiting, .finishing:
@@ -447,26 +467,46 @@ private struct RemoteLinkPairingQRCode: View {
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
 
     var body: some View {
-        Group {
-            if let image = Self.image(for: payload) {
-                Image(nsImage: image)
-                    .interpolation(.none)
-            } else {
-                Color.clear
-                    .frame(width: Self.maxSide, height: Self.maxSide)
+        if let image = Self.image(for: payload) {
+            Image(nsImage: image)
+                .interpolation(.none)
+                .padding(16)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isImage)
+                .accessibilityLabel(Self.accessibilityText)
+        } else {
+            // The list on the device still pairs; the text beside says how.
+            VStack(spacing: 8) {
+                Image(systemName: "qrcode")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(localizedAppText(
+                    "The QR code could not be shown.",
+                    de: "Der QR-Code kann nicht angezeigt werden.",
+                    ja: "QR コードを表示できません。",
+                    zh: "无法显示二维码。",
+                    es: "No se puede mostrar el código QR."
+                ))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
             }
+            .padding(16)
+            .frame(width: Self.maxSide + 32, height: Self.maxSide + 32)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityElement(children: .combine)
         }
-        .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .ignore)
-        .accessibilityAddTraits(.isImage)
-        .accessibilityLabel(localizedAppText(
+    }
+
+    private static var accessibilityText: String {
+        localizedAppText(
             "Pairing QR code. Scan it with TypeWhisper on your phone or tablet under Settings → Mac → Scan QR Code.",
             de: "QR-Code zum Koppeln. Scanne ihn mit TypeWhisper auf deinem Smartphone oder Tablet unter Einstellungen → Mac → QR-Code scannen.",
             ja: "ペアリング用 QR コード。スマートフォンまたはタブレットの TypeWhisper で、設定 → Mac → QR コードをスキャン からスキャンしてください。",
             zh: "配对二维码。请在手机或平板电脑上的 TypeWhisper 中，通过“设置”→“Mac”→“扫描二维码”扫描它。",
             es: "Código QR de vinculación. Escanéalo con TypeWhisper en tu teléfono o tablet en Ajustes → Mac → Escanear código QR."
-        ))
+        )
     }
 
     static func image(for payload: String) -> NSImage? {

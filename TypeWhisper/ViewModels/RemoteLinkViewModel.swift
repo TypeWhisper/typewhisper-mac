@@ -34,6 +34,9 @@ final class RemoteLinkViewModel: ObservableObject {
 
     let computerName = RemoteLinkServer.computerName()
 
+    /// Paired devices are a Premium feature; without access the listener does not start.
+    var hasPremiumAccess: Bool { premiumAccess() }
+
     private let server: RemoteLinkServer
     private let defaults: UserDefaults
     private let premiumAccess: @MainActor () -> Bool
@@ -132,6 +135,16 @@ final class RemoteLinkViewModel: ObservableObject {
         guard case .confirming(let request) = pairingState else { return }
         pairingState = .finishing(request)
         resolveApproval(true)
+    }
+
+    /// After a failed code request the QR code is still valid, so the sheet
+    /// waits again without replacing it. Without one it opens pairing anew.
+    func retryPairing() {
+        if pairingInvitation != nil, server.pairingInvitation == pairingInvitation {
+            pairingState = .waiting
+        } else {
+            beginPairing()
+        }
     }
 
     func denyPairing() {

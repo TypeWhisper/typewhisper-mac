@@ -87,6 +87,26 @@ final class RemoteLinkDeviceStore: @unchecked Sendable {
         deleteKey(id)
     }
 
+    /// The stored pairing of a device, so a new pairing that fails can put it back.
+    func pairing(for deviceID: String) -> (device: RemoteLinkDevice, key: SymmetricKey)? {
+        guard let device = devices().first(where: { $0.id == deviceID }),
+              let key = pairingKey(for: deviceID) else {
+            return nil
+        }
+        return (device, key)
+    }
+
+    /// Undoes `addDevice` with `addedKey` while that write is still the
+    /// stored one: puts back the pairing it replaced, or forgets the device.
+    /// A newer pairing or a removal in between stays as it is.
+    func rollBack(deviceID: String, addedKey: SymmetricKey, previous: (device: RemoteLinkDevice, key: SymmetricKey)?) {
+        guard pairingKey(for: deviceID) == addedKey else { return }
+        if let previous, (try? addDevice(previous.device, key: previous.key)) != nil {
+            return
+        }
+        removeDevice(id: deviceID)
+    }
+
     func markSeen(id: String, at date: Date = Date()) {
         lock.withLock {
             var devices = storedDevices()
@@ -191,6 +211,9 @@ final class RemoteLinkServer: @unchecked Sendable {
     /// Changes whenever pairing opens or closes; a pairing that started under
     /// an older generation must not store its device.
     private var pairingGeneration = 0
+    /// Changes only when the pairing sheet opens or closes, unlike
+    /// `pairingGeneration`, so work of a closed sheet can tell it is stale.
+    private var pairingSession = 0
     private var pairingConnection: RemoteLinkConnection?
     /// The one-time secret of the QR code. Memory only: never logged, never
     /// written to disk or to the TXT record.
@@ -326,6 +349,7 @@ final class RemoteLinkServer: @unchecked Sendable {
         let listener = lock.withLock {
             pairingApprover = approver
             pairingGeneration += 1
+            pairingSession += 1
             lockedOutPairingHosts.removeAll()
             renewPairingSecretLocked()
             return self.listener
@@ -351,6 +375,7 @@ final class RemoteLinkServer: @unchecked Sendable {
         let (listener, connection, attempts) = lock.withLock {
             pairingApprover = nil
             pairingGeneration += 1
+            pairingSession += 1
             pairingSecret = nil
             let current = (self.listener, pairingConnection, Array(secretAttempts.values))
             pairingConnection = nil
@@ -590,7 +615,7 @@ final class RemoteLinkServer: @unchecked Sendable {
     }
 
     private enum SecretAttemptClaim {
-        case claimed(secret: PairingSecret, generation: Int, host: String)
+        case claimed(secret: PairingSecret, generation: Int, session: Int, host: String)
         case noSecret
         case lockedOut
         case busy
@@ -611,13 +636,14 @@ final class RemoteLinkServer: @unchecked Sendable {
         let methods = request.methods ?? []
         if methods.contains(RemoteLinkPairingMethod.secret.rawValue) {
             switch claimSecretAttempt(id: id, connection: connection) {
-            case .claimed(let secret, let generation, let host):
+            case .claimed(let secret, let generation, let session, let host):
                 try await serveSecretPairing(
                     request: request,
                     deviceID: deviceID,
                     commitment: commitment,
                     secret: secret,
                     generation: generation,
+                    session: session,
                     host: host,
                     connection: connection,
                     id: id
@@ -744,6 +770,7 @@ final class RemoteLinkServer: @unchecked Sendable {
         }
 
         let device = RemoteLinkDevice(id: deviceID, name: deviceName, pairedAt: Date(), lastSeenAt: nil)
+        let previous = store.pairing(for: deviceID)
         try store.addDevice(device, key: pairingKey)
         do {
             try await connection.send(RemoteLinkHandshake(
@@ -751,8 +778,9 @@ final class RemoteLinkServer: @unchecked Sendable {
                 proof: transcript.proof(.serverApproved, key: pairingKey)
             ))
         } catch {
-            // The iPhone never learns that pairing succeeded, so it keeps no key either.
-            store.removeDevice(id: deviceID)
+            // The device never learns that pairing succeeded, so it keeps no
+            // new key either; a pairing it had before stays valid.
+            store.rollBack(deviceID: deviceID, addedKey: pairingKey, previous: previous)
             throw error
         }
         pairedDevice = device
@@ -772,7 +800,7 @@ final class RemoteLinkServer: @unchecked Sendable {
             guard !isLockedOutLocked(id: id) else { return .lockedOut }
             guard secretAttempts.count < Self.maxSecretPairingAttempts else { return .busy }
             secretAttempts[id] = connection
-            return .claimed(secret: pairingSecret, generation: pairingGeneration, host: host)
+            return .claimed(secret: pairingSecret, generation: pairingGeneration, session: pairingSession, host: host)
         }
     }
 
@@ -796,63 +824,70 @@ final class RemoteLinkServer: @unchecked Sendable {
         commitment: Data,
         secret: PairingSecret,
         generation: Int,
+        session: Int,
         host: String,
         connection: RemoteLinkConnection,
         id: UUID
     ) async throws {
-        var locksOutHost = true
         defer {
-            lock.withLock {
-                secretAttempts[id] = nil
-                if locksOutHost {
-                    lockedOutPairingHosts[host] = Date().addingTimeInterval(pairingFailureLockout)
-                }
-            }
+            lock.withLock { secretAttempts[id] = nil }
         }
 
         let deviceName = Self.sanitizedDeviceName(request.name)
         let serverID = store.serverID
         let privateKey = Curve25519.KeyAgreement.PrivateKey()
         let serverNonce = RemoteLinkCrypto.randomNonce()
-        try await connection.send(RemoteLinkHandshake(
-            type: .pairChallenge,
-            serverID: serverID,
-            name: serverName(),
-            nonce: serverNonce,
-            key: privateKey.publicKey.rawRepresentation,
-            method: RemoteLinkPairingMethod.secret.rawValue
-        ))
+        let transcript: RemoteLinkPairingTranscript
+        let pairingKey: SymmetricKey
+        do {
+            try await connection.send(RemoteLinkHandshake(
+                type: .pairChallenge,
+                serverID: serverID,
+                name: serverName(),
+                nonce: serverNonce,
+                key: privateKey.publicKey.rawRepresentation,
+                method: RemoteLinkPairingMethod.secret.rawValue
+            ))
 
-        let reveal = try await connection.receiveHandshake(timeout: secretPairingStepTimeout).expecting(.pairReveal)
-        guard let clientKey = reveal.key,
-              let clientNonce = reveal.nonce,
-              clientNonce.count == RemoteLink.nonceSize,
-              RemoteLinkCrypto.commitment(clientKey: clientKey, clientNonce: clientNonce) == commitment else {
-            try? await connection.send(.error(.pairingFailed))
-            throw RemoteLinkError.commitmentMismatch
+            let reveal = try await connection.receiveHandshake(timeout: secretPairingStepTimeout).expecting(.pairReveal)
+            guard let clientKey = reveal.key,
+                  let clientNonce = reveal.nonce,
+                  clientNonce.count == RemoteLink.nonceSize,
+                  RemoteLinkCrypto.commitment(clientKey: clientKey, clientNonce: clientNonce) == commitment else {
+                lockOutSecretAttempt(host: host, session: session)
+                try? await connection.send(.error(.pairingFailed))
+                throw RemoteLinkError.commitmentMismatch
+            }
+
+            transcript = RemoteLinkPairingTranscript(
+                deviceID: deviceID,
+                serverID: serverID,
+                clientKey: clientKey,
+                serverKey: privateKey.publicKey.rawRepresentation,
+                clientNonce: clientNonce,
+                serverNonce: serverNonce
+            )
+            pairingKey = try transcript.pairingKey(privateKey: privateKey, peerKey: clientKey)
+
+            let confirm = try await connection.receiveHandshake(timeout: secretPairingStepTimeout).expecting(.pairConfirm)
+            // Both checks are constant time (`HMAC.isValidAuthenticationCode`).
+            guard let proof = confirm.proof,
+                  transcript.isValidProof(proof, label: .clientConfirmed, key: pairingKey),
+                  let secretProof = confirm.secretProof,
+                  transcript.isValidSecretProof(secretProof, role: .client, secret: secret.value) else {
+                // Locked out before the answer goes out, so a retry cannot
+                // arrive first.
+                lockOutSecretAttempt(host: host, session: session)
+                try? await connection.send(.error(.pairingFailed))
+                throw RemoteLinkError.authenticationFailed
+            }
+        } catch {
+            // A timeout or a dropped connection counts as a failed attempt too.
+            lockOutSecretAttempt(host: host, session: session)
+            throw error
         }
-
-        let transcript = RemoteLinkPairingTranscript(
-            deviceID: deviceID,
-            serverID: serverID,
-            clientKey: clientKey,
-            serverKey: privateKey.publicKey.rawRepresentation,
-            clientNonce: clientNonce,
-            serverNonce: serverNonce
-        )
-        let pairingKey = try transcript.pairingKey(privateKey: privateKey, peerKey: clientKey)
-
-        let confirm = try await connection.receiveHandshake(timeout: secretPairingStepTimeout).expecting(.pairConfirm)
-        // Both checks are constant time (`HMAC.isValidAuthenticationCode`).
-        guard let proof = confirm.proof,
-              transcript.isValidProof(proof, label: .clientConfirmed, key: pairingKey),
-              let secretProof = confirm.secretProof,
-              transcript.isValidSecretProof(secretProof, role: .client, secret: secret.value) else {
-            try? await connection.send(.error(.pairingFailed))
-            throw RemoteLinkError.authenticationFailed
-        }
-        // The device proved the secret; whatever follows is no reason to lock it out.
-        locksOutHost = false
+        // From here on the device has proved the secret, so nothing that
+        // follows locks it out.
 
         // Burns the secret, so only one device pairs with it. The new
         // generation also keeps a code request that is still waiting from
@@ -878,16 +913,25 @@ final class RemoteLinkServer: @unchecked Sendable {
         onPairingInvitationChange?()
 
         let device = RemoteLinkDevice(id: deviceID, name: deviceName, pairedAt: Date(), lastSeenAt: nil)
-        try store.addDevice(device, key: pairingKey)
+        let previous = store.pairing(for: deviceID)
         do {
-            try await connection.send(RemoteLinkHandshake(
-                type: .pairApproved,
-                proof: transcript.proof(.serverApproved, key: pairingKey),
-                secretProof: transcript.secretProof(.server, secret: secret.value)
-            ))
+            try store.addDevice(device, key: pairingKey)
+            do {
+                try await connection.send(RemoteLinkHandshake(
+                    type: .pairApproved,
+                    proof: transcript.proof(.serverApproved, key: pairingKey),
+                    secretProof: transcript.secretProof(.server, secret: secret.value)
+                ))
+            } catch {
+                // The device never learns that pairing succeeded, so it keeps
+                // no new key either; a pairing it had before stays valid.
+                store.rollBack(deviceID: deviceID, addedKey: pairingKey, previous: previous)
+                throw error
+            }
         } catch {
-            // The device never learns that pairing succeeded, so it keeps no key either.
-            store.removeDevice(id: deviceID)
+            // The used secret stays invalid, since the device may have seen
+            // the approval; the sheet that is still open gets a new QR code.
+            renewPairingSecretAfterFailure(session: session)
             throw error
         }
         onDevicesChange?()
@@ -899,6 +943,27 @@ final class RemoteLinkServer: @unchecked Sendable {
             try? await pending.connection.send(RemoteLinkHandshake(type: .pairDenied))
             pending.connection.close()
             pending.task.cancel()
+        }
+    }
+
+    /// Locks the host out, but only for the sheet that admitted the attempt.
+    /// An attempt that ends because the user closed or reopened the sheet
+    /// did not fail, and must not block the phone from the new QR code.
+    private func lockOutSecretAttempt(host: String, session: Int) {
+        lock.withLock {
+            guard pairingApprover != nil, pairingSession == session else { return }
+            lockedOutPairingHosts[host] = Date().addingTimeInterval(pairingFailureLockout)
+        }
+    }
+
+    private func renewPairingSecretAfterFailure(session: Int) {
+        let renewed = lock.withLock {
+            guard pairingApprover != nil, pairingSession == session, pairingSecret == nil else { return false }
+            renewPairingSecretLocked()
+            return true
+        }
+        if renewed {
+            onPairingInvitationChange?()
         }
     }
 
