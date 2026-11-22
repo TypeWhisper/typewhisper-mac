@@ -1043,6 +1043,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.presentInitialWindow(isNormalLaunch: isNormalLaunch)
         }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--remote-link-open-pairing") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.openRemoteLinkPairingForDebugging()
+            }
+        }
+        #endif
 
         // Observe appearance preference changes
         menuBarIconObserver = UserDefaults.standard.observe(\.showMenuBarIcon, options: [.new]) { [weak self] _, _ in
@@ -1244,6 +1251,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // An unfocused overview still counts as an open window for Dock policy.
         applyActivationPolicy()
     }
+
+    #if DEBUG
+    /// Debug builds only: `--remote-link-open-pairing` turns on Remote Link
+    /// and opens the pairing sheet with its QR code, so it can be shown
+    /// without clicking. The secret stays in memory like a normal pairing.
+    private func openRemoteLinkPairingForDebugging() {
+        let remoteLink = ServiceContainer.shared.remoteLinkViewModel
+        remoteLink.setEnabled(true)
+        PremiumSettingsWindowManager.shared.present(.pairedDevices)
+        remoteLink.beginPairing()
+    }
+    #endif
 
     private func presentInitialWindow(isNormalLaunch: Bool) {
         guard let whatsNew = WhatsNewCoordinator.shared else { return }
