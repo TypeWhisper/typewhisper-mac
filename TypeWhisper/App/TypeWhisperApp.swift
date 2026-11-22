@@ -1263,9 +1263,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ServiceContainer.shared.premiumAccountService.prepareScreenshotFixture(hasPremiumAccess: true)
         }
         let remoteLink = ServiceContainer.shared.remoteLinkViewModel
+        // Without Premium the listener never starts, so the setting is left
+        // as it was and no QR code is shown that no phone could use.
+        guard remoteLink.hasPremiumAccess else {
+            fputs("--remote-link-open-pairing: Remote Link needs Premium; add --debug-premium.\n", stderr)
+            return
+        }
         remoteLink.setEnabled(true)
         PremiumSettingsWindowManager.shared.present(.pairedDevices)
-        remoteLink.beginPairing()
+        openRemoteLinkPairingWhenListening(remainingAttempts: 40)
+    }
+
+    private func openRemoteLinkPairingWhenListening(remainingAttempts: Int) {
+        let remoteLink = ServiceContainer.shared.remoteLinkViewModel
+        if remoteLink.isRunning {
+            remoteLink.beginPairing()
+            return
+        }
+        guard remainingAttempts > 0 else {
+            let reason = remoteLink.errorMessage ?? "the listener did not start"
+            fputs("--remote-link-open-pairing: pairing not opened, \(reason).\n", stderr)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.openRemoteLinkPairingWhenListening(remainingAttempts: remainingAttempts - 1)
+        }
     }
     #endif
 
