@@ -12764,6 +12764,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             audioStarted.set()
         }
         context.hotkeyService.externalKeySuppressionAvailableOverride = scenario != "suppression"
+        if scenario == "suppression" {
+            // With the permission granted the message names the tap. No real tap gets created.
+            context.hotkeyService.failEventTapCreationForTesting = true
+            context.hotkeyService.accessibilityTrustedProvider = { true }
+        }
         context.hotkeyService.secureInputEnabledProvider = { scenario == "secureInput" || secureInputActivated.value }
         context.audioRecordingService.stopRecordingOverride = { _ in
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
@@ -12822,7 +12827,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
             XCTAssertEqual(returnCount, 0)
             if ["suppression", "secureInput", "secureInputTransition"].contains(scenario) {
-                XCTAssertNotNil(context.dictationViewModel.apiDictationSession(id: sessionID)?.error)
+                let reason: HotkeyService.KeySuppressionUnavailableReason = scenario == "suppression"
+                    ? .eventTapDisabled : .secureInput
+                let message = DictationViewModel.submitKeySuppressionUnavailableMessage(for: reason)
+                XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.error, message)
+                let loggedError = ErrorLogService(appSupportDirectory: appSupportDirectory).entries.first
+                XCTAssertEqual(loggedError?.message, message)
+                XCTAssertEqual(loggedError?.code, reason.rawValue)
                 XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
                 return
             }
@@ -22226,6 +22237,60 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.secureInputEnabledProvider = { true }
         XCTAssertFalse(service.canSuppressExternalKeyEvents)
     }
+
+    #if !APPSTORE
+    /// Secure Input and a lost or disabled tap used to be reported as a permission problem (#2003).
+    @MainActor
+    func testKeySuppressionUnavailableReasonNamesTheFailedCondition() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        var accessibilityTrusted = true
+        var secureInput = false
+        service.accessibilityTrustedProvider = { accessibilityTrusted }
+        service.secureInputEnabledProvider = { secureInput }
+
+        service.externalKeySuppressionAvailableOverride = true
+        XCTAssertNil(service.keySuppressionUnavailableReason)
+        secureInput = true
+        XCTAssertEqual(service.keySuppressionUnavailableReason, .secureInput)
+
+        service.externalKeySuppressionAvailableOverride = false
+        XCTAssertEqual(service.keySuppressionUnavailableReason, .secureInput)
+        secureInput = false
+        XCTAssertEqual(service.keySuppressionUnavailableReason, .eventTapDisabled)
+        accessibilityTrusted = false
+        XCTAssertEqual(service.keySuppressionUnavailableReason, .accessibilityNotGranted)
+
+        service.externalKeySuppressionAvailableOverride = nil
+        XCTAssertEqual(service.keySuppressionUnavailableReason, .accessibilityNotGranted)
+        accessibilityTrusted = true
+        XCTAssertEqual(service.keySuppressionUnavailableReason, .eventTapUnavailable)
+        XCTAssertFalse(service.canSuppressExternalKeyEvents)
+    }
+
+    /// A recording that needs the tap re-creates it at once instead of waiting for the watchdog.
+    @MainActor
+    func testRecoverEventTapNowRetriesSetupOnlyWhileMonitoring() {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        service.failEventTapCreationForTesting = true
+        defer { service.suspendMonitoring() }
+
+        service.resumeMonitoring()
+        var attempts = service.eventTapSetupAttemptCountForTesting
+        service.recoverEventTapNow()
+        XCTAssertEqual(service.eventTapSetupAttemptCountForTesting, attempts, "No tap without the permission")
+
+        service.accessibilityTrustedProvider = { true }
+        service.recoverEventTapNow()
+        XCTAssertEqual(service.eventTapSetupAttemptCountForTesting, attempts + 1)
+
+        service.suspendMonitoring()
+        attempts = service.eventTapSetupAttemptCountForTesting
+        service.recoverEventTapNow()
+        XCTAssertEqual(service.eventTapSetupAttemptCountForTesting, attempts, "A suspended monitor stays off")
+    }
+    #endif
 
     @MainActor
     func testConfiguredWorkflowReturnStopsNormallyInsteadOfSubmitting() async throws {

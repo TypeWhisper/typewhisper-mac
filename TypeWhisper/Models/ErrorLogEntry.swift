@@ -5,12 +5,16 @@ struct ErrorLogEntry: Codable, Identifiable {
     let timestamp: Date
     let message: String
     let category: String
+    /// A privacy-safe reason code for support diagnostics, such as "secure-input".
+    /// Entries written before it existed decode without one.
+    let code: String?
 
-    init(message: String, category: String = "general") {
+    init(message: String, category: String = "general", code: String? = nil) {
         self.id = UUID()
         self.timestamp = Date()
         self.message = message
         self.category = category
+        self.code = code
     }
 
     var categoryIcon: String {

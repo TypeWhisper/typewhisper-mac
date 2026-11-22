@@ -2929,22 +2929,56 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func ensureSubmitKeySuppressionAvailable() -> Bool {
-        guard effectiveAutoEnterMode == .duringDictation, !hotkeyService.canSuppressExternalKeyEvents else { return true }
-        let message = AccessibilityPermissionPane.text(
-            legacy: localizedAppText(
-                "Enter submission is unavailable. Check Accessibility access and restart TypeWhisper, or choose another Enter option.",
-                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Bedienungshilfen und starte TypeWhisper neu oder wähle eine andere Enter-Option."
-            ),
-            deviceControl: localizedAppText(
-                "Enter submission is unavailable. Check the Device Control and Data Access permission and restart TypeWhisper, or choose another Enter option.",
-                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Berechtigung „Gerätesteuerung und Datenzugriff“ und starte TypeWhisper neu oder wähle eine andere Enter-Option.",
-                ja: "Enter キーで送信できません。「デバイスの制御とデータへのアクセス」の権限を確認して TypeWhisper を再起動するか、別の Enter オプションを選択してください。",
-                zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 TypeWhisper，或选择其他 Enter 选项。"
-            )
-        )
+        guard effectiveAutoEnterMode == .duringDictation,
+              var reason = hotkeyService.keySuppressionUnavailableReason else { return true }
+        if reason.isEventTapFailure {
+            // The watchdog would re-arm or replace the tap within two seconds anyway.
+            hotkeyService.recoverEventTapNow()
+            guard let remainingReason = hotkeyService.keySuppressionUnavailableReason else {
+                logger.info("Enter submission: event tap recovered before rejecting the recording, reason=\(reason.rawValue, privacy: .public)")
+                return true
+            }
+            reason = remainingReason
+        }
+        logger.warning("Enter submission unavailable, ending the recording: reason=\(reason.rawValue, privacy: .public)")
+        let message = Self.submitKeySuppressionUnavailableMessage(for: reason)
         abortActiveRecordingImmediately(sessionMessage: message)
-        showError(message, category: "recording")
+        showError(message, category: "recording", code: reason.rawValue)
         return false
+    }
+
+    static func submitKeySuppressionUnavailableMessage(for reason: HotkeyService.KeySuppressionUnavailableReason) -> String {
+        switch reason {
+        case .accessibilityNotGranted:
+            return AccessibilityPermissionPane.text(
+                legacy: localizedAppText(
+                    "Enter submission is unavailable. Check Accessibility access and restart TypeWhisper, or choose another Enter option.",
+                    de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Bedienungshilfen und starte TypeWhisper neu oder wähle eine andere Enter-Option."
+                ),
+                deviceControl: localizedAppText(
+                    "Enter submission is unavailable. Check the Device Control and Data Access permission and restart TypeWhisper, or choose another Enter option.",
+                    de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Berechtigung „Gerätesteuerung und Datenzugriff“ und starte TypeWhisper neu oder wähle eine andere Enter-Option.",
+                    ja: "Enter キーで送信できません。「デバイスの制御とデータへのアクセス」の権限を確認して TypeWhisper を再起動するか、別の Enter オプションを選択してください。",
+                    zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 TypeWhisper，或选择其他 Enter 选项。"
+                )
+            )
+        case .secureInput:
+            return localizedAppText(
+                "Enter submission is unavailable while Secure Input is on, for example in a password field. Leave that field or choose another Enter option.",
+                de: "Absenden mit Enter ist nicht verfügbar, solange die sichere Eingabe aktiv ist, etwa in einem Passwortfeld. Verlasse das Feld oder wähle eine andere Enter-Option.",
+                ja: "セキュア入力が有効な間 (パスワードフィールドなど) は Enter キーで送信できません。そのフィールドから移動するか、別の Enter オプションを選択してください。",
+                zh: "“安全输入”启用期间（例如在密码栏中）无法使用 Enter 发送。请离开该输入栏，或选择其他 Enter 选项。",
+                es: "El envío con Intro no está disponible mientras la entrada segura está activa, por ejemplo en un campo de contraseña. Sal de ese campo o elige otra opción de Intro."
+            )
+        case .eventTapUnavailable, .eventTapDisabled, .listenOnlyEventTap:
+            return localizedAppText(
+                "Enter submission is unavailable because TypeWhisper can't intercept keys right now. Try again in a moment or choose another Enter option.",
+                de: "Absenden mit Enter ist nicht verfügbar, weil TypeWhisper Tasten gerade nicht abfangen kann. Versuche es gleich noch einmal oder wähle eine andere Enter-Option.",
+                ja: "TypeWhisper が現在キー入力を捕捉できないため、Enter キーで送信できません。しばらくしてからもう一度試すか、別の Enter オプションを選択してください。",
+                zh: "TypeWhisper 目前无法拦截按键，因此无法使用 Enter 发送。请稍后重试，或选择其他 Enter 选项。",
+                es: "El envío con Intro no está disponible porque TypeWhisper no puede interceptar teclas en este momento. Vuelve a intentarlo en un momento o elige otra opción de Intro."
+            )
+        }
     }
 
     /// `stoppedAfterSilence` marks the silence stop of a toggle dictation, which takes the same
@@ -5708,6 +5742,7 @@ final class DictationViewModel: ObservableObject {
         duration: TimeInterval = 2.5,
         isError: Bool = false,
         errorCategory: String = "general",
+        errorCode: String? = nil,
         action: ActionFeedbackAction? = nil
     ) {
         actionFeedbackMessage = message
@@ -5720,7 +5755,7 @@ final class DictationViewModel: ObservableObject {
         state = .inserting
 
         if isError {
-            errorLogService.addEntry(message: message, category: errorCategory)
+            errorLogService.addEntry(message: message, category: errorCategory, code: errorCode)
             // Every error banner, not only those from showError, stays visible in the menu bar.
             lastDictationError = ErrorSummary(message: message, settingsTab: action?.settingsTab)
         }
@@ -5807,6 +5842,7 @@ final class DictationViewModel: ObservableObject {
         duration: TimeInterval,
         isError: Bool = false,
         errorCategory: String = "general",
+        errorCode: String? = nil,
         recoveryPreservation: DictationRecoveryPreservationResult,
         fallbackAction: ActionFeedbackAction? = nil
     ) {
@@ -5817,6 +5853,7 @@ final class DictationViewModel: ObservableObject {
                 duration: duration,
                 isError: isError,
                 errorCategory: errorCategory,
+                errorCode: errorCode,
                 action: fallbackAction
             )
             return
@@ -5829,6 +5866,7 @@ final class DictationViewModel: ObservableObject {
             duration: 12.0,
             isError: isError,
             errorCategory: errorCategory,
+            errorCode: errorCode,
             action: .openDictationRecovery
         )
     }
@@ -5841,9 +5879,11 @@ final class DictationViewModel: ObservableObject {
         lastDictationError = nil
     }
 
+    /// `code` is a privacy-safe reason for support diagnostics, written to the error log only.
     private func showError(
         _ message: String,
         category: String = "general",
+        code: String? = nil,
         recoveryPreservation: DictationRecoveryPreservationResult? = nil,
         settingsTab: SettingsTab? = nil
     ) {
@@ -5862,6 +5902,7 @@ final class DictationViewModel: ObservableObject {
                 duration: duration,
                 isError: true,
                 errorCategory: category,
+                errorCode: code,
                 recoveryPreservation: recoveryPreservation,
                 fallbackAction: settingsAction
             )
@@ -5872,6 +5913,7 @@ final class DictationViewModel: ObservableObject {
                 duration: duration,
                 isError: true,
                 errorCategory: category,
+                errorCode: code,
                 action: settingsAction
             )
         }
