@@ -1257,6 +1257,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// and opens the pairing sheet with its QR code, so it can be shown
     /// without clicking. The secret stays in memory like a normal pairing.
     private func openRemoteLinkPairingForDebugging() {
+        // `--debug-premium` grants Premium in memory for this run, like the
+        // screenshot fixtures, so a dev build without an account can pair.
+        if ProcessInfo.processInfo.arguments.contains("--debug-premium") {
+            ServiceContainer.shared.premiumAccountService.prepareScreenshotFixture(hasPremiumAccess: true)
+        }
         let remoteLink = ServiceContainer.shared.remoteLinkViewModel
         remoteLink.setEnabled(true)
         PremiumSettingsWindowManager.shared.present(.pairedDevices)
