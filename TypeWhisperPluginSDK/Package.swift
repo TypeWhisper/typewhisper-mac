@@ -19,7 +19,7 @@ let package = Package(
         // TypeWhisper's fork (branch seofood/sov-transcribe-on-0.31): upstream 01dec7c9 plus the
         // Granite Speech 5.0 and SOV-Transcribe-1 backports, kept on mlx-swift 0.31 (see the
         // mlx-swift pin below).
-        .package(url: "https://github.com/TypeWhisper/mlx-audio-swift.git", revision: "4cd7b792e9d0ab6d8af30119b4de16b303f67334"),
+        .package(url: "https://github.com/TypeWhisper/mlx-audio-swift.git", revision: "2f019d8ec7b603dcff0257a879322a64e60576a0"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.10.1"),
         .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.5.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.6"),
