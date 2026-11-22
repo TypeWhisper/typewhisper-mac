@@ -264,6 +264,26 @@ enum NotchIndicatorLayout {
     static let fallbackClosedHeight: CGFloat = 32
     static let fallbackClosedWidth: CGFloat = 200
     static let compactWaveformWidth: CGFloat = 23
+    /// On MacBook Pros with a Dynamic Island, macOS widens its island to about
+    /// 145 pt while an app records from the microphone (#2001). That is the
+    /// width at the 14-inch panel's default scaling of 1512 pt across 302.4 mm,
+    /// which is 5 pt per millimetre.
+    static let expandedSystemIslandWidthMillimeters: CGFloat = 29
+    static let defaultPointsPerMillimeter: CGFloat = 5
+    /// Room left on each side of the expanded island so content never touches it.
+    static let systemIslandSideClearance: CGFloat = 8
+
+    /// Width the indicator keeps free in the middle of the cap: the hardware
+    /// cutout, or the expanded system island where that is wider. A classic
+    /// notch is wider than the expanded island at every scaling, so only Macs
+    /// with a Dynamic Island get the wider gap.
+    static func reservedNotchWidth(cutoutWidth: CGFloat, pointsPerMillimeter: CGFloat?) -> CGFloat {
+        guard cutoutWidth > 0 else { return cutoutWidth }
+        let scale = pointsPerMillimeter.flatMap { $0 > 0 ? $0 : nil } ?? defaultPointsPerMillimeter
+        let islandWidth = ceil(expandedSystemIslandWidthMillimeters * scale)
+            + 2 * systemIslandSideClearance
+        return max(cutoutWidth, islandWidth)
+    }
 
     /// Uses the real screen safe-area inset when available so the closed cap matches
     /// the physical notch across different MacBook models and display scaling modes.
