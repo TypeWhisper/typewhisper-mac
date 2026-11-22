@@ -224,13 +224,13 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
-    func testOpenAIPlugin150RequiresCompatibleHost18AndDeclaresCloudHosting() throws {
+    func testOpenAIPlugin150RequiresHost183AndDeclaresCloudHosting() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.5.0")
-        XCTAssertEqual(manifest.minHostVersion, "1.8.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.8.3")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.hosting, .cloud)
         XCTAssertEqual(manifest.requiresAPIKey, false)
