@@ -21,8 +21,15 @@ struct RemoteLinkPairingRequest: Equatable, Sendable {
 final class RemoteLinkDeviceStore: @unchecked Sendable {
     static let keychainServicePrefix = "remote-link-device."
 
+    /// A stored device with its key.
+    typealias Pairing = (device: RemoteLinkDevice, key: SymmetricKey)
+
     private let defaults: UserDefaults
     private let lock = NSLock()
+    /// Serializes every write including its Keychain operation, so a
+    /// rollback cannot interleave with an addition or a removal. Taken
+    /// before `lock`, never inside it.
+    private let writeLock = NSLock()
     private let loadKey: @Sendable (String) -> String?
     private let saveKey: @Sendable (String, String) throws -> Void
     private let deleteKey: @Sendable (String) -> Void
@@ -71,7 +78,37 @@ final class RemoteLinkDeviceStore: @unchecked Sendable {
         return SymmetricKey(data: data)
     }
 
-    func addDevice(_ device: RemoteLinkDevice, key: SymmetricKey) throws {
+    /// Stores the device and returns the pairing it replaced, read in the
+    /// same step, so a pairing that fails afterwards can put it back.
+    @discardableResult
+    func addDevice(_ device: RemoteLinkDevice, key: SymmetricKey) throws -> Pairing? {
+        try writeLock.withLock {
+            let replaced = storedPairing(for: device.id)
+            try addDeviceLocked(device, key: key)
+            return replaced
+        }
+    }
+
+    func removeDevice(id: String) {
+        writeLock.withLock { removeDeviceLocked(id: id) }
+    }
+
+    /// Undoes `addDevice` with `addedKey` while that write is still the
+    /// stored one: puts back the pairing it replaced, or forgets the device.
+    /// Runs as one write, so a newer pairing or a removal that came after
+    /// the failed attempt stays as it is and is never undone.
+    func rollBack(deviceID: String, addedKey: SymmetricKey, replaced: Pairing?) {
+        writeLock.withLock {
+            guard pairingKey(for: deviceID) == addedKey else { return }
+            if let replaced, (try? addDeviceLocked(replaced.device, key: replaced.key)) != nil {
+                return
+            }
+            removeDeviceLocked(id: deviceID)
+        }
+    }
+
+    /// Call with `writeLock` held.
+    private func addDeviceLocked(_ device: RemoteLinkDevice, key: SymmetricKey) throws {
         try saveKey(device.id, key.withUnsafeBytes { Data($0) }.base64EncodedString())
         lock.withLock {
             var devices = storedDevices().filter { $0.id != device.id }
@@ -80,31 +117,20 @@ final class RemoteLinkDeviceStore: @unchecked Sendable {
         }
     }
 
-    func removeDevice(id: String) {
+    /// Call with `writeLock` held.
+    private func removeDeviceLocked(id: String) {
         lock.withLock {
             store(storedDevices().filter { $0.id != id })
         }
         deleteKey(id)
     }
 
-    /// The stored pairing of a device, so a new pairing that fails can put it back.
-    func pairing(for deviceID: String) -> (device: RemoteLinkDevice, key: SymmetricKey)? {
+    private func storedPairing(for deviceID: String) -> Pairing? {
         guard let device = devices().first(where: { $0.id == deviceID }),
               let key = pairingKey(for: deviceID) else {
             return nil
         }
         return (device, key)
-    }
-
-    /// Undoes `addDevice` with `addedKey` while that write is still the
-    /// stored one: puts back the pairing it replaced, or forgets the device.
-    /// A newer pairing or a removal in between stays as it is.
-    func rollBack(deviceID: String, addedKey: SymmetricKey, previous: (device: RemoteLinkDevice, key: SymmetricKey)?) {
-        guard pairingKey(for: deviceID) == addedKey else { return }
-        if let previous, (try? addDevice(previous.device, key: previous.key)) != nil {
-            return
-        }
-        removeDevice(id: deviceID)
     }
 
     func markSeen(id: String, at date: Date = Date()) {
@@ -770,8 +796,7 @@ final class RemoteLinkServer: @unchecked Sendable {
         }
 
         let device = RemoteLinkDevice(id: deviceID, name: deviceName, pairedAt: Date(), lastSeenAt: nil)
-        let previous = store.pairing(for: deviceID)
-        try store.addDevice(device, key: pairingKey)
+        let replaced = try store.addDevice(device, key: pairingKey)
         do {
             try await connection.send(RemoteLinkHandshake(
                 type: .pairApproved,
@@ -780,7 +805,7 @@ final class RemoteLinkServer: @unchecked Sendable {
         } catch {
             // The device never learns that pairing succeeded, so it keeps no
             // new key either; a pairing it had before stays valid.
-            store.rollBack(deviceID: deviceID, addedKey: pairingKey, previous: previous)
+            store.rollBack(deviceID: deviceID, addedKey: pairingKey, replaced: replaced)
             throw error
         }
         pairedDevice = device
@@ -913,9 +938,8 @@ final class RemoteLinkServer: @unchecked Sendable {
         onPairingInvitationChange?()
 
         let device = RemoteLinkDevice(id: deviceID, name: deviceName, pairedAt: Date(), lastSeenAt: nil)
-        let previous = store.pairing(for: deviceID)
         do {
-            try store.addDevice(device, key: pairingKey)
+            let replaced = try store.addDevice(device, key: pairingKey)
             do {
                 try await connection.send(RemoteLinkHandshake(
                     type: .pairApproved,
@@ -925,7 +949,7 @@ final class RemoteLinkServer: @unchecked Sendable {
             } catch {
                 // The device never learns that pairing succeeded, so it keeps
                 // no new key either; a pairing it had before stays valid.
-                store.rollBack(deviceID: deviceID, addedKey: pairingKey, previous: previous)
+                store.rollBack(deviceID: deviceID, addedKey: pairingKey, replaced: replaced)
                 throw error
             }
         } catch {

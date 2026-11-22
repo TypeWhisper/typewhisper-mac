@@ -945,10 +945,10 @@ final class RemoteLinkTests: XCTestCase {
         let newKey = SymmetricKey(size: .bits256)
         let new = RemoteLinkDevice(id: deviceID, name: "New", pairedAt: Date(), lastSeenAt: nil)
 
-        try store.addDevice(old, key: oldKey)
-        let previous = store.pairing(for: deviceID)
-        try store.addDevice(new, key: newKey)
-        store.rollBack(deviceID: deviceID, addedKey: newKey, previous: previous)
+        XCTAssertNil(try store.addDevice(old, key: oldKey))
+        let replaced = try store.addDevice(new, key: newKey)
+        XCTAssertEqual(replaced?.key, oldKey)
+        store.rollBack(deviceID: deviceID, addedKey: newKey, replaced: replaced)
         XCTAssertEqual(store.pairingKey(for: deviceID), oldKey)
         XCTAssertEqual(store.devices().map(\.name), ["Old"])
 
@@ -956,17 +956,70 @@ final class RemoteLinkTests: XCTestCase {
         let newerKey = SymmetricKey(size: .bits256)
         try store.addDevice(new, key: newKey)
         try store.addDevice(new, key: newerKey)
-        store.rollBack(deviceID: deviceID, addedKey: newKey, previous: previous)
+        store.rollBack(deviceID: deviceID, addedKey: newKey, replaced: replaced)
         XCTAssertEqual(store.pairingKey(for: deviceID), newerKey)
         store.removeDevice(id: deviceID)
-        store.rollBack(deviceID: deviceID, addedKey: newerKey, previous: previous)
+        store.rollBack(deviceID: deviceID, addedKey: newerKey, replaced: replaced)
         XCTAssertTrue(store.devices().isEmpty)
 
         // Without an earlier pairing the device is forgotten.
         let other = UUID().uuidString
         try store.addDevice(RemoteLinkDevice(id: other, name: "Other", pairedAt: Date(), lastSeenAt: nil), key: newKey)
-        store.rollBack(deviceID: other, addedKey: newKey, previous: nil)
+        store.rollBack(deviceID: other, addedKey: newKey, replaced: nil)
         XCTAssertTrue(store.devices().isEmpty)
+    }
+
+    func testRemovalDuringARollbackIsNotUndone() throws {
+        // A Keychain whose read inside the rollback lets a removal from
+        // another thread try to run before the old pairing is put back.
+        let keychain = RemoteLinkLockedValue<[String: String]>([:])
+        let interleave = RemoteLinkLockedValue<(@Sendable () -> Void)?>(nil)
+        let store = RemoteLinkDeviceStore(
+            defaults: UserDefaults(suiteName: "RemoteLinkTests-\(UUID().uuidString)")!,
+            loadKey: { id in
+                // The rollback has read the key it checks; the removal now
+                // tries to run before the old pairing is put back.
+                let value = keychain.get()[id]
+                if let hook = interleave.get() {
+                    interleave.set(nil)
+                    hook()
+                }
+                return value
+            },
+            saveKey: { id, key in
+                var values = keychain.get()
+                values[id] = key
+                keychain.set(values)
+            },
+            deleteKey: { id in
+                var values = keychain.get()
+                values[id] = nil
+                keychain.set(values)
+            }
+        )
+        let deviceID = UUID().uuidString
+        let oldKey = SymmetricKey(size: .bits256)
+        let newKey = SymmetricKey(size: .bits256)
+        try store.addDevice(RemoteLinkDevice(id: deviceID, name: "Old", pairedAt: Date(), lastSeenAt: nil), key: oldKey)
+        // The re-pairing wrote its key, then its approval failed.
+        let replaced = try store.addDevice(RemoteLinkDevice(id: deviceID, name: "New", pairedAt: Date(), lastSeenAt: nil), key: newKey)
+
+        // The user removes the device while the rollback checks its key.
+        let removed = DispatchSemaphore(value: 0)
+        interleave.set {
+            DispatchQueue.global().async {
+                store.removeDevice(id: deviceID)
+                removed.signal()
+            }
+            usleep(200_000)
+        }
+        store.rollBack(deviceID: deviceID, addedKey: newKey, replaced: replaced)
+        XCTAssertEqual(removed.wait(timeout: .now() + 5), .success)
+        XCTAssertNil(interleave.get(), "The removal must have been started inside the rollback")
+
+        XCTAssertTrue(store.devices().isEmpty, "A device the user removed must stay removed")
+        XCTAssertNil(store.pairingKey(for: deviceID))
+        XCTAssertNil(keychain.get()[deviceID])
     }
 
     func testClosingTheSheetDuringAScanDoesNotLockThePhoneOutOfTheNextOne() async throws {
