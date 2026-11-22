@@ -1,6 +1,8 @@
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import SwiftUI
 
-/// Premium settings for iPhones and iPads that use this Mac over the local
+/// Premium settings for phones and tablets that use this Mac over the local
 /// network, shown in the Premium window like the other Premium features.
 struct RemoteLinkSettingsView: View {
     @ObservedObject private var viewModel = RemoteLinkViewModel.shared
@@ -10,12 +12,13 @@ struct RemoteLinkSettingsView: View {
             PremiumSettingsDetailHeader(
                 icon: "iphone.radiowaves.left.and.right",
                 accent: .indigo,
-                title: localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad"),
+                title: PairedDevicesPremiumCopy.title,
                 description: localizedAppText(
-                    "Paired iPhones and iPads transcribe and write with this Mac's models and workflows over the local network.",
-                    de: "Gekoppelte iPhones und iPads transkribieren und schreiben über das lokale Netzwerk mit den Modellen und Workflows dieses Macs.",
-                    ja: "ペアリング済みの iPhone と iPad は、ローカルネットワーク経由でこの Mac のモデルとワークフローを使って文字起こしや文章作成を行えます。",
-                    zh: "已配对的 iPhone 和 iPad 可以通过本地网络使用这台 Mac 的模型和工作流进行转写和写作。"
+                    "Paired phones and tablets transcribe and write with this Mac's models and workflows over the local network.",
+                    de: "Gekoppelte Smartphones und Tablets transkribieren und schreiben über das lokale Netzwerk mit den Modellen und Workflows dieses Macs.",
+                    ja: "ペアリング済みのスマートフォンとタブレットは、ローカルネットワーク経由でこの Mac のモデルとワークフローを使って文字起こしや文章作成を行えます。",
+                    zh: "已配对的手机和平板电脑可以通过本地网络使用这台 Mac 的模型和工作流进行转写和写作。",
+                    es: "Los teléfonos y tablets vinculados transcriben y escriben con los modelos y flujos de trabajo de este Mac a través de la red local."
                 ),
                 status: viewModel.isEnabled ? statusText : String(localized: "premium.hub.status.off"),
                 statusColor: viewModel.isEnabled && viewModel.isAdvertised ? .green : .secondary
@@ -32,10 +35,11 @@ struct RemoteLinkSettingsView: View {
                                 zh: "允许本地网络上的已配对设备"
                             ),
                             info: localizedAppText(
-                                "Paired iPhones and iPads on the same network can send recordings to this Mac and transcribe them with its models. Only paired devices are accepted, and every connection is encrypted. The local API and its token are not exposed.",
-                                de: "Gekoppelte iPhones und iPads im selben Netzwerk können Aufnahmen an diesen Mac senden und mit seinen Modellen transkribieren lassen. Nur gekoppelte Geräte werden angenommen, und jede Verbindung ist verschlüsselt. Die lokale API und ihr Token bleiben davon unberührt.",
-                                ja: "同じネットワーク上のペアリング済み iPhone と iPad は、録音をこの Mac に送信し、この Mac のモデルで文字起こしできます。ペアリング済みのデバイスのみが受け入れられ、すべての接続は暗号化されます。ローカル API とそのトークンは公開されません。",
-                                zh: "同一网络上的已配对 iPhone 和 iPad 可以将录音发送到这台 Mac，并使用它的模型进行转写。只接受已配对的设备，所有连接均经过加密。本地 API 及其令牌不会被公开。"
+                                "Paired phones and tablets on the same network can send recordings to this Mac and transcribe them with its models. Only paired devices are accepted, and every connection is encrypted. The local API and its token are not exposed.",
+                                de: "Gekoppelte Smartphones und Tablets im selben Netzwerk können Aufnahmen an diesen Mac senden und mit seinen Modellen transkribieren lassen. Nur gekoppelte Geräte werden angenommen, und jede Verbindung ist verschlüsselt. Die lokale API und ihr Token bleiben davon unberührt.",
+                                ja: "同じネットワーク上のペアリング済みスマートフォンとタブレットは、録音をこの Mac に送信し、この Mac のモデルで文字起こしできます。ペアリング済みのデバイスのみが受け入れられ、すべての接続は暗号化されます。ローカル API とそのトークンは公開されません。",
+                                zh: "同一网络上的已配对手机和平板电脑可以将录音发送到这台 Mac，并使用它的模型进行转写。只接受已配对的设备，所有连接均经过加密。本地 API 及其令牌不会被公开。",
+                                es: "Los teléfonos y tablets vinculados en la misma red pueden enviar grabaciones a este Mac y transcribirlas con sus modelos. Solo se aceptan dispositivos vinculados y todas las conexiones están cifradas. La API local y su token no quedan expuestos."
                             )
                         )
                     }
@@ -204,9 +208,15 @@ private struct RemoteLinkPairingSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(localizedAppText("Pair iPhone or iPad", de: "iPhone oder iPad koppeln", ja: "iPhone または iPad をペアリング", zh: "配对 iPhone 或 iPad"))
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
+            Text(localizedAppText(
+                "Pair a Phone or Tablet",
+                de: "Smartphone oder Tablet koppeln",
+                ja: "スマートフォンまたはタブレットをペアリング",
+                zh: "配对手机或平板电脑",
+                es: "Vincular un teléfono o tablet"
+            ))
+            .font(.headline)
+            .accessibilityAddTraits(.isHeader)
 
             content
                 .frame(maxWidth: .infinity)
@@ -218,7 +228,7 @@ private struct RemoteLinkPairingSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(width: showsQRCode ? 600 : 420)
         // The pairing request arrives from the other device, so VoiceOver
         // users hear it, including the code to compare, and the outcome.
         .onChange(of: viewModel.pairingState) { _, state in
@@ -237,6 +247,15 @@ private struct RemoteLinkPairingSheet: View {
 
     private func announce(_ message: String) {
         ServiceContainer.shared.accessibilityAnnouncementService.announce(message)
+    }
+
+    /// The QR code stays visible while a code request waits, so a device
+    /// that only sends requests cannot hide it.
+    private var showsQRCode: Bool {
+        switch viewModel.pairingState {
+        case .closed, .waiting, .confirming: true
+        case .finishing, .paired, .failed: false
+        }
     }
 
     static func pairingRequestText(_ request: RemoteLinkPairingRequest) -> String {
@@ -267,45 +286,58 @@ private struct RemoteLinkPairingSheet: View {
         )
     }
 
+    static var scanText: String {
+        localizedAppText(
+            "In TypeWhisper on your phone or tablet, go to Settings → Mac → Scan QR Code and point the camera at this code.",
+            de: "Gehe in TypeWhisper auf deinem Smartphone oder Tablet zu Einstellungen → Mac → QR-Code scannen und richte die Kamera auf diesen Code.",
+            ja: "スマートフォンまたはタブレットの TypeWhisper で、設定 → Mac → QR コードをスキャン を開き、カメラをこのコードに向けてください。",
+            zh: "在手机或平板电脑上的 TypeWhisper 中，前往“设置”→“Mac”→“扫描二维码”，然后将相机对准此二维码。",
+            es: "En TypeWhisper en tu teléfono o tablet, ve a Ajustes → Mac → Escanear código QR y apunta la cámara a este código."
+        )
+    }
+
+    static func listFallbackText(_ computerName: String) -> String {
+        localizedAppText(
+            "No QR scanner in TypeWhisper on your device? Choose “\(computerName)” under Settings → Mac there and compare the code.",
+            de: "Kein QR-Scanner in TypeWhisper auf deinem Gerät? Wähle dort unter Einstellungen → Mac „\(computerName)“ und vergleiche den Code.",
+            ja: "デバイスの TypeWhisper に QR スキャナがない場合は、設定 → Mac で「\(computerName)」を選び、コードを照合してください。",
+            zh: "设备上的 TypeWhisper 没有二维码扫描器？请在其“设置”→“Mac”中选择“\(computerName)”，然后核对代码。",
+            es: "¿No hay escáner QR en TypeWhisper en tu dispositivo? Elige “\(computerName)” en Ajustes → Mac y compara el código."
+        )
+    }
+
     @ViewBuilder
     private var content: some View {
         switch viewModel.pairingState {
-        case .closed, .waiting:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .accessibilityLabel(localizedAppText(
-                        "Waiting for a device",
-                        de: "Warte auf ein Gerät",
-                        ja: "デバイスを待っています",
-                        zh: "正在等待设备"
-                    ))
-                Text(localizedAppText(
-                    "On your iPhone or iPad, open TypeWhisper, go to Settings → Mac and choose “\(viewModel.computerName)”.",
-                    de: "Öffne TypeWhisper auf deinem iPhone oder iPad, gehe zu Einstellungen → Mac und wähle „\(viewModel.computerName)“.",
-                    ja: "iPhone または iPad で TypeWhisper を開き、設定 → Mac で「\(viewModel.computerName)」を選択してください。",
-                    zh: "在 iPhone 或 iPad 上打开 TypeWhisper，前往“设置”→“Mac”，然后选择“\(viewModel.computerName)”。",
-                    es: "En tu iPhone o iPad, abre TypeWhisper, ve a Ajustes → Mac y elige “\(viewModel.computerName)”."
-                ))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        case .confirming(let request):
-            VStack(spacing: 12) {
-                Text(Self.pairingRequestText(request))
-                    .multilineTextAlignment(.center)
-                Text(Self.formattedCode(request.code))
-                    .font(.system(size: 36, weight: .semibold, design: .monospaced))
-                    .textSelection(.disabled)
-                    .accessibilityLabel(Self.spokenCode(request.code))
-                Text(localizedAppText(
-                    "Approve only if the device shows the same code.",
-                    de: "Bestätige nur, wenn das Gerät denselben Code anzeigt.",
-                    ja: "デバイスに同じコードが表示されている場合のみ承認してください。",
-                    zh: "仅当设备显示相同的代码时才批准。"
-                ))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        case .closed, .waiting, .confirming:
+            HStack(alignment: .center, spacing: 20) {
+                if let invitation = viewModel.pairingInvitation {
+                    RemoteLinkPairingQRCode(payload: invitation.payload)
+                } else {
+                    ProgressView()
+                        .frame(width: RemoteLinkPairingQRCode.maxSide, height: RemoteLinkPairingQRCode.maxSide)
+                        .accessibilityLabel(localizedAppText(
+                            "Waiting for a device",
+                            de: "Warte auf ein Gerät",
+                            ja: "デバイスを待っています",
+                            zh: "正在等待设备"
+                        ))
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    if case .confirming(let request) = viewModel.pairingState {
+                        codeRequest(request)
+                    } else {
+                        Text(viewModel.pairingInvitation?.name ?? viewModel.computerName)
+                            .font(.title3.weight(.semibold))
+                        Text(Self.scanText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(Self.listFallbackText(viewModel.computerName))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         case .finishing:
             VStack(spacing: 12) {
@@ -337,6 +369,26 @@ private struct RemoteLinkPairingSheet: View {
         }
     }
 
+    private func codeRequest(_ request: RemoteLinkPairingRequest) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(Self.pairingRequestText(request))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Self.formattedCode(request.code))
+                .font(.system(size: 36, weight: .semibold, design: .monospaced))
+                .textSelection(.disabled)
+                .accessibilityLabel(Self.spokenCode(request.code))
+            Text(localizedAppText(
+                "Approve only if the device shows the same code.",
+                de: "Bestätige nur, wenn das Gerät denselben Code anzeigt.",
+                ja: "デバイスに同じコードが表示されている場合のみ承認してください。",
+                zh: "仅当设备显示相同的代码时才批准。"
+            ))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder
     private var buttons: some View {
         switch viewModel.pairingState {
@@ -349,6 +401,16 @@ private struct RemoteLinkPairingSheet: View {
             }
             .keyboardShortcut(.defaultAction)
         case .paired:
+            // A new QR code with a new secret; the one just used is burnt.
+            Button(localizedAppText(
+                "Pair Another Device",
+                de: "Weiteres Gerät koppeln",
+                ja: "別のデバイスをペアリング",
+                zh: "配对其他设备",
+                es: "Vincular otro dispositivo"
+            )) {
+                viewModel.beginPairing()
+            }
             Button(String(localized: "Done")) {
                 viewModel.endPairing()
             }
@@ -372,5 +434,56 @@ private struct RemoteLinkPairingSheet: View {
     static func formattedCode(_ code: String) -> String {
         guard code.count == 6 else { return code }
         return "\(code.prefix(3)) \(code.suffix(3))"
+    }
+}
+
+/// The pairing QR code: black modules on white with a quiet zone, scaled in
+/// whole points per module without interpolation, so its edges stay sharp,
+/// also on a photo of the screen.
+private struct RemoteLinkPairingQRCode: View {
+    let payload: String
+
+    static let maxSide: CGFloat = 240
+    private static let context = CIContext(options: [.useSoftwareRenderer: false])
+
+    var body: some View {
+        Group {
+            if let image = Self.image(for: payload) {
+                Image(nsImage: image)
+                    .interpolation(.none)
+            } else {
+                Color.clear
+                    .frame(width: Self.maxSide, height: Self.maxSide)
+            }
+        }
+        .padding(16)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isImage)
+        .accessibilityLabel(localizedAppText(
+            "Pairing QR code. Scan it with TypeWhisper on your phone or tablet under Settings → Mac → Scan QR Code.",
+            de: "QR-Code zum Koppeln. Scanne ihn mit TypeWhisper auf deinem Smartphone oder Tablet unter Einstellungen → Mac → QR-Code scannen.",
+            ja: "ペアリング用 QR コード。スマートフォンまたはタブレットの TypeWhisper で、設定 → Mac → QR コードをスキャン からスキャンしてください。",
+            zh: "配对二维码。请在手机或平板电脑上的 TypeWhisper 中，通过“设置”→“Mac”→“扫描二维码”扫描它。",
+            es: "Código QR de vinculación. Escanéalo con TypeWhisper en tu teléfono o tablet en Ajustes → Mac → Escanear código QR."
+        ))
+    }
+
+    static func image(for payload: String) -> NSImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(payload.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage, output.extent.width > 0 else { return nil }
+        let modules = output.extent.width
+        let pointsPerModule = max(1, (maxSide / modules).rounded(.down))
+        // Rendered at twice the point size for Retina screens, with nearest
+        // sampling, so every module is a block of whole pixels.
+        let pixelsPerModule = pointsPerModule * 2
+        let scaled = output
+            .samplingNearest()
+            .transformed(by: CGAffineTransform(scaleX: pixelsPerModule, y: pixelsPerModule))
+        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        let side = modules * pointsPerModule
+        return NSImage(cgImage: cgImage, size: NSSize(width: side, height: side))
     }
 }

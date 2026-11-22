@@ -378,15 +378,22 @@ struct PremiumLockedFeatureOverview: View {
 /// rest of its settings.
 enum PairedDevicesPremiumCopy {
     static var title: String {
-        localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad")
+        localizedAppText(
+            "iPhone, iPad and Android",
+            de: "iPhone, iPad und Android",
+            ja: "iPhone、iPad、Android",
+            zh: "iPhone、iPad 和 Android",
+            es: "iPhone, iPad y Android"
+        )
     }
 
     static var description: String {
         localizedAppText(
-            "Transcribe and write on your iPhone or iPad with this Mac's models and workflows.",
-            de: "Transkribiere und schreibe auf deinem iPhone oder iPad mit den Modellen und Workflows dieses Macs.",
-            ja: "この Mac のモデルとワークフローを使って、iPhone や iPad で文字起こしや文章作成ができます。",
-            zh: "在 iPhone 或 iPad 上使用这台 Mac 的模型和工作流进行转写和写作。"
+            "Transcribe and write on your phone or tablet with this Mac's models and workflows.",
+            de: "Transkribiere und schreibe auf deinem Smartphone oder Tablet mit den Modellen und Workflows dieses Macs.",
+            ja: "この Mac のモデルとワークフローを使って、スマートフォンやタブレットで文字起こしや文章作成ができます。",
+            zh: "在手机或平板电脑上使用这台 Mac 的模型和工作流进行转写和写作。",
+            es: "Transcribe y escribe en tu teléfono o tablet con los modelos y flujos de trabajo de este Mac."
         )
     }
 

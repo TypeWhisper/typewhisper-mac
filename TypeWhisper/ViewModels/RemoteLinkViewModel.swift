@@ -29,6 +29,8 @@ final class RemoteLinkViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var devices: [RemoteLinkDevice] = []
     @Published private(set) var pairingState: PairingState = .closed
+    /// The QR code the pairing sheet shows. Its secret stays in memory.
+    @Published private(set) var pairingInvitation: RemoteLinkPairingInvitation?
 
     let computerName = RemoteLinkServer.computerName()
 
@@ -61,6 +63,9 @@ final class RemoteLinkViewModel: ObservableObject {
         }
         server.onPairingFinished = { [weak self] device in
             Task { @MainActor in self?.pairingFinished(device) }
+        }
+        server.onPairingInvitationChange = { [weak self] in
+            Task { @MainActor in self?.reloadPairingInvitation() }
         }
     }
 
@@ -113,12 +118,14 @@ final class RemoteLinkViewModel: ObservableObject {
         server.openPairing { [weak self] request in
             await self?.requestApproval(request) ?? false
         }
+        reloadPairingInvitation()
     }
 
     func endPairing() {
         server.closePairing()
         resolveApproval(false)
         pairingState = .closed
+        pairingInvitation = nil
     }
 
     func approvePairing() {
@@ -184,6 +191,12 @@ final class RemoteLinkViewModel: ObservableObject {
         devices = server.store.devices()
     }
 
+    /// The server renews the secret while the sheet stays open and burns it
+    /// once a device used it; the current one is always read from there.
+    private func reloadPairingInvitation() {
+        pairingInvitation = pairingState == .closed ? nil : server.pairingInvitation
+    }
+
     private func requestApproval(_ request: RemoteLinkPairingRequest) async -> Bool {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
@@ -219,8 +232,14 @@ final class RemoteLinkViewModel: ObservableObject {
     private func pairingFinished(_ device: RemoteLinkDevice?) {
         guard pairingState != .closed else { return }
         if let device {
+            // A device that scanned the QR code pairs without a decision
+            // here; a code request still waiting for one is declined.
+            resolveApproval(false)
             pairingState = .paired(device.name)
         } else if case .waiting = pairingState {
+            return
+        } else if case .paired = pairingState {
+            // The declined code request ends after the pairing that succeeded.
             return
         } else {
             pairingState = .failed

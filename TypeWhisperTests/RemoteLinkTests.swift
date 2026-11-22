@@ -181,7 +181,7 @@ final class RemoteLinkTests: XCTestCase {
 
     func testDeviceNamesAreTrimmedAndBounded() {
         XCTAssertEqual(RemoteLinkServer.sanitizedDeviceName(" Marco’s iPhone\n"), "Marco’s iPhone")
-        XCTAssertEqual(RemoteLinkServer.sanitizedDeviceName(nil), "iPhone")
+        XCTAssertEqual(RemoteLinkServer.sanitizedDeviceName(nil), "Device")
         XCTAssertEqual(RemoteLinkServer.sanitizedDeviceName(String(repeating: "a", count: 200)).count, 64)
     }
 
@@ -490,7 +490,379 @@ final class RemoteLinkTests: XCTestCase {
         XCTAssertEqual(server.port, port, "The listener must not be restarted")
     }
 
+    // MARK: - Pairing with the QR secret
+
+    // The iOS and Android repositories assert the same values.
+    func testSecretProofVectorsMatchTheSharedProtocol() throws {
+        let transcript = try Self.knownAnswerTranscript()
+        let secret = Data(repeating: 0x77, count: 16)
+
+        XCTAssertEqual(transcript.digest.base64EncodedString(), "AFtNqLTyjBTktbjzb8VN6wCyXC1fdXUz8b+voU/4SZI=")
+        let clientProof = transcript.secretProof(.client, secret: secret)
+        let serverProof = transcript.secretProof(.server, secret: secret)
+        XCTAssertEqual(clientProof.base64EncodedString(), "ADM7ZOtqBIICAFXiEa027yURZ2IViV8hr/JhkD3P14I=")
+        XCTAssertEqual(serverProof.base64EncodedString(), "mhjbO3qspWdNmMQKzAe5bqV7v0Py5iYUzc0yEuZxnOo=")
+
+        XCTAssertTrue(transcript.isValidSecretProof(clientProof, role: .client, secret: secret))
+        XCTAssertTrue(transcript.isValidSecretProof(serverProof, role: .server, secret: secret))
+        XCTAssertFalse(transcript.isValidSecretProof(clientProof, role: .server, secret: secret))
+        XCTAssertFalse(transcript.isValidSecretProof(clientProof, role: .client, secret: Data(repeating: 0x78, count: 16)))
+        XCTAssertFalse(transcript.isValidSecretProof(
+            transcript.secretProof(.client, secret: Data(repeating: 0x77, count: 15)),
+            role: .client,
+            secret: Data(repeating: 0x77, count: 15)
+        ))
+    }
+
+    func testPairingInvitationPayloadMatchesTheSharedVector() throws {
+        let invitation = RemoteLinkPairingInvitation(
+            serverID: "6F1C2B8E-0000-4000-8000-000000000002",
+            secret: Data(repeating: 0x77, count: 16),
+            name: "Studio Mac"
+        )
+        let payload = "typewhisper-pair:1?id=6F1C2B8E-0000-4000-8000-000000000002&s=d3d3d3d3d3d3d3d3d3d3dw&n=Studio%20Mac"
+        XCTAssertEqual(invitation.payload, payload)
+        XCTAssertEqual(RemoteLinkPairingInvitation(payload: payload), invitation)
+
+        // Scheme without case, free query order, unknown keys ignored, no name.
+        XCTAssertEqual(
+            RemoteLinkPairingInvitation(payload: "TypeWhisper-Pair:1?x=1&s=d3d3d3d3d3d3d3d3d3d3dw&id=6F1C2B8E-0000-4000-8000-000000000002"),
+            RemoteLinkPairingInvitation(serverID: "6F1C2B8E-0000-4000-8000-000000000002", secret: Data(repeating: 0x77, count: 16))
+        )
+        XCTAssertEqual(RemoteLinkPairingInvitation.randomSecret().count, RemoteLink.pairingSecretSize)
+        XCTAssertNotEqual(RemoteLinkPairingInvitation.randomSecret(), RemoteLinkPairingInvitation.randomSecret())
+    }
+
+    func testPairingInvitationRejectsInvalidPayloads() {
+        let id = "6F1C2B8E-0000-4000-8000-000000000002"
+        let secret = "d3d3d3d3d3d3d3d3d3d3dw"
+        let rejected = [
+            "typewhisper-pair:2?id=\(id)&s=\(secret)",
+            "typewhisper-pair://1?id=\(id)&s=\(secret)",
+            "typewhisper-pair:1?id=\(id)&s=\(RemoteLinkPairingInvitation.encodeBase64URL(Data(repeating: 0x77, count: 15)))",
+            "typewhisper-pair:1?id=\(id)&s=\(RemoteLinkPairingInvitation.encodeBase64URL(Data(repeating: 0x77, count: 17)))",
+            "typewhisper-pair:1?id=\(id)&s=d3d3d3d3d3d3d3d3d3d3d+",
+            "typewhisper-pair:1?id=\(id)&s=d3d3d3d3d3d3d3d3d3d3d/",
+            "typewhisper-pair:1?id=\(id)&s=d3d3d3d3d3d3d3d3d3d3dw==",
+            "typewhisper-pair:1?id=\(id)&s=d3d3d3d3d3d3d3d3d3d3dx",
+            "typewhisper-pair:1?s=\(secret)",
+            "typewhisper-pair:1?id=&s=\(secret)",
+            "typewhisper-pair:1?id=6F1C_2B8E&s=\(secret)",
+            "typewhisper-pair:1?id=\(id)&s=\(secret)&s=\(secret)",
+            "typewhisper-pair:1?id=\(id)&s=\(secret)&n=" + String(repeating: "a", count: 512),
+        ]
+        for payload in rejected {
+            XCTAssertNil(RemoteLinkPairingInvitation(payload: payload), payload)
+        }
+    }
+
+    func testHandshakesOmitThePairingMethodFieldsWhenNil() throws {
+        let frame = try RemoteLinkHandshake(type: .pairRequest, deviceID: "device", commitment: Data(count: 32)).frame()
+        let json = String(decoding: frame.payload, as: UTF8.self)
+        XCTAssertFalse(json.contains("methods"), json)
+        XCTAssertFalse(json.contains("secretProof"), json)
+        XCTAssertFalse(json.contains("\"method\""), json)
+    }
+
+    func testTXTRecordOffersTheSecretOnlyWhilePairingIsOpen() throws {
+        let (server, _) = try Self.makeServer()
+        defer { server.stop() }
+        XCTAssertEqual(server.txtRecord(pairing: true)[RemoteLink.txtPairingMethodsKey], "secret,compare")
+        XCTAssertNil(server.txtRecord(pairing: false)[RemoteLink.txtPairingMethodsKey])
+        XCTAssertNil(server.txtRecord(pairing: false)[RemoteLink.txtPairingKey])
+    }
+
+    func testScannedSecretPairsWithoutAskingTheUserAndIsUsedOnce() async throws {
+        let (server, store) = try Self.makeServer()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        let asked = RemoteLinkLockedValue(false)
+        let finished = RemoteLinkLockedValue<[RemoteLinkDevice?]>([])
+        server.onPairingFinished = { device in finished.set(finished.get() + [device]) }
+
+        XCTAssertNil(server.pairingInvitation)
+        server.openPairing { _ in
+            asked.set(true)
+            return true
+        }
+        let invitation = try XCTUnwrap(server.pairingInvitation)
+        XCTAssertEqual(invitation.serverID, store.serverID)
+        XCTAssertEqual(invitation.name, "Studio Mac")
+        XCTAssertEqual(invitation.secret.count, RemoteLink.pairingSecretSize)
+
+        let deviceID = UUID().uuidString
+        let paired = try await Self.pair(endpoint: endpoint, deviceID: deviceID, methods: Self.secretMethods, secret: invitation.secret)
+        XCTAssertNil(paired.error)
+        XCTAssertEqual(paired.method, "secret")
+        XCTAssertEqual(store.pairingKey(for: deviceID), try XCTUnwrap(paired.key))
+        XCTAssertEqual(store.devices().map(\.name), ["Test iPhone"])
+        XCTAssertFalse(asked.get(), "A secret attempt must not reach the approver")
+        XCTAssertEqual(finished.get().compactMap { $0?.id }, [deviceID])
+
+        // The secret is burnt: no QR code until pairing opens again.
+        XCTAssertNil(server.pairingInvitation)
+        let reused = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString, methods: Self.secretMethods, secret: invitation.secret)
+        XCTAssertEqual(reused.error, .remoteError("pairing-failed"))
+        XCTAssertNil(reused.method)
+        XCTAssertEqual(store.devices().map(\.id), [deviceID])
+
+        // Opening pairing again shows a new QR code with a new secret.
+        server.openPairing { _ in true }
+        XCTAssertNotEqual(try XCTUnwrap(server.pairingInvitation).secret, invitation.secret)
+    }
+
+    func testWrongSecretStoresNothingKeepsTheSecretAndLocksTheHostOut() async throws {
+        let (server, store) = try Self.makeServer()
+        defer { server.stop() }
+        server.pairingFailureLockout = 1.5
+        let endpoint = try await Self.endpoint(of: server)
+        server.openPairing { _ in true }
+        let invitation = try XCTUnwrap(server.pairingInvitation)
+
+        let wrong = try await Self.pair(
+            endpoint: endpoint,
+            deviceID: UUID().uuidString,
+            methods: Self.secretMethods,
+            secret: RemoteLinkPairingInvitation.randomSecret()
+        )
+        XCTAssertEqual(wrong.method, "secret")
+        XCTAssertEqual(wrong.error, .remoteError("pairing-failed"))
+        XCTAssertTrue(store.devices().isEmpty)
+        XCTAssertEqual(server.pairingInvitation, invitation, "A wrong proof must not burn the secret")
+
+        // The host is locked out of pairing, with the right secret too and
+        // for a code request.
+        let lockedOut = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString, methods: Self.secretMethods, secret: invitation.secret)
+        XCTAssertEqual(lockedOut.error, .remoteError("pairing-failed"))
+        let codeRequest = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString)
+        XCTAssertEqual(codeRequest.error, .remoteError("pairing-busy"))
+        XCTAssertTrue(store.devices().isEmpty)
+
+        try await Task.sleep(for: .seconds(1.7))
+        let deviceID = UUID().uuidString
+        let paired = try await Self.pair(endpoint: endpoint, deviceID: deviceID, methods: Self.secretMethods, secret: invitation.secret)
+        XCTAssertNil(paired.error)
+        XCTAssertEqual(store.devices().map(\.id), [deviceID])
+    }
+
+    func testMissingSecretProofOrConfirmationStoresNothing() async throws {
+        let (server, store) = try Self.makeServer()
+        defer { server.stop() }
+        server.pairingFailureLockout = 0
+        server.secretPairingStepTimeout = 0.5
+        let endpoint = try await Self.endpoint(of: server)
+        server.openPairing { _ in true }
+        let invitation = try XCTUnwrap(server.pairingInvitation)
+
+        let missing = try await Self.pair(
+            endpoint: endpoint,
+            deviceID: UUID().uuidString,
+            methods: Self.secretMethods,
+            secret: invitation.secret,
+            sendsSecretProof: false
+        )
+        XCTAssertEqual(missing.error, .remoteError("pairing-failed"))
+        XCTAssertTrue(store.devices().isEmpty)
+        XCTAssertEqual(server.pairingInvitation, invitation)
+
+        // A device that never confirms is dropped after the step timeout.
+        let connection = RemoteLinkConnection(endpoint: endpoint)
+        defer { connection.close() }
+        try await connection.start(timeout: 5)
+        let clientKey = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+        let clientNonce = RemoteLinkCrypto.randomNonce()
+        try await connection.send(RemoteLinkHandshake(
+            type: .pairRequest,
+            deviceID: UUID().uuidString,
+            commitment: RemoteLinkCrypto.commitment(clientKey: clientKey, clientNonce: clientNonce),
+            methods: Self.secretMethods
+        ))
+        _ = try await connection.receiveHandshake(timeout: 5).expecting(.pairChallenge)
+        try await connection.send(RemoteLinkHandshake(type: .pairReveal, nonce: clientNonce, key: clientKey))
+        let started = Date()
+        do {
+            _ = try await connection.receiveHandshake(timeout: 5)
+            XCTFail("The Mac must not answer without a confirmation")
+        } catch {
+            XCTAssertNotEqual(error as? RemoteLinkError, .timedOut)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 3)
+        XCTAssertTrue(store.devices().isEmpty)
+        XCTAssertEqual(server.pairingInvitation, invitation)
+    }
+
+    func testSecretExpiresIsRenewedWhilePairingIsOpenAndDiesWithTheSheet() async throws {
+        let (server, store) = try Self.makeServer()
+        defer { server.stop() }
+        server.pairingSecretLifetime = 0.5
+        server.pairingFailureLockout = 0
+        let changes = RemoteLinkLockedValue(0)
+        server.onPairingInvitationChange = { changes.set(changes.get() + 1) }
+        let endpoint = try await Self.endpoint(of: server)
+        server.openPairing { _ in true }
+        let expired = try XCTUnwrap(server.pairingInvitation)
+
+        try await Task.sleep(for: .seconds(0.9))
+        let renewed = try XCTUnwrap(server.pairingInvitation)
+        XCTAssertNotEqual(renewed.secret, expired.secret)
+        XCTAssertGreaterThanOrEqual(changes.get(), 2)
+
+        let late = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString, methods: Self.secretMethods, secret: expired.secret)
+        XCTAssertEqual(late.error, .remoteError("pairing-failed"))
+        XCTAssertTrue(store.devices().isEmpty)
+
+        server.closePairing()
+        XCTAssertNil(server.pairingInvitation)
+        let closed = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString, methods: Self.secretMethods, secret: renewed.secret)
+        XCTAssertEqual(closed.error, .remoteError("pairing-failed"))
+        XCTAssertNil(closed.method)
+        XCTAssertTrue(store.devices().isEmpty)
+    }
+
+    func testRequestsWithoutTheSecretCompareTheCodeWhileTheQRCodeIsShown() async throws {
+        let (server, store) = try Self.makeServer()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        let shownCodes = RemoteLinkLockedValue<[String]>([])
+        server.openPairing { request in
+            shownCodes.set(shownCodes.get() + [request.code])
+            return true
+        }
+        let invitation = try XCTUnwrap(server.pairingInvitation)
+
+        // An old iPhone sends no methods, a new one that picked the Mac
+        // from the list offers the code methods.
+        let old = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString)
+        let fromList = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString, methods: ["code-entry", "compare"])
+        XCTAssertNil(old.error)
+        XCTAssertNil(fromList.error)
+        XCTAssertNil(old.method)
+        XCTAssertNil(fromList.method)
+        XCTAssertEqual(shownCodes.get(), [try XCTUnwrap(old.code), try XCTUnwrap(fromList.code)])
+        XCTAssertEqual(store.devices().count, 2)
+        XCTAssertEqual(server.pairingInvitation, invitation, "A code pairing must not use up the QR code")
+
+        // A request that also offers the secret gets the secret while it is
+        // valid, so it cannot fall back to the code and skip the proof.
+        let fallback = try await Self.pair(
+            endpoint: endpoint,
+            deviceID: UUID().uuidString,
+            methods: ["secret", "compare"],
+            secret: nil
+        )
+        XCTAssertEqual(fallback.method, "secret", "A live secret wins over the code")
+        XCTAssertNotNil(fallback.error)
+        XCTAssertEqual(store.devices().count, 2)
+    }
+
+    func testSecretAttemptPairsWhileACodeRequestHoldsTheSlotAndDeclinesIt() async throws {
+        let (server, store) = try Self.makeServer()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        let codeRequestArrived = RemoteLinkLockedValue(false)
+        server.openPairing { _ in
+            codeRequestArrived.set(true)
+            // The user never decides.
+            try? await Task.sleep(for: .seconds(30))
+            return false
+        }
+        let invitation = try XCTUnwrap(server.pairingInvitation)
+
+        let squatterID = UUID().uuidString
+        let squatter = Task {
+            try await Self.pair(endpoint: endpoint, deviceID: squatterID, replyTimeout: 10)
+        }
+        for _ in 0..<100 where !codeRequestArrived.get() {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(codeRequestArrived.get())
+
+        let deviceID = UUID().uuidString
+        let paired = try await Self.pair(endpoint: endpoint, deviceID: deviceID, methods: Self.secretMethods, secret: invitation.secret)
+        XCTAssertNil(paired.error)
+
+        let declined = try await squatter.value
+        XCTAssertNil(declined.key)
+        XCTAssertEqual(declined.error, .unexpectedMessage("pair-denied"))
+        XCTAssertEqual(store.devices().map(\.id), [deviceID])
+    }
+
+    func testAtMostTwoSecretAttemptsRunAtOnce() async throws {
+        let (server, _) = try Self.makeServer()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        server.openPairing { _ in true }
+
+        var holding: [RemoteLinkConnection] = []
+        defer { holding.forEach { $0.close() } }
+        for _ in 0..<RemoteLinkServer.maxSecretPairingAttempts {
+            let connection = RemoteLinkConnection(endpoint: endpoint)
+            try await connection.start(timeout: 5)
+            holding.append(connection)
+            let clientKey = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+            try await connection.send(RemoteLinkHandshake(
+                type: .pairRequest,
+                deviceID: UUID().uuidString,
+                commitment: RemoteLinkCrypto.commitment(clientKey: clientKey, clientNonce: RemoteLinkCrypto.randomNonce()),
+                methods: Self.secretMethods
+            ))
+            let challenge = try await connection.receiveHandshake(timeout: 5).expecting(.pairChallenge)
+            XCTAssertEqual(challenge.method, "secret")
+        }
+
+        let third = try await Self.pair(
+            endpoint: endpoint,
+            deviceID: UUID().uuidString,
+            methods: Self.secretMethods,
+            secret: try XCTUnwrap(server.pairingInvitation).secret
+        )
+        XCTAssertEqual(third.error, .remoteError("pairing-busy"))
+    }
+
+    @MainActor
+    func testPairingSheetShowsTheQRCodeAndTheDeviceThatScannedIt() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Studio Mac" }, advertises: false)
+        let defaults = UserDefaults(suiteName: "RemoteLinkTests-\(UUID().uuidString)")!
+        let viewModel = RemoteLinkViewModel(server: server, defaults: defaults, premiumAccess: { true })
+        try server.start()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+
+        viewModel.beginPairing()
+        let invitation = try XCTUnwrap(viewModel.pairingInvitation)
+        XCTAssertEqual(invitation, server.pairingInvitation)
+        XCTAssertEqual(RemoteLinkPairingInvitation(payload: invitation.payload), invitation)
+
+        let paired = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString, methods: Self.secretMethods, secret: invitation.secret)
+        XCTAssertNil(paired.error)
+        for _ in 0..<100 where viewModel.pairingState == .waiting {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(viewModel.pairingState, .paired("Test iPhone"))
+        XCTAssertNil(viewModel.pairingInvitation)
+
+        viewModel.beginPairing()
+        XCTAssertNotEqual(try XCTUnwrap(viewModel.pairingInvitation).secret, invitation.secret)
+        viewModel.endPairing()
+        XCTAssertNil(viewModel.pairingInvitation)
+        XCTAssertNil(server.pairingInvitation)
+    }
+
     // MARK: - Helpers
+
+    private static func knownAnswerTranscript() throws -> RemoteLinkPairingTranscript {
+        let clientKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x11, count: 32))
+        let serverKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x22, count: 32))
+        return RemoteLinkPairingTranscript(
+            deviceID: "6F1C2B8E-0000-4000-8000-000000000001",
+            serverID: "6F1C2B8E-0000-4000-8000-000000000002",
+            clientKey: clientKey.publicKey.rawRepresentation,
+            serverKey: serverKey.publicKey.rawRepresentation,
+            clientNonce: Data(repeating: 0x33, count: 32),
+            serverNonce: Data(repeating: 0x44, count: 32)
+        )
+    }
 
     private static func openSession(
         endpoint: NWEndpoint,
@@ -554,9 +926,21 @@ final class RemoteLinkTests: XCTestCase {
         var key: SymmetricKey?
         var code: String?
         var error: RemoteLinkError?
+        /// The method in the server's challenge, if one arrived.
+        var method: String?
     }
 
-    private static func pair(endpoint: NWEndpoint, deviceID: String) async throws -> PairingResult {
+    /// Runs the client side of a pairing. With `secret` it sends
+    /// `secretProof` (unless `sendsSecretProof` is false) and accepts the
+    /// approval only with a valid server proof of the secret.
+    private static func pair(
+        endpoint: NWEndpoint,
+        deviceID: String,
+        methods: [String]? = nil,
+        secret: Data? = nil,
+        sendsSecretProof: Bool = true,
+        replyTimeout: TimeInterval = 5
+    ) async throws -> PairingResult {
         let connection = RemoteLinkConnection(endpoint: endpoint)
         defer { connection.close() }
         try await connection.start(timeout: 5)
@@ -568,11 +952,14 @@ final class RemoteLinkTests: XCTestCase {
             type: .pairRequest,
             deviceID: deviceID,
             name: "Test iPhone",
-            commitment: RemoteLinkCrypto.commitment(clientKey: clientKey, clientNonce: clientNonce)
+            commitment: RemoteLinkCrypto.commitment(clientKey: clientKey, clientNonce: clientNonce),
+            methods: methods
         ))
 
+        var method: String?
         do {
             let challenge = try await connection.receiveHandshake(timeout: 5).expecting(.pairChallenge)
+            method = challenge.method
             try await connection.send(RemoteLinkHandshake(type: .pairReveal, nonce: clientNonce, key: clientKey))
             let transcript = RemoteLinkPairingTranscript(
                 deviceID: deviceID,
@@ -583,13 +970,31 @@ final class RemoteLinkTests: XCTestCase {
                 serverNonce: try XCTUnwrap(challenge.nonce)
             )
             let key = try transcript.pairingKey(privateKey: privateKey, peerKey: transcript.serverKey)
-            try await connection.send(RemoteLinkHandshake(type: .pairConfirm, proof: transcript.proof(.clientConfirmed, key: key)))
-            let approved = try await connection.receiveHandshake(timeout: 5).expecting(.pairApproved)
+            try await connection.send(RemoteLinkHandshake(
+                type: .pairConfirm,
+                proof: transcript.proof(.clientConfirmed, key: key),
+                secretProof: sendsSecretProof ? secret.map { transcript.secretProof(.client, secret: $0) } : nil
+            ))
+            let approved = try await connection.receiveHandshake(timeout: replyTimeout).expecting(.pairApproved)
             XCTAssertTrue(transcript.isValidProof(try XCTUnwrap(approved.proof), label: .serverApproved, key: key))
-            return PairingResult(key: key, code: transcript.verificationCode)
+            if let secret {
+                XCTAssertTrue(transcript.isValidSecretProof(try XCTUnwrap(approved.secretProof), role: .server, secret: secret))
+            } else {
+                XCTAssertNil(approved.secretProof)
+            }
+            return PairingResult(key: key, code: transcript.verificationCode, method: method)
         } catch let error as RemoteLinkError {
-            return PairingResult(error: error)
+            return PairingResult(error: error, method: method)
         }
+    }
+
+    private static let secretMethods = [RemoteLinkPairingMethod.secret.rawValue]
+
+    private static func makeServer() throws -> (RemoteLinkServer, RemoteLinkDeviceStore) {
+        let (store, _) = makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Studio Mac" }, advertises: false)
+        try server.start()
+        return (server, store)
     }
 
     private static func send(_ request: String, endpoint: NWEndpoint, deviceID: String, key: SymmetricKey) async throws -> String {
