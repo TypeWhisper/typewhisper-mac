@@ -778,7 +778,7 @@ private struct RecordingRow: View {
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel(String(localized: "Error: \(failureSummary)"))
+                    .selectableTextAccessibilityLabel(String(localized: "Error: \(failureSummary)"))
             }
 
             // Expandable transcript

@@ -608,8 +608,7 @@ struct HistoryRecordDetailView: View {
                 .accessibilityHidden(true)
             // Read as one "label, value" pair instead of two unrelated texts.
             Text(value).textSelection(.enabled)
-                .accessibilityLabel(label)
-                .accessibilityValue(spokenValue ?? value)
+                .selectableTextAccessibilityLabel(label, value: spokenValue ?? value)
         }
     }
 

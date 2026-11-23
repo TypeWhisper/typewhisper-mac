@@ -83,9 +83,7 @@ struct ManagedSettingsSection: View {
                             Text(row.name)
                                 .font(.callout.monospaced())
                                 .textSelection(.enabled)
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(Self.accessibilityLabel(for: row))
-                                .accessibilityAddTraits(.isStaticText)
+                                .selectableTextAccessibilityLabel(Self.accessibilityLabel(for: row))
                             Text(row.scope)
                                 .accessibilityHidden(true)
                             Text(row.value)
@@ -113,9 +111,7 @@ struct ManagedSettingsSection: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(problem)
-                        .accessibilityAddTraits(.isStaticText)
+                        .selectableTextAccessibilityLabel(problem)
                     }
                 }
             }
