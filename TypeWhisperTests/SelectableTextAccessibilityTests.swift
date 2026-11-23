@@ -63,15 +63,42 @@ final class SelectableTextAccessibilityTests: XCTestCase {
         ])
     }
 
+    func testChainScanSeesAMultiLineModifierAboveTheSelection() {
+        let lines = [
+            "if let failure {",
+            "    Text(failure)",
+            "        .accessibilityLabel(localizedAppText(",
+            "            \"Error\",",
+            "            de: \"Fehler\"",
+            "        ))",
+            "        .font(.caption)",
+            "        .textSelection(.enabled)",
+            "}",
+        ]
+
+        XCTAssertEqual(Self.modifiers(inChainAround: 7, of: lines), [
+            ".accessibilityLabel(localizedAppText(\"Error\",de: \"Fehler\"))",
+            ".font(.caption)",
+            ".textSelection(.enabled)",
+        ])
+    }
+
     /// The top-level modifiers of the expression that line `index` belongs to. The expression starts
     /// at the nearest line above that does not begin with `.` and ends before the first later line
     /// that neither begins with `.` nor continues an open argument list.
     private static func modifiers(inChainAround index: Int, of lines: [String]) -> [String] {
         let trimmed = lines.map { $0.trimmingCharacters(in: .whitespaces) }
 
+        // Walk up through modifier lines and through argument lines of a multi-line modifier,
+        // which close parentheses that a line further up opened.
         var first = index
-        while first > 0, trimmed[first].hasPrefix(".") {
+        var unclosedAbove = 0
+        while first > 0, trimmed[first].hasPrefix(".") || unclosedAbove > 0 {
             first -= 1
+            for character in trimmed[first] {
+                if character == ")" { unclosedAbove += 1 } else if character == "(" { unclosedAbove -= 1 }
+            }
+            unclosedAbove = max(0, unclosedAbove)
         }
 
         var chain = ""

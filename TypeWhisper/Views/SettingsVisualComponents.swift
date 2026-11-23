@@ -208,12 +208,14 @@ extension View {
     /// SwiftUI for the label again. When an accessibility client such as VoiceOver reads the text,
     /// this repeats until the main thread's stack overflows (#2004). The label therefore sits on a
     /// plain container around the text, and the text itself keeps no accessibility modifiers.
+    /// The container replaces the text for VoiceOver, so the text is read once, as static text.
     @ViewBuilder
     func selectableTextAccessibilityLabel(_ label: String, value: String? = nil) -> some View {
         let container = HStack(spacing: 0) {
             self
         }
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(label)
 
         if let value {
