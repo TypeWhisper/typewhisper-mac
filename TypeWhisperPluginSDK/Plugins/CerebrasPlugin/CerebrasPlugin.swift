@@ -5,9 +5,10 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(CerebrasPlugin)
-final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
+final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffortControllableProvider, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.cerebras"
     static let pluginName = "Cerebras"
+    static let reasoningEffortsKey = "reasoningEfforts"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -15,6 +16,11 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedModels: [CerebrasFetchedModel] = []
+    /// The Reasoning Effort picked in the plugin settings, per model ID. The
+    /// settings write it on the main thread while requests read it, so every
+    /// access goes through `reasoningEffortsLock`.
+    private var _reasoningEfforts: [String: String] = [:]
+    private let reasoningEffortsLock = NSLock()
 
     private let chatHelper = PluginOpenAIChatHelper(
         baseURL: "https://api.cerebras.ai"
@@ -31,11 +37,14 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
            let models = try? JSONDecoder().decode([CerebrasFetchedModel].self, from: data) {
             _fetchedModels = models
         }
-        _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
+        _selectedLLMModelId = (host.userDefault(forKey: "selectedLLMModel") as? String)
+            .map(Self.currentModelId(for:))
         _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
+        let savedEfforts = host.userDefault(forKey: Self.reasoningEffortsKey) as? [String: String] ?? [:]
+        reasoningEffortsLock.withLock { _reasoningEfforts = savedEfforts }
     }
 
     func deactivate() {
@@ -57,19 +66,40 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
         "gpt-oss-120b": "GPT-OSS 120B",
         "qwen-3-235b-a22b-instruct-2507": "Qwen 3 235B",
         "zai-glm-4.7": "ZAI GLM 4.7",
+        "qwen-3.8-27b": "Qwen 3.8 27B",
+        "kimi-k3": "Kimi K3",
+        "kimi-k3.1-pro": "Kimi K3.1 Pro",
+        "zai-glm-5.3-flash": "ZAI GLM 5.3 Flash",
+        "gemma-4-31b": "Gemma 4 31B",
     ]
 
     private static let fallbackModels: [PluginModelInfo] = [
-        PluginModelInfo(id: "llama3.1-8b", displayName: "Llama 3.1 8B"),
         PluginModelInfo(id: "gpt-oss-120b", displayName: "GPT-OSS 120B"),
     ]
+
+    /// Models Cerebras deprecated, mapped to the model it recommends instead.
+    /// The saved selection and a model list fetched before the deprecation use
+    /// the replacement.
+    private static let replacedModelIds: [String: String] = [
+        "llama3.1-8b": "gpt-oss-120b",
+        "qwen-3-235b-a22b-instruct-2507": "gpt-oss-120b",
+        "zai-glm-4.7": "gpt-oss-120b",
+    ]
+
+    static func currentModelId(for modelId: String) -> String {
+        replacedModelIds[modelId] ?? modelId
+    }
 
     var supportedModels: [PluginModelInfo] {
         if _fetchedModels.isEmpty {
             return Self.fallbackModels
         }
-        return _fetchedModels.map {
-            PluginModelInfo(id: $0.id, displayName: Self.displayNames[$0.id] ?? $0.id)
+        // A list fetched before Cerebras retired a model can still hold it.
+        var seen = Set<String>()
+        return _fetchedModels.compactMap { model in
+            let id = Self.currentModelId(for: model.id)
+            guard seen.insert(id).inserted else { return nil }
+            return PluginModelInfo(id: id, displayName: Self.displayNames[id] ?? id)
         }
     }
 
@@ -88,17 +118,109 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            effort: nil
+        )
+    }
+
+    func process(systemPrompt: String, userText: String, model: String?, effort: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
+    ) async throws -> String {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        let modelId = llmModelId(for: model)
         return try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
+            reasoningEffort: requestReasoningEffort(effort, forModelId: modelId),
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         )
+    }
+
+    private func llmModelId(for model: String?) -> String {
+        Self.currentModelId(for: model ?? _selectedLLMModelId ?? supportedModels.first!.id)
+    }
+
+    // MARK: - Reasoning Effort
+
+    func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+        let bundle = Bundle(for: CerebrasPlugin.self)
+        return CerebrasReasoningEffort.supportedEfforts(forModelId: llmModelId(for: model)).map { effort in
+            PluginLLMEffortInfo(id: effort, displayName: Self.effortDisplayName(effort, bundle: bundle))
+        }
+    }
+
+    /// The level a request without an explicit effort uses: the one picked in the
+    /// plugin settings for that model, otherwise Cerebras' own default.
+    func defaultEffortId(for model: String?) -> String? {
+        savedReasoningEffort(forModelId: llmModelId(for: model))
+    }
+
+    func savedReasoningEffort(forModelId modelId: String) -> String? {
+        let supported = CerebrasReasoningEffort.supportedEfforts(forModelId: modelId)
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
+            return saved
+        }
+        return CerebrasReasoningEffort.providerDefault(forModelId: modelId)
+    }
+
+    func setReasoningEffort(_ effort: String, forModelId modelId: String) {
+        let efforts = reasoningEffortsLock.withLock {
+            _reasoningEfforts[modelId] = effort
+            return _reasoningEfforts
+        }
+        host?.setUserDefault(efforts, forKey: Self.reasoningEffortsKey)
+    }
+
+    private func storedReasoningEffort(forModelId modelId: String) -> String? {
+        reasoningEffortsLock.withLock { _reasoningEfforts[modelId] }
+    }
+
+    /// The `reasoning_effort` a request sends: the workflow's level, else the one
+    /// picked in the plugin settings. Nil leaves the field out, so a model keeps
+    /// Cerebras' default until a level is picked, and models without reasoning
+    /// levels never get the field.
+    func requestReasoningEffort(_ requested: String?, forModelId modelId: String) -> String? {
+        let supported = CerebrasReasoningEffort.supportedEfforts(forModelId: modelId)
+        if let requested, supported.contains(requested) {
+            return requested
+        }
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
+            return saved
+        }
+        return nil
+    }
+
+    static func effortDisplayName(_ effort: String, bundle: Bundle) -> String {
+        switch effort {
+        case "none": String(localized: "Off", bundle: bundle)
+        case "low": String(localized: "Low", bundle: bundle)
+        case "medium": String(localized: "Medium", bundle: bundle)
+        case "high": String(localized: "High", bundle: bundle)
+        case "max": String(localized: "Max", bundle: bundle)
+        default: effort
+        }
     }
 
     func selectLLMModel(_ modelId: String) {
@@ -175,7 +297,7 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
         }
     }
 
-    fileprivate func setFetchedModels(_ models: [CerebrasFetchedModel]) {
+    func setFetchedModels(_ models: [CerebrasFetchedModel]) {
         _fetchedModels = models
         if let data = try? JSONEncoder().encode(models) {
             host?.setUserDefault(data, forKey: "fetchedModels")
@@ -205,6 +327,31 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
         } catch {
             return []
         }
+    }
+}
+
+// MARK: - Reasoning Effort Catalog
+
+/// The `reasoning_effort` levels Cerebras documents per model, in the order the
+/// settings list them, and the level Cerebras uses when the field is missing.
+/// Other models get no picker and no field.
+enum CerebrasReasoningEffort {
+    private static let catalog: [String: (efforts: [String], providerDefault: String)] = [
+        "gpt-oss-120b": (["low", "medium", "high"], "medium"),
+        "qwen-3.8-27b": (["none", "low", "medium", "high"], "high"),
+        "kimi-k3": (["low", "high", "max"], "max"),
+        "kimi-k3.1-pro": (["low", "medium", "high", "max"], "max"),
+        "zai-glm-5.3-flash": (["low", "high", "max"], "max"),
+        // Gemma 4 reasons the same at low, medium and high, so it only switches on.
+        "gemma-4-31b": (["none", "high"], "none"),
+    ]
+
+    static func supportedEfforts(forModelId modelId: String) -> [String] {
+        catalog[modelId]?.efforts ?? []
+    }
+
+    static func providerDefault(forModelId modelId: String) -> String? {
+        catalog[modelId]?.providerDefault
     }
 }
 
@@ -249,6 +396,7 @@ private struct CerebrasSettingsView: View {
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedModels: [CerebrasFetchedModel] = []
+    @State private var reasoningEffort: String = ""
     private let bundle = Bundle(for: CerebrasPlugin.self)
 
     var body: some View {
@@ -351,12 +499,44 @@ private struct CerebrasSettingsView: View {
                     .labelsHidden()
                     .onChange(of: selectedModel) {
                         plugin.selectLLMModel(selectedModel)
+                        showReasoningEffort()
                     }
 
                     if fetchedModels.isEmpty {
                         Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if !reasoningEfforts.isEmpty {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Reasoning Effort", bundle: bundle)
+                            .font(.headline)
+
+                        Picker(selection: Binding(
+                            get: { reasoningEffort },
+                            set: { effort in
+                                reasoningEffort = effort
+                                plugin.setReasoningEffort(effort, forModelId: selectedModel)
+                            }
+                        )) {
+                            ForEach(reasoningEfforts, id: \.self) { effort in
+                                Text(CerebrasPlugin.effortDisplayName(effort, bundle: bundle)).tag(effort)
+                            }
+                        } label: {
+                            Text("Reasoning Effort", bundle: bundle)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
+
+                        Text("Lower levels answer faster and use fewer tokens. Workflows can pick their own level.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -407,7 +587,16 @@ private struct CerebrasSettingsView: View {
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedModels = plugin._fetchedModels
+            showReasoningEffort()
         }
+    }
+
+    private var reasoningEfforts: [String] {
+        CerebrasReasoningEffort.supportedEfforts(forModelId: selectedModel)
+    }
+
+    private func showReasoningEffort() {
+        reasoningEffort = plugin.savedReasoningEffort(forModelId: selectedModel) ?? ""
     }
 
     private func saveApiKey() {
