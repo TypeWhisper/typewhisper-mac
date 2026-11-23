@@ -62,6 +62,11 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
         "gpt-oss-120b": "GPT-OSS 120B",
         "qwen-3-235b-a22b-instruct-2507": "Qwen 3 235B",
         "zai-glm-4.7": "ZAI GLM 4.7",
+        "qwen-3.8-27b": "Qwen 3.8 27B",
+        "kimi-k3": "Kimi K3",
+        "kimi-k3.1-pro": "Kimi K3.1 Pro",
+        "zai-glm-5.3-flash": "ZAI GLM 5.3 Flash",
+        "gemma-4-31b": "Gemma 4 31B",
     ]
 
     private static let fallbackModels: [PluginModelInfo] = [
