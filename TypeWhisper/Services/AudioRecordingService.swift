@@ -298,8 +298,12 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
     /// below the ceiling, and the gain then recovers gently toward the chosen value.
     private func manualGain(target: Float, inputPeak: Float) -> Float {
         let target = min(max(target, Self.minimumGain), Self.maximumGain)
-        // 0 dB passes the input through unchanged, as before the gain picker.
-        guard target > Self.minimumGain else { return Self.minimumGain }
+        // 0 dB passes the input through unchanged, as before the gain picker. Clear the
+        // limiter state so a later boost starts at its full value.
+        guard target > Self.minimumGain else {
+            reset()
+            return Self.minimumGain
+        }
         return stateLock.withLock { state -> Float in
             if state.mode != .manual || state.manualTarget != target {
                 state = State(gain: target, mode: .manual, manualTarget: target)
