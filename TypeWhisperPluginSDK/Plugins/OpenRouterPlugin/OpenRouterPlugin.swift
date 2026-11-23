@@ -10,7 +10,7 @@ final class OpenRouterPlugin: NSObject,
     TranscriptionEnginePlugin,
     DictionaryTermsCapabilityProviding,
     LLMProviderPlugin,
-    LLMTemperatureControllableProvider,
+    LLMTemperatureAndEffortControllableProvider,
     LLMModelSelectable,
     @unchecked Sendable
 {
@@ -26,6 +26,13 @@ final class OpenRouterPlugin: NSObject,
     fileprivate var _fetchedLLMModels: [OpenRouterFetchedModel] = []
     fileprivate var _fetchedTranscriptionModels: [OpenRouterFetchedModel] = []
     fileprivate var _elevenLabsCleanTranscript = true
+    /// The Reasoning Effort picked in the plugin settings, per model ID. The
+    /// settings write it on the main thread while requests read it, so every
+    /// access goes through `reasoningEffortsLock`.
+    private var _reasoningEfforts: [String: String] = [:]
+    private let reasoningEffortsLock = NSLock()
+    /// Background refresh of a model list cached before it carried reasoning levels.
+    private(set) var llmModelRefreshTask: Task<Void, Never>?
 
     private static let chatRequestTimeout: TimeInterval = 30
     private static let transcriptionRequestTimeout: TimeInterval = 120
@@ -39,6 +46,9 @@ final class OpenRouterPlugin: NSObject,
         static let fetchedModels = "fetchedModels"
         static let fetchedTranscriptionModels = "fetchedTranscriptionModels"
         static let elevenLabsCleanTranscript = "elevenLabsCleanTranscript"
+        static let reasoningEfforts = "reasoningEfforts"
+        /// Set once the cached LLM list carries each model's reasoning levels.
+        static let fetchedModelsIncludeReasoning = "fetchedModelsIncludeReasoning"
     }
 
     required override init() {
@@ -74,6 +84,26 @@ final class OpenRouterPlugin: NSObject,
             ?? 0.3
         _elevenLabsCleanTranscript = host.userDefault(forKey: Self.StorageKeys.elevenLabsCleanTranscript) as? Bool
             ?? true
+        let savedEfforts = host.userDefault(forKey: Self.StorageKeys.reasoningEfforts) as? [String: String] ?? [:]
+        reasoningEffortsLock.withLock { _reasoningEfforts = savedEfforts }
+        refreshLLMModelsWithoutReasoningLevels()
+    }
+
+    /// A list cached by an earlier plugin version lacks the reasoning levels, so
+    /// no model would offer a Reasoning Effort until the user pressed Refresh.
+    /// Fetch it once in the background instead.
+    private func refreshLLMModelsWithoutReasoningLevels() {
+        guard let host, isConfigured, !_fetchedLLMModels.isEmpty,
+              host.userDefault(forKey: Self.StorageKeys.fetchedModelsIncludeReasoning) as? Bool != true
+        else { return }
+        llmModelRefreshTask?.cancel()
+        llmModelRefreshTask = Task { [weak self] in
+            guard let models = await self?.fetchLLMModels(), !models.isEmpty, !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self, self.host != nil else { return }
+                self.setFetchedLLMModels(models)
+            }
+        }
     }
 
     private static func resolvedStoredModelId(
@@ -95,6 +125,8 @@ final class OpenRouterPlugin: NSObject,
     }
 
     func deactivate() {
+        llmModelRefreshTask?.cancel()
+        llmModelRefreshTask = nil
         host = nil
     }
 
@@ -478,16 +510,43 @@ final class OpenRouterPlugin: NSObject,
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            effort: nil
+        )
+    }
+
+    func process(systemPrompt: String, userText: String, model: String?, effort: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
+    ) async throws -> String {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        let modelId = llmModelId(for: model)
         let request = try Self.makeChatRequest(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective),
+            reasoningEffort: requestReasoningEffort(effort, forModelId: modelId),
             timeout: Self.chatRequestTimeout
         )
         let (data, response) = try await PluginHTTPClient.data(for: request)
@@ -495,6 +554,84 @@ final class OpenRouterPlugin: NSObject,
         // Reported before parsing: a reply cut off at the token limit still used the tokens.
         PluginLLMUsageReporting.report(.openAICompatible(from: data))
         return try Self.parseChatResponse(data)
+    }
+
+    private func llmModelId(for model: String?) -> String {
+        model ?? _selectedLLMModelId ?? supportedModels.first!.id
+    }
+
+    // MARK: - Reasoning Effort
+
+    /// The effort levels OpenRouter lists for a model, lowest first. Models
+    /// without levels, and lists cached before they carried them, offer none.
+    func reasoningEffortLevels(forModelId modelId: String) -> [String] {
+        llmModelInfo(forId: modelId)?.reasoningEffortLevels ?? []
+    }
+
+    private func llmModelInfo(forId modelId: String) -> OpenRouterFetchedModel? {
+        let models = _fetchedLLMModels.isEmpty ? Self.fallbackLLMModels : _fetchedLLMModels
+        return models.first(where: { $0.id == modelId })
+    }
+
+    func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+        let bundle = Bundle(for: OpenRouterPlugin.self)
+        return reasoningEffortLevels(forModelId: llmModelId(for: model)).map { effort in
+            PluginLLMEffortInfo(id: effort, displayName: Self.effortDisplayName(effort, bundle: bundle))
+        }
+    }
+
+    /// The level a request without an explicit effort uses: the one picked in the
+    /// plugin settings for that model, otherwise the model's own default.
+    func defaultEffortId(for model: String?) -> String? {
+        savedReasoningEffort(forModelId: llmModelId(for: model))
+    }
+
+    func savedReasoningEffort(forModelId modelId: String) -> String? {
+        let supported = reasoningEffortLevels(forModelId: modelId)
+        guard !supported.isEmpty else { return nil }
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
+            return saved
+        }
+        return llmModelInfo(forId: modelId)?.defaultReasoningEffort.flatMap { supported.contains($0) ? $0 : nil }
+    }
+
+    func setReasoningEffort(_ effort: String, forModelId modelId: String) {
+        let efforts = reasoningEffortsLock.withLock {
+            _reasoningEfforts[modelId] = effort
+            return _reasoningEfforts
+        }
+        host?.setUserDefault(efforts, forKey: Self.StorageKeys.reasoningEfforts)
+    }
+
+    private func storedReasoningEffort(forModelId modelId: String) -> String? {
+        reasoningEffortsLock.withLock { _reasoningEfforts[modelId] }
+    }
+
+    /// The effort a request sends: the workflow's level, else the one picked in
+    /// the plugin settings. Nil leaves `reasoning` out, so a model keeps its
+    /// default until a level is picked, and models without levels never get it.
+    func requestReasoningEffort(_ requested: String?, forModelId modelId: String) -> String? {
+        let supported = reasoningEffortLevels(forModelId: modelId)
+        if let requested, supported.contains(requested) {
+            return requested
+        }
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
+            return saved
+        }
+        return nil
+    }
+
+    static func effortDisplayName(_ effort: String, bundle: Bundle) -> String {
+        switch effort {
+        case "none": String(localized: "Off", bundle: bundle)
+        case "minimal": String(localized: "Minimal", bundle: bundle)
+        case "low": String(localized: "Low", bundle: bundle)
+        case "medium": String(localized: "Medium", bundle: bundle)
+        case "high": String(localized: "High", bundle: bundle)
+        case "xhigh": String(localized: "Extra High", bundle: bundle)
+        case "max": String(localized: "Max", bundle: bundle)
+        default: effort
+        }
     }
 
     func selectLLMModel(_ modelId: String) {
@@ -529,6 +666,7 @@ final class OpenRouterPlugin: NSObject,
         systemPrompt: String,
         userText: String,
         temperature: Double?,
+        reasoningEffort: String? = nil,
         timeout: TimeInterval
     ) throws -> URLRequest {
         guard let url = URL(string: "https://openrouter.ai/api/v1/chat/completions") else {
@@ -545,6 +683,12 @@ final class OpenRouterPlugin: NSObject,
         ]
         if let temperature {
             body["temperature"] = temperature
+        }
+        // OpenRouter's unified reasoning object; it translates the level for
+        // each provider. The reasoning text comes back in `message.reasoning`,
+        // which parseChatResponse ignores.
+        if let reasoningEffort, !reasoningEffort.isEmpty {
+            body["reasoning"] = ["effort": reasoningEffort]
         }
 
         var request = URLRequest(url: url)
@@ -647,6 +791,7 @@ final class OpenRouterPlugin: NSObject,
         _fetchedLLMModels = models
         if let data = try? JSONEncoder().encode(models) {
             host?.setUserDefault(data, forKey: Self.StorageKeys.fetchedModels)
+            host?.setUserDefault(true, forKey: Self.StorageKeys.fetchedModelsIncludeReasoning)
         }
         host?.notifyCapabilitiesChanged()
     }
@@ -681,7 +826,9 @@ final class OpenRouterPlugin: NSObject,
                         id: model.id,
                         name: model.name,
                         promptPrice: model.pricing?.prompt ?? "0",
-                        completionPrice: model.pricing?.completion ?? "0"
+                        completionPrice: model.pricing?.completion ?? "0",
+                        reasoningEfforts: model.reasoning?.supported_efforts,
+                        defaultReasoningEffort: model.reasoning?.default_effort
                     )
                 }
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -774,6 +921,14 @@ private struct OpenRouterAPIModel: Decodable {
     let name: String
     let pricing: OpenRouterPricing?
     let architecture: OpenRouterArchitecture?
+    let reasoning: OpenRouterReasoning?
+}
+
+/// A model's reasoning controls. Only models that list `supported_efforts`
+/// take an effort level; the others omit the list or the whole object.
+private struct OpenRouterReasoning: Decodable {
+    let supported_efforts: [String]?
+    let default_effort: String?
 }
 
 private struct OpenRouterPricing: Decodable {
@@ -792,6 +947,19 @@ struct OpenRouterFetchedModel: Codable, Sendable {
     let name: String
     let promptPrice: String
     let completionPrice: String
+    /// The effort levels OpenRouter lists for the model, nil when it offers none.
+    var reasoningEfforts: [String]? = nil
+    var defaultReasoningEffort: String? = nil
+
+    /// The known effort levels from lowest to highest, as the settings list them.
+    static let reasoningEffortOrder = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+    /// The model's effort levels, lowest first. Levels this version does not
+    /// name are left out rather than shown as raw IDs.
+    var reasoningEffortLevels: [String] {
+        guard let reasoningEfforts else { return [] }
+        return Self.reasoningEffortOrder.filter(reasoningEfforts.contains)
+    }
 
     var formattedPricing: String {
         let promptPer1M = (Double(promptPrice) ?? 0) * 1_000_000
@@ -821,6 +989,7 @@ private struct OpenRouterSettingsView: View {
     @State private var llmSearchText = ""
     @State private var transcriptionSearchText = ""
     @State private var remainingCredits: Double?
+    @State private var reasoningEffort: String = ""
     private let bundle = Bundle(for: OpenRouterPlugin.self)
 
     private var llmModels: [OpenRouterFetchedModel] {
@@ -1019,6 +1188,7 @@ private struct OpenRouterSettingsView: View {
                     }
                     .labelsHidden()
                     .onChange(of: selectedLLMModel) {
+                        showReasoningEffort()
                         guard !selectedLLMModel.isEmpty else { return }
                         plugin.selectLLMModel(selectedLLMModel)
                     }
@@ -1027,6 +1197,37 @@ private struct OpenRouterSettingsView: View {
                         Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if !reasoningEfforts.isEmpty {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Reasoning Effort", bundle: bundle)
+                            .font(.headline)
+
+                        Picker(selection: Binding(
+                            get: { reasoningEffort },
+                            set: { effort in
+                                reasoningEffort = effort
+                                plugin.setReasoningEffort(effort, forModelId: selectedLLMModel)
+                            }
+                        )) {
+                            ForEach(reasoningEfforts, id: \.self) { effort in
+                                Text(OpenRouterPlugin.effortDisplayName(effort, bundle: bundle)).tag(effort)
+                            }
+                        } label: {
+                            Text("Reasoning Effort", bundle: bundle)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
+
+                        Text("Lower levels answer faster and use fewer tokens. Workflows can pick their own level.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -1080,6 +1281,7 @@ private struct OpenRouterSettingsView: View {
             elevenLabsCleanTranscript = plugin.elevenLabsCleanTranscript
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
+            showReasoningEffort()
 
             if plugin.isAvailable {
                 Task {
@@ -1155,6 +1357,18 @@ private struct OpenRouterSettingsView: View {
             selectedLLMModel = first.id
             plugin.selectLLMModel(first.id)
         }
+        showReasoningEffort()
+    }
+
+    private var reasoningEfforts: [String] {
+        guard !selectedLLMModel.isEmpty else { return [] }
+        return plugin.reasoningEffortLevels(forModelId: selectedLLMModel)
+    }
+
+    private func showReasoningEffort() {
+        reasoningEffort = selectedLLMModel.isEmpty
+            ? ""
+            : plugin.savedReasoningEffort(forModelId: selectedLLMModel) ?? ""
     }
 
     private func applyTranscriptionModels(_ models: [OpenRouterFetchedModel]) {

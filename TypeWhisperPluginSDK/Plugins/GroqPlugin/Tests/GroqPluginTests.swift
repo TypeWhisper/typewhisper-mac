@@ -264,6 +264,66 @@ final class GroqPluginTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "openai/gpt-oss-120b")
     }
 
+    func testReasoningEffortFollowsWorkflowThenSettingsAndSkipsModelsWithoutLevels() throws {
+        let host = try PluginTestHostServices()
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.supportedEfforts(for: nil).map(\.id), ["low", "medium", "high"])
+        XCTAssertEqual(plugin.supportedEfforts(for: "openai/gpt-oss-20b").map(\.id), ["low", "medium", "high"])
+        XCTAssertEqual(plugin.defaultEffortId(for: "openai/gpt-oss-120b"), "medium")
+        XCTAssertNil(
+            plugin.requestReasoningEffort(nil, forModelId: "openai/gpt-oss-120b"),
+            "Without a picked level the request keeps Groq's default"
+        )
+
+        plugin.setReasoningEffort("low", forModelId: "openai/gpt-oss-120b")
+        XCTAssertEqual(plugin.requestReasoningEffort(nil, forModelId: "openai/gpt-oss-120b"), "low")
+        XCTAssertEqual(plugin.requestReasoningEffort("high", forModelId: "openai/gpt-oss-120b"), "high")
+        XCTAssertEqual(plugin.requestReasoningEffort("xhigh", forModelId: "openai/gpt-oss-120b"), "low")
+        XCTAssertNil(plugin.requestReasoningEffort(nil, forModelId: "openai/gpt-oss-20b"))
+
+        let reloaded = GroqPlugin()
+        reloaded.activate(host: host)
+        XCTAssertEqual(reloaded.defaultEffortId(for: "openai/gpt-oss-120b"), "low")
+
+        XCTAssertEqual(plugin.supportedEfforts(for: "qwen/qwen3.8-27b").map(\.id), ["none", "low", "medium", "high"])
+        XCTAssertEqual(plugin.defaultEffortId(for: "qwen/qwen3.8-27b"), "none")
+        XCTAssertEqual(plugin.defaultEffortId(for: "meta-models/muse-spark-open"), "xhigh")
+        XCTAssertEqual(plugin.requestReasoningEffort("xhigh", forModelId: "meta-models/muse-spark-open"), "xhigh")
+
+        XCTAssertTrue(plugin.supportedEfforts(for: "llama-3.3-70b-versatile").isEmpty)
+        XCTAssertNil(plugin.requestReasoningEffort("low", forModelId: "llama-3.3-70b-versatile"))
+    }
+
+    func testChatRequestSendsReasoningEffortOnlyOncePicked() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        let reply = Data(#"{"choices":[{"message":{"content":"Done."},"finish_reason":"stop"}]}"#.utf8)
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: Array(
+                repeating: .success(reply, Self.httpResponse(url: "https://api.groq.com/openai/v1/chat/completions", statusCode: 200)),
+                count: 3
+            ))
+        }
+
+        _ = try await plugin.process(systemPrompt: "Fix.", userText: "text", model: nil)
+        plugin.setReasoningEffort("low", forModelId: "openai/gpt-oss-120b")
+        _ = try await plugin.process(systemPrompt: "Fix.", userText: "text", model: nil)
+        _ = try await plugin.process(systemPrompt: "Fix.", userText: "text", model: nil, effort: "high")
+
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 3)
+        let efforts = try requests.map { request in
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+            return body["reasoning_effort"] as? String
+        }
+        XCTAssertEqual(efforts, [nil, "low", "high"])
+    }
+
     func testSavedLLMModelStaysSelectedWhileTheFetchedListOffersIt() throws {
         // Groq keeps Llama 3.3 70B for enterprise contracts; the account's own list decides.
         let host = try PluginTestHostServices(
