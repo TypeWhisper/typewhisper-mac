@@ -336,6 +336,34 @@
           }
         }
       }
+    },
+    "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe requiere un idioma compatible seleccionado explícitamente. La detección automática de idioma no está disponible. Idiomas compatibles:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribeでは対応言語を明示的に選択する必要があります。言語の自動検出は利用できません。対応言語："
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe benötigt eine explizit ausgewählte unterstützte Sprache. Automatische Spracherkennung ist nicht verfügbar. Unterstützte Sprachen:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 需要明确选择支持的语言。不支持自动语言检测。支持的语言："
+          }
+        }
+      }
     }
   },
   "version": "1.0"
