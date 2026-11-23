@@ -355,7 +355,12 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var effortId: String?
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
+    /// Whisper Mode override written by builds before the microphone gain picker:
+    /// `true` is automatic gain, `false` is off. Still written for older builds.
     var microphoneBoostOverride: Bool?
+    /// Raw `MicrophoneGainMode` override. Stored as a string so an unknown future mode
+    /// does not make the whole behavior undecodable.
+    var microphoneGainModeRaw: String?
     var inlineCommandsEnabled: Bool?
     var temperatureModeRaw: String?
     var temperatureValue: Double?
@@ -376,6 +381,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         transcriptionEngineId: String? = nil,
         transcriptionModelId: String? = nil,
         microphoneBoostOverride: Bool? = nil,
+        microphoneGainModeRaw: String? = nil,
         inlineCommandsEnabled: Bool? = nil,
         temperatureModeRaw: String? = nil,
         temperatureValue: Double? = nil,
@@ -390,6 +396,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.transcriptionEngineId = transcriptionEngineId
         self.transcriptionModelId = transcriptionModelId
         self.microphoneBoostOverride = microphoneBoostOverride
+        self.microphoneGainModeRaw = microphoneGainModeRaw
         self.inlineCommandsEnabled = inlineCommandsEnabled
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
@@ -399,6 +406,28 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
 
     var temperatureMode: PluginLLMTemperatureMode {
         PluginLLMTemperatureMode(rawValue: temperatureModeRaw ?? "") ?? .inheritProviderSetting
+    }
+
+    /// The microphone gain mode this workflow forces while it records, or `nil` to follow
+    /// the global setting. Falls back to the legacy Whisper Mode override.
+    var microphoneGainOverride: MicrophoneGainMode? {
+        get {
+            if let mode = microphoneGainModeRaw.flatMap(MicrophoneGainMode.init(rawValue:)) {
+                return mode
+            }
+            return microphoneBoostOverride.map { $0 ? .automatic : .off }
+        }
+        set {
+            microphoneGainModeRaw = newValue?.rawValue
+            switch newValue {
+            case .automatic:
+                microphoneBoostOverride = true
+            case .off:
+                microphoneBoostOverride = false
+            case .manual, .none:
+                microphoneBoostOverride = nil
+            }
+        }
     }
 
     var temperatureDirective: PluginLLMTemperatureDirective {

@@ -395,7 +395,7 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let samples: [Float] = [0.01, -0.02, 0.03]
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        let result = processor.process(samples, enabled: false)
+        let result = processor.process(samples, gain: .off)
 
         XCTAssertEqual(result.samples, samples)
         XCTAssertEqual(result.gain, 1)
@@ -405,9 +405,9 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let samples = [Float](repeating: 0.01, count: 100)
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        var result = processor.process(samples, enabled: true)
+        var result = processor.process(samples, gain: .automatic)
         for _ in 0..<12 {
-            result = processor.process(samples, enabled: true)
+            result = processor.process(samples, gain: .automatic)
         }
 
         XCTAssertEqual(result.gain, 10, accuracy: 0.01)
@@ -419,7 +419,7 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let samples = [Float](repeating: 0.01, count: 100)
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        let result = processor.process(samples, enabled: true)
+        let result = processor.process(samples, gain: .automatic)
 
         XCTAssertGreaterThanOrEqual(result.gain, 5)
         XCTAssertGreaterThanOrEqual(result.outputRMS, 0.05)
@@ -429,9 +429,9 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let samples = [Float](repeating: 0.002, count: 100)
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        var result = processor.process(samples, enabled: true)
+        var result = processor.process(samples, gain: .automatic)
         for _ in 0..<12 {
-            result = processor.process(samples, enabled: true)
+            result = processor.process(samples, gain: .automatic)
         }
 
         XCTAssertEqual(result.gain, TypeWhisper.MicrophoneBoostProcessor.maximumGain, accuracy: 0.01)
@@ -442,7 +442,7 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let samples = [Float](repeating: 0.001, count: 100)
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        let result = processor.process(samples, enabled: true)
+        let result = processor.process(samples, gain: .automatic)
 
         XCTAssertEqual(result.samples, samples)
         XCTAssertEqual(result.gain, 1)
@@ -452,7 +452,7 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let samples = [Float](repeating: 0.00005, count: 100)
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        let result = processor.process(samples, enabled: true)
+        let result = processor.process(samples, gain: .automatic)
 
         XCTAssertEqual(result.samples, samples)
         XCTAssertEqual(result.gain, 1)
@@ -462,9 +462,9 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let samples = [Float(0.2)] + [Float](repeating: 0.01, count: 99)
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        var result = processor.process(samples, enabled: true)
+        var result = processor.process(samples, gain: .automatic)
         for _ in 0..<12 {
-            result = processor.process(samples, enabled: true)
+            result = processor.process(samples, gain: .automatic)
         }
 
         let unLimitedPeak = try XCTUnwrap(samples.first) * result.gain
@@ -479,11 +479,11 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let quietGap = [Float](repeating: 0.001, count: 100)
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
-        var speechResult = processor.process(speech, enabled: true)
+        var speechResult = processor.process(speech, gain: .automatic)
         for _ in 0..<12 {
-            speechResult = processor.process(speech, enabled: true)
+            speechResult = processor.process(speech, gain: .automatic)
         }
-        let gapResult = processor.process(quietGap, enabled: true)
+        let gapResult = processor.process(quietGap, gain: .automatic)
 
         XCTAssertGreaterThan(speechResult.gain, 1)
         XCTAssertEqual(gapResult.gain, speechResult.gain, accuracy: 0.0001)
@@ -496,10 +496,10 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
         for _ in 0..<12 {
-            _ = processor.process(speech, enabled: true)
+            _ = processor.process(speech, gain: .automatic)
         }
         processor.reset()
-        let result = processor.process(roomNoise, enabled: true)
+        let result = processor.process(roomNoise, gain: .automatic)
 
         XCTAssertEqual(result.samples, roomNoise)
         XCTAssertEqual(result.gain, 1)
@@ -516,7 +516,7 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
                 index == 17 ? (bufferIndex.isMultiple(of: 2) ? 0.09 : -0.09) : 0.01 * sin(Float(bufferIndex * 256 + index) * 0.07)
             }
             var processed = samples
-            let levels = processor.processInPlace(&processed, enabled: true)
+            let levels = processor.processInPlace(&processed, gain: .automatic)
 
             let expected = levels.gain > 1
                 ? samples.map { referenceSoftLimited($0 * levels.gain) }
@@ -527,6 +527,71 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         }
 
         XCTAssertTrue(limiterEngaged)
+    }
+
+    func testManualGainAppliesFixedDecibelBoost() {
+        let samples = [Float](repeating: 0.01, count: 100)
+        let processor = TypeWhisper.MicrophoneBoostProcessor()
+
+        let plusSix = processor.process(samples, gain: .manual(gainDB: 6))
+        XCTAssertEqual(plusSix.gain, 1.995, accuracy: 0.01)
+
+        let plusTwelve = processor.process(samples, gain: .manual(gainDB: 12))
+        XCTAssertEqual(plusTwelve.gain, 3.981, accuracy: 0.01)
+        XCTAssertEqual(plusTwelve.outputRMS, 0.03981, accuracy: 0.0001)
+    }
+
+    func testManualGainBoostsRoomNoiseLikeAVolumeSlider() {
+        // Unlike Whisper Mode, a fixed gain does not wait for speech-level input.
+        let samples = [Float](repeating: 0.001, count: 100)
+        let processor = TypeWhisper.MicrophoneBoostProcessor()
+
+        let result = processor.process(samples, gain: .manual(gainDB: 20))
+
+        XCTAssertEqual(result.gain, 10, accuracy: 0.01)
+    }
+
+    func testManualGainLimiterLowersGainForLoudPeaksAndRecovers() throws {
+        let processor = TypeWhisper.MicrophoneBoostProcessor()
+        let loud = [Float(0.5)] + [Float](repeating: 0.05, count: 99)
+        let quiet = [Float](repeating: 0.01, count: 100)
+
+        _ = processor.process(quiet, gain: .manual(gainDB: 12))
+        let loudResult = processor.process(loud, gain: .manual(gainDB: 12))
+        let loudPeak = try XCTUnwrap(loudResult.samples.first)
+
+        XCTAssertEqual(loudResult.gain, TypeWhisper.MicrophoneBoostProcessor.peakCeiling / 0.5, accuracy: 0.001)
+        XCTAssertLessThan(loudPeak, 1)
+        XCTAssertTrue(loudResult.samples.allSatisfy { $0 > -1 && $0 < 1 })
+
+        var recovered = processor.process(quiet, gain: .manual(gainDB: 12))
+        XCTAssertLessThan(recovered.gain, 3.981)
+        for _ in 0..<120 {
+            recovered = processor.process(quiet, gain: .manual(gainDB: 12))
+        }
+        XCTAssertEqual(recovered.gain, 3.981, accuracy: 0.01)
+    }
+
+    func testZeroDecibelManualGainLeavesSamplesUnchanged() {
+        let samples: [Float] = [0.01, -0.5, 0.3]
+        let processor = TypeWhisper.MicrophoneBoostProcessor()
+
+        let result = processor.process(samples, gain: .manual(gainDB: 0))
+
+        XCTAssertEqual(result.samples, samples)
+        XCTAssertEqual(result.gain, 1)
+    }
+
+    func testSwitchingFromAutomaticToManualStartsAtManualGain() {
+        let speech = [Float](repeating: 0.005, count: 100)
+        let processor = TypeWhisper.MicrophoneBoostProcessor()
+        for _ in 0..<12 {
+            _ = processor.process(speech, gain: .automatic)
+        }
+
+        let result = processor.process(speech, gain: .manual(gainDB: 6))
+
+        XCTAssertEqual(result.gain, 1.995, accuracy: 0.01)
     }
 
     private func referenceSoftLimited(_ sample: Float) -> Float {

@@ -1866,7 +1866,7 @@ private struct WorkflowEditorPage: View {
                     }
 
                     Divider()
-                    workflowMicrophoneBoostSection
+                    workflowMicrophoneGainSection
 
                     if draft.template == .custom {
                         Divider()
@@ -1917,12 +1917,13 @@ private struct WorkflowEditorPage: View {
         if draft.template == .dictation, let engineId = draft.transcriptionEngineId {
             items.append(pluginManager.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId)
         }
-        if draft.microphoneBoostOverride != nil {
+        if draft.microphoneGainOverride != nil {
+            let title = WorkflowMicrophoneGainOverride(value: draft.microphoneGainOverride).title
             items.append(
                 localizedAppText(
-                    "Whisper Mode: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)",
-                    de: "Whisper-Modus: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)",
-                    es: "Modo susurro: \(WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride).title)"
+                    "Microphone gain: \(title)",
+                    de: "Mikrofonverstärkung: \(title)",
+                    es: "Ganancia del micrófono: \(title)"
                 )
             )
         }
@@ -2178,30 +2179,32 @@ private struct WorkflowEditorPage: View {
         }
     }
 
-    private var workflowMicrophoneBoostSection: some View {
+    private var workflowMicrophoneGainSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"))
+            Text(localizedAppText("Microphone Gain", de: "Mikrofonverstärkung", es: "Ganancia del micrófono"))
                 .font(.subheadline.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
 
             Picker(
-                localizedAppText("Whisper Mode", de: "Whisper-Modus"),
-                selection: workflowMicrophoneBoostBinding
+                localizedAppText("Microphone Gain", de: "Mikrofonverstärkung", es: "Ganancia del micrófono"),
+                selection: workflowMicrophoneGainBinding
             ) {
-                ForEach(WorkflowMicrophoneBoostOverride.allCases) { option in
+                ForEach(WorkflowMicrophoneGainOverride.allCases) { option in
                     Text(option.title).tag(option)
                 }
             }
 
             Text(
-                draft.microphoneBoostOverride == nil
+                draft.microphoneGainOverride == nil
                     ? localizedAppText(
-                        "This workflow follows the global Whisper Mode setting.",
-                        de: "Dieser Workflow folgt der globalen Whisper-Modus-Einstellung."
+                        "This workflow follows the global microphone gain setting.",
+                        de: "Dieser Workflow folgt der globalen Einstellung für die Mikrofonverstärkung.",
+                        es: "Este flujo de trabajo sigue el ajuste global de ganancia del micrófono."
                     )
                     : localizedAppText(
-                        "This workflow overrides Whisper Mode while it records.",
-                        de: "Dieser Workflow überschreibt den Whisper-Modus während der Aufnahme."
+                        "This workflow overrides the microphone gain while it records.",
+                        de: "Dieser Workflow überschreibt die Mikrofonverstärkung während der Aufnahme.",
+                        es: "Este flujo de trabajo cambia la ganancia del micrófono mientras graba."
                     )
             )
             .font(.caption)
@@ -3250,11 +3253,11 @@ private struct WorkflowEditorPage: View {
         )
     }
 
-    private var workflowMicrophoneBoostBinding: Binding<WorkflowMicrophoneBoostOverride> {
+    private var workflowMicrophoneGainBinding: Binding<WorkflowMicrophoneGainOverride> {
         Binding(
-            get: { WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride) },
+            get: { WorkflowMicrophoneGainOverride(value: draft.microphoneGainOverride) },
             set: { option in
-                draft.microphoneBoostOverride = option.value
+                draft.microphoneGainOverride = option.value
             }
         )
     }
@@ -3657,30 +3660,35 @@ enum WorkflowTriggerMode: String, CaseIterable, Hashable {
     case global
 }
 
-enum WorkflowMicrophoneBoostOverride: String, CaseIterable, Hashable, Identifiable {
+enum WorkflowMicrophoneGainOverride: String, CaseIterable, Hashable, Identifiable {
     case inherit
-    case on
     case off
+    case automatic
+    case manual
 
     var id: String { rawValue }
 
-    var value: Bool? {
+    var value: MicrophoneGainMode? {
         switch self {
         case .inherit:
             nil
-        case .on:
-            true
         case .off:
-            false
+            .off
+        case .automatic:
+            .automatic
+        case .manual:
+            .manual
         }
     }
 
-    init(value: Bool?) {
+    init(value: MicrophoneGainMode?) {
         switch value {
-        case .some(true):
-            self = .on
-        case .some(false):
+        case .off:
             self = .off
+        case .automatic:
+            self = .automatic
+        case .manual:
+            self = .manual
         case .none:
             self = .inherit
         }
@@ -3689,11 +3697,11 @@ enum WorkflowMicrophoneBoostOverride: String, CaseIterable, Hashable, Identifiab
     var title: String {
         switch self {
         case .inherit:
-            localizedAppText("Use Global Whisper Mode", de: "Globalen Whisper-Modus verwenden")
-        case .on:
-            localizedAppText("Whisper Mode On", de: "Whisper-Modus ein")
-        case .off:
-            localizedAppText("Whisper Mode Off", de: "Whisper-Modus aus")
+            localizedAppText("Use Global Setting", de: "Globale Einstellung verwenden", es: "Usar ajuste global")
+        case .off, .automatic:
+            value?.title ?? ""
+        case .manual:
+            localizedAppText("Manual (global dB value)", de: "Manuell (globaler dB-Wert)", es: "Manual (valor global en dB)")
         }
     }
 }
@@ -3772,7 +3780,7 @@ struct WorkflowDraft {
     var numberNormalizationMode: WorkflowNumberNormalizationMode
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
-    var microphoneBoostOverride: Bool?
+    var microphoneGainOverride: MicrophoneGainMode?
     var inlineCommandsEnabled: Bool?
     var segmentedPostProcessingEnabled: Bool?
     var screenContextEnabled: Bool?
@@ -3813,7 +3821,7 @@ struct WorkflowDraft {
         self.numberNormalizationMode = .inherit
         self.transcriptionEngineId = nil
         self.transcriptionModelId = nil
-        self.microphoneBoostOverride = nil
+        self.microphoneGainOverride = nil
         self.inlineCommandsEnabled = nil
         self.segmentedPostProcessingEnabled = nil
         self.screenContextEnabled = nil
@@ -3849,7 +3857,7 @@ struct WorkflowDraft {
         self.numberNormalizationMode = output.numberNormalizationMode
         self.transcriptionEngineId = workflow.template == .dictation ? behavior.transcriptionEngineId : nil
         self.transcriptionModelId = workflow.template == .dictation ? behavior.transcriptionModelId : nil
-        self.microphoneBoostOverride = behavior.microphoneBoostOverride
+        self.microphoneGainOverride = behavior.microphoneGainOverride
         self.inlineCommandsEnabled = workflow.template == .dictation ? behavior.inlineCommandsEnabled : nil
         self.segmentedPostProcessingEnabled = behavior.segmentedPostProcessingEnabled
         self.screenContextEnabled = behavior.screenContextEnabled
@@ -4241,7 +4249,7 @@ struct WorkflowDraft {
         let trimmedEffortId = effortId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTranscriptionEngineId = template == .dictation ? Self.trimmedOptional(transcriptionEngineId) : nil
 
-        return WorkflowBehavior(
+        var behavior = WorkflowBehavior(
             settings: settings,
             fineTuning: usesLLMProcessing ? fineTuning.trimmingCharacters(in: .whitespacesAndNewlines) : "",
             providerId: usesLLMProcessing && trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
@@ -4249,7 +4257,6 @@ struct WorkflowDraft {
             effortId: usesLLMProcessing && trimmedEffortId?.isEmpty == false ? trimmedEffortId : nil,
             transcriptionEngineId: trimmedTranscriptionEngineId,
             transcriptionModelId: trimmedTranscriptionEngineId != nil ? Self.trimmedOptional(transcriptionModelId) : nil,
-            microphoneBoostOverride: microphoneBoostOverride,
             inlineCommandsEnabled: template == .dictation ? inlineCommandsEnabled : nil,
             temperatureModeRaw: temperatureModeRaw,
             temperatureValue: temperatureValue,
@@ -4258,6 +4265,8 @@ struct WorkflowDraft {
                 : nil,
             screenContextEnabled: usesLLMProcessing && screenContextEnabled == true ? true : nil
         )
+        behavior.microphoneGainOverride = microphoneGainOverride
+        return behavior
     }
 
     func resolvedOutput() -> WorkflowOutput {

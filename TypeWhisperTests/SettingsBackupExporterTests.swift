@@ -641,6 +641,54 @@ final class SettingsBackupExporterTests: XCTestCase {
         }
     }
 
+    func testMicrophoneGainBackupRoundTripAndLegacyWhisperMode() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        DictationViewModel.persistMicrophoneGainMode(.manual, defaults: source.userDefaults)
+        DictationViewModel.persistMicrophoneManualGainDB(12, defaults: source.userDefaults)
+        let backup = try SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+        var legacyJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(backup)) as? [String: Any])
+        // A backup from before the gain picker only knows the Whisper Mode toggle.
+        legacyJSON["preferences"] = ["microphoneBoostEnabled": true]
+        let legacyBackup = try JSONDecoder().decode(
+            SettingsBackupExporter.SettingsBackup.self,
+            from: JSONSerialization.data(withJSONObject: legacyJSON)
+        )
+
+        for (candidate, expectedMode, expectedGainDB) in [
+            (backup, MicrophoneGainMode.manual, 12.0),
+            (legacyBackup, MicrophoneGainMode.automatic, 6.0)
+        ] {
+            let destination = try makeFixture()
+            defer { teardown(destination) }
+            DictationViewModel.persistMicrophoneGainMode(.off, defaults: destination.userDefaults)
+            await SettingsBackupExporter.importBackup(
+                try SettingsBackupExporter.parse(SettingsBackupExporter.encodedJSON(candidate)),
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults
+            )
+            XCTAssertEqual(DictationViewModel.loadMicrophoneGainMode(defaults: destination.userDefaults), expectedMode)
+            XCTAssertEqual(DictationViewModel.loadMicrophoneManualGainDB(defaults: destination.userDefaults), expectedGainDB)
+        }
+    }
+
     func testNumberNormalizationPreferencesRoundTrip() async throws {
         for minimumValue in [0, 10, 100] {
             let source = try makeFixture()

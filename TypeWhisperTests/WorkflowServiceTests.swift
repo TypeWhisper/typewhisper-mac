@@ -476,7 +476,7 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(behavior.cloudModel, "llama-3.3")
         XCTAssertNil(behavior.transcriptionEngineId)
         XCTAssertNil(behavior.transcriptionModelId)
-        XCTAssertNil(behavior.microphoneBoostOverride)
+        XCTAssertNil(behavior.microphoneGainOverride)
         XCTAssertNil(behavior.effortId)
     }
 
@@ -653,24 +653,47 @@ final class WorkflowServiceTests: XCTestCase {
         let draft = WorkflowDraft(workflow)
         let behavior = draft.resolvedBehavior()
 
-        XCTAssertEqual(draft.microphoneBoostOverride, true)
+        XCTAssertEqual(draft.microphoneGainOverride, .automatic)
+        XCTAssertEqual(behavior.microphoneGainOverride, .automatic)
         XCTAssertEqual(behavior.microphoneBoostOverride, true)
+    }
+
+    func testWorkflowDraftSavesManualMicrophoneGainOverride() throws {
+        var draft = WorkflowDraft(template: .dictation)
+        draft.microphoneGainOverride = .manual
+
+        let behavior = draft.resolvedBehavior()
+
+        XCTAssertEqual(behavior.microphoneGainOverride, .manual)
+        XCTAssertEqual(behavior.microphoneGainModeRaw, "manual")
+        // Builds without the gain picker follow the global setting for a manual override.
+        XCTAssertNil(behavior.microphoneBoostOverride)
+    }
+
+    func testLegacyWhisperModeOverrideDecodesAsMicrophoneGainOverride() throws {
+        let onData = Data(#"{"settings":{},"fineTuning":"","microphoneBoostOverride":true}"#.utf8)
+        let offData = Data(#"{"settings":{},"fineTuning":"","microphoneBoostOverride":false}"#.utf8)
+        let unknownData = Data(#"{"settings":{},"fineTuning":"","microphoneGainModeRaw":"future"}"#.utf8)
+
+        XCTAssertEqual(try JSONDecoder().decode(WorkflowBehavior.self, from: onData).microphoneGainOverride, .automatic)
+        XCTAssertEqual(try JSONDecoder().decode(WorkflowBehavior.self, from: offData).microphoneGainOverride, .off)
+        XCTAssertNil(try JSONDecoder().decode(WorkflowBehavior.self, from: unknownData).microphoneGainOverride)
     }
 
     func testWorkflowDraftDropsTranscriptionOverridesForNonDictationTemplates() throws {
         var draft = WorkflowDraft(template: .dictation)
         draft.transcriptionEngineId = "whisperkit"
         draft.transcriptionModelId = "large-v3"
-        draft.microphoneBoostOverride = true
+        draft.microphoneGainOverride = .automatic
 
         draft.selectTemplate(.summary)
 
         XCTAssertNil(draft.transcriptionEngineId)
         XCTAssertNil(draft.transcriptionModelId)
-        XCTAssertEqual(draft.microphoneBoostOverride, true)
+        XCTAssertEqual(draft.microphoneGainOverride, .automatic)
         XCTAssertNil(draft.resolvedBehavior().transcriptionEngineId)
         XCTAssertNil(draft.resolvedBehavior().transcriptionModelId)
-        XCTAssertEqual(draft.resolvedBehavior().microphoneBoostOverride, true)
+        XCTAssertEqual(draft.resolvedBehavior().microphoneGainOverride, .automatic)
     }
 
     func testWorkflowDraftWithoutEditsHasNoUnsavedChanges() {
@@ -759,7 +782,8 @@ final class WorkflowServiceTests: XCTestCase {
         let draft = WorkflowDraft(workflow)
         let behavior = draft.resolvedBehavior()
 
-        XCTAssertEqual(draft.microphoneBoostOverride, false)
+        XCTAssertEqual(draft.microphoneGainOverride, .off)
+        XCTAssertEqual(behavior.microphoneGainOverride, .off)
         XCTAssertEqual(behavior.microphoneBoostOverride, false)
     }
 

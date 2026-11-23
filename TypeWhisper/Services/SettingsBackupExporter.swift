@@ -206,6 +206,8 @@ enum SettingsBackupExporter {
         var mediaPauseEnabled: Bool? = nil
         var transcribeShortQuietClipsAggressively: Bool? = nil
         var microphoneBoostEnabled: Bool? = nil
+        var microphoneGainMode: String? = nil
+        var microphoneManualGainDB: Double? = nil
         var cancellationBehavior: String? = nil
         var requireSecondEscapeToCancelRecording: Bool? = nil
         // Dictation Recovery
@@ -260,7 +262,8 @@ enum SettingsBackupExporter {
             if transcriptionNumberNormalizationMinimumValue != nil { count += 1 }
             if mediaPauseEnabled != nil { count += 1 }
             if transcribeShortQuietClipsAggressively != nil { count += 1 }
-            if microphoneBoostEnabled != nil { count += 1 }
+            if microphoneBoostEnabled != nil || microphoneGainMode != nil { count += 1 }
+            if microphoneManualGainDB != nil { count += 1 }
             if cancellationBehavior != nil || requireSecondEscapeToCancelRecording != nil { count += 1 }
             if dictationRecoveryLanguage != nil { count += 1 }
             if dictationRecoveryAutomaticFallbackEnabled != nil { count += 1 }
@@ -605,6 +608,8 @@ enum SettingsBackupExporter {
                 mediaPauseEnabled: userDefaults.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool,
                 transcribeShortQuietClipsAggressively: userDefaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool,
                 microphoneBoostEnabled: userDefaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
+                microphoneGainMode: userDefaults.string(forKey: UserDefaultsKeys.microphoneGainMode),
+                microphoneManualGainDB: userDefaults.object(forKey: UserDefaultsKeys.microphoneManualGainDB) as? Double,
                 cancellationBehavior: DictationViewModel.loadCancellationBehavior(defaults: userDefaults).rawValue,
                 dictationRecoveryLanguage: userDefaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
                 dictationRecoveryAutomaticFallbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled) as? Bool,
@@ -1061,7 +1066,17 @@ enum SettingsBackupExporter {
         }
         apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)
         apply(preferences.transcribeShortQuietClipsAggressively, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
-        apply(preferences.microphoneBoostEnabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+        // Backups from before the gain picker only carry the Whisper Mode toggle; it maps to
+        // automatic or off. An unknown mode from user-edited JSON keeps the current one.
+        if let mode = preferences.microphoneGainMode.flatMap(MicrophoneGainMode.init(rawValue:))
+            ?? preferences.microphoneBoostEnabled.map({ $0 ? MicrophoneGainMode.automatic : .off }) {
+            DictationViewModel.persistMicrophoneGainMode(mode, defaults: userDefaults)
+            result.preferencesApplied += 1
+        }
+        if let gainDB = preferences.microphoneManualGainDB {
+            DictationViewModel.persistMicrophoneManualGainDB(gainDB, defaults: userDefaults)
+            result.preferencesApplied += 1
+        }
         let cancellationBehavior = preferences.cancellationBehavior.flatMap(CancellationBehavior.init(rawValue:))
             ?? preferences.requireSecondEscapeToCancelRecording.map { $0 ? .doubleEscape : .singleEscape }
         if let cancellationBehavior {

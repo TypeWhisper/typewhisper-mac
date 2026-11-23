@@ -205,28 +205,40 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), .singleEscape)
     }
 
-    func testMicrophoneBoostDefaultsToDisabled() {
-        XCTAssertFalse(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
+    func testMicrophoneGainDefaultsToOffWithSixDecibelManualBoost() {
+        XCTAssertEqual(DictationViewModel.loadMicrophoneGainMode(defaults: defaults), .off)
+        XCTAssertEqual(DictationViewModel.loadMicrophoneManualGainDB(defaults: defaults), 6)
     }
 
-    func testMicrophoneBoostPersistsWhenEnabled() {
-        DictationViewModel.persistMicrophoneBoostEnabled(true, defaults: defaults)
+    func testLegacyWhisperModeToggleMigratesToAutomaticGain() {
+        defaults.set(true, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+        XCTAssertEqual(DictationViewModel.loadMicrophoneGainMode(defaults: defaults), .automatic)
 
-        XCTAssertEqual(
-            defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
-            true
-        )
-        XCTAssertTrue(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
+        defaults.set(false, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+        XCTAssertEqual(DictationViewModel.loadMicrophoneGainMode(defaults: defaults), .off)
     }
 
-    func testMicrophoneBoostPersistsWhenDisabled() {
-        DictationViewModel.persistMicrophoneBoostEnabled(false, defaults: defaults)
+    func testMicrophoneGainModePersistsAndKeepsLegacyToggleInSync() {
+        for mode in MicrophoneGainMode.allCases {
+            DictationViewModel.persistMicrophoneGainMode(mode, defaults: defaults)
 
-        XCTAssertEqual(
-            defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
-            false
-        )
-        XCTAssertFalse(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
+            XCTAssertEqual(DictationViewModel.loadMicrophoneGainMode(defaults: defaults), mode)
+            XCTAssertEqual(
+                defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
+                mode == .automatic
+            )
+        }
+    }
+
+    func testManualMicrophoneGainIsClampedToSupportedRange() {
+        DictationViewModel.persistMicrophoneManualGainDB(12, defaults: defaults)
+        XCTAssertEqual(DictationViewModel.loadMicrophoneManualGainDB(defaults: defaults), 12)
+
+        defaults.set(40.0, forKey: UserDefaultsKeys.microphoneManualGainDB)
+        XCTAssertEqual(DictationViewModel.loadMicrophoneManualGainDB(defaults: defaults), 20)
+
+        defaults.set(-3.0, forKey: UserDefaultsKeys.microphoneManualGainDB)
+        XCTAssertEqual(DictationViewModel.loadMicrophoneManualGainDB(defaults: defaults), 0)
     }
 }
 

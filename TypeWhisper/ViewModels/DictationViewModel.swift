@@ -384,10 +384,21 @@ final class DictationViewModel: ObservableObject {
             }
         }
     }
-    @Published var microphoneBoostEnabled: Bool {
+    @Published var microphoneGainMode: MicrophoneGainMode {
         didSet {
-            Self.persistMicrophoneBoostEnabled(microphoneBoostEnabled)
-            applyEffectiveMicrophoneBoostToAudioService()
+            Self.persistMicrophoneGainMode(microphoneGainMode)
+            applyEffectiveMicrophoneGainToAudioServices()
+        }
+    }
+    @Published var microphoneManualGainDB: Double {
+        didSet {
+            let clamped = MicrophoneGainSetting.clampedGainDB(microphoneManualGainDB)
+            if clamped != microphoneManualGainDB {
+                microphoneManualGainDB = clamped
+                return
+            }
+            Self.persistMicrophoneManualGainDB(microphoneManualGainDB)
+            applyEffectiveMicrophoneGainToAudioServices()
         }
     }
     @Published var spokenFeedbackEnabled: Bool {
@@ -895,7 +906,8 @@ final class DictationViewModel: ObservableObject {
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
         self.cancellationBehavior = Self.loadCancellationBehavior()
-        self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
+        self.microphoneGainMode = Self.loadMicrophoneGainMode()
+        self.microphoneManualGainDB = Self.loadMicrophoneManualGainDB()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.toggleSilenceStopEnabled = Self.loadToggleSilenceStopEnabled()
         self.toggleSilenceStopDuration = Self.loadToggleSilenceStopDuration()
@@ -911,7 +923,7 @@ final class DictationViewModel: ObservableObject {
             .flatMap { NotchIndicatorDisplay(rawValue: $0) } ?? .activeScreen
         self.overlayPosition = UserDefaults.standard.string(forKey: UserDefaultsKeys.overlayPosition)
             .flatMap { OverlayPosition(rawValue: $0) } ?? .bottom
-        audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled
+        applyEffectiveMicrophoneGainToAudioServices()
 
         setupBindings()
 
@@ -1093,12 +1105,31 @@ final class DictationViewModel: ObservableObject {
         defaults.set(behavior.rawValue, forKey: UserDefaultsKeys.cancellationBehavior)
     }
 
-    nonisolated static func loadMicrophoneBoostEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool ?? false
+    /// Reads the gain mode, migrating the former Whisper Mode toggle when no mode is stored.
+    nonisolated static func loadMicrophoneGainMode(defaults: UserDefaults = .standard) -> MicrophoneGainMode {
+        if let mode = defaults.string(forKey: UserDefaultsKeys.microphoneGainMode)
+            .flatMap(MicrophoneGainMode.init(rawValue:)) {
+            return mode
+        }
+        let legacyBoostEnabled = defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool ?? false
+        return legacyBoostEnabled ? .automatic : .off
     }
 
-    nonisolated static func persistMicrophoneBoostEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
-        defaults.set(enabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+    /// Also writes the former Whisper Mode toggle, so older builds and backups keep working.
+    nonisolated static func persistMicrophoneGainMode(_ mode: MicrophoneGainMode, defaults: UserDefaults = .standard) {
+        defaults.set(mode.rawValue, forKey: UserDefaultsKeys.microphoneGainMode)
+        defaults.set(mode == .automatic, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+    }
+
+    nonisolated static func loadMicrophoneManualGainDB(defaults: UserDefaults = .standard) -> Double {
+        guard let value = defaults.object(forKey: UserDefaultsKeys.microphoneManualGainDB) as? Double else {
+            return MicrophoneGainSetting.defaultManualGainDB
+        }
+        return MicrophoneGainSetting.clampedGainDB(value)
+    }
+
+    nonisolated static func persistMicrophoneManualGainDB(_ gainDB: Double, defaults: UserDefaults = .standard) {
+        defaults.set(MicrophoneGainSetting.clampedGainDB(gainDB), forKey: UserDefaultsKeys.microphoneManualGainDB)
     }
 
     nonisolated static func loadToggleSilenceStopEnabled(defaults: UserDefaults = .standard) -> Bool {
@@ -2226,7 +2257,7 @@ final class DictationViewModel: ObservableObject {
         dictationLatencyTraces[sessionID]?.inputTransport = audioDeviceService
             .recordingInputTransportName(for: resolvedInputSelection)
         let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
-        audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
+        audioRecordingService.microphoneGain = microphoneGain(for: initialForcedWorkflow)
         let selectedInputUsesBluetooth = resolvedInputSelection.usesBluetoothTransport
         audioRecordingService.configureInputSelection(
             deviceID: resolvedInputSelection.deviceID,
@@ -2511,7 +2542,7 @@ final class DictationViewModel: ObservableObject {
         beginTargetAppAccessibilityObservationIfNeeded(
             bundleIdentifier: activeApp.bundleId
         )
-        applyEffectiveMicrophoneBoostToAudioService()
+        applyEffectiveMicrophoneGainToAudioServices()
         if selectedInputUsesBluetooth {
             // The asynchronous Bluetooth start only returns after the current
             // engine generation has produced a confirmed ready stream.
@@ -2729,8 +2760,8 @@ final class DictationViewModel: ObservableObject {
         DictationTranscriptionOverrideResolver.modelId(for: matchedWorkflow)
     }
 
-    private var effectiveMicrophoneBoostEnabled: Bool {
-        microphoneBoostEnabled(for: matchedWorkflow)
+    private var effectiveMicrophoneGain: MicrophoneGainSetting {
+        microphoneGain(for: matchedWorkflow)
     }
 
     private var effectiveRuleName: String? {
@@ -4462,7 +4493,7 @@ final class DictationViewModel: ObservableObject {
         activeRuleName = match?.workflow.name
         activeRuleReasonLabel = match?.kind.label
         activeRuleExplanation = match.map { workflowExplanation(for: $0, activeApp: activeApp) }
-        applyEffectiveMicrophoneBoostToAudioService()
+        applyEffectiveMicrophoneGainToAudioServices()
         prewarmWorkflowLLMIfNeeded()
     }
 
@@ -4482,12 +4513,21 @@ final class DictationViewModel: ObservableObject {
         return workflowService.workflows.first { $0.id == id && $0.isEnabled }
     }
 
-    private func microphoneBoostEnabled(for workflow: Workflow?) -> Bool {
-        return workflow?.behavior.microphoneBoostOverride ?? microphoneBoostEnabled
+    private func microphoneGain(for workflow: Workflow?) -> MicrophoneGainSetting {
+        MicrophoneGainSetting(
+            mode: workflow?.behavior.microphoneGainOverride ?? microphoneGainMode,
+            manualGainDB: microphoneManualGainDB
+        )
     }
 
-    private func applyEffectiveMicrophoneBoostToAudioService() {
-        audioRecordingService.microphoneBoostEnabled = effectiveMicrophoneBoostEnabled
+    /// Dictation follows the matched workflow; the microphone test in Settings shows the
+    /// global setting so the slider can be tuned against the live level.
+    private func applyEffectiveMicrophoneGainToAudioServices() {
+        audioRecordingService.microphoneGain = effectiveMicrophoneGain
+        audioDeviceService.previewMicrophoneGain = MicrophoneGainSetting(
+            mode: microphoneGainMode,
+            manualGainDB: microphoneManualGainDB
+        )
     }
 
     /// Starts the live streaming handler with the currently effective workflow/global params
