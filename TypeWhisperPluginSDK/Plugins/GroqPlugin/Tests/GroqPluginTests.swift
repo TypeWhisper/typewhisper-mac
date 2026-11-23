@@ -296,6 +296,26 @@ final class GroqPluginTests: XCTestCase {
         XCTAssertNil(plugin.requestReasoningEffort("low", forModelId: "llama-3.3-70b-versatile"))
     }
 
+    func testReasoningModelReplyKeepsALiteralThinkTag() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+        let literal = "<think>Keep this literal text.</think>\nBody."
+        let body = try JSONSerialization.data(withJSONObject: [
+            "choices": [["message": ["content": literal, "reasoning": "Thinking."], "finish_reason": "stop"]],
+        ])
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(body, Self.httpResponse(url: "https://api.groq.com/openai/v1/chat/completions", statusCode: 200)),
+            ])
+        }
+
+        let reply = try await plugin.process(systemPrompt: "Keep.", userText: "text", model: "qwen/qwen3.8-27b", effort: "low")
+
+        XCTAssertEqual(reply, literal)
+    }
+
     func testChatRequestSendsReasoningEffortOnlyOncePicked() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
         let plugin = GroqPlugin()
