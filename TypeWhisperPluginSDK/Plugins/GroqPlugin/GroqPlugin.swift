@@ -229,7 +229,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
         guard let modelId = llmModelId(for: model) else {
             throw PluginChatError.notConfigured
         }
-        return try await chatHelper.process(
+        let reply = try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
@@ -237,6 +237,18 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             reasoningEffort: requestReasoningEffort(effort, forModelId: modelId),
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         )
+        return Self.removingLeadingThinkBlock(from: reply)
+    }
+
+    /// Groq's docs name `raw` as the default `reasoning_format`, which puts the
+    /// reasoning of models such as Qwen 3.8 into the reply as a `<think>` block.
+    /// Groq currently answers as with `parsed` and returns it in
+    /// `message.reasoning`; the shared chat helper cannot send the format, so
+    /// a leading block is removed should Groq apply the documented default.
+    static func removingLeadingThinkBlock(from reply: String) -> String {
+        let trimmed = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("<think>"), let end = trimmed.range(of: "</think>") else { return reply }
+        return String(trimmed[end.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func llmModelId(for model: String?) -> String? {

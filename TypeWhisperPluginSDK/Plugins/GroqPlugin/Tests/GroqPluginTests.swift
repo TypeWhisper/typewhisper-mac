@@ -296,6 +296,15 @@ final class GroqPluginTests: XCTestCase {
         XCTAssertNil(plugin.requestReasoningEffort("low", forModelId: "llama-3.3-70b-versatile"))
     }
 
+    func testLeadingThinkBlockNeverBecomesTheReply() {
+        XCTAssertEqual(
+            GroqPlugin.removingLeadingThinkBlock(from: "\n<think>\nFix the commas.\n</think>\n\nHello, how are you?"),
+            "Hello, how are you?"
+        )
+        XCTAssertEqual(GroqPlugin.removingLeadingThinkBlock(from: "Hello, how are you?"), "Hello, how are you?")
+        XCTAssertEqual(GroqPlugin.removingLeadingThinkBlock(from: "<think> without an end"), "<think> without an end")
+    }
+
     func testChatRequestSendsReasoningEffortOnlyOncePicked() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
         let plugin = GroqPlugin()

@@ -23,7 +23,15 @@ final class OpenRouterPlugin: NSObject,
     fileprivate var _selectedLLMModelId: String?
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
-    fileprivate var _fetchedLLMModels: [OpenRouterFetchedModel] = []
+    /// The LLM catalog. The settings and the background refresh replace it on
+    /// the main thread while requests read it, so every access goes through
+    /// `fetchedLLMModelsLock`.
+    private let fetchedLLMModelsLock = NSLock()
+    private var fetchedLLMModelsStorage: [OpenRouterFetchedModel] = []
+    fileprivate var _fetchedLLMModels: [OpenRouterFetchedModel] {
+        get { fetchedLLMModelsLock.withLock { fetchedLLMModelsStorage } }
+        set { fetchedLLMModelsLock.withLock { fetchedLLMModelsStorage = newValue } }
+    }
     fileprivate var _fetchedTranscriptionModels: [OpenRouterFetchedModel] = []
     fileprivate var _elevenLabsCleanTranscript = true
     /// The Reasoning Effort picked in the plugin settings, per model ID. The
