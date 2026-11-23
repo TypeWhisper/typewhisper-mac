@@ -229,14 +229,16 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
         guard let modelId = llmModelId(for: model) else {
             throw PluginChatError.notConfigured
         }
+        let reasoningEffort = requestReasoningEffort(effort, forModelId: modelId)
         let reply = try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
-            reasoningEffort: requestReasoningEffort(effort, forModelId: modelId),
+            reasoningEffort: reasoningEffort,
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         )
+        guard GroqReasoningEffort.reasons(modelId: modelId, sentEffort: reasoningEffort) else { return reply }
         return Self.removingLeadingThinkBlock(from: reply)
     }
 
@@ -506,6 +508,14 @@ enum GroqReasoningEffort {
 
     static func providerDefault(forModelId modelId: String) -> String? {
         catalog[modelId]?.providerDefault
+    }
+
+    /// Whether the model reasons for a request that sent `sentEffort`. Only
+    /// these replies can carry Groq's raw reasoning block; other replies stay
+    /// as the model wrote them.
+    static func reasons(modelId: String, sentEffort: String?) -> Bool {
+        guard let level = sentEffort ?? providerDefault(forModelId: modelId) else { return false }
+        return level != "none"
     }
 }
 

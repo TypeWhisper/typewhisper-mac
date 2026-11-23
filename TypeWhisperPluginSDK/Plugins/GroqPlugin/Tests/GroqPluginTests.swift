@@ -303,6 +303,36 @@ final class GroqPluginTests: XCTestCase {
         )
         XCTAssertEqual(GroqPlugin.removingLeadingThinkBlock(from: "Hello, how are you?"), "Hello, how are you?")
         XCTAssertEqual(GroqPlugin.removingLeadingThinkBlock(from: "<think> without an end"), "<think> without an end")
+
+        XCTAssertTrue(GroqReasoningEffort.reasons(modelId: "openai/gpt-oss-120b", sentEffort: nil))
+        XCTAssertTrue(GroqReasoningEffort.reasons(modelId: "qwen/qwen3.8-27b", sentEffort: "low"))
+        XCTAssertFalse(GroqReasoningEffort.reasons(modelId: "qwen/qwen3.8-27b", sentEffort: nil))
+        XCTAssertFalse(GroqReasoningEffort.reasons(modelId: "llama-3.3-70b-versatile", sentEffort: nil))
+    }
+
+    func testRepliesOfModelsThatDoNotReasonKeepALiteralThinkTag() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+        let literal = "<think>Keep this literal text.</think>\nBody."
+        let raw = "<think>Fix the commas.</think>\nHello, how are you?"
+        let response = Self.httpResponse(url: "https://api.groq.com/openai/v1/chat/completions", statusCode: 200)
+        func reply(_ content: String) throws -> Data {
+            try JSONSerialization.data(withJSONObject: ["choices": [["message": ["content": content], "finish_reason": "stop"]]])
+        }
+        let store = PluginHTTPClientSessionStore()
+        let outcomes = [try reply(literal), try reply(literal), try reply(raw)]
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: outcomes.map { .success($0, response) })
+        }
+
+        let llama = try await plugin.process(systemPrompt: "Keep.", userText: "text", model: "llama-3.3-70b-versatile")
+        let qwenOff = try await plugin.process(systemPrompt: "Keep.", userText: "text", model: "qwen/qwen3.8-27b")
+        let qwenLow = try await plugin.process(systemPrompt: "Fix.", userText: "text", model: "qwen/qwen3.8-27b", effort: "low")
+
+        XCTAssertEqual(llama, literal)
+        XCTAssertEqual(qwenOff, literal)
+        XCTAssertEqual(qwenLow, "Hello, how are you?")
     }
 
     func testChatRequestSendsReasoningEffortOnlyOncePicked() async throws {
