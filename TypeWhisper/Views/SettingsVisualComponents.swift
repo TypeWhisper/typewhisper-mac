@@ -200,6 +200,30 @@ extension View {
     ) -> some View {
         modifier(KeyboardActivatableCard(cornerRadius: cornerRadius, isEnabled: isEnabled, action: action))
     }
+
+    /// Gives selectable text a VoiceOver label without crashing.
+    ///
+    /// `.textSelection(.enabled)` backs the text with an AppKit element. An accessibility modifier
+    /// in the same chain makes SwiftUI read the label through that element, and the element asks
+    /// SwiftUI for the label again. When an accessibility client such as VoiceOver reads the text,
+    /// this repeats until the main thread's stack overflows (#2004). The label therefore sits on a
+    /// plain container around the text, and the text itself keeps no accessibility modifiers.
+    /// The container replaces the text for VoiceOver, so the text is read once, as static text.
+    @ViewBuilder
+    func selectableTextAccessibilityLabel(_ label: String, value: String? = nil) -> some View {
+        let container = HStack(spacing: 0) {
+            self
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
+        .accessibilityLabel(label)
+
+        if let value {
+            container.accessibilityValue(value)
+        } else {
+            container
+        }
+    }
 }
 
 /// A short, visible confirmation for an action that otherwise changes nothing on

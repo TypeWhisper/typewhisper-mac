@@ -83,7 +83,7 @@ struct AppVocabularyImportSheet: View {
                                     .lineLimit(3)
                                     .help(row.entry.replacement ?? row.entry.original)
                                     .textSelection(.enabled)
-                                    .accessibilityLabel(row.entry.replacement ?? String(localized: "None"))
+                                    .selectableTextAccessibilityLabel(row.entry.replacement ?? String(localized: "None"))
                             }
                             TableColumn(String(localized: "Status")) { row in
                                 Text(status(row.outcome))
@@ -108,7 +108,7 @@ struct AppVocabularyImportSheet: View {
 
             if let error = model.error {
                 Text(error).foregroundStyle(.red).textSelection(.enabled)
-                    .accessibilityLabel(String(localized: "Error: \(error)"))
+                    .selectableTextAccessibilityLabel(String(localized: "Error: \(error)"))
             }
             Spacer(minLength: 0)
             HStack {
