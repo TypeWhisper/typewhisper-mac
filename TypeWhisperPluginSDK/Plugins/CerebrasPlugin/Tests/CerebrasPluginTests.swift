@@ -21,4 +21,29 @@ final class CerebrasPluginTests: XCTestCase {
         let preferred = (plugin as? LLMModelSelectable)?.preferredModelId
         XCTAssertEqual(preferred, target)
     }
+
+    func testReasoningEffortFollowsWorkflowThenSettingsAndSkipsModelsWithoutLevels() throws {
+        let host = try PluginTestHostServices()
+        let plugin = CerebrasPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.supportedEfforts(for: "gpt-oss-120b").map(\.id), ["low", "medium", "high"])
+        XCTAssertEqual(plugin.defaultEffortId(for: "gpt-oss-120b"), "medium")
+        XCTAssertNil(
+            plugin.requestReasoningEffort(nil, forModelId: "gpt-oss-120b"),
+            "Without a picked level the request keeps Cerebras' default"
+        )
+
+        plugin.setReasoningEffort("low", forModelId: "gpt-oss-120b")
+        XCTAssertEqual(plugin.requestReasoningEffort(nil, forModelId: "gpt-oss-120b"), "low")
+        XCTAssertEqual(plugin.requestReasoningEffort("high", forModelId: "gpt-oss-120b"), "high")
+        XCTAssertEqual(plugin.requestReasoningEffort("none", forModelId: "gpt-oss-120b"), "low")
+
+        let reloaded = CerebrasPlugin()
+        reloaded.activate(host: host)
+        XCTAssertEqual(reloaded.defaultEffortId(for: "gpt-oss-120b"), "low")
+
+        XCTAssertTrue(plugin.supportedEfforts(for: "llama3.1-8b").isEmpty)
+        XCTAssertNil(plugin.requestReasoningEffort("low", forModelId: "llama3.1-8b"))
+    }
 }

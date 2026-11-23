@@ -5,9 +5,10 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(CerebrasPlugin)
-final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
+final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffortControllableProvider, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.cerebras"
     static let pluginName = "Cerebras"
+    static let reasoningEffortsKey = "reasoningEfforts"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -15,6 +16,8 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedModels: [CerebrasFetchedModel] = []
+    /// The Reasoning Effort picked in the plugin settings, per model ID.
+    fileprivate var _reasoningEfforts: [String: String] = [:]
 
     private let chatHelper = PluginOpenAIChatHelper(
         baseURL: "https://api.cerebras.ai"
@@ -36,6 +39,7 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
+        _reasoningEfforts = host.userDefault(forKey: Self.reasoningEffortsKey) as? [String: String] ?? [:]
     }
 
     func deactivate() {
@@ -88,17 +92,102 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            effort: nil
+        )
+    }
+
+    func process(systemPrompt: String, userText: String, model: String?, effort: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
+    ) async throws -> String {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        let modelId = llmModelId(for: model)
         return try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
+            reasoningEffort: requestReasoningEffort(effort, forModelId: modelId),
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         )
+    }
+
+    private func llmModelId(for model: String?) -> String {
+        model ?? _selectedLLMModelId ?? supportedModels.first!.id
+    }
+
+    // MARK: - Reasoning Effort
+
+    func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+        let bundle = Bundle(for: CerebrasPlugin.self)
+        return CerebrasReasoningEffort.supportedEfforts(forModelId: llmModelId(for: model)).map { effort in
+            PluginLLMEffortInfo(id: effort, displayName: Self.effortDisplayName(effort, bundle: bundle))
+        }
+    }
+
+    /// The level a request without an explicit effort uses: the one picked in the
+    /// plugin settings for that model, otherwise Cerebras' own default.
+    func defaultEffortId(for model: String?) -> String? {
+        savedReasoningEffort(forModelId: llmModelId(for: model))
+    }
+
+    func savedReasoningEffort(forModelId modelId: String) -> String? {
+        let supported = CerebrasReasoningEffort.supportedEfforts(forModelId: modelId)
+        if let saved = _reasoningEfforts[modelId], supported.contains(saved) {
+            return saved
+        }
+        return CerebrasReasoningEffort.providerDefault(forModelId: modelId)
+    }
+
+    func setReasoningEffort(_ effort: String, forModelId modelId: String) {
+        _reasoningEfforts[modelId] = effort
+        host?.setUserDefault(_reasoningEfforts, forKey: Self.reasoningEffortsKey)
+    }
+
+    /// The `reasoning_effort` a request sends: the workflow's level, else the one
+    /// picked in the plugin settings. Nil leaves the field out, so a model keeps
+    /// Cerebras' default until a level is picked, and models without reasoning
+    /// levels never get the field.
+    func requestReasoningEffort(_ requested: String?, forModelId modelId: String) -> String? {
+        let supported = CerebrasReasoningEffort.supportedEfforts(forModelId: modelId)
+        if let requested, supported.contains(requested) {
+            return requested
+        }
+        if let saved = _reasoningEfforts[modelId], supported.contains(saved) {
+            return saved
+        }
+        return nil
+    }
+
+    static func effortDisplayName(_ effort: String, bundle: Bundle) -> String {
+        switch effort {
+        case "none": String(localized: "Off", bundle: bundle)
+        case "low": String(localized: "Low", bundle: bundle)
+        case "medium": String(localized: "Medium", bundle: bundle)
+        case "high": String(localized: "High", bundle: bundle)
+        case "max": String(localized: "Max", bundle: bundle)
+        default: effort
+        }
     }
 
     func selectLLMModel(_ modelId: String) {
@@ -208,6 +297,31 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControlla
     }
 }
 
+// MARK: - Reasoning Effort Catalog
+
+/// The `reasoning_effort` levels Cerebras documents per model, in the order the
+/// settings list them, and the level Cerebras uses when the field is missing.
+/// Other models get no picker and no field.
+enum CerebrasReasoningEffort {
+    private static let catalog: [String: (efforts: [String], providerDefault: String)] = [
+        "gpt-oss-120b": (["low", "medium", "high"], "medium"),
+        "qwen-3.8-27b": (["none", "low", "medium", "high"], "high"),
+        "kimi-k3": (["low", "high", "max"], "max"),
+        "kimi-k3.1-pro": (["low", "medium", "high", "max"], "max"),
+        "zai-glm-5.3-flash": (["low", "high", "max"], "max"),
+        // Gemma 4 reasons the same at low, medium and high, so it only switches on.
+        "gemma-4-31b": (["none", "high"], "none"),
+    ]
+
+    static func supportedEfforts(forModelId modelId: String) -> [String] {
+        catalog[modelId]?.efforts ?? []
+    }
+
+    static func providerDefault(forModelId modelId: String) -> String? {
+        catalog[modelId]?.providerDefault
+    }
+}
+
 // MARK: - Fetched Model
 
 struct CerebrasFetchedModel: Codable, Sendable {
@@ -249,6 +363,7 @@ private struct CerebrasSettingsView: View {
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedModels: [CerebrasFetchedModel] = []
+    @State private var reasoningEffort: String = ""
     private let bundle = Bundle(for: CerebrasPlugin.self)
 
     var body: some View {
@@ -351,12 +466,44 @@ private struct CerebrasSettingsView: View {
                     .labelsHidden()
                     .onChange(of: selectedModel) {
                         plugin.selectLLMModel(selectedModel)
+                        showReasoningEffort()
                     }
 
                     if fetchedModels.isEmpty {
                         Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if !reasoningEfforts.isEmpty {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Reasoning Effort", bundle: bundle)
+                            .font(.headline)
+
+                        Picker(selection: Binding(
+                            get: { reasoningEffort },
+                            set: { effort in
+                                reasoningEffort = effort
+                                plugin.setReasoningEffort(effort, forModelId: selectedModel)
+                            }
+                        )) {
+                            ForEach(reasoningEfforts, id: \.self) { effort in
+                                Text(CerebrasPlugin.effortDisplayName(effort, bundle: bundle)).tag(effort)
+                            }
+                        } label: {
+                            Text("Reasoning Effort", bundle: bundle)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
+
+                        Text("Lower levels answer faster and use fewer tokens. Workflows can pick their own level.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -407,7 +554,16 @@ private struct CerebrasSettingsView: View {
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedModels = plugin._fetchedModels
+            showReasoningEffort()
         }
+    }
+
+    private var reasoningEfforts: [String] {
+        CerebrasReasoningEffort.supportedEfforts(forModelId: selectedModel)
+    }
+
+    private func showReasoningEffort() {
+        reasoningEffort = plugin.savedReasoningEffort(forModelId: selectedModel) ?? ""
     }
 
     private func saveApiKey() {
