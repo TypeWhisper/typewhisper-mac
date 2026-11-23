@@ -229,28 +229,14 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
         guard let modelId = llmModelId(for: model) else {
             throw PluginChatError.notConfigured
         }
-        let reasoningEffort = requestReasoningEffort(effort, forModelId: modelId)
-        let reply = try await chatHelper.process(
+        return try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
-            reasoningEffort: reasoningEffort,
+            reasoningEffort: requestReasoningEffort(effort, forModelId: modelId),
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         )
-        guard GroqReasoningEffort.reasons(modelId: modelId, sentEffort: reasoningEffort) else { return reply }
-        return Self.removingLeadingThinkBlock(from: reply)
-    }
-
-    /// Groq's docs name `raw` as the default `reasoning_format`, which puts the
-    /// reasoning of models such as Qwen 3.8 into the reply as a `<think>` block.
-    /// Groq currently answers as with `parsed` and returns it in
-    /// `message.reasoning`; the shared chat helper cannot send the format, so
-    /// a leading block is removed should Groq apply the documented default.
-    static func removingLeadingThinkBlock(from reply: String) -> String {
-        let trimmed = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("<think>"), let end = trimmed.range(of: "</think>") else { return reply }
-        return String(trimmed[end.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func llmModelId(for model: String?) -> String? {
@@ -492,7 +478,10 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
 /// The `reasoning_effort` levels Groq documents per model, in the order the
 /// settings list them, and the level Groq uses when the field is missing.
 /// Other models get no picker and no field. Groq returns the reasoning in
-/// `message.reasoning`, which never becomes the reply.
+/// `message.reasoning`, which never becomes the reply. Its docs name `raw`
+/// (reasoning as a `<think>` block in the reply) as the default
+/// `reasoning_format` for Qwen, but Groq answers requests without the field
+/// as with `parsed`, checked live on 2026-11-23.
 enum GroqReasoningEffort {
     private static let catalog: [String: (efforts: [String], providerDefault: String)] = [
         "openai/gpt-oss-120b": (["low", "medium", "high"], "medium"),
@@ -508,14 +497,6 @@ enum GroqReasoningEffort {
 
     static func providerDefault(forModelId modelId: String) -> String? {
         catalog[modelId]?.providerDefault
-    }
-
-    /// Whether the model reasons for a request that sent `sentEffort`. Only
-    /// these replies can carry Groq's raw reasoning block; other replies stay
-    /// as the model wrote them.
-    static func reasons(modelId: String, sentEffort: String?) -> Bool {
-        guard let level = sentEffort ?? providerDefault(forModelId: modelId) else { return false }
-        return level != "none"
     }
 }
 
