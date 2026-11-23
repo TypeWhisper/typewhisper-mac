@@ -43,7 +43,18 @@ final class CerebrasPluginTests: XCTestCase {
         reloaded.activate(host: host)
         XCTAssertEqual(reloaded.defaultEffortId(for: "gpt-oss-120b"), "low")
 
-        XCTAssertTrue(plugin.supportedEfforts(for: "llama3.1-8b").isEmpty)
-        XCTAssertNil(plugin.requestReasoningEffort("low", forModelId: "llama3.1-8b"))
+        XCTAssertTrue(plugin.supportedEfforts(for: "some-model-without-levels").isEmpty)
+        XCTAssertNil(plugin.requestReasoningEffort("low", forModelId: "some-model-without-levels"))
+    }
+
+    func testDeprecatedModelSelectionMovesToGPTOSS() throws {
+        let host = try PluginTestHostServices()
+        host.setUserDefault("llama3.1-8b", forKey: "selectedLLMModel")
+        let plugin = CerebrasPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-oss-120b")
+        XCTAssertEqual(plugin.supportedModels.map(\.id), ["gpt-oss-120b"])
+        XCTAssertEqual(plugin.defaultEffortId(for: "zai-glm-4.7"), "medium")
     }
 }

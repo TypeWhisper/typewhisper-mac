@@ -34,7 +34,8 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
            let models = try? JSONDecoder().decode([CerebrasFetchedModel].self, from: data) {
             _fetchedModels = models
         }
-        _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
+        _selectedLLMModelId = (host.userDefault(forKey: "selectedLLMModel") as? String)
+            .map(Self.currentModelId(for:))
         _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
@@ -64,9 +65,20 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
     ]
 
     private static let fallbackModels: [PluginModelInfo] = [
-        PluginModelInfo(id: "llama3.1-8b", displayName: "Llama 3.1 8B"),
         PluginModelInfo(id: "gpt-oss-120b", displayName: "GPT-OSS 120B"),
     ]
+
+    /// Models Cerebras deprecated, mapped to the model it recommends instead.
+    /// A saved selection or a workflow with one of them uses the replacement.
+    private static let replacedModelIds: [String: String] = [
+        "llama3.1-8b": "gpt-oss-120b",
+        "qwen-3-235b-a22b-instruct-2507": "gpt-oss-120b",
+        "zai-glm-4.7": "gpt-oss-120b",
+    ]
+
+    static func currentModelId(for modelId: String) -> String {
+        replacedModelIds[modelId] ?? modelId
+    }
 
     var supportedModels: [PluginModelInfo] {
         if _fetchedModels.isEmpty {
@@ -133,7 +145,7 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
     }
 
     private func llmModelId(for model: String?) -> String {
-        model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        Self.currentModelId(for: model ?? _selectedLLMModelId ?? supportedModels.first!.id)
     }
 
     // MARK: - Reasoning Effort
