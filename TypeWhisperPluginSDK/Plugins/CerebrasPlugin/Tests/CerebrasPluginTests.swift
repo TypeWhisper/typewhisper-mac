@@ -56,5 +56,12 @@ final class CerebrasPluginTests: XCTestCase {
         XCTAssertEqual(plugin.selectedLLMModelId, "gpt-oss-120b")
         XCTAssertEqual(plugin.supportedModels.map(\.id), ["gpt-oss-120b"])
         XCTAssertEqual(plugin.defaultEffortId(for: "zai-glm-4.7"), "medium")
+
+        plugin.setFetchedModels([
+            CerebrasFetchedModel(id: "gpt-oss-120b", displayName: nil),
+            CerebrasFetchedModel(id: "llama3.1-8b", displayName: nil),
+            CerebrasFetchedModel(id: "qwen-3.8-27b", displayName: nil),
+        ])
+        XCTAssertEqual(plugin.supportedModels.map(\.id), ["gpt-oss-120b", "qwen-3.8-27b"])
     }
 }

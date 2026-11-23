@@ -16,8 +16,11 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedModels: [CerebrasFetchedModel] = []
-    /// The Reasoning Effort picked in the plugin settings, per model ID.
-    fileprivate var _reasoningEfforts: [String: String] = [:]
+    /// The Reasoning Effort picked in the plugin settings, per model ID. The
+    /// settings write it on the main thread while requests read it, so every
+    /// access goes through `reasoningEffortsLock`.
+    private var _reasoningEfforts: [String: String] = [:]
+    private let reasoningEffortsLock = NSLock()
 
     private let chatHelper = PluginOpenAIChatHelper(
         baseURL: "https://api.cerebras.ai"
@@ -40,7 +43,8 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
-        _reasoningEfforts = host.userDefault(forKey: Self.reasoningEffortsKey) as? [String: String] ?? [:]
+        let savedEfforts = host.userDefault(forKey: Self.reasoningEffortsKey) as? [String: String] ?? [:]
+        reasoningEffortsLock.withLock { _reasoningEfforts = savedEfforts }
     }
 
     func deactivate() {
@@ -74,7 +78,8 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
     ]
 
     /// Models Cerebras deprecated, mapped to the model it recommends instead.
-    /// A saved selection or a workflow with one of them uses the replacement.
+    /// The saved selection and a model list fetched before the deprecation use
+    /// the replacement.
     private static let replacedModelIds: [String: String] = [
         "llama3.1-8b": "gpt-oss-120b",
         "qwen-3-235b-a22b-instruct-2507": "gpt-oss-120b",
@@ -89,8 +94,12 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
         if _fetchedModels.isEmpty {
             return Self.fallbackModels
         }
-        return _fetchedModels.map {
-            PluginModelInfo(id: $0.id, displayName: Self.displayNames[$0.id] ?? $0.id)
+        // A list fetched before Cerebras retired a model can still hold it.
+        var seen = Set<String>()
+        return _fetchedModels.compactMap { model in
+            let id = Self.currentModelId(for: model.id)
+            guard seen.insert(id).inserted else { return nil }
+            return PluginModelInfo(id: id, displayName: Self.displayNames[id] ?? id)
         }
     }
 
@@ -170,15 +179,22 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
 
     func savedReasoningEffort(forModelId modelId: String) -> String? {
         let supported = CerebrasReasoningEffort.supportedEfforts(forModelId: modelId)
-        if let saved = _reasoningEfforts[modelId], supported.contains(saved) {
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
             return saved
         }
         return CerebrasReasoningEffort.providerDefault(forModelId: modelId)
     }
 
     func setReasoningEffort(_ effort: String, forModelId modelId: String) {
-        _reasoningEfforts[modelId] = effort
-        host?.setUserDefault(_reasoningEfforts, forKey: Self.reasoningEffortsKey)
+        let efforts = reasoningEffortsLock.withLock {
+            _reasoningEfforts[modelId] = effort
+            return _reasoningEfforts
+        }
+        host?.setUserDefault(efforts, forKey: Self.reasoningEffortsKey)
+    }
+
+    private func storedReasoningEffort(forModelId modelId: String) -> String? {
+        reasoningEffortsLock.withLock { _reasoningEfforts[modelId] }
     }
 
     /// The `reasoning_effort` a request sends: the workflow's level, else the one
@@ -190,7 +206,7 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
         if let requested, supported.contains(requested) {
             return requested
         }
-        if let saved = _reasoningEfforts[modelId], supported.contains(saved) {
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
             return saved
         }
         return nil
@@ -281,7 +297,7 @@ final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffort
         }
     }
 
-    fileprivate func setFetchedModels(_ models: [CerebrasFetchedModel]) {
+    func setFetchedModels(_ models: [CerebrasFetchedModel]) {
         _fetchedModels = models
         if let data = try? JSONEncoder().encode(models) {
             host?.setUserDefault(data, forKey: "fetchedModels")
