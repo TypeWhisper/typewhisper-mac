@@ -25,7 +25,10 @@ enum UserDefaultsKeys {
     static let toggleDictationSilenceStopEnabled = "toggleDictationSilenceStopEnabled"
     static let toggleDictationSilenceStopDuration = "toggleDictationSilenceStopDuration"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
+    /// Legacy Whisper Mode toggle. Still written for older builds and backups.
     static let microphoneBoostEnabled = "microphoneBoostEnabled"
+    static let microphoneGainMode = "microphoneGainMode"
+    static let microphoneManualGainDB = "microphoneManualGainDB"
     static let cancellationBehavior = "cancellationBehavior"
     // Legacy preference, retained for migration and old settings backups.
     static let requireSecondEscapeToCancelRecording = "requireSecondEscapeToCancelRecording"

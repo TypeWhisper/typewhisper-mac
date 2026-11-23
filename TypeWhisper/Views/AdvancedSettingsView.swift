@@ -346,16 +346,6 @@ struct AdvancedSettingsView: View {
                 }
 #endif
 
-                Toggle(isOn: $dictation.microphoneBoostEnabled) {
-                    SettingsInfoLabel(
-                        title: localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"),
-                        info: localizedAppText(
-                            "Automatically raises quiet microphone input before transcription. Useful for low-gain microphones, but very noisy rooms may sound louder too.",
-                            de: "Hebt leise Mikrofoneingaben vor der Transkription automatisch an. Hilft bei Mikrofonen mit niedrigem Pegel, kann in lauten Räumen aber auch Störgeräusche verstärken."
-                        )
-                    )
-                }
-
                 LabeledContent {
                     HStack(spacing: 8) {
                         if workflowService.shortTranscriptionMinimumWords > 0 {
@@ -936,6 +926,10 @@ struct AdvancedSettingsView: View {
             },
             cancellationBehaviorDidChange: { behavior in
                 dictation.cancellationBehavior = behavior
+            },
+            microphoneGainDidChange: { mode, gainDB in
+                dictation.microphoneGainMode = mode
+                dictation.microphoneManualGainDB = gainDB
             },
             indicatorThemeDidChange: { theme in
                 dictation.indicatorTheme = theme

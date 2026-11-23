@@ -123,6 +123,65 @@ enum BluetoothRecordingInputPreparationPolicy {
     }
 }
 
+/// How dictation raises the microphone level before metering, live preview and transcription.
+enum MicrophoneGainMode: String, CaseIterable, Codable, Identifiable, Sendable {
+    /// The input is passed through unchanged.
+    case off
+    /// Whisper Mode: an automatic gain control that lifts quiet speech toward a target level.
+    case automatic
+    /// A fixed gain in decibels, like an input volume slider, with peak protection.
+    case manual
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off:
+            localizedAppText("Off", de: "Aus", es: "Desactivado")
+        case .automatic:
+            localizedAppText("Automatic (Whisper Mode)", de: "Automatisch (Whisper-Modus)", es: "Automático (modo Whisper)")
+        case .manual:
+            localizedAppText("Manual", de: "Manuell", es: "Manual")
+        }
+    }
+}
+
+/// The effective microphone gain for one recording: a mode plus the manual gain in decibels.
+struct MicrophoneGainSetting: Equatable, Sendable {
+    static let manualGainRangeDB: ClosedRange<Double> = 0...20
+    static let defaultManualGainDB: Double = 6
+
+    static let off = MicrophoneGainSetting(mode: .off)
+    static let automatic = MicrophoneGainSetting(mode: .automatic)
+
+    static func manual(gainDB: Double) -> MicrophoneGainSetting {
+        MicrophoneGainSetting(mode: .manual, manualGainDB: gainDB)
+    }
+
+    var mode: MicrophoneGainMode
+    var manualGainDB: Double
+
+    init(mode: MicrophoneGainMode, manualGainDB: Double = MicrophoneGainSetting.defaultManualGainDB) {
+        self.mode = mode
+        self.manualGainDB = Self.clampedGainDB(manualGainDB)
+    }
+
+    static func clampedGainDB(_ gainDB: Double) -> Double {
+        guard gainDB.isFinite else { return defaultManualGainDB }
+        return min(max(gainDB, manualGainRangeDB.lowerBound), manualGainRangeDB.upperBound)
+    }
+
+    /// The linear factor for the manual gain, e.g. about 2 for +6 dB and 4 for +12 dB.
+    var manualLinearGain: Float {
+        Float(pow(10, manualGainDB / 20))
+    }
+
+    static func formattedGainDB(_ gainDB: Double) -> String {
+        let rounded = Int(clampedGainDB(gainDB).rounded())
+        return rounded == 0 ? "0 dB" : "+\(rounded) dB"
+    }
+}
+
 struct MicrophoneBoostProcessingResult {
     let samples: [Float]
     let inputRMS: Float
@@ -146,6 +205,10 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
     private struct State {
         var gain: Float = 1
         var recentPeak: Float = 0
+        /// The mode the gain state belongs to, so switching modes starts from a clean state.
+        var mode: MicrophoneGainMode = .off
+        /// The manual gain the state was set up for; a new slider value applies at once.
+        var manualTarget: Float = 1
     }
 
     private let stateLock = OSAllocatedUnfairLock(initialState: State())
@@ -156,9 +219,9 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
         }
     }
 
-    func process(_ samples: [Float], enabled: Bool) -> MicrophoneBoostProcessingResult {
+    func process(_ samples: [Float], gain setting: MicrophoneGainSetting) -> MicrophoneBoostProcessingResult {
         var processedSamples = samples
-        let levels = processInPlace(&processedSamples, enabled: enabled)
+        let levels = processInPlace(&processedSamples, gain: setting)
         return MicrophoneBoostProcessingResult(
             samples: processedSamples,
             inputRMS: levels.inputRMS,
@@ -167,20 +230,42 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
         )
     }
 
-    /// Applies the boost to `samples` in place so the capture path does not copy each buffer.
-    func processInPlace(_ samples: inout [Float], enabled: Bool) -> (inputRMS: Float, outputRMS: Float, gain: Float) {
+    /// Applies the gain to `samples` in place so the capture path does not copy each buffer.
+    func processInPlace(
+        _ samples: inout [Float],
+        gain setting: MicrophoneGainSetting
+    ) -> (inputRMS: Float, outputRMS: Float, gain: Float) {
         guard !samples.isEmpty else {
             return (inputRMS: 0, outputRMS: 0, gain: 1)
         }
 
         let inputRMS = Self.rms(samples)
-        guard enabled else {
+        let gain: Float
+        switch setting.mode {
+        case .off:
             reset()
+            return (inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
+        case .automatic:
+            gain = automaticGain(inputRMS: inputRMS, inputPeak: Self.peak(samples))
+        case .manual:
+            gain = manualGain(target: setting.manualLinearGain, inputPeak: Self.peak(samples))
+        }
+
+        // Automatic gain never drops below 1; a manual boost may, while its limiter
+        // attenuates a buffer that is already louder than the ceiling.
+        guard gain != 1 else {
             return (inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
         }
 
-        let inputPeak = samples.reduce(Float.zero) { max($0, abs($1)) }
-        let gain = stateLock.withLock { state -> Float in
+        Self.applyGain(gain, to: &samples)
+        return (inputRMS: inputRMS, outputRMS: Self.rms(samples), gain: gain)
+    }
+
+    private func automaticGain(inputRMS: Float, inputPeak: Float) -> Float {
+        stateLock.withLock { state -> Float in
+            if state.mode != .automatic {
+                state = State(mode: .automatic)
+            }
             state.recentPeak = max(inputPeak, state.recentPeak * Self.peakDecay)
 
             // Hold the current gain through near-silence instead of normalizing each
@@ -207,13 +292,36 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
             state.gain = min(max(state.gain, Self.minimumGain), Self.maximumGain)
             return state.gain
         }
+    }
 
-        guard gain > 1 else {
-            return (inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
+    /// A fixed gain with a peak limiter: a loud buffer lowers the gain at once so it stays
+    /// below the ceiling, and the gain then recovers gently toward the chosen value.
+    private func manualGain(target: Float, inputPeak: Float) -> Float {
+        let target = min(max(target, Self.minimumGain), Self.maximumGain)
+        // 0 dB passes the input through unchanged, as before the gain picker. Clear the
+        // limiter state so a later boost starts at its full value.
+        guard target > Self.minimumGain else {
+            reset()
+            return Self.minimumGain
         }
+        return stateLock.withLock { state -> Float in
+            if state.mode != .manual || state.manualTarget != target {
+                state = State(gain: target, mode: .manual, manualTarget: target)
+            }
 
-        Self.applyGain(gain, to: &samples)
-        return (inputRMS: inputRMS, outputRMS: Self.rms(samples), gain: gain)
+            var allowedGain = target
+            if inputPeak > 0 {
+                allowedGain = min(allowedGain, Self.peakCeiling / inputPeak)
+            }
+
+            if allowedGain < state.gain {
+                state.gain = allowedGain
+            } else {
+                state.gain += (allowedGain - state.gain) * Self.gainRelease
+            }
+            state.gain = min(max(state.gain, 0), target)
+            return state.gain
+        }
     }
 
     /// Equivalent to `samples.map { softLimited($0 * gain) }` without a new allocation.
@@ -244,6 +352,10 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
 
     private static func rms(_ samples: [Float]) -> Float {
         sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
+    }
+
+    private static func peak(_ samples: [Float]) -> Float {
+        samples.reduce(Float.zero) { max($0, abs($1)) }
     }
 }
 
@@ -564,9 +676,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             if changed { invalidatePreparedRecordingInputs(reason: "input-transport-changed") }
         }
     }
-    var microphoneBoostEnabled: Bool {
-        get { microphoneBoostEnabledLock.withLock { $0 } }
-        set { microphoneBoostEnabledLock.withLock { $0 = newValue } }
+    var microphoneGain: MicrophoneGainSetting {
+        get { microphoneGainLock.withLock { $0 } }
+        set { microphoneGainLock.withLock { $0 = newValue } }
     }
     private var _selectedDeviceID: AudioDeviceID?
     private var _hasExplicitDeviceSelection = false
@@ -665,7 +777,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var sampleBuffer: [Float] = []
     private var _peakRawAudioLevel: Float = 0
     private let bufferLock = NSLock()
-    private let microphoneBoostEnabledLock = OSAllocatedUnfairLock(initialState: false)
+    private let microphoneGainLock = OSAllocatedUnfairLock(initialState: MicrophoneGainSetting.off)
     private let microphoneBoostProcessor = MicrophoneBoostProcessor()
     private let configLock = NSLock()
     private let stopStateLock = NSLock()
@@ -1851,7 +1963,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             var samples = prerollRing.drain()
             heldSampleCount = samples.count
             guard !samples.isEmpty else { return }
-            let boostResult = microphoneBoostProcessor.processInPlace(&samples, enabled: microphoneBoostEnabled)
+            let boostResult = microphoneBoostProcessor.processInPlace(&samples, gain: microphoneGain)
             bufferLock.withLock {
                 sampleBuffer.append(contentsOf: samples)
                 if boostResult.inputRMS > _peakRawAudioLevel { _peakRawAudioLevel = boostResult.inputRMS }
@@ -3673,7 +3785,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        let boostResult = microphoneBoostProcessor.processInPlace(&samples, enabled: microphoneBoostEnabled)
+        let boostResult = microphoneBoostProcessor.processInPlace(&samples, gain: microphoneGain)
         let processedSamples = samples
         let rms = boostResult.outputRMS
         let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)

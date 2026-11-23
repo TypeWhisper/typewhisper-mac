@@ -551,6 +551,10 @@ final class ServiceContainer: ObservableObject {
             cancellationBehaviorDidChange: { [dictationViewModel] behavior in
                 dictationViewModel.cancellationBehavior = behavior
             },
+            microphoneGainDidChange: { [dictationViewModel] mode, gainDB in
+                dictationViewModel.microphoneGainMode = mode
+                dictationViewModel.microphoneManualGainDB = gainDB
+            },
             indicatorThemeDidChange: { [dictationViewModel] theme in
                 dictationViewModel.indicatorTheme = theme
             },

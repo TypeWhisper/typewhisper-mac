@@ -206,6 +206,8 @@ enum SettingsBackupExporter {
         var mediaPauseEnabled: Bool? = nil
         var transcribeShortQuietClipsAggressively: Bool? = nil
         var microphoneBoostEnabled: Bool? = nil
+        var microphoneGainMode: String? = nil
+        var microphoneManualGainDB: Double? = nil
         var cancellationBehavior: String? = nil
         var requireSecondEscapeToCancelRecording: Bool? = nil
         // Dictation Recovery
@@ -260,7 +262,8 @@ enum SettingsBackupExporter {
             if transcriptionNumberNormalizationMinimumValue != nil { count += 1 }
             if mediaPauseEnabled != nil { count += 1 }
             if transcribeShortQuietClipsAggressively != nil { count += 1 }
-            if microphoneBoostEnabled != nil { count += 1 }
+            if microphoneBoostEnabled != nil || microphoneGainMode != nil { count += 1 }
+            if microphoneManualGainDB != nil { count += 1 }
             if cancellationBehavior != nil || requireSecondEscapeToCancelRecording != nil { count += 1 }
             if dictationRecoveryLanguage != nil { count += 1 }
             if dictationRecoveryAutomaticFallbackEnabled != nil { count += 1 }
@@ -605,6 +608,8 @@ enum SettingsBackupExporter {
                 mediaPauseEnabled: userDefaults.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool,
                 transcribeShortQuietClipsAggressively: userDefaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool,
                 microphoneBoostEnabled: userDefaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
+                microphoneGainMode: userDefaults.string(forKey: UserDefaultsKeys.microphoneGainMode),
+                microphoneManualGainDB: userDefaults.object(forKey: UserDefaultsKeys.microphoneManualGainDB) as? Double,
                 cancellationBehavior: DictationViewModel.loadCancellationBehavior(defaults: userDefaults).rawValue,
                 dictationRecoveryLanguage: userDefaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
                 dictationRecoveryAutomaticFallbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled) as? Bool,
@@ -664,6 +669,7 @@ enum SettingsBackupExporter {
         userDefaults: UserDefaults = .standard,
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
+        microphoneGainDidChange: ((MicrophoneGainMode, Double) -> Void)? = nil,
         indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
         dictationRecoveryPreferencesDidChange: (() -> Void)? = nil,
@@ -1061,7 +1067,25 @@ enum SettingsBackupExporter {
         }
         apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)
         apply(preferences.transcribeShortQuietClipsAggressively, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
-        apply(preferences.microphoneBoostEnabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+        // Backups from before the gain picker only carry the Whisper Mode toggle; it maps to
+        // automatic or off. An unknown mode from user-edited JSON keeps the current one.
+        let importedMicrophoneGainMode = preferences.microphoneGainMode.flatMap(MicrophoneGainMode.init(rawValue:))
+            ?? preferences.microphoneBoostEnabled.map({ $0 ? MicrophoneGainMode.automatic : .off })
+        if let mode = importedMicrophoneGainMode {
+            DictationViewModel.persistMicrophoneGainMode(mode, defaults: userDefaults)
+            result.preferencesApplied += 1
+        }
+        if let gainDB = preferences.microphoneManualGainDB {
+            DictationViewModel.persistMicrophoneManualGainDB(gainDB, defaults: userDefaults)
+            result.preferencesApplied += 1
+        }
+        if importedMicrophoneGainMode != nil || preferences.microphoneManualGainDB != nil {
+            // The running view model loaded the gain at launch; hand it the imported values.
+            microphoneGainDidChange?(
+                DictationViewModel.loadMicrophoneGainMode(defaults: userDefaults),
+                DictationViewModel.loadMicrophoneManualGainDB(defaults: userDefaults)
+            )
+        }
         let cancellationBehavior = preferences.cancellationBehavior.flatMap(CancellationBehavior.init(rawValue:))
             ?? preferences.requireSecondEscapeToCancelRecording.map { $0 ? .doubleEscape : .singleEscape }
         if let cancellationBehavior {
@@ -1234,8 +1258,19 @@ extension SettingsBackupExporter.WorkflowDTO {
         name == other.name
             && template == other.template
             && Self.hasSameSelectors(trigger, other.trigger)
-            && behavior == other.behavior
+            && Self.hasSameEffect(behavior, other.behavior)
             && Self.hasSameEffect(output, other.output)
+    }
+
+    /// Workflows saved before the gain picker store their Whisper Mode override only as
+    /// `microphoneBoostOverride`. Saving them in the current editor also writes the
+    /// equivalent gain mode, which must not make an unchanged workflow look different.
+    private static func hasSameEffect(_ lhs: WorkflowBehavior, _ rhs: WorkflowBehavior) -> Bool {
+        var normalizedLhs = lhs
+        normalizedLhs.microphoneGainOverride = lhs.microphoneGainOverride
+        var normalizedRhs = rhs
+        normalizedRhs.microphoneGainOverride = rhs.microphoneGainOverride
+        return normalizedLhs == normalizedRhs
     }
 
     /// Older workflows store the auto-enter mode only as a flag. Saving them
@@ -1414,6 +1449,7 @@ final class SettingsBackupAutomationService {
     private let liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)?
     private let recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)?
     private let cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)?
+    private let microphoneGainDidChange: ((MicrophoneGainMode, Double) -> Void)?
     private let indicatorThemeDidChange: ((IndicatorTheme) -> Void)?
     private let dictationRecoveryPreferencesDidChange: (() -> Void)?
     private let hotkeysDidChange: (() -> Void)?
@@ -1432,6 +1468,7 @@ final class SettingsBackupAutomationService {
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
+        microphoneGainDidChange: ((MicrophoneGainMode, Double) -> Void)? = nil,
         indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
         dictationRecoveryPreferencesDidChange: (() -> Void)? = nil,
         hotkeysDidChange: (() -> Void)? = nil
@@ -1449,6 +1486,7 @@ final class SettingsBackupAutomationService {
         self.liveFieldTranscriptEnabledDidChange = liveFieldTranscriptEnabledDidChange
         self.recoveryRetentionPolicyDidChange = recoveryRetentionPolicyDidChange
         self.cancellationBehaviorDidChange = cancellationBehaviorDidChange
+        self.microphoneGainDidChange = microphoneGainDidChange
         self.indicatorThemeDidChange = indicatorThemeDidChange
         self.dictationRecoveryPreferencesDidChange = dictationRecoveryPreferencesDidChange
         self.hotkeysDidChange = hotkeysDidChange
@@ -1488,6 +1526,7 @@ final class SettingsBackupAutomationService {
             userDefaults: userDefaults,
             liveFieldTranscriptEnabledDidChange: liveFieldTranscriptEnabledDidChange,
             cancellationBehaviorDidChange: cancellationBehaviorDidChange,
+            microphoneGainDidChange: microphoneGainDidChange,
             indicatorThemeDidChange: indicatorThemeDidChange,
             recoveryRetentionPolicyDidChange: recoveryRetentionPolicyDidChange,
             dictationRecoveryPreferencesDidChange: dictationRecoveryPreferencesDidChange,

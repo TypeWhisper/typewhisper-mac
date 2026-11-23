@@ -1338,6 +1338,41 @@ struct RecordingSettingsView: View {
                         .font(.caption)
                 }
 
+                Picker(selection: $dictation.microphoneGainMode) {
+                    ForEach(MicrophoneGainMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                } label: {
+                    SettingsInfoLabel(
+                        title: localizedAppText("Microphone gain", de: "Mikrofonverstärkung", es: "Ganancia del micrófono"),
+                        info: localizedAppText(
+                            "Raises the microphone level before the level meter, the live preview and transcription. Automatic (Whisper Mode) lifts quiet speech on its own. Manual adds a fixed boost; a limiter keeps loud sounds from clipping. Louder settings also raise room noise. Use Test Microphone to check the level.",
+                            de: "Hebt den Mikrofonpegel vor Pegelanzeige, Live-Vorschau und Transkription an. Automatisch (Whisper-Modus) hebt leise Sprache selbstständig an. Manuell verstärkt um einen festen Wert; ein Limiter verhindert Übersteuerung bei lauten Geräuschen. Höhere Werte verstärken auch Umgebungsgeräusche. Mit „Mikrofon testen“ lässt sich der Pegel prüfen.",
+                            es: "Sube el nivel del micrófono antes del medidor de nivel, la vista previa en vivo y la transcripción. Automático (modo Whisper) sube la voz baja por sí solo. Manual aplica un aumento fijo; un limitador evita que los sonidos fuertes saturen. Los valores altos también suben el ruido de la sala. Usa Probar micrófono para comprobar el nivel."
+                        )
+                    )
+                }
+
+                if dictation.microphoneGainMode == .manual {
+                    LabeledContent(localizedAppText("Boost", de: "Verstärkung", es: "Aumento")) {
+                        HStack(spacing: 8) {
+                            Slider(
+                                value: $dictation.microphoneManualGainDB,
+                                in: MicrophoneGainSetting.manualGainRangeDB,
+                                step: 1
+                            )
+                            .accessibilityLabel(localizedAppText("Microphone boost", de: "Mikrofonverstärkung", es: "Aumento del micrófono"))
+                            .accessibilityValue(MicrophoneGainSetting.formattedGainDB(dictation.microphoneManualGainDB))
+
+                            Text(MicrophoneGainSetting.formattedGainDB(dictation.microphoneManualGainDB))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: 48, alignment: .trailing)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+
                 if audioDevice.isPreviewActive {
                     HStack(spacing: 8) {
                         Image(systemName: "mic.fill")

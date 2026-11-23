@@ -274,6 +274,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     @Published var previewRawLevel: Float = 0
     @Published private(set) var previewError: SelectedInputDeviceError?
 
+    /// The microphone gain the "Test Microphone" level applies, so the meter shows what
+    /// dictation hears. Read on the audio thread.
+    var previewMicrophoneGain: MicrophoneGainSetting {
+        get { previewMicrophoneGainLock.withLock { $0 } }
+        set { previewMicrophoneGainLock.withLock { $0 = newValue } }
+    }
+    private let previewMicrophoneGainLock = OSAllocatedUnfairLock(initialState: MicrophoneGainSetting.off)
+    private let previewGainProcessor = MicrophoneBoostProcessor()
+
     var hasMicrophonePermissionOverride: Bool?
     var audioDeviceIDResolverOverride: ((String) -> AudioDeviceID?)?
     var selectionValidationOverride: ((AudioDeviceID?) throws -> Void)?
@@ -714,6 +723,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     func startPreview() {
         guard !isPreviewActive else { return }
         previewError = nil
+        previewGainProcessor.reset()
         guard hasMicrophonePermission else {
             logger.warning("Microphone permission not granted, cannot start preview")
             return
@@ -911,13 +921,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private func processPreviewBuffer(_ buffer: AVAudioPCMBuffer) {
         guard let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer),
               let channelData = monoBuffer.floatChannelData?[0] else { return }
-        let frames = Int(monoBuffer.frameLength)
-        var sum: Float = 0
-        for i in 0..<frames {
-            let sample = channelData[i]
-            sum += sample * sample
-        }
-        let rms = sqrt(sum / Float(max(frames, 1)))
+        var samples = Array(UnsafeBufferPointer(start: channelData, count: Int(monoBuffer.frameLength)))
+        let rms = previewGainProcessor.processInPlace(&samples, gain: previewMicrophoneGain).outputRMS
         let level = AudioLevelMeter.normalizedLevel(rms: rms)
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isPreviewActive else { return }
