@@ -4,9 +4,11 @@ import TypeWhisperPluginSDK
 
 // MARK: - Supported Languages
 
+// The 14 languages of Cohere Transcribe (docs.cohere.com/docs/transcribe), as in the
+// Cohere Transcribe (Local) plugin.
 private let cohereSupportedLanguages = [
-    "ar", "bn", "de", "en", "es", "fr", "hi", "ja", "ko", "pt",
-    "ru", "sw", "tr", "zh",
+    "ar", "de", "el", "en", "es", "fr", "it", "ja", "ko", "nl",
+    "pl", "pt", "vi", "zh",
 ]
 
 // MARK: - Plugin Entry Point
