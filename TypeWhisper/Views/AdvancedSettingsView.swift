@@ -927,6 +927,10 @@ struct AdvancedSettingsView: View {
             cancellationBehaviorDidChange: { behavior in
                 dictation.cancellationBehavior = behavior
             },
+            microphoneGainDidChange: { mode, gainDB in
+                dictation.microphoneGainMode = mode
+                dictation.microphoneManualGainDB = gainDB
+            },
             indicatorThemeDidChange: { theme in
                 dictation.indicatorTheme = theme
             },

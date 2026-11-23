@@ -671,6 +671,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             let destination = try makeFixture()
             defer { teardown(destination) }
             DictationViewModel.persistMicrophoneGainMode(.off, defaults: destination.userDefaults)
+            var appliedGain: (MicrophoneGainMode, Double)?
             await SettingsBackupExporter.importBackup(
                 try SettingsBackupExporter.parse(SettingsBackupExporter.encodedJSON(candidate)),
                 workflowService: destination.workflowService,
@@ -682,8 +683,11 @@ final class SettingsBackupExporterTests: XCTestCase {
                 pluginRegistryService: destination.pluginRegistryService,
                 historyService: destination.historyService,
                 usageStatisticsService: destination.usageStatisticsService,
-                userDefaults: destination.userDefaults
+                userDefaults: destination.userDefaults,
+                microphoneGainDidChange: { appliedGain = ($0, $1) }
             )
+            XCTAssertEqual(appliedGain?.0, expectedMode)
+            XCTAssertEqual(appliedGain?.1, expectedGainDB)
             XCTAssertEqual(DictationViewModel.loadMicrophoneGainMode(defaults: destination.userDefaults), expectedMode)
             XCTAssertEqual(DictationViewModel.loadMicrophoneManualGainDB(defaults: destination.userDefaults), expectedGainDB)
         }
@@ -1533,6 +1537,36 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(secondImport.historyImported, 0)
         XCTAssertEqual(secondImport.historySkippedAsDuplicate, 2)
         XCTAssertEqual(try destination.historyService.allRecordsThrowing().count, 2)
+    }
+
+    func testWorkflowWithLegacyWhisperModeOverrideMatchesGainMode() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.workflowService.addWorkflow(
+            name: "Quiet",
+            template: .dictation,
+            trigger: .app("com.apple.Notes"),
+            behavior: WorkflowBehavior(microphoneBoostOverride: true)
+        )
+        let backup = try exportBackup(from: fixture)
+        let workflow = try XCTUnwrap(backup.workflows.first)
+        XCTAssertNil(workflow.behavior.microphoneGainModeRaw)
+        var resavedBehavior = workflow.behavior
+        resavedBehavior.microphoneGainOverride = .automatic
+        let edited = editedBackup(backup, workflows: [SettingsBackupExporter.WorkflowDTO(
+            name: workflow.name,
+            isEnabled: workflow.isEnabled,
+            sortOrder: workflow.sortOrder,
+            template: workflow.template,
+            trigger: workflow.trigger,
+            behavior: resavedBehavior,
+            output: workflow.output
+        )])
+
+        let result = await importBackup(edited, into: fixture)
+
+        XCTAssertEqual(result.workflowsSkipped, 1)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
     }
 
     func testWorkflowWithLegacyAutoEnterFlagMatchesExplicitMode() async throws {

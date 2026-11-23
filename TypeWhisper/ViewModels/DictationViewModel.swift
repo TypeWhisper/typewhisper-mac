@@ -392,10 +392,10 @@ final class DictationViewModel: ObservableObject {
     }
     @Published var microphoneManualGainDB: Double {
         didSet {
+            // Assigning inside didSet does not run the observer again, so continue below.
             let clamped = MicrophoneGainSetting.clampedGainDB(microphoneManualGainDB)
             if clamped != microphoneManualGainDB {
                 microphoneManualGainDB = clamped
-                return
             }
             Self.persistMicrophoneManualGainDB(microphoneManualGainDB)
             applyEffectiveMicrophoneGainToAudioServices()

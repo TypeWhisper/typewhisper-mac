@@ -572,8 +572,18 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         XCTAssertEqual(recovered.gain, 3.981, accuracy: 0.01)
     }
 
+    func testManualGainLimiterAttenuatesInputAboveCeiling() {
+        let processor = TypeWhisper.MicrophoneBoostProcessor()
+
+        let result = processor.process([1, -1], gain: .manual(gainDB: 12))
+
+        XCTAssertEqual(result.gain, TypeWhisper.MicrophoneBoostProcessor.peakCeiling, accuracy: 0.0001)
+        XCTAssertTrue(result.samples.allSatisfy { abs($0) <= 0.96 })
+        XCTAssertEqual(result.samples[0], -result.samples[1])
+    }
+
     func testZeroDecibelManualGainLeavesSamplesUnchanged() {
-        let samples: [Float] = [0.01, -0.5, 0.3]
+        let samples: [Float] = [0.01, -1, 0.3]
         let processor = TypeWhisper.MicrophoneBoostProcessor()
 
         let result = processor.process(samples, gain: .manual(gainDB: 0))
