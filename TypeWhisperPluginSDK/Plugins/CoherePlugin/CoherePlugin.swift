@@ -70,7 +70,11 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         }
 
         let model = "cohere-transcribe-03-2026"
-        let lang = language ?? "en"
+        // Cohere Transcribe has no language detection. For automatic detection the host picks one of
+        // `languagesForHostDetection`; without one of them the request fails here instead of sending English.
+        guard let lang = Self.cohereLanguage(for: language) else {
+            throw CoherePluginError.explicitLanguageRequired(supportedLanguages: cohereSupportedLanguages)
+        }
 
         guard let url = URL(string: "https://api.cohere.com/v2/audio/transcriptions") else {
             throw PluginTranscriptionError.apiError("Invalid Cohere API URL")
@@ -146,6 +150,20 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         }
     }
 
+    /// The base ISO 639-1 code Cohere accepts for a host language code, or nil when there is none.
+    static func cohereLanguage(for language: String?) -> String? {
+        guard let language else { return nil }
+        let normalized = language
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+        guard !normalized.isEmpty, normalized != "auto", normalized != "und" else { return nil }
+        let baseCode = normalized.split(separator: "-", omittingEmptySubsequences: true).first.map(String.init)
+        let canonicalCode = baseCode == "cmn" ? "zh" : baseCode
+        guard let canonicalCode, cohereSupportedLanguages.contains(canonicalCode) else { return nil }
+        return canonicalCode
+    }
+
     // MARK: - API Key Validation
 
     fileprivate func validateApiKey(_ key: String) async -> Bool {
@@ -192,6 +210,30 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
                 print("[CoherePlugin] Failed to delete API key: \(error)")
             }
             host.notifyCapabilitiesChanged()
+        }
+    }
+}
+
+// MARK: - Host Language Detection
+
+extension CoherePlugin: HostLanguageDetectionEnginePlugin {
+    var languagesForHostDetection: [String] { cohereSupportedLanguages }
+}
+
+// MARK: - Errors
+
+enum CoherePluginError: LocalizedError {
+    case explicitLanguageRequired(supportedLanguages: [String])
+
+    var errorDescription: String? {
+        switch self {
+        case .explicitLanguageRequired(let supportedLanguages):
+            let message = Bundle(for: CoherePlugin.self).localizedString(
+                forKey: "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:",
+                value: nil,
+                table: nil
+            )
+            return "\(message) \(supportedLanguages.joined(separator: ", "))."
         }
     }
 }
