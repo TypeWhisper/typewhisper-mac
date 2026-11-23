@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GroqPlugin)
-final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
+final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, LLMTemperatureAndEffortControllableProvider, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.groq"
     static let pluginName = "Groq"
     private static let transcriptionRequestTimeout: TimeInterval = 600
@@ -13,6 +13,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
     static let selectedLLMModelKey = "selectedLLMModel"
     static let fetchedLLMModelsKey = "fetchedLLMModels"
     static let fetchedLLMModelsDateKey = "fetchedLLMModelsDate"
+    static let reasoningEffortsKey = "reasoningEfforts"
     /// Groq's featured production model and its named replacement for the
     /// retired Llama 3.3 70B and Kimi K2 models.
     static let curatedDefaultLLMModelId = "openai/gpt-oss-120b"
@@ -28,6 +29,11 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedLLMModels: [GroqFetchedModel] = []
+    /// The Reasoning Effort picked in the plugin settings, per model ID. The
+    /// settings write it on the main thread while requests read it, so every
+    /// access goes through `reasoningEffortsLock`.
+    private var _reasoningEfforts: [String: String] = [:]
+    private let reasoningEffortsLock = NSLock()
     private let llmModelFetcher: LLMModelFetcher
     /// Background refresh of a stale cached model list, started on activation.
     private(set) var llmModelRefreshTask: Task<Void, Never>?
@@ -68,6 +74,8 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
+        let savedEfforts = host.userDefault(forKey: Self.reasoningEffortsKey) as? [String: String] ?? [:]
+        reasoningEffortsLock.withLock { _reasoningEfforts = savedEfforts }
         refreshStaleLLMModelsIfNeeded()
     }
 
@@ -189,10 +197,36 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            effort: nil
+        )
+    }
+
+    func process(systemPrompt: String, userText: String, model: String?, effort: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
+    ) async throws -> String {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        guard let modelId = model ?? _selectedLLMModelId ?? defaultLLMModelId else {
+        guard let modelId = llmModelId(for: model) else {
             throw PluginChatError.notConfigured
         }
         return try await chatHelper.process(
@@ -200,8 +234,75 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
+            reasoningEffort: requestReasoningEffort(effort, forModelId: modelId),
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         )
+    }
+
+    private func llmModelId(for model: String?) -> String? {
+        model ?? _selectedLLMModelId ?? defaultLLMModelId
+    }
+
+    // MARK: - Reasoning Effort
+
+    func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+        guard let modelId = llmModelId(for: model) else { return [] }
+        let bundle = Bundle(for: GroqPlugin.self)
+        return GroqReasoningEffort.supportedEfforts(forModelId: modelId).map { effort in
+            PluginLLMEffortInfo(id: effort, displayName: Self.effortDisplayName(effort, bundle: bundle))
+        }
+    }
+
+    /// The level a request without an explicit effort uses: the one picked in the
+    /// plugin settings for that model, otherwise Groq's own default.
+    func defaultEffortId(for model: String?) -> String? {
+        llmModelId(for: model).flatMap(savedReasoningEffort(forModelId:))
+    }
+
+    func savedReasoningEffort(forModelId modelId: String) -> String? {
+        let supported = GroqReasoningEffort.supportedEfforts(forModelId: modelId)
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
+            return saved
+        }
+        return GroqReasoningEffort.providerDefault(forModelId: modelId)
+    }
+
+    func setReasoningEffort(_ effort: String, forModelId modelId: String) {
+        let efforts = reasoningEffortsLock.withLock {
+            _reasoningEfforts[modelId] = effort
+            return _reasoningEfforts
+        }
+        host?.setUserDefault(efforts, forKey: Self.reasoningEffortsKey)
+    }
+
+    private func storedReasoningEffort(forModelId modelId: String) -> String? {
+        reasoningEffortsLock.withLock { _reasoningEfforts[modelId] }
+    }
+
+    /// The `reasoning_effort` a request sends: the workflow's level, else the one
+    /// picked in the plugin settings. Nil leaves the field out, so a model keeps
+    /// Groq's default until a level is picked, and models without reasoning
+    /// levels never get the field.
+    func requestReasoningEffort(_ requested: String?, forModelId modelId: String) -> String? {
+        let supported = GroqReasoningEffort.supportedEfforts(forModelId: modelId)
+        if let requested, supported.contains(requested) {
+            return requested
+        }
+        if let saved = storedReasoningEffort(forModelId: modelId), supported.contains(saved) {
+            return saved
+        }
+        return nil
+    }
+
+    static func effortDisplayName(_ effort: String, bundle: Bundle) -> String {
+        switch effort {
+        case "none": String(localized: "Off", bundle: bundle)
+        case "low": String(localized: "Low", bundle: bundle)
+        case "medium": String(localized: "Medium", bundle: bundle)
+        case "high": String(localized: "High", bundle: bundle)
+        case "xhigh": String(localized: "Extra High", bundle: bundle)
+        default: effort
+        }
     }
 
     func selectLLMModel(_ modelId: String) {
@@ -372,6 +473,33 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
     }
 }
 
+// MARK: - Reasoning Effort Catalog
+
+/// The `reasoning_effort` levels Groq documents per model, in the order the
+/// settings list them, and the level Groq uses when the field is missing.
+/// Other models get no picker and no field. Groq returns the reasoning in
+/// `message.reasoning`, which never becomes the reply. Its docs name `raw`
+/// (reasoning as a `<think>` block in the reply) as the default
+/// `reasoning_format` for Qwen, but Groq answers requests without the field
+/// as with `parsed`, checked live on 2026-11-23.
+enum GroqReasoningEffort {
+    private static let catalog: [String: (efforts: [String], providerDefault: String)] = [
+        "openai/gpt-oss-120b": (["low", "medium", "high"], "medium"),
+        "openai/gpt-oss-20b": (["low", "medium", "high"], "medium"),
+        // Groq also takes `default`, which behaves like `none`: no reasoning.
+        "qwen/qwen3.8-27b": (["none", "low", "medium", "high"], "none"),
+        "meta-models/muse-spark-open": (["low", "medium", "high", "xhigh"], "xhigh"),
+    ]
+
+    static func supportedEfforts(forModelId modelId: String) -> [String] {
+        catalog[modelId]?.efforts ?? []
+    }
+
+    static func providerDefault(forModelId modelId: String) -> String? {
+        catalog[modelId]?.providerDefault
+    }
+}
+
 // MARK: - Fetched Model
 
 struct GroqFetchedModel: Codable, Sendable {
@@ -404,6 +532,7 @@ private struct GroqSettingsView: View {
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedLLMModels: [GroqFetchedModel] = []
+    @State private var reasoningEffort: String = ""
     private let bundle = Bundle(for: GroqPlugin.self)
 
     var body: some View {
@@ -531,6 +660,7 @@ private struct GroqSettingsView: View {
                         set: { modelId in
                             selectedLLMModel = modelId
                             plugin.selectLLMModel(modelId)
+                            showReasoningEffort()
                         }
                     )) {
                         ForEach(plugin.supportedModels, id: \.id) { model in
@@ -543,6 +673,37 @@ private struct GroqSettingsView: View {
                         Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if !reasoningEfforts.isEmpty {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Reasoning Effort", bundle: bundle)
+                            .font(.headline)
+
+                        Picker(selection: Binding(
+                            get: { reasoningEffort },
+                            set: { effort in
+                                reasoningEffort = effort
+                                plugin.setReasoningEffort(effort, forModelId: selectedLLMModel)
+                            }
+                        )) {
+                            ForEach(reasoningEfforts, id: \.self) { effort in
+                                Text(GroqPlugin.effortDisplayName(effort, bundle: bundle)).tag(effort)
+                            }
+                        } label: {
+                            Text("Reasoning Effort", bundle: bundle)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
+
+                        Text("Lower levels answer faster and use fewer tokens. Workflows can pick their own level.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -647,5 +808,14 @@ private struct GroqSettingsView: View {
     /// model. Showing it does not save it.
     private func showSelectedLLMModel() {
         selectedLLMModel = plugin.selectedLLMModelId ?? plugin.defaultLLMModelId ?? ""
+        showReasoningEffort()
+    }
+
+    private var reasoningEfforts: [String] {
+        GroqReasoningEffort.supportedEfforts(forModelId: selectedLLMModel)
+    }
+
+    private func showReasoningEffort() {
+        reasoningEffort = plugin.savedReasoningEffort(forModelId: selectedLLMModel) ?? ""
     }
 }

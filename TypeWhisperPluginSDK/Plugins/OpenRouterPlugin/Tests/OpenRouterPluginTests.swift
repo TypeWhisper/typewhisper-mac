@@ -230,6 +230,131 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertNotNil(host.userDefault(forKey: "fetchedTranscriptionModels") as? Data)
     }
 
+    func testModelFetchKeepsReasoningLevelsAndRequestsSendThePickedLevel() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        XCTAssertTrue(plugin.supportedEfforts(for: nil).isEmpty, "The built-in models list no levels")
+
+        let store = PluginHTTPClientSessionStore()
+        let reply = Data(#"{"choices":[{"message":{"content":"Done.","reasoning":"Thinking."},"finish_reason":"stop"}]}"#.utf8)
+        let chatResponse = Self.httpResponse(url: "https://openrouter.ai/api/v1/chat/completions", statusCode: 200)
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        """
+                        {
+                          "data": [
+                            {
+                              "id": "openai/gpt-oss-120b",
+                              "name": "OpenAI: gpt-oss-120b",
+                              "architecture": { "modality": "text->text" },
+                              "reasoning": {
+                                "supported_efforts": ["high", "medium", "low"],
+                                "default_effort": "medium",
+                                "mandatory": true
+                              }
+                            },
+                            {
+                              "id": "anthropic/claude-sonnet-4.6",
+                              "name": "Anthropic: Claude Sonnet 4.6",
+                              "architecture": { "modality": "text->text" },
+                              "reasoning": {
+                                "supported_efforts": ["max", "future-level", "high", "medium", "low", "none"],
+                                "default_effort": "medium",
+                                "mandatory": false
+                              }
+                            },
+                            {
+                              "id": "anthropic/claude-sonnet-4.5",
+                              "name": "Anthropic: Claude Sonnet 4.5",
+                              "architecture": { "modality": "text->text" },
+                              "reasoning": { "mandatory": false }
+                            },
+                            {
+                              "id": "openai/gpt-4o",
+                              "name": "OpenAI: GPT-4o",
+                              "architecture": { "modality": "text->text" }
+                            }
+                          ]
+                        }
+                        """.utf8
+                    ),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/models", statusCode: 200)
+                ),
+                .success(reply, chatResponse),
+                .success(reply, chatResponse),
+                .success(reply, chatResponse),
+            ])
+        }
+
+        plugin.setFetchedLLMModels(await plugin.fetchLLMModels())
+
+        XCTAssertEqual(plugin.supportedEfforts(for: "openai/gpt-oss-120b").map(\.id), ["low", "medium", "high"])
+        XCTAssertEqual(
+            plugin.supportedEfforts(for: "anthropic/claude-sonnet-4.6").map(\.id),
+            ["none", "low", "medium", "high", "max"],
+            "Lowest first, without levels this version cannot name"
+        )
+        XCTAssertTrue(plugin.supportedEfforts(for: "anthropic/claude-sonnet-4.5").isEmpty)
+        XCTAssertTrue(plugin.supportedEfforts(for: "openai/gpt-4o").isEmpty)
+        XCTAssertEqual(plugin.defaultEffortId(for: "openai/gpt-oss-120b"), "medium")
+        XCTAssertNil(plugin.requestReasoningEffort("low", forModelId: "openai/gpt-4o"))
+
+        // A reloaded cache keeps the levels and does not fetch them again.
+        let reloaded = OpenRouterPlugin()
+        reloaded.activate(host: host)
+        XCTAssertNil(reloaded.llmModelRefreshTask)
+        XCTAssertEqual(reloaded.supportedEfforts(for: "openai/gpt-oss-120b").map(\.id), ["low", "medium", "high"])
+
+        _ = try await plugin.process(systemPrompt: "Fix.", userText: "text", model: "openai/gpt-oss-120b")
+        plugin.setReasoningEffort("low", forModelId: "openai/gpt-oss-120b")
+        let result = try await plugin.process(systemPrompt: "Fix.", userText: "text", model: "openai/gpt-oss-120b")
+        _ = try await plugin.process(systemPrompt: "Fix.", userText: "text", model: "openai/gpt-oss-120b", effort: "high")
+
+        XCTAssertEqual(result, "Done.", "Reasoning text never becomes the reply")
+        let chatRequests = try XCTUnwrap(store.sessions.first?.requestedRequests).dropFirst()
+        let reasoning = try chatRequests.map { try Self.jsonBody(from: $0)["reasoning"] as? [String: String] }
+        XCTAssertEqual(reasoning, [nil, ["effort": "low"], ["effort": "high"]])
+    }
+
+    func testModelListCachedWithoutReasoningLevelsRefreshesOnActivation() async throws {
+        let cached = try JSONEncoder().encode([
+            OpenRouterFetchedModel(id: "openai/gpt-oss-120b", name: "OpenAI: gpt-oss-120b", promptPrice: "0", completionPrice: "0"),
+        ])
+        let host = try PluginTestHostServices(
+            defaults: ["fetchedModels": cached],
+            secrets: ["api-key": "openrouter-key"]
+        )
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        """
+                        {"data": [{
+                          "id": "openai/gpt-oss-120b",
+                          "name": "OpenAI: gpt-oss-120b",
+                          "architecture": { "modality": "text->text" },
+                          "reasoning": { "supported_efforts": ["high", "medium", "low"], "default_effort": "medium" }
+                        }]}
+                        """.utf8
+                    ),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/models", statusCode: 200)
+                ),
+            ])
+        }
+
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        XCTAssertTrue(plugin.supportedEfforts(for: "openai/gpt-oss-120b").isEmpty)
+        await plugin.llmModelRefreshTask?.value
+
+        XCTAssertEqual(plugin.supportedEfforts(for: "openai/gpt-oss-120b").map(\.id), ["low", "medium", "high"])
+        XCTAssertEqual(host.userDefault(forKey: "fetchedModelsIncludeReasoning") as? Bool, true)
+    }
+
     func testTranscribeFailsWithoutAPIKey() async throws {
         let host = try PluginTestHostServices()
         let plugin = OpenRouterPlugin()
