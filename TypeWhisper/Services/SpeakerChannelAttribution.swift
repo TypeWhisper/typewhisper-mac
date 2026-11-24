@@ -59,8 +59,7 @@ enum SpeakerChannelAttribution {
         let systemLevels = levels(of: system, frameLength: frameLength)
 
         let microphoneReference = percentile(microphoneLevels, 0.95)
-        let microphoneFloor = percentile(microphoneLevels, 0.10)
-        let threshold = max(minimumLevel, microphoneFloor * 3, microphoneReference * 0.12)
+        let threshold = activityThreshold(microphoneLevels)
         guard microphoneReference > threshold else { return [] }
         let echo = expectedEcho(microphone: microphoneLevels, system: systemLevels)
         let systemReference = max(percentile(systemLevels, 0.95), minimumLevel)
@@ -86,6 +85,33 @@ enum SpeakerChannelAttribution {
         return ranges
             .filter { $0.end - $0.start >= minimumDuration }
             .map { max(0, $0.start - padding)...min(duration, $0.end + padding) }
+    }
+
+    /// An echo this much quieter than the system audio isn't heard twice in a mix.
+    static let audibleEchoGain: Float = 0.1
+
+    /// Whether the microphone picks up the system audio, as on a call on
+    /// loudspeakers: the echo measured from the recording comes back at least
+    /// `audibleEchoGain` as loud as the system audio and above the level
+    /// that counts as microphone activity. On headphones there is no such
+    /// echo. Nil when the system audio has less than a second of sound,
+    /// which leaves nothing to measure.
+    static func microphoneHearsSystemAudio(
+        microphone: [Float],
+        system: [Float],
+        sampleRate: Double = 16_000
+    ) -> Bool? {
+        let frameLength = max(1, Int(frameDuration * sampleRate))
+        let microphoneLevels = levels(of: microphone, frameLength: frameLength)
+        let systemLevels = levels(of: system, frameLength: frameLength)
+        guard !microphoneLevels.isEmpty, !systemLevels.isEmpty else { return nil }
+        let systemThreshold = activityThreshold(systemLevels)
+        guard Double(systemLevels.filter { $0 > systemThreshold }.count) * frameDuration >= 1 else { return nil }
+        guard let echo = echo(microphone: microphoneLevels, system: systemLevels), echo.gain >= audibleEchoGain else {
+            return false
+        }
+        let heard = echo.source.filter { $0 > echo.systemThreshold }.map { $0 * echo.gain }
+        return percentile(heard, 0.5) > activityThreshold(microphoneLevels)
     }
 
     /// Diarizer turns with the user's own speech cut out of them and added
@@ -152,6 +178,15 @@ enum SpeakerChannelAttribution {
     /// its lower quarter: the echo is there whenever the system audio is
     /// loud, the user's voice only now and then.
     private static func expectedEcho(microphone: [Float], system: [Float]) -> [Float]? {
+        echo(microphone: microphone, system: system).map { echo in echo.source.map { $0 * echo.gain } }
+    }
+
+    /// The system level held over the echo's delay and reverberation, and
+    /// how loud it comes back on the microphone; see `expectedEcho`.
+    private static func echo(
+        microphone: [Float],
+        system: [Float]
+    ) -> (source: [Float], gain: Float, systemThreshold: Float)? {
         guard let delay = echoDelay(microphone: microphone, system: system) else { return nil }
         var source = [Float](repeating: 0, count: microphone.count)
         var held: Float = 0
@@ -165,11 +200,7 @@ enum SpeakerChannelAttribution {
             source[index] = held
         }
 
-        let systemThreshold = max(
-            minimumLevel,
-            percentile(system, 0.10) * 3,
-            percentile(system, 0.95) * 0.12
-        )
+        let systemThreshold = activityThreshold(system)
         let loudest = source.indices
             .filter { source[$0] > systemThreshold }
             .sorted { (source[$0], -$0) > (source[$1], -$1) }
@@ -177,7 +208,13 @@ enum SpeakerChannelAttribution {
         guard Double(loudest.count) * frameDuration >= 1 else { return nil }
         let sampled = loudest.prefix(max(1, loudest.count / 4))
         let gain = percentile(sampled.map { microphone[$0] / source[$0] }, 0.25)
-        return source.map { $0 * gain }
+        return (source, gain, systemThreshold)
+    }
+
+    /// The level above which a track's frame counts as sound, relative to
+    /// the track's own noise floor and loudness.
+    private static func activityThreshold(_ levels: [Float]) -> Float {
+        max(minimumLevel, percentile(levels, 0.10) * 3, percentile(levels, 0.95) * 0.12)
     }
 
     /// Frames by which the microphone trails the system audio: the shift

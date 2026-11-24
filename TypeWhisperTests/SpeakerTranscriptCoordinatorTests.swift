@@ -1177,6 +1177,51 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         XCTAssertTrue(SpeakerChannelAttribution.ownSpeechRanges(microphone: [], system: system).isEmpty)
     }
 
+    /// On headphones the microphone only hears the user, even while another
+    /// voice talks on the system audio, so the Recorder mixes it without ducking.
+    func testMicrophoneOnHeadphonesDoesNotHearTheSystemAudio() {
+        let remote = words(from: 1, count: 6, variant: 1) + words(from: 13, count: 6, variant: 3)
+        let background = words(from: 4, count: 14, variant: 2)
+        let user = words(from: 4.2, count: 5, variant: 4) + words(from: 7.5, count: 5, variant: 5)
+        let system = zip(
+            track(duration: 18, words: remote, level: 0.3),
+            track(duration: 18, words: background, level: 0.1, noise: 0)
+        ).map { $0 + $1 }
+        let microphone = track(duration: 18, words: user, level: 0.05)
+
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system), false)
+    }
+
+    /// Near loudspeakers the remote voice comes back on the microphone, which
+    /// ducking keeps from being heard twice; a faint echo doesn't need it.
+    func testMicrophoneNearLoudspeakersHearsTheSystemAudio() {
+        let remote = words(from: 1, count: 6, variant: 1) + words(from: 7, count: 6, variant: 2)
+            + words(from: 13, count: 6, variant: 3)
+        let user = words(from: 4.2, count: 5, variant: 4) + words(from: 10.2, count: 5, variant: 5)
+        let system = track(duration: 18, words: remote, level: 0.3)
+        let speech = track(duration: 18, words: user, level: 0.05)
+        for (echoLevel, hears) in [(Float(0.05), true), (0.012, false)] {
+            let echo = track(duration: 18, words: remote, level: echoLevel, delay: 0.24, noise: 0)
+            let microphone = zip(speech, echo).map { $0 + $1 }
+
+            XCTAssertEqual(
+                SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system),
+                hears,
+                "echo level \(echoLevel)"
+            )
+        }
+    }
+
+    func testTooLittleSystemAudioLeavesTheDuckingDecisionOpen() {
+        let microphone = track(duration: 5, speech: [1...3], level: 0.2)
+
+        XCTAssertNil(SpeakerChannelAttribution.microphoneHearsSystemAudio(
+            microphone: microphone,
+            system: track(duration: 5, speech: [2...2.5], level: 0.3)
+        ))
+        XCTAssertNil(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: [], system: []))
+    }
+
     func testOwnSpeechIsCutOutOfDiarizerTurns() {
         let turns = [
             PluginSpeakerTurn(speakerLabel: "a", start: 0, end: 10),

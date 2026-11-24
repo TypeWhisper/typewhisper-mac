@@ -716,12 +716,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Thread-safe snapshot of the current 16kHz mono buffer for streaming transcription.
     func getCurrentBuffer() -> [Float] {
+        currentBuffer(micDuckingMode: micDuckingMode)
+    }
+
+    private func currentBuffer(micDuckingMode: MicDuckingMode) -> [Float] {
         if let currentBufferOverride {
             return currentBufferOverride()
         }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
-        let micDuckingMode = self.micDuckingMode
         return transcriptionBufferLock.withLock { buffer in
             buffer.currentBuffer(
                 micEnabled: micEnabled,
@@ -915,7 +918,6 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let stoppedFinalOutputURL = finalOutputURL
         let stoppedOutputFormat = outputFormat
         let stoppedTrackMode = trackMode
-        let stoppedMicDuckingMode = micDuckingMode
 
         // Test overrides own their capture lifecycle. Production capture must be fully
         // stopped before any live-session or file finalization work begins.
@@ -951,7 +953,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             micFileLock.withLock { $0 = nil }
         }
 
-        let transcriptionSamples = includeTranscriptionSamples ? getCurrentBuffer() : []
+        let stoppedMicDuckingMode = stoppedTrackMode == .mixed && stoppedMicEnabled && stoppedSystemAudioEnabled
+            ? effectiveMicDuckingMode(micDuckingMode)
+            : micDuckingMode
+        let transcriptionSamples = includeTranscriptionSamples
+            ? currentBuffer(micDuckingMode: stoppedMicDuckingMode)
+            : []
         let ownSpeech = includeTranscriptionSamples && stoppedMicEnabled && stoppedSystemAudioEnabled
             ? transcriptionBufferLock.withLock { buffer in
                 SpeakerChannelAttribution.ownSpeechRanges(
@@ -1701,6 +1708,26 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// The ducking a mixed recording gets: none when the microphone didn't
+    /// pick up the system audio. Ducking keeps a call on loudspeakers from
+    /// being heard twice, but on headphones it only lowered the user's voice
+    /// whenever the system audio had sound, such as another voice or noise
+    /// on the line, and the transcript lost the user's words there.
+    private func effectiveMicDuckingMode(_ mode: MicDuckingMode) -> MicDuckingMode {
+        guard mode != .off else { return mode }
+        let hearsSystemAudio = transcriptionBufferLock.withLock { buffer in
+            SpeakerChannelAttribution.microphoneHearsSystemAudio(
+                microphone: buffer.micSamples,
+                system: buffer.systemSamples,
+                sampleRate: Self.transcriptionSampleRate
+            )
+        }
+        // Without enough audio to measure, the setting applies as it is.
+        guard hearsSystemAudio == false else { return mode }
+        logger.info("Microphone didn't pick up the system audio; mixing without ducking")
+        return .off
     }
 
     private func createDirectoryIfNeeded(_ url: URL) throws {
