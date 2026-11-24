@@ -17,7 +17,10 @@ enum HanNumberWordParser {
     private static let decimalMarkers: Set<Character> = ["点", "點"]
     private static let negativeMarkers: Set<Character> = ["负", "負"]
 
-    static func parse(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
+    static func parse(
+        _ words: [String],
+        spokenTailEnabled: Bool = false
+    ) -> NumberWordNormalizer.ParsedWords? {
         guard !words.isEmpty else { return nil }
 
         var consumedWords = 0
@@ -37,11 +40,11 @@ enum HanNumberWordParser {
 
         let numberText = pieces.joined()
         guard containsNumberMarker(numberText) else { return nil }
-        guard let parsed = parseNumberText(numberText) else { return nil }
+        guard let parsed = parseNumberText(numberText, spokenTailEnabled: spokenTailEnabled) else { return nil }
         return NumberWordNormalizer.ParsedWords(value: parsed, consumedWords: consumedWords, kind: parsed.contains(".") ? .decimal : .number)
     }
 
-    private static func parseNumberText(_ text: String) -> String? {
+    private static func parseNumberText(_ text: String, spokenTailEnabled: Bool) -> String? {
         var characters = Array(text)
         var isNegative = false
 
@@ -52,7 +55,10 @@ enum HanNumberWordParser {
         }
 
         let parts = splitDecimal(characters)
-        guard let integer = parseInteger(parts.integer), parts.integerHadNumber else { return nil }
+        guard let integer = parseInteger(parts.integer, spokenTailEnabled: spokenTailEnabled),
+              parts.integerHadNumber else {
+            return nil
+        }
 
         var replacement = "\(integer)"
         if let decimal = parts.decimal {
@@ -77,22 +83,50 @@ enum HanNumberWordParser {
         return (integer, integer.contains(where: isNumericCharacter), decimal)
     }
 
-    private static func parseInteger(_ characters: [Character]) -> Int? {
+    private static func parseInteger(_ characters: [Character], spokenTailEnabled: Bool) -> Int? {
         guard !characters.isEmpty else { return nil }
 
         var total = 0
         var section = 0
         var number = 0
+        var lastUnit: Int?
+        var lastUnitHadExplicitZero = false
+        var lastCharacterWasDigit = false
+        var previousCharacterWasASCIIDigit = false
 
         for character in characters {
+            if let digit = asciiDigitValue(character) {
+                if previousCharacterWasASCIIDigit {
+                    let (multiplied, multiplyOverflow) = number.multipliedReportingOverflow(by: 10)
+                    guard !multiplyOverflow else { return nil }
+                    let (sum, addOverflow) = multiplied.addingReportingOverflow(digit)
+                    guard !addOverflow else { return nil }
+                    number = sum
+                } else {
+                    number = digit
+                }
+                lastCharacterWasDigit = true
+                previousCharacterWasASCIIDigit = true
+                continue
+            }
+
             if let digit = digitValues[character] {
                 number = digit
+                if digit == 0 {
+                    lastUnitHadExplicitZero = true
+                }
+                lastCharacterWasDigit = true
+                previousCharacterWasASCIIDigit = false
                 continue
             }
 
             if let unit = unitValues[character] {
                 section += (number == 0 ? 1 : number) * unit
                 number = 0
+                lastUnit = unit
+                lastUnitHadExplicitZero = false
+                lastCharacterWasDigit = false
+                previousCharacterWasASCIIDigit = false
                 continue
             }
 
@@ -101,12 +135,22 @@ enum HanNumberWordParser {
                 total += max(section, 1) * largeUnit
                 section = 0
                 number = 0
+                lastUnit = largeUnit
+                lastUnitHadExplicitZero = false
+                lastCharacterWasDigit = false
+                previousCharacterWasASCIIDigit = false
                 continue
             }
 
             return nil
         }
 
+        if spokenTailEnabled, let lastUnit, lastCharacterWasDigit, !lastUnitHadExplicitZero {
+            // In spoken Chinese, a trailing digit after a unit fills the next
+            // lower place: 一萬五 = 15000, 千二 = 1200. An explicit zero
+            // keeps the literal reading: 一萬零五 = 10005.
+            return total + section + number * max(lastUnit / 10, 1)
+        }
         return total + section + number
     }
 
@@ -115,10 +159,21 @@ enum HanNumberWordParser {
     }
 
     private static func isNumericCharacter(_ character: Character) -> Bool {
-        digitValues[character] != nil ||
+        asciiDigitValue(character) != nil ||
+            digitValues[character] != nil ||
             unitValues[character] != nil ||
             largeUnitValues[character] != nil ||
             decimalMarkers.contains(character)
+    }
+
+    private static func asciiDigitValue(_ character: Character) -> Int? {
+        guard let scalar = character.unicodeScalars.first,
+              character.unicodeScalars.count == 1,
+              scalar.value >= 48,
+              scalar.value <= 57 else {
+            return nil
+        }
+        return Int(scalar.value - 48)
     }
 
     private static func containsNumberMarker(_ text: String) -> Bool {

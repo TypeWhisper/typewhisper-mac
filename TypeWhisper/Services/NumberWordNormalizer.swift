@@ -8,6 +8,13 @@ enum NumberWordNormalizer {
     private static let ordinaryWordsByLanguage: [String: Set<String>] = [
         "pl": ["ten", "one"],
     ]
+    private static let hanLexicalNumberWords: Set<String> = [
+        "萬能", "万能", "萬一", "万一", "萬分", "万分",
+        "百般", "百姓",
+    ]
+    private static let hanApproximationPrefixes: Set<Character> = [
+        "幾", "几", "數", "数", "上", "成",
+    ]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
     static func supports(language: String?) -> Bool {
@@ -244,6 +251,10 @@ enum NumberWordNormalizer {
             parsed = wordParser.parse(normalized)
         } else {
             let wordTexts = words.map(\.text)
+            if (languageCode == "zh" || languageCode == "ja"),
+               isHanLexicalNumberWord(startingAt: index, text: wordTexts[0], in: tokens) {
+                return nil
+            }
             switch languageCode {
             case "zh":
                 parsed = ChineseNumberWordParser.parse(wordTexts)
@@ -306,7 +317,67 @@ enum NumberWordNormalizer {
             tokens.append(Token(text: current, kind: currentKind))
         }
 
-        return tokens
+        return mergingAdjacentNumericRuns(tokens)
+    }
+
+    private static func mergingAdjacentNumericRuns(_ tokens: [Token]) -> [Token] {
+        var result: [Token] = []
+        var index = 0
+
+        while index < tokens.count {
+            guard tokens[index].kind == .digit || tokens[index].kind == .cjkNumber else {
+                result.append(tokens[index])
+                index += 1
+                continue
+            }
+
+            var endIndex = index
+            var text = ""
+            var containsCJKNumber = false
+            while endIndex < tokens.count,
+                  (tokens[endIndex].kind == .digit || tokens[endIndex].kind == .cjkNumber) {
+                text += tokens[endIndex].text
+                containsCJKNumber = containsCJKNumber || tokens[endIndex].kind == .cjkNumber
+                endIndex += 1
+            }
+
+            if containsCJKNumber {
+                result.append(Token(text: text, kind: .cjkNumber))
+            } else {
+                result.append(contentsOf: tokens[index..<endIndex])
+            }
+            index = endIndex
+        }
+
+        return result
+    }
+
+    private static func isHanLexicalNumberWord(
+        startingAt index: Int,
+        text: String,
+        in tokens: [Token]
+    ) -> Bool {
+        if hanLexicalNumberWords.contains(text) {
+            return true
+        }
+
+        if index > 0,
+           tokens[index - 1].kind == .word,
+           let left = tokens[index - 1].text.last {
+            if hanApproximationPrefixes.contains(left) ||
+                hanLexicalNumberWords.contains(String(left) + text) {
+                return true
+            }
+        }
+
+        if index + 1 < tokens.count,
+           tokens[index + 1].kind == .word,
+           let right = tokens[index + 1].text.first,
+           hanLexicalNumberWords.contains(text + String(right)) {
+            return true
+        }
+
+        return false
     }
 
     private static func tokenKind(for character: Character) -> TokenKind {

@@ -343,9 +343,59 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "负二点五", language: "zh"), "-2.5")
     }
 
+    func testChineseMixedASCIIDigitsAndLargeUnitsNormalize() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "10万", language: "zh"), "100000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "100万", language: "zh"), "1000000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1億", language: "zh"), "100000000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1万2千", language: "zh"), "12000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "十萬", language: "zh"), "100000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "負二點五", language: "zh"), "-2.5")
+    }
+
+    func testChineseSpokenTailNumbersNormalize() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一萬五", language: "zh"), "15000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "兩萬三", language: "zh"), "23000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "千二", language: "zh"), "1200")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一百二", language: "zh"), "120")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一百零二", language: "zh"), "102")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一千零二", language: "zh"), "1002")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一千二百三十四", language: "zh"), "1234")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一萬五千", language: "zh"), "15000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一萬零五", language: "zh"), "10005")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一萬零二", language: "zh"), "10002")
+    }
+
+    func testChineseUnitCharactersInsideWordsArePreserved() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "萬能", language: "zh"), "萬能")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "万能", language: "zh"), "万能")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "幾千", language: "zh"), "幾千")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "几千", language: "zh"), "几千")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "數千", language: "zh"), "數千")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "幾千萬", language: "zh"), "幾千萬")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "數百", language: "zh"), "數百")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "成千上萬", language: "zh"), "成千上萬")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "百姓", language: "zh"), "百姓")
+    }
+
+    func testChineseNumberNormalizationOutputIsIdempotent() {
+        for text in [
+            "10万", "100万", "1億", "1万2千",
+            "一萬五", "兩萬三", "千二", "一萬零五",
+            "萬能", "幾千", "幾千萬", "成千上萬",
+        ] {
+            let once = NumberWordNormalizer.normalize(text: text, language: "zh")
+            XCTAssertEqual(
+                NumberWordNormalizer.normalize(text: once, language: "zh"),
+                once,
+                text
+            )
+        }
+    }
+
     func testJapaneseHanNumbersNormalizeToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "二十三個のファイル", language: "ja"), "23個のファイル")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "千二百三十四", language: "ja"), "1234")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "千二", language: "ja"), "1002")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "負二点五", language: "ja"), "-2.5")
     }
 
