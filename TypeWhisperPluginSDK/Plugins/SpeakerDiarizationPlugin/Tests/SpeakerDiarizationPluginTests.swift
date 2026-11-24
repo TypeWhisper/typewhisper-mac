@@ -65,6 +65,30 @@ final class SpeakerDiarizationPluginTests: XCTestCase {
         XCTAssertEqual(SpeakerDiarizationPlugin.speakersWithShare(of: []), 0)
     }
 
+    /// The second pass asks for at least the speakers the first one found:
+    /// a meeting where the user and one other person speak little keeps
+    /// three speakers instead of merging two of them.
+    func testTheSecondPassKeepsEverySpeakerTheFirstFound() {
+        let merged = [
+            PluginSpeakerTurn(speakerLabel: "S1", start: 0, end: 2_385),
+            PluginSpeakerTurn(speakerLabel: "S2", start: 2_385, end: 2_401),
+        ]
+        XCTAssertEqual(SpeakerDiarizationPlugin.speakerCountForSecondPass(after: merged, minimum: 2), 2)
+
+        let meeting = [
+            PluginSpeakerTurn(speakerLabel: "S1", start: 0, end: 85),
+            PluginSpeakerTurn(speakerLabel: "S2", start: 85, end: 92.5),
+            PluginSpeakerTurn(speakerLabel: "S3", start: 92.5, end: 100),
+        ]
+        XCTAssertEqual(SpeakerDiarizationPlugin.speakerCountForSecondPass(after: meeting, minimum: 2), 3)
+
+        let call = [
+            PluginSpeakerTurn(speakerLabel: "S1", start: 0, end: 60),
+            PluginSpeakerTurn(speakerLabel: "S2", start: 60, end: 100),
+        ]
+        XCTAssertNil(SpeakerDiarizationPlugin.speakerCountForSecondPass(after: call, minimum: 2))
+    }
+
     func testAMinimumSpeakerCountNeedsTheModelsToo() async throws {
         let host = try PluginTestHostServices()
         let plugin = SpeakerDiarizationPlugin()

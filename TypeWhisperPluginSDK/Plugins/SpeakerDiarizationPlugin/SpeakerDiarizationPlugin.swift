@@ -56,6 +56,18 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationMinimumCountPr
         return spoken.values.filter { $0 >= minimumSpeakerShare * total }.count
     }
 
+    static let speakerCounts = 2...8
+
+    /// The fixed number of speakers to detect again with, or nil to keep the
+    /// automatic result: when fewer than `minimum` speakers have
+    /// `minimumSpeakerShare` of the speech. It is never below the number of
+    /// speakers the automatic pass found, so the quieter people of a meeting
+    /// stay apart.
+    static func speakerCountForSecondPass(after turns: [PluginSpeakerTurn], minimum: Int) -> Int? {
+        guard speakersWithShare(of: turns) < minimum else { return nil }
+        return min(max(minimum, Set(turns.map(\.speakerLabel)).count), speakerCounts.upperBound)
+    }
+
     /// The offline diarizer's settings for automatic detection or a fixed number of speakers.
     static func diarizerConfig(speakerCount: Int?) -> OfflineDiarizerConfig {
         var config = OfflineDiarizerConfig(
@@ -110,7 +122,7 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationMinimumCountPr
 
     var diarizationProviderId: String { Self.pluginId }
     var diarizationProviderDisplayName: String { Self.pluginName }
-    var supportedSpeakerCounts: ClosedRange<Int> { 2...8 }
+    var supportedSpeakerCounts: ClosedRange<Int> { Self.speakerCounts }
 
     var areDiarizationModelsInstalled: Bool {
         guard let directory = modelsDirectory else { return false }
@@ -147,7 +159,8 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationMinimumCountPr
     }
 
     /// Detects the speakers and, when fewer than `minimumSpeakerCount` of them
-    /// have `minimumSpeakerShare` of the speech, detects again with that many.
+    /// have `minimumSpeakerShare` of the speech, detects again with a fixed
+    /// count; see `speakerCountForSecondPass`.
     func diarize(
         _ request: PluginDiarizationRequest,
         minimumSpeakerCount: Int,
@@ -279,8 +292,8 @@ private actor DiarizationRunner {
         }
         var turns = SpeakerDiarizationPlugin.turns(from: result.segments)
         if let minimumSpeakerCount,
-           SpeakerDiarizationPlugin.speakersWithShare(of: turns) < minimumSpeakerCount,
-           let second = try await process(audioURL, speakerCount: minimumSpeakerCount, models: models, onProgress: {
+           let count = SpeakerDiarizationPlugin.speakerCountForSecondPass(after: turns, minimum: minimumSpeakerCount),
+           let second = try await process(audioURL, speakerCount: count, models: models, onProgress: {
                onProgress(firstShare + $0 * (1 - firstShare))
            }) {
             result = second
