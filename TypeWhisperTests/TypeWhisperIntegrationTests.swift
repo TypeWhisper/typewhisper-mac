@@ -2189,6 +2189,50 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    /// Safari marks every request of a web extension as cross-site and omits the Origin of
+    /// GET requests. The headers below were recorded from the TypeWhisper extension in Safari 27.
+    func testRouterAcceptsSafariExtensionRequestsThatCarryTheToken() async {
+        let safariGet = ["host": "127.0.0.1:8978", "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors"]
+        var safariPut = safariGet
+        safariPut["origin"] = "safari-web-extension://ca0a2f06-3ba3-4531-9bf2-1a37825d43b8"
+
+        let authentications: [APIAuthenticationRequirement] = [.required(token: "secret"), .disabled]
+        for authentication in authentications {
+            let router = APIRouter(authenticationProvider: { authentication }, tokenProvider: { "secret" })
+            router.register("GET", "/v1/dictation/status") { _ in .json(["ok": true]) }
+            router.register("PUT", "/v1/browser/context") { _ in .json(["ok": true]) }
+
+            func status(_ method: String, _ path: String, _ headers: [String: String]) async -> Int {
+                await router.route(Self.apiRequest(path, method: method, headers: headers)).status
+            }
+            func with(_ headers: [String: String], token: String) -> [String: String] {
+                headers.merging(["authorization": "Bearer \(token)"]) { $1 }
+            }
+
+            let getWithToken = await status("GET", "/v1/dictation/status", with(safariGet, token: "secret"))
+            let putWithToken = await status("PUT", "/v1/browser/context", with(safariPut, token: "secret"))
+            let getWithoutToken = await status("GET", "/v1/dictation/status", safariGet)
+            let putWithWrongToken = await status("PUT", "/v1/browser/context", with(safariPut, token: "guess"))
+            let foreignPageWithToken = await status(
+                "PUT",
+                "/v1/browser/context",
+                with(safariGet.merging(["origin": "https://attacker.example"]) { $1 }, token: "secret")
+            )
+            let reboundHostWithToken = await status(
+                "GET",
+                "/v1/dictation/status",
+                with(["host": "attacker.example:8978", "sec-fetch-site": "cross-site"], token: "secret")
+            )
+
+            XCTAssertEqual(getWithToken, 200, "\(authentication)")
+            XCTAssertEqual(putWithToken, 200, "\(authentication)")
+            XCTAssertEqual(getWithoutToken, 403, "\(authentication)")
+            XCTAssertEqual(putWithWrongToken, 403, "\(authentication)")
+            XCTAssertEqual(foreignPageWithToken, 403, "\(authentication)")
+            XCTAssertEqual(reboundHostWithToken, 403, "\(authentication)")
+        }
+    }
+
     func testAPITokenIsRequiredByDefaultButExistingTokenlessServersKeepRunning() throws {
         let freshDefaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
         XCTAssertTrue(LocalAPIAuthenticator.storedRequiresAuthentication(freshDefaults))
