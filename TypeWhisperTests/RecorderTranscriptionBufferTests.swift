@@ -87,6 +87,40 @@ final class RecorderTranscriptionBufferTests: XCTestCase {
     }
 }
 
+final class RecorderTranscriptionResamplerTests: XCTestCase {
+    /// A microphone in 512-frame IO buffers at 48 kHz lost 0.4 % of its samples,
+    /// so its own-speech ranges drifted 14 seconds an hour from the recording.
+    func testKeepsTimeAcrossBuffersThatDontDivideEvenly() throws {
+        for (sampleRate, frames) in [(48_000.0, 512), (44_100.0, 512), (48_000.0, 4096)] {
+            let format = try XCTUnwrap(AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: sampleRate,
+                channels: 1,
+                interleaved: false
+            ))
+            let resampler = try XCTUnwrap(RecorderTranscriptionResampler(inputFormat: format, sampleRate: 16_000))
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)))
+            buffer.frameLength = AVAudioFrameCount(frames)
+            let channel = try XCTUnwrap(buffer.floatChannelData?[0])
+            var phase = 0.0
+            var inputFrames = 0
+            var outputFrames = 0
+            while Double(inputFrames) < sampleRate * 60 {
+                for index in 0..<frames {
+                    channel[index] = Float(sin(phase)) * 0.3
+                    phase += 2 * .pi * 440 / sampleRate
+                }
+                outputFrames += resampler.convert(buffer).count
+                inputFrames += frames
+            }
+
+            // Only the converter's filter delay of a few frames is missing.
+            let expected = Double(inputFrames) * 16_000 / sampleRate
+            XCTAssertEqual(Double(outputFrames), expected, accuracy: 32, "\(sampleRate) Hz, \(frames)-frame buffers")
+        }
+    }
+}
+
 final class SystemAudioSampleProcessorTests: XCTestCase {
     func testProcessesStereoInterleavedFloat32Buffers() throws {
         var samples: [Float] = [
@@ -236,6 +270,41 @@ final class SystemAudioSampleProcessorTests: XCTestCase {
             -0.5,
             (expectedLeft[3] + expectedRight[3]) * 0.5,
         ])
+    }
+
+    /// Each buffer's decimation started at its first frame, so buffers whose
+    /// length isn't a multiple of the factor added samples and the system
+    /// audio ran ahead of the microphone.
+    func testDecimationContinuesAcrossBuffers() throws {
+        let asbd = makeAudioDescription(
+            sampleRate: 48_000,
+            channels: 1,
+            bitsPerChannel: 32,
+            flags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+            bytesPerFrame: 4
+        )
+        let stream = (0..<10).map(Float.init)
+        var phase = 0
+        var transcription: [Float] = []
+        for range in [0..<4, 4..<5, 5..<10] {
+            var samples = Array(stream[range])
+            let result = try samples.withUnsafeMutableBytes { bytes in
+                try withAudioBufferList([
+                    .init(channels: 1, byteSize: UInt32(bytes.count), data: bytes.baseAddress)
+                ]) { bufferList in
+                    try SystemAudioSampleProcessor.process(
+                        audioBufferList: bufferList,
+                        asbd: asbd,
+                        transcriptionSampleRate: 16_000,
+                        transcriptionPhase: phase
+                    )
+                }
+            }
+            transcription += result.transcriptionSamples
+            phase = result.nextTranscriptionPhase
+        }
+
+        XCTAssertFloats(transcription, [0, 3, 6, 9])
     }
 
     func testSystemAudioDiagnosticsWarnsWhenNoUsableAudioArrivesAfterGracePeriod() {
