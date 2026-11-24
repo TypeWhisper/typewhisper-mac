@@ -92,6 +92,24 @@ public protocol SpeakerDiarizationProviderPlugin: TypeWhisperPlugin {
     ) async throws -> PluginDiarizationResult
 }
 
+/// Optional capability of a diarization provider: detection that is told how
+/// many speakers the recording has at least.
+///
+/// The host asks for at least two speakers when it knows that more than one
+/// person talks, such as in a call recorded with the user's microphone and
+/// the other side on the system audio. A provider without this capability
+/// gets `diarize(_:onProgress:)` there. Requires TypeWhisper 1.9.0; declare
+/// `"minHostVersion": "1.9.0"` when you adopt it.
+public protocol SpeakerDiarizationMinimumCountProviding: SpeakerDiarizationProviderPlugin {
+    /// Like `diarize(_:onProgress:)` with `request.speakerCount` nil, for a
+    /// recording with at least `minimumSpeakerCount` speakers.
+    func diarize(
+        _ request: PluginDiarizationRequest,
+        minimumSpeakerCount: Int,
+        onProgress: @Sendable @escaping (Double) -> Void
+    ) async throws -> PluginDiarizationResult
+}
+
 // MARK: - Speaker Labels in Transcriptions
 
 /// Whether the host uses the speaker labels of the current transcription.

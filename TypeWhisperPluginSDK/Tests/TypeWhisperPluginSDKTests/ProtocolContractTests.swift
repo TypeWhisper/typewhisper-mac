@@ -1025,6 +1025,8 @@ final class ProtocolContractTests: XCTestCase {
 
         XCTAssertFalse(legacyPlugin is any SpeakerDiarizationProviderPlugin)
         XCTAssertTrue(erasedProvider is any SpeakerDiarizationProviderPlugin)
+        // A minimum speaker count is an optional capability on top.
+        XCTAssertFalse(erasedProvider is any SpeakerDiarizationMinimumCountProviding)
         XCTAssertFalse(provider.areDiarizationModelsInstalled)
 
         try await provider.prepareDiarizationModels { _ in }

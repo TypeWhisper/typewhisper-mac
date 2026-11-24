@@ -6,7 +6,7 @@ import os
 /// Runs FluidAudio's offline diarizer (segmentation, speaker embeddings, VBx
 /// clustering) on a recorded file.
 @objc(SpeakerDiarizationPlugin)
-final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin, @unchecked Sendable {
+final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationMinimumCountProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speaker-diarization"
     static let pluginName = "Speaker Detection"
     static let engineIdentifier = "fluidaudio-offline-diarizer"
@@ -40,6 +40,35 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
     /// few stray seconds in another, which already counts as two speakers and
     /// skips K-Means.
     static let fixedCountSpeakerPriorWeight = 0.3
+
+    /// Share of the speech a speaker needs to count towards a minimum number
+    /// of speakers. Automatic detection can put two people in one cluster and
+    /// leave a few stray seconds in another: in a 56-minute call it gave one
+    /// speaker 2,385 s and the other 16 s.
+    static let minimumSpeakerShare = 0.1
+
+    /// Speakers in `turns` with at least `minimumSpeakerShare` of the speech.
+    static func speakersWithShare(of turns: [PluginSpeakerTurn]) -> Int {
+        var spoken: [String: Double] = [:]
+        for turn in turns { spoken[turn.speakerLabel, default: 0] += max(0, turn.end - turn.start) }
+        let total = spoken.values.reduce(0, +)
+        guard total > 0 else { return 0 }
+        return spoken.values.filter { $0 >= minimumSpeakerShare * total }.count
+    }
+
+    static let speakerCounts = 2...8
+
+    /// The fixed number of speakers to detect again with, or nil to keep the
+    /// automatic result: when fewer than `minimum` speakers have
+    /// `minimumSpeakerShare` of the speech. It is never below the number of
+    /// speakers the automatic pass found, so the quieter people of a meeting
+    /// stay apart; with more speakers than a fixed count allows, the
+    /// automatic result stays.
+    static func speakerCountForSecondPass(after turns: [PluginSpeakerTurn], minimum: Int) -> Int? {
+        guard speakersWithShare(of: turns) < minimum else { return nil }
+        let count = max(minimum, Set(turns.map(\.speakerLabel)).count)
+        return speakerCounts.contains(count) ? count : nil
+    }
 
     /// The offline diarizer's settings for automatic detection or a fixed number of speakers.
     static func diarizerConfig(speakerCount: Int?) -> OfflineDiarizerConfig {
@@ -95,7 +124,7 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
 
     var diarizationProviderId: String { Self.pluginId }
     var diarizationProviderDisplayName: String { Self.pluginName }
-    var supportedSpeakerCounts: ClosedRange<Int> { 2...8 }
+    var supportedSpeakerCounts: ClosedRange<Int> { Self.speakerCounts }
 
     var areDiarizationModelsInstalled: Bool {
         guard let directory = modelsDirectory else { return false }
@@ -128,9 +157,32 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
         _ request: PluginDiarizationRequest,
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult {
+        try await detectSpeakers(request, minimumSpeakerCount: nil, onProgress: onProgress)
+    }
+
+    /// Detects the speakers and, when fewer than `minimumSpeakerCount` of them
+    /// have `minimumSpeakerShare` of the speech, detects again with a fixed
+    /// count; see `speakerCountForSecondPass`.
+    func diarize(
+        _ request: PluginDiarizationRequest,
+        minimumSpeakerCount: Int,
+        onProgress: @Sendable @escaping (Double) -> Void
+    ) async throws -> PluginDiarizationResult {
+        try await detectSpeakers(request, minimumSpeakerCount: minimumSpeakerCount, onProgress: onProgress)
+    }
+
+    private func detectSpeakers(
+        _ request: PluginDiarizationRequest,
+        minimumSpeakerCount: Int?,
+        onProgress: @Sendable @escaping (Double) -> Void
+    ) async throws -> PluginDiarizationResult {
         if let count = request.speakerCount, !supportedSpeakerCounts.contains(count) {
             throw PluginDiarizationError.unsupportedSpeakerCount(count)
         }
+        // A fixed count needs no minimum; one beyond the supported counts is left out.
+        let minimumSpeakerCount = request.speakerCount == nil
+            ? minimumSpeakerCount.map { min($0, supportedSpeakerCounts.upperBound) }.flatMap { $0 > 1 ? $0 : nil }
+            : nil
         let directory = try requireModelsDirectory()
         guard Self.modelsExist(in: directory) else {
             throw PluginDiarizationError.modelsNotInstalled
@@ -139,6 +191,7 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
         let result = try await runner.diarize(
             audioURL: request.audioURL,
             speakerCount: request.speakerCount,
+            minimumSpeakerCount: minimumSpeakerCount,
             modelsDirectory: directory,
             onProgress: onProgress
         )
@@ -222,6 +275,7 @@ private actor DiarizationRunner {
     func diarize(
         audioURL: URL,
         speakerCount: Int?,
+        minimumSpeakerCount: Int?,
         modelsDirectory: URL,
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult {
@@ -231,26 +285,24 @@ private actor DiarizationRunner {
         guard let models else { throw PluginDiarizationError.modelsNotInstalled }
         try Task.checkCancellation()
 
-        let config = SpeakerDiarizationPlugin.diarizerConfig(speakerCount: speakerCount)
-        let manager = OfflineDiarizerManager(config: config)
-        manager.initialize(models: models)
-
-        let result: DiarizationResult
-        do {
-            result = try await manager.process(audioURL) { processed, total in
-                guard total > 0 else { return }
-                onProgress(min(max(Double(processed) / Double(total), 0), 1))
-            }
-        } catch OfflineDiarizationError.noSpeechDetected {
+        // With a minimum, the first pass is the first half of the progress.
+        let firstShare = minimumSpeakerCount == nil ? 1.0 : 0.5
+        guard var result = try await process(audioURL, speakerCount: speakerCount, models: models, onProgress: {
+            onProgress($0 * firstShare)
+        }) else {
             return PluginDiarizationResult(turns: [], engine: SpeakerDiarizationPlugin.engineIdentifier)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            throw PluginDiarizationError.processingFailed(error.localizedDescription)
         }
-        try Task.checkCancellation()
+        var turns = SpeakerDiarizationPlugin.turns(from: result.segments)
+        if let minimumSpeakerCount,
+           let count = SpeakerDiarizationPlugin.speakerCountForSecondPass(after: turns, minimum: minimumSpeakerCount),
+           let second = try await process(audioURL, speakerCount: count, models: models, onProgress: {
+               onProgress(firstShare + $0 * (1 - firstShare))
+           }) {
+            result = second
+            turns = SpeakerDiarizationPlugin.turns(from: result.segments)
+        }
+        onProgress(1)
 
-        let turns = SpeakerDiarizationPlugin.turns(from: result.segments)
         let speakers = Set(turns.map(\.speakerLabel))
         return PluginDiarizationResult(
             turns: turns,
@@ -258,5 +310,31 @@ private actor DiarizationRunner {
             speakerEmbeddingModel: SpeakerDiarizationPlugin.speakerEmbeddingModel,
             engine: SpeakerDiarizationPlugin.engineIdentifier
         )
+    }
+
+    /// One pass of the offline diarizer, or nil when the audio has no speech.
+    private func process(
+        _ audioURL: URL,
+        speakerCount: Int?,
+        models: OfflineDiarizerModels,
+        onProgress: @Sendable @escaping (Double) -> Void
+    ) async throws -> DiarizationResult? {
+        let manager = OfflineDiarizerManager(config: SpeakerDiarizationPlugin.diarizerConfig(speakerCount: speakerCount))
+        manager.initialize(models: models)
+        let result: DiarizationResult
+        do {
+            result = try await manager.process(audioURL) { processed, total in
+                guard total > 0 else { return }
+                onProgress(min(max(Double(processed) / Double(total), 0), 1))
+            }
+        } catch OfflineDiarizationError.noSpeechDetected {
+            return nil
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw PluginDiarizationError.processingFailed(error.localizedDescription)
+        }
+        try Task.checkCancellation()
+        return result
     }
 }
