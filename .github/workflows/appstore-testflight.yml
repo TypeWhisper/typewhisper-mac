@@ -260,7 +260,8 @@ jobs:
           # One profile per signed bundle with an embedded provisioning profile.
           for entry in "App:$BUNDLE_IDENTIFIER:TW_APPSTORE_PROFILE" \
                        "Widget:$BUNDLE_IDENTIFIER.widget:TW_APPSTORE_WIDGET_PROFILE" \
-                       "TranscribeAction:$BUNDLE_IDENTIFIER.transcribe-action:TW_APPSTORE_TRANSCRIBE_PROFILE"; do
+                       "TranscribeAction:$BUNDLE_IDENTIFIER.transcribe-action:TW_APPSTORE_TRANSCRIBE_PROFILE" \
+                       "SafariExtension:$BUNDLE_IDENTIFIER.safari-extension:TW_APPSTORE_SAFARI_PROFILE"; do
             IFS=: read -r label identifier variable <<<"$entry"
             output="$RUNNER_TEMP/$label.provisionprofile"
             BUNDLE_IDENTIFIER="$identifier" \
@@ -298,6 +299,7 @@ jobs:
             TW_APPSTORE_PROFILE="$TW_APPSTORE_PROFILE" \
             TW_APPSTORE_WIDGET_PROFILE="$TW_APPSTORE_WIDGET_PROFILE" \
             TW_APPSTORE_TRANSCRIBE_PROFILE="$TW_APPSTORE_TRANSCRIBE_PROFILE" \
+            TW_APPSTORE_SAFARI_PROFILE="$TW_APPSTORE_SAFARI_PROFILE" \
             > build/xcodebuild-archive.log 2>&1; then
             grep -E ' error: ' build/xcodebuild-archive.log | sort -u | head -50
             tail -n 40 build/xcodebuild-archive.log
@@ -331,6 +333,7 @@ jobs:
             -c "Add :provisioningProfiles:$BUNDLE_IDENTIFIER string '$TW_APPSTORE_PROFILE'" \
             -c "Add :provisioningProfiles:$BUNDLE_IDENTIFIER.widget string '$TW_APPSTORE_WIDGET_PROFILE'" \
             -c "Add :provisioningProfiles:$BUNDLE_IDENTIFIER.transcribe-action string '$TW_APPSTORE_TRANSCRIBE_PROFILE'" \
+            -c "Add :provisioningProfiles:$BUNDLE_IDENTIFIER.safari-extension string '$TW_APPSTORE_SAFARI_PROFILE'" \
             "$options"
           plutil -p "$options"
 

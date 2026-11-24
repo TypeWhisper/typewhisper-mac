@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="../icons/icon-32.png" alt="" width="20" height="20" />
+      <h1>TypeWhisper</h1>
+    </header>
+
+    <p id="status" role="status" aria-live="polite" data-state="checking"></p>
+
+    <form id="connection">
+      <label>
+        <span data-i18n="labelToken"></span>
+        <input id="token" type="password" autocomplete="off" spellcheck="false" />
+      </label>
+      <p class="hint" data-i18n="hintToken"></p>
+      <label class="inline">
+        <span data-i18n="labelPort"></span>
+        <input id="port" type="number" min="1" max="65535" inputmode="numeric" />
+      </label>
+      <button type="submit" data-i18n="buttonSave"></button>
+    </form>
+
+    <section>
+      <label class="toggle">
+        <input id="reportContext" type="checkbox" />
+        <span>
+          <strong data-i18n="labelReportContext"></strong>
+          <small data-i18n="hintReportContext"></small>
+        </span>
+      </label>
+      <label class="toggle">
+        <input id="showMicButton" type="checkbox" />
+        <span>
+          <strong data-i18n="labelShowMicButton"></strong>
+          <small data-i18n="hintShowMicButton"></small>
+        </span>
+      </label>
+    </section>
+
+    <footer>
+      <span id="shortcut"></span>
+      <a href="#" id="editShortcut" data-i18n="linkEditShortcut"></a>
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

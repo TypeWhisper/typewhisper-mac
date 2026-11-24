@@ -1,0 +1,141 @@
+:root {
+  --text: #202124;
+  --muted: #5f6368;
+  --border: #dadce0;
+  --surface: #ffffff;
+  --accent: #1a73e8;
+  --ok: #188038;
+  --warn: #b06000;
+  --error: #c5221f;
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--surface);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --border: #3c4043;
+    --surface: #202124;
+    --accent: #8ab4f8;
+    --ok: #81c995;
+    --warn: #fdd663;
+    --error: #f28b82;
+  }
+}
+
+body {
+  width: 320px;
+  margin: 0;
+  padding: 14px 16px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#status {
+  margin: 10px 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+#status[data-state="connected"] { color: var(--ok); }
+#status[data-state="offline"],
+#status[data-state="unsupported"] { color: var(--warn); }
+#status[data-state="unauthorized"],
+#status[data-state="error"] { color: var(--error); }
+
+form,
+section {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+label {
+  display: grid;
+  gap: 4px;
+}
+
+label.inline {
+  grid-template-columns: 1fr 90px;
+  align-items: center;
+}
+
+input[type="password"],
+input[type="number"] {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hint,
+small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+button {
+  justify-self: end;
+  font: inherit;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #1a73e8;
+  cursor: pointer;
+}
+
+label.toggle {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+label.toggle input {
+  margin: 2px 0 0;
+}
+
+label.toggle span {
+  display: grid;
+  gap: 2px;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+}
+
+a {
+  color: var(--accent);
+}
+
+[hidden] {
+  display: none;
+}

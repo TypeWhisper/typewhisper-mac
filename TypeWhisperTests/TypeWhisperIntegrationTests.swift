@@ -2233,6 +2233,34 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    func testSafariExtensionReadsTheConnectionOfItsOwnApp() throws {
+        XCTAssertEqual(
+            SafariExtensionConnection.hostBundleIdentifier(ofExtension: "com.typewhisper.mac.safari-extension"),
+            "com.typewhisper.mac"
+        )
+        XCTAssertEqual(
+            SafariExtensionConnection.hostBundleIdentifier(ofExtension: "com.typewhisper.mac.dev.safari-extension"),
+            "com.typewhisper.mac.dev"
+        )
+        XCTAssertNil(SafariExtensionConnection.hostBundleIdentifier(ofExtension: "com.typewhisper.mac.widgets"))
+
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: container) }
+        let releaseURL = SafariExtensionConnection.fileURL(hostBundleIdentifier: "com.typewhisper.mac", in: container)
+        let devURL = SafariExtensionConnection.fileURL(hostBundleIdentifier: "com.typewhisper.mac.dev", in: container)
+        XCTAssertNotEqual(releaseURL, devURL)
+
+        try SafariExtensionConnection(port: 8978, token: "release-token").write(to: releaseURL)
+        XCTAssertEqual(SafariExtensionConnection.load(from: releaseURL), SafariExtensionConnection(port: 8978, token: "release-token"))
+        XCTAssertNil(SafariExtensionConnection.load(from: devURL))
+        let permissions = try FileManager.default.attributesOfItem(atPath: releaseURL.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+
+        try SafariExtensionConnection(port: 8978, token: "").write(to: devURL)
+        XCTAssertNil(SafariExtensionConnection.load(from: devURL), "an empty token is no connection")
+    }
+
     func testAPITokenIsRequiredByDefaultButExistingTokenlessServersKeepRunning() throws {
         let freshDefaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
         XCTAssertTrue(LocalAPIAuthenticator.storedRequiresAuthentication(freshDefaults))

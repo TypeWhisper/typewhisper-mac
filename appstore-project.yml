@@ -118,6 +118,7 @@ targets:
           - Views/PostUpdateLicensePromptView.swift
           - Views/WelcomeSheet.swift
       - path: TypeWhisperWidgetShared/WidgetData.swift
+      - path: TypeWhisperSafariExtension/SafariExtensionConnection.swift
       - path: TypeWhisperICloudBridge/PremiumICloudBridgeShared.swift
       - path: AppStore/Sources
       - path: AppStore/Resources/AppStorePluginCatalog.json
@@ -135,6 +136,8 @@ targets:
       - target: TypeWhisperWidgetExtension
         embed: true
       - target: TypeWhisperTranscribeAction
+        embed: true
+      - target: TypeWhisperSafariExtension
         embed: true
       - target: AssemblyAIPlugin
         embed: true
@@ -634,6 +637,59 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: WidgetBackground
         SWIFT_EMIT_LOC_STRINGS: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"
+
+  TypeWhisperSafariExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: TypeWhisperSafariExtension
+        excludes:
+          - Info.plist
+          - TypeWhisperSafariExtension.entitlements
+          - SOURCE
+          - Resources
+      # The web extension's top-level files and folders, as scripts/sync_safari_extension.sh lists them.
+      - path: TypeWhisperSafariExtension/Resources/_locales
+        type: folder
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/api.js
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/background.js
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/content
+        type: folder
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/context.js
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/icons
+        type: folder
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/manifest.json
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/mic-setting.js
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/popup
+        type: folder
+        buildPhase: resources
+      - path: TypeWhisperSafariExtension/Resources/settings.js
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: TypeWhisperSafariExtension
+        PRODUCT_BUNDLE_IDENTIFIER: $(TYPEWHISPER_APPSTORE_BUNDLE_ID).safari-extension
+        PROVISIONING_PROFILE_SPECIFIER: "$(TW_APPSTORE_SAFARI_PROFILE)"
+        INFOPLIST_FILE: TypeWhisperSafariExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: TypeWhisperSafariExtension/TypeWhisperSafariExtension.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_STRICT_CONCURRENCY: targeted
         SKIP_INSTALL: YES
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"

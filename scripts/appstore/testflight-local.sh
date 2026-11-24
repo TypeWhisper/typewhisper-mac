@@ -96,6 +96,7 @@ profile_name_for() {
 app_profile="$(profile_name_for "$bundle_id" App)"
 widget_profile="$(profile_name_for "$bundle_id.widget" Widget)"
 transcribe_profile="$(profile_name_for "$bundle_id.transcribe-action" TranscribeAction)"
+safari_profile="$(profile_name_for "$bundle_id.safari-extension" SafariExtension)"
 
 "$repo_root/scripts/appstore/generate_project.sh"
 
@@ -115,6 +116,7 @@ if ! xcodebuild archive \
     TW_APPSTORE_PROFILE="$app_profile" \
     TW_APPSTORE_WIDGET_PROFILE="$widget_profile" \
     TW_APPSTORE_TRANSCRIBE_PROFILE="$transcribe_profile" \
+    TW_APPSTORE_SAFARI_PROFILE="$safari_profile" \
     >"$output_root/archive.log" 2>&1; then
     grep -E ' error: ' "$output_root/archive.log" | sort -u | head -30 >&2 || true
     tail -n 20 "$output_root/archive.log" >&2
@@ -138,6 +140,7 @@ plutil -insert provisioningProfiles -dictionary "$options"
     -c "Add :provisioningProfiles:$bundle_id string '$app_profile'" \
     -c "Add :provisioningProfiles:$bundle_id.widget string '$widget_profile'" \
     -c "Add :provisioningProfiles:$bundle_id.transcribe-action string '$transcribe_profile'" \
+    -c "Add :provisioningProfiles:$bundle_id.safari-extension string '$safari_profile'" \
     "$options"
 
 echo "Exporting signed package..."

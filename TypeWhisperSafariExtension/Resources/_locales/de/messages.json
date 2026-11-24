@@ -1,0 +1,96 @@
+{
+  "extensionName": {
+    "message": "TypeWhisper"
+  },
+  "extensionDescription": {
+    "message": "Diktiere mit TypeWhisper in jedes Textfeld und lass Website-Workflows zur geöffneten Seite passen."
+  },
+  "commandToggleDictation": {
+    "message": "Diktat starten oder stoppen"
+  },
+  "menuStartDictation": {
+    "message": "Mit TypeWhisper diktieren"
+  },
+  "menuStopDictation": {
+    "message": "TypeWhisper-Diktat stoppen"
+  },
+  "buttonStartDictation": {
+    "message": "Mit TypeWhisper diktieren"
+  },
+  "buttonStopDictation": {
+    "message": "Diktat stoppen"
+  },
+  "errorOffline": {
+    "message": "TypeWhisper läuft nicht, oder der API-Server ist ausgeschaltet."
+  },
+  "errorUnauthorized": {
+    "message": "TypeWhisper hat den API-Token abgelehnt. Füge den aktuellen Token in der Erweiterung ein."
+  },
+  "errorUnsupported": {
+    "message": "Diese TypeWhisper-Version kann die aktive Website nicht empfangen. Aktualisiere TypeWhisper."
+  },
+  "errorGeneric": {
+    "message": "TypeWhisper konnte das Diktat nicht starten."
+  },
+  "labelToken": {
+    "message": "API-Token"
+  },
+  "hintToken": {
+    "message": "Aktiviere in TypeWhisper unter Einstellungen › Erweitert den API-Server und klicke auf „API-Token kopieren“."
+  },
+  "labelPort": {
+    "message": "Port"
+  },
+  "buttonSave": {
+    "message": "Speichern"
+  },
+  "labelReportContext": {
+    "message": "Aktive Website an TypeWhisper melden"
+  },
+  "hintReportContext": {
+    "message": "Damit greifen Website-Workflows. Adresse und Titel des aktiven Tabs gehen nur an TypeWhisper auf diesem Computer. Private Fenster werden nie gemeldet."
+  },
+  "labelShowMicButton": {
+    "message": "Mikrofon-Button in Textfeldern zeigen"
+  },
+  "hintShowMicButton": {
+    "message": "Braucht Zugriff auf alle Websites, um den Button anzuzeigen."
+  },
+  "linkEditShortcut": {
+    "message": "Kurzbefehl ändern"
+  },
+  "labelShortcut": {
+    "message": "Kurzbefehl: $SHORTCUT$",
+    "placeholders": {
+      "shortcut": {
+        "content": "$1"
+      }
+    }
+  },
+  "labelNoShortcut": {
+    "message": "Kein Kurzbefehl festgelegt"
+  },
+  "statusChecking": {
+    "message": "Verbinde mit TypeWhisper …"
+  },
+  "statusOffline": {
+    "message": "TypeWhisper läuft nicht, oder der API-Server ist ausgeschaltet."
+  },
+  "statusUnauthorized": {
+    "message": "Füge den API-Token aus TypeWhisper ein."
+  },
+  "statusUnsupported": {
+    "message": "Verbunden. Aktualisiere TypeWhisper, um Website-Workflows aus diesem Browser zu nutzen."
+  },
+  "statusConnected": {
+    "message": "Mit TypeWhisper verbunden"
+  },
+  "statusModel": {
+    "message": " · $MODEL$",
+    "placeholders": {
+      "model": {
+        "content": "$1"
+      }
+    }
+  }
+}

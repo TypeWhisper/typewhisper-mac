@@ -315,6 +315,7 @@
 		AA12990000000000000003 /* TranslationServiceBatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB12990000000000000003 /* TranslationServiceBatchTests.swift */; };
 		AA00000000000000000045 /* APIServerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000045 /* APIServerViewModel.swift */; };
 		AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000046 /* AdvancedSettingsView.swift */; };
+		5AF00000000000000000000F /* SafariExtensionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF00000000000000000002F /* SafariExtensionButton.swift */; };
 		AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */; };
 		AA00000000000000000050 /* SubtitleExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000050 /* SubtitleExporter.swift */; };
 		7E5C00000000000000000002 /* TranscriptExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5C00000000000000000001 /* TranscriptExporter.swift */; };
@@ -521,6 +522,20 @@
 		E1A000000000000000000002 /* TypeWhisperTranscribeAction.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E1A000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000024 /* Assets.xcassets */; };
 		E1A000000000000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000025 /* InfoPlist.xcstrings */; };
+		5AF000000000000000000001 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000020 /* SafariWebExtensionHandler.swift */; };
+		5AF000000000000000000002 /* SafariExtensionConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000024 /* SafariExtensionConnection.swift */; };
+		5AF000000000000000000003 /* SafariExtensionConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000024 /* SafariExtensionConnection.swift */; };
+		5AF000000000000000000004 /* TypeWhisperSafariExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000023 /* TypeWhisperSafariExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5AF000000000000000000005 /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000025 /* _locales */; };
+		5AF000000000000000000006 /* api.js in Resources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000026 /* api.js */; };
+		5AF000000000000000000007 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000027 /* background.js */; };
+		5AF000000000000000000008 /* content in Resources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000028 /* content */; };
+		5AF000000000000000000009 /* context.js in Resources */ = {isa = PBXBuildFile; fileRef = 5AF000000000000000000029 /* context.js */; };
+		5AF00000000000000000000A /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 5AF00000000000000000002A /* icons */; };
+		5AF00000000000000000000B /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5AF00000000000000000002B /* manifest.json */; };
+		5AF00000000000000000000C /* mic-setting.js in Resources */ = {isa = PBXBuildFile; fileRef = 5AF00000000000000000002C /* mic-setting.js */; };
+		5AF00000000000000000000D /* popup in Resources */ = {isa = PBXBuildFile; fileRef = 5AF00000000000000000002D /* popup */; };
+		5AF00000000000000000000E /* settings.js in Resources */ = {isa = PBXBuildFile; fileRef = 5AF00000000000000000002E /* settings.js */; };
 		5E7A00000000000000000001 /* SpeechAnalyzerPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6CB202A0A4799036AF9067A7 /* SpeakerDiarizationPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 8418AAA27B2D8C818BCF5019 /* SpeakerDiarizationPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		AA00000000000000000199 /* VoxtralPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000191 /* VoxtralPlugin.swift */; };
@@ -807,6 +822,13 @@
 			remoteGlobalIDString = E1A000000000000000000050;
 			remoteInfo = TypeWhisperTranscribeAction;
 		};
+		5AF000000000000000000010 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5AF000000000000000000050;
+			remoteInfo = TypeWhisperSafariExtension;
+		};
 		5E7A00000000000000000003 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = EE00000000000000000001 /* Project object */;
@@ -865,6 +887,7 @@
 			files = (
 				AA00000000000000000198 /* TypeWhisperWidgetExtension.appex in Embed App Extensions */,
 				E1A000000000000000000002 /* TypeWhisperTranscribeAction.appex in Embed App Extensions */,
+				5AF000000000000000000004 /* TypeWhisperSafariExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1088,6 +1111,7 @@
 		BB12990000000000000003 /* TranslationServiceBatchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranslationServiceBatchTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000045 /* APIServerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIServerViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000046 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
+		5AF00000000000000000002F /* SafariExtensionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariExtensionButton.swift; sourceTree = "<group>"; };
 		BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenPunctuationSettingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000050 /* SubtitleExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleExporter.swift; sourceTree = "<group>"; };
 		7E5C00000000000000000001 /* TranscriptExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptExporter.swift; sourceTree = "<group>"; };
@@ -1298,6 +1322,21 @@
 		E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TypeWhisperTranscribeAction.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1A000000000000000000024 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E1A000000000000000000025 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		5AF000000000000000000020 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		5AF000000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5AF000000000000000000022 /* TypeWhisperSafariExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisperSafariExtension.entitlements; sourceTree = "<group>"; };
+		5AF000000000000000000023 /* TypeWhisperSafariExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TypeWhisperSafariExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5AF000000000000000000024 /* SafariExtensionConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariExtensionConnection.swift; sourceTree = "<group>"; };
+		5AF000000000000000000025 /* _locales */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "_locales"; sourceTree = "<group>"; };
+		5AF000000000000000000026 /* api.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = api.js; sourceTree = "<group>"; };
+		5AF000000000000000000027 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
+		5AF000000000000000000028 /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; path = content; sourceTree = "<group>"; };
+		5AF000000000000000000029 /* context.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = context.js; sourceTree = "<group>"; };
+		5AF00000000000000000002A /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; path = icons; sourceTree = "<group>"; };
+		5AF00000000000000000002B /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		5AF00000000000000000002C /* mic-setting.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mic-setting.js; sourceTree = "<group>"; };
+		5AF00000000000000000002D /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; path = popup; sourceTree = "<group>"; };
+		5AF00000000000000000002E /* settings.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = settings.js; sourceTree = "<group>"; };
 		BB00000000000000000190 /* VoxtralPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoxtralPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000191 /* VoxtralPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000192 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -2133,6 +2172,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5AF000000000000000000040 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5B81D548A60D47F789F6E9E4 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -2252,6 +2298,7 @@
 				CC00000000000000000045 /* SpeechmaticsPlugin */,
 				CC00000000000000000025 /* TypeWhisperWidgetExtension */,
 				E1A000000000000000000030 /* TypeWhisperTranscribeAction */,
+				5AF000000000000000000030 /* TypeWhisperSafariExtension */,
 				CC00000000000000000026 /* TypeWhisperWidgetShared */,
 				CC00000000000000000090 /* Products */,
 				573FF8BBD9BCC48AA1BBD1CD /* Frameworks */,
@@ -2531,6 +2578,7 @@
 				CA1F0000000000000000000B /* MeetingAutomationCountdownIndicator.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
+				5AF00000000000000000002F /* SafariExtensionButton.swift */,
 				BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */,
 				80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
@@ -2911,6 +2959,35 @@
 				E1A000000000000000000021 /* Info.plist */,
 			);
 			path = TypeWhisperTranscribeAction;
+			sourceTree = "<group>";
+		};
+		5AF000000000000000000030 /* TypeWhisperSafariExtension */ = {
+			isa = PBXGroup;
+			children = (
+				5AF000000000000000000031 /* Resources */,
+				5AF000000000000000000024 /* SafariExtensionConnection.swift */,
+				5AF000000000000000000020 /* SafariWebExtensionHandler.swift */,
+				5AF000000000000000000022 /* TypeWhisperSafariExtension.entitlements */,
+				5AF000000000000000000021 /* Info.plist */,
+			);
+			path = TypeWhisperSafariExtension;
+			sourceTree = "<group>";
+		};
+		5AF000000000000000000031 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				5AF000000000000000000025 /* _locales */,
+				5AF000000000000000000026 /* api.js */,
+				5AF000000000000000000027 /* background.js */,
+				5AF000000000000000000028 /* content */,
+				5AF000000000000000000029 /* context.js */,
+				5AF00000000000000000002A /* icons */,
+				5AF00000000000000000002B /* manifest.json */,
+				5AF00000000000000000002C /* mic-setting.js */,
+				5AF00000000000000000002D /* popup */,
+				5AF00000000000000000002E /* settings.js */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000026 /* TypeWhisperWidgetShared */ = {
@@ -3467,6 +3544,7 @@
 				5A4F4F4D0000000000000014 /* ZoomPlugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
 				E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */,
+				5AF000000000000000000023 /* TypeWhisperSafariExtension.appex */,
 				5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */,
 				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
 			);
@@ -3687,6 +3765,7 @@
 				GG00000000000000000001 /* PBXTargetDependency */,
 				GG00000000000000000009 /* PBXTargetDependency */,
 				E1A000000000000000000060 /* PBXTargetDependency */,
+				5AF000000000000000000060 /* PBXTargetDependency */,
 				5E7A00000000000000000004 /* PBXTargetDependency */,
 				C2AF9B8B174BB5B9D6858EF4 /* PBXTargetDependency */,
 				1C1000000000000000000045 /* PBXTargetDependency */,
@@ -4076,6 +4155,23 @@
 			name = TypeWhisperTranscribeAction;
 			productName = TypeWhisperTranscribeAction;
 			productReference = E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		5AF000000000000000000050 /* TypeWhisperSafariExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5AF000000000000000000080 /* Build configuration list for PBXNativeTarget "TypeWhisperSafariExtension" */;
+			buildPhases = (
+				5AF000000000000000000042 /* Sources */,
+				5AF000000000000000000040 /* Frameworks */,
+				5AF000000000000000000041 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TypeWhisperSafariExtension;
+			productName = TypeWhisperSafariExtension;
+			productReference = 5AF000000000000000000023 /* TypeWhisperSafariExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		DD00000000000000000015 /* VoxtralPlugin */ = {
@@ -4951,6 +5047,9 @@
 					E1A000000000000000000050 = {
 						CreatedOnToolsVersion = 26.0;
 					};
+					5AF000000000000000000050 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					D10000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
 					};
@@ -5052,6 +5151,7 @@
 				5A4F4F4D0000000000000021 /* ZoomPlugin */,
 				DD00000000000000000014 /* TypeWhisperWidgetExtension */,
 				E1A000000000000000000050 /* TypeWhisperTranscribeAction */,
+				5AF000000000000000000050 /* TypeWhisperSafariExtension */,
 				40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */,
 				F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */,
 			);
@@ -5622,6 +5722,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5AF000000000000000000041 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5AF000000000000000000005 /* _locales in Resources */,
+				5AF000000000000000000006 /* api.js in Resources */,
+				5AF000000000000000000007 /* background.js in Resources */,
+				5AF000000000000000000008 /* content in Resources */,
+				5AF000000000000000000009 /* context.js in Resources */,
+				5AF00000000000000000000A /* icons in Resources */,
+				5AF00000000000000000000B /* manifest.json in Resources */,
+				5AF00000000000000000000C /* mic-setting.js in Resources */,
+				5AF00000000000000000000D /* popup in Resources */,
+				5AF00000000000000000000E /* settings.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		946BDA6B150F486DBC39A4E8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -5905,7 +6022,9 @@
 				AA0A5E7700000000000000A1 /* APIAudioSettings.swift in Sources */,
 				B82D3E95DF72450E8F3EEF97 /* APISpeakerProfiles.swift in Sources */,
 				AA00000000000000000045 /* APIServerViewModel.swift in Sources */,
+				5AF000000000000000000003 /* SafariExtensionConnection.swift in Sources */,
 				AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */,
+				5AF00000000000000000000F /* SafariExtensionButton.swift in Sources */,
 				AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */,
 				AA00000000000000000050 /* SubtitleExporter.swift in Sources */,
 				7E5C00000000000000000002 /* TranscriptExporter.swift in Sources */,
@@ -6604,6 +6723,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5AF000000000000000000042 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5AF000000000000000000002 /* SafariExtensionConnection.swift in Sources */,
+				5AF000000000000000000001 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		EF92386A9CCB4EBA90C929FF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -6640,6 +6768,11 @@
 			isa = PBXTargetDependency;
 			target = E1A000000000000000000050 /* TypeWhisperTranscribeAction */;
 			targetProxy = E1A000000000000000000010 /* PBXContainerItemProxy */;
+		};
+		5AF000000000000000000060 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5AF000000000000000000050 /* TypeWhisperSafariExtension */;
+			targetProxy = 5AF000000000000000000010 /* PBXContainerItemProxy */;
 		};
 		5E7A00000000000000000004 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -7761,6 +7894,58 @@
 				);
 				MARKETING_VERSION = 1.9.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.transcribe-action;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		5AF000000000000000000070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = TypeWhisperSafariExtension/TypeWhisperSafariExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TypeWhisperSafariExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.safari-extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		5AF000000000000000000071 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = TypeWhisperSafariExtension/TypeWhisperSafariExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TypeWhisperSafariExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.safari-extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -10151,6 +10336,15 @@
 			buildConfigurations = (
 				E1A000000000000000000070 /* Debug */,
 				E1A000000000000000000071 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5AF000000000000000000080 /* Build configuration list for PBXNativeTarget "TypeWhisperSafariExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5AF000000000000000000070 /* Debug */,
+				5AF000000000000000000071 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
