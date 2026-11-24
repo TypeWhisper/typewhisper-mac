@@ -1494,8 +1494,12 @@ final class TextInsertionService {
                unchangedState.value == target.expectedValue,
                unchangedState.selectedRange == target.expectedCaret,
                unchangedState.selectedText?.isEmpty != false {
+                // An earlier partial in the field rules out a second insertion of the transcript.
+                let outcome = target.hasAttemptedMutation
+                    ? "an earlier partial is in the field, so the final transcript goes to Recent Transcriptions"
+                    : "the final transcript uses normal insertion"
                 logger.info(
-                    "Live field stopped: bundle=\(bundleIdentifier, privacy: .public) left the field unchanged after the Accessibility write (writeReported=\(writeSucceeded, privacy: .public)); the final transcript uses normal insertion"
+                    "Live field stopped: bundle=\(bundleIdentifier, privacy: .public) left the field unchanged after the Accessibility write (writeReported=\(writeSucceeded, privacy: .public)); \(outcome, privacy: .public)"
                 )
                 return .detached
             }
@@ -1503,7 +1507,7 @@ final class TextInsertionService {
             // The resulting state is not provably unchanged. Text may be
             // present, so paste is unsafe.
             logger.info(
-                "Live field stopped: bundle=\(bundleIdentifier, privacy: .public) shows an unexpected field state after the Accessibility write; the final transcript is not inserted again, to avoid duplicate text"
+                "Live field stopped: bundle=\(bundleIdentifier, privacy: .public) shows an unexpected field state after the Accessibility write; the final transcript goes to Recent Transcriptions instead of being inserted again"
             )
             target.hasAttemptedMutation = true
             return .detached
