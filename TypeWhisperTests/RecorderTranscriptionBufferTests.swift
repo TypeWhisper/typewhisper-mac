@@ -169,6 +169,56 @@ final class RecorderLiveEchoTests: XCTestCase {
         loudspeakers.reset()
         XCTAssertNil(loudspeakers.liveMicrophoneHearsSystemAudio)
     }
+
+    /// The live mix measures again after every ten seconds of new audio,
+    /// over the last minute only, and keeps its answer through a minute
+    /// with nothing to measure.
+    func testLiveEchoIsMeasuredEveryTenSecondsOverTheLastMinute() {
+        let remote = speech(duration: 20, from: 1, every: 0.6, level: 0.3)
+        let user = speech(duration: 20, from: 1.3, every: 0.9, level: 0.05)
+        let echo = speech(duration: 20, from: 1, every: 0.6, level: 0.05, delay: 0.24)
+        let loudspeakers = zip(user, echo).map { $0 + $1 }
+        let tenSeconds = Int(10 * sampleRate)
+        var buffer = RecorderTranscriptionBuffer()
+
+        buffer.appendMic(Array(loudspeakers.prefix(tenSeconds - 1)))
+        buffer.appendSystem(Array(remote.prefix(tenSeconds - 1)))
+        buffer.measureLiveEcho(sampleRate: sampleRate)
+        XCTAssertNil(buffer.liveMicrophoneHearsSystemAudio, "one sample short of ten seconds")
+
+        buffer.appendMic(Array(loudspeakers[(tenSeconds - 1)...]))
+        buffer.appendSystem(Array(remote[(tenSeconds - 1)...]))
+        buffer.measureLiveEcho(sampleRate: sampleRate)
+        XCTAssertEqual(buffer.liveMicrophoneHearsSystemAudio, true)
+        for _ in 0..<9 {
+            buffer.appendMic(loudspeakers)
+            buffer.appendSystem(remote)
+            buffer.measureLiveEcho(sampleRate: sampleRate)
+        }
+
+        // Headphones from here on: once the loudspeaker part has left the
+        // last minute, the microphone doesn't hear the system audio, although
+        // the whole recording is mostly loudspeaker echo.
+        for _ in 0..<3 {
+            buffer.appendMic(user)
+            buffer.appendSystem(remote)
+            buffer.measureLiveEcho(sampleRate: sampleRate)
+        }
+        XCTAssertEqual(buffer.liveMicrophoneHearsSystemAudio, false)
+
+        // A minute without system audio leaves nothing to measure.
+        let silentMinute = [Float](repeating: 0, count: Int(60 * sampleRate))
+        buffer.appendMic(silentMinute)
+        buffer.appendSystem(silentMinute)
+        buffer.measureLiveEcho(sampleRate: sampleRate)
+        XCTAssertEqual(buffer.liveMicrophoneHearsSystemAudio, false)
+
+        buffer.reset()
+        buffer.appendMic(loudspeakers)
+        buffer.appendSystem(remote)
+        buffer.measureLiveEcho(sampleRate: sampleRate)
+        XCTAssertEqual(buffer.liveMicrophoneHearsSystemAudio, true)
+    }
 }
 
 final class SystemAudioSampleProcessorTests: XCTestCase {
