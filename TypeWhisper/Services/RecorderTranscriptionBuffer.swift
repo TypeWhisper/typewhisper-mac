@@ -70,6 +70,15 @@ struct RecorderTranscriptionBuffer {
     var micSamples: [Float] = []
     var systemSamples: [Float] = []
 
+    /// The live mix measures the echo again after this much new audio,
+    /// over the last `liveEchoWindow` of the recording.
+    static let liveEchoInterval: TimeInterval = 10
+    static let liveEchoWindow: TimeInterval = 60
+    /// Whether the microphone hears the system audio, as last measured while
+    /// recording; nil until the recording gives enough audio to tell.
+    private(set) var liveMicrophoneHearsSystemAudio: Bool?
+    private var liveEchoMeasuredSampleCount = 0
+
     var mixedSampleCount: Int {
         max(micSamples.count, systemSamples.count)
     }
@@ -77,6 +86,25 @@ struct RecorderTranscriptionBuffer {
     mutating func reset() {
         micSamples.removeAll(keepingCapacity: false)
         systemSamples.removeAll(keepingCapacity: false)
+        liveMicrophoneHearsSystemAudio = nil
+        liveEchoMeasuredSampleCount = 0
+    }
+
+    /// Measures `liveMicrophoneHearsSystemAudio` once `liveEchoInterval` of
+    /// new audio has come in. A window without enough system audio keeps the
+    /// last answer.
+    mutating func measureLiveEcho(sampleRate: Double) {
+        let count = min(micSamples.count, systemSamples.count)
+        guard Double(count - liveEchoMeasuredSampleCount) >= Self.liveEchoInterval * sampleRate else { return }
+        liveEchoMeasuredSampleCount = count
+        let start = max(0, count - Int(Self.liveEchoWindow * sampleRate))
+        if let hears = SpeakerChannelAttribution.microphoneHearsSystemAudio(
+            microphone: Array(micSamples[start..<count]),
+            system: Array(systemSamples[start..<count]),
+            sampleRate: sampleRate
+        ) {
+            liveMicrophoneHearsSystemAudio = hears
+        }
     }
 
     mutating func appendMic(_ samples: [Float]) {
