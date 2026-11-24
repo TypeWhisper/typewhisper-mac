@@ -69,7 +69,10 @@ final class APIServerViewModel: ObservableObject {
                 do {
                     try writeDiscoveryFiles(apiToken: apiToken, port: selectedPort)
                 } catch {
+                    // The stopped listener no longer reports, so nothing else removes
+                    // a discovery file that was written before the failure.
                     httpServer.stop()
+                    removeDiscoveryFiles()
                     throw error
                 }
             } catch is CancellationError {

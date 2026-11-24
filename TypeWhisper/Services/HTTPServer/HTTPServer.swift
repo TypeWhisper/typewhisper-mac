@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 
 /// Bytes received so far on one connection. Only used on the server queue.
 /// Appending through a reference keeps the buffer unique, so a large upload is
@@ -12,6 +13,9 @@ final class HTTPServer: @unchecked Sendable {
     private let router: APIRouter
     private var listener: NWListener?
     private let serverQueue = DispatchQueue(label: "com.typewhisper.httpserver")
+    /// Increases with every start and stop. A listener reports its state only while its
+    /// generation is current, so a replaced listener cannot report on behalf of the new one.
+    private let listenerGeneration = OSAllocatedUnfairLock(initialState: 0)
     private let activeWork = NSLock()
     private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
     private var activeRouteTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
@@ -30,13 +34,18 @@ final class HTTPServer: @unchecked Sendable {
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: nwPort)
 
         let newListener = try NWListener(using: params)
+        let generation = listenerGeneration.withLock { value in
+            value += 1
+            return value
+        }
 
         newListener.stateUpdateHandler = { [weak self] state in
+            guard let self, self.listenerGeneration.withLock({ $0 }) == generation else { return }
             switch state {
             case .ready:
-                self?.onStateChange?(true)
+                self.onStateChange?(true)
             case .failed, .cancelled:
-                self?.onStateChange?(false)
+                self.onStateChange?(false)
             default:
                 break
             }
@@ -54,6 +63,7 @@ final class HTTPServer: @unchecked Sendable {
     /// `onStateChange`, or a restart could see the old listener's stop after the new one is
     /// ready and remove the new server's discovery files.
     func stop() {
+        listenerGeneration.withLock { $0 += 1 }
         listener?.stateUpdateHandler = nil
         listener?.cancel()
         listener = nil
