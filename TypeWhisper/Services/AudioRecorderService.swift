@@ -735,17 +735,24 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Thread-safe snapshot of the current 16kHz mono buffer for streaming transcription.
     func getCurrentBuffer() -> [Float] {
-        currentBuffer(micDuckingMode: micDuckingMode)
+        currentBuffer(micDuckingMode: nil)
     }
 
-    private func currentBuffer(micDuckingMode: MicDuckingMode) -> [Float] {
+    /// - Parameter fixedMode: The ducking to mix with, or nil for the live mix's.
+    private func currentBuffer(micDuckingMode fixedMode: MicDuckingMode?) -> [Float] {
         if let currentBufferOverride {
             return currentBufferOverride()
         }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
+        let configuredMode = self.micDuckingMode
         return transcriptionBufferLock.withLock { buffer in
-            buffer.currentBuffer(
+            let micDuckingMode = fixedMode ?? Self.liveMicDuckingMode(
+                configuredMode,
+                buffer: &buffer,
+                measures: micEnabled && systemAudioEnabled
+            )
+            return buffer.currentBuffer(
                 micEnabled: micEnabled,
                 systemAudioEnabled: systemAudioEnabled,
                 mixer: { range, micSamples, systemSamples in
@@ -769,10 +776,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
-        let micDuckingMode = self.micDuckingMode
+        let configuredMode = self.micDuckingMode
         let maxSampleCount = Int(maxDuration * Self.transcriptionSampleRate)
         return transcriptionBufferLock.withLock { buffer in
-            buffer.recentBuffer(
+            let micDuckingMode = Self.liveMicDuckingMode(
+                configuredMode,
+                buffer: &buffer,
+                measures: micEnabled && systemAudioEnabled
+            )
+            return buffer.recentBuffer(
                 maxSampleCount: maxSampleCount,
                 micEnabled: micEnabled,
                 systemAudioEnabled: systemAudioEnabled,
@@ -797,9 +809,14 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
-        let micDuckingMode = self.micDuckingMode
+        let configuredMode = self.micDuckingMode
         return transcriptionBufferLock.withLock { buffer in
-            buffer.delta(
+            let micDuckingMode = Self.liveMicDuckingMode(
+                configuredMode,
+                buffer: &buffer,
+                measures: micEnabled && systemAudioEnabled
+            )
+            return buffer.delta(
                 since: sampleOffset,
                 micEnabled: micEnabled,
                 systemAudioEnabled: systemAudioEnabled,
@@ -813,6 +830,19 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 }
             )
         }
+    }
+
+    /// The ducking of the live mix while recording: none once the microphone
+    /// is measured not to hear the system audio, as at stop
+    /// (`effectiveMicDuckingMode`). Until then the setting applies.
+    private static func liveMicDuckingMode(
+        _ mode: MicDuckingMode,
+        buffer: inout RecorderTranscriptionBuffer,
+        measures: Bool
+    ) -> MicDuckingMode {
+        guard mode != .off, measures else { return mode }
+        buffer.measureLiveEcho(sampleRate: transcriptionSampleRate)
+        return buffer.liveMicrophoneHearsSystemAudio == false ? .off : mode
     }
 
     /// Total duration of transcription buffer in seconds.

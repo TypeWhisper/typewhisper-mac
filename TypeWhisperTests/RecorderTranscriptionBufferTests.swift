@@ -121,6 +121,56 @@ final class RecorderTranscriptionResamplerTests: XCTestCase {
     }
 }
 
+final class RecorderLiveEchoTests: XCTestCase {
+    private let sampleRate = 16_000.0
+
+    /// Bursts of uneven length from `start`, like words, as a tone `delay` seconds late.
+    private func speech(duration: TimeInterval, from start: TimeInterval, every gap: TimeInterval, level: Float, delay: TimeInterval = 0) -> [Float] {
+        let lengths = [0.21, 0.35, 0.18, 0.42, 0.27, 0.5, 0.24, 0.31]
+        var words: [ClosedRange<TimeInterval>] = []
+        var time = start
+        var index = 0
+        while time < duration {
+            let length = lengths[index % lengths.count]
+            words.append(time...(time + length))
+            time += length + gap * Double(1 + index % 3) / 2
+            index += 1
+        }
+        return (0..<Int(duration * sampleRate)).map { sample in
+            let time = Double(sample) / sampleRate - delay
+            return (words.contains { $0.contains(time) } ? level : 0.0005) * Float(sin(Double(sample) * 0.3))
+        }
+    }
+
+    /// The live mix stops ducking once the recording shows that the
+    /// microphone doesn't hear the system audio, and keeps it near loudspeakers.
+    func testLiveMixMeasuresWhetherTheMicrophoneHearsTheSystemAudio() {
+        let remote = speech(duration: 20, from: 1, every: 0.6, level: 0.3)
+        let user = speech(duration: 20, from: 1.3, every: 0.9, level: 0.05)
+        let echo = speech(duration: 20, from: 1, every: 0.6, level: 0.05, delay: 0.24)
+
+        var headset = RecorderTranscriptionBuffer()
+        headset.appendMic(Array(user.prefix(Int(5 * sampleRate))))
+        headset.appendSystem(Array(remote.prefix(Int(5 * sampleRate))))
+        headset.measureLiveEcho(sampleRate: sampleRate)
+        XCTAssertNil(headset.liveMicrophoneHearsSystemAudio, "less than the measuring interval")
+
+        headset.appendMic(Array(user.dropFirst(Int(5 * sampleRate))))
+        headset.appendSystem(Array(remote.dropFirst(Int(5 * sampleRate))))
+        headset.measureLiveEcho(sampleRate: sampleRate)
+        XCTAssertEqual(headset.liveMicrophoneHearsSystemAudio, false)
+
+        var loudspeakers = RecorderTranscriptionBuffer()
+        loudspeakers.appendMic(zip(user, echo).map { $0 + $1 })
+        loudspeakers.appendSystem(remote)
+        loudspeakers.measureLiveEcho(sampleRate: sampleRate)
+        XCTAssertEqual(loudspeakers.liveMicrophoneHearsSystemAudio, true)
+
+        loudspeakers.reset()
+        XCTAssertNil(loudspeakers.liveMicrophoneHearsSystemAudio)
+    }
+}
+
 final class SystemAudioSampleProcessorTests: XCTestCase {
     func testProcessesStereoInterleavedFloat32Buffers() throws {
         var samples: [Float] = [
