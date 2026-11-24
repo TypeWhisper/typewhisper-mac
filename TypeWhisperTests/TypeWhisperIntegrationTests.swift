@@ -2233,6 +2233,54 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    func testStoppedHTTPServerDoesNotReportItsCancellation() throws {
+        let server = HTTPServer(router: APIRouter())
+        let states = OSAllocatedUnfairLock<[Bool]>(initialState: [])
+        let ready = expectation(description: "listener ready")
+        server.onStateChange = { running in
+            states.withLock { $0.append(running) }
+            if running { ready.fulfill() }
+        }
+
+        try server.start(port: UInt16.random(in: 40_000...49_000))
+        wait(for: [ready], timeout: 5)
+        server.stop()
+
+        // The cancelled listener would report on the server queue right after stop().
+        let settled = expectation(description: "server queue settled")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+        XCTAssertEqual(states.withLock { $0 }, [true])
+    }
+
+    func testSafariExtensionReadsTheConnectionOfItsOwnApp() throws {
+        XCTAssertEqual(
+            SafariExtensionConnection.hostBundleIdentifier(ofExtension: "com.typewhisper.mac.safari-extension"),
+            "com.typewhisper.mac"
+        )
+        XCTAssertEqual(
+            SafariExtensionConnection.hostBundleIdentifier(ofExtension: "com.typewhisper.mac.dev.safari-extension"),
+            "com.typewhisper.mac.dev"
+        )
+        XCTAssertNil(SafariExtensionConnection.hostBundleIdentifier(ofExtension: "com.typewhisper.mac.widgets"))
+
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: container) }
+        let releaseURL = SafariExtensionConnection.fileURL(hostBundleIdentifier: "com.typewhisper.mac", in: container)
+        let devURL = SafariExtensionConnection.fileURL(hostBundleIdentifier: "com.typewhisper.mac.dev", in: container)
+        XCTAssertNotEqual(releaseURL, devURL)
+
+        try SafariExtensionConnection(port: 8978, token: "release-token").write(to: releaseURL)
+        XCTAssertEqual(SafariExtensionConnection.load(from: releaseURL), SafariExtensionConnection(port: 8978, token: "release-token"))
+        XCTAssertNil(SafariExtensionConnection.load(from: devURL))
+        let permissions = try FileManager.default.attributesOfItem(atPath: releaseURL.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+
+        try SafariExtensionConnection(port: 8978, token: "").write(to: devURL)
+        XCTAssertNil(SafariExtensionConnection.load(from: devURL), "an empty token is no connection")
+    }
+
     func testAPITokenIsRequiredByDefaultButExistingTokenlessServersKeepRunning() throws {
         let freshDefaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
         XCTAssertTrue(LocalAPIAuthenticator.storedRequiresAuthentication(freshDefaults))

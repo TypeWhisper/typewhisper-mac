@@ -6,6 +6,7 @@ bundle_id="com.typewhisper.mac"
 helper_bundle_id="com.typewhisper.typewhisper-mac"
 widget_bundle_id="com.typewhisper.mac.widgets"
 action_bundle_id="com.typewhisper.mac.transcribe-action"
+safari_bundle_id="com.typewhisper.mac.safari-extension"
 app_group="$team_id.com.typewhisper.mac"
 icloud_container="iCloud.com.typewhisper.sync"
 require_notarization=false
@@ -192,6 +193,7 @@ fi
 
 widget_path="$app_path/Contents/PlugIns/TypeWhisperWidgetExtension.appex"
 action_path="$app_path/Contents/PlugIns/TypeWhisperTranscribeAction.appex"
+safari_path="$app_path/Contents/PlugIns/TypeWhisperSafariExtension.appex"
 helper_path="$app_path/Contents/XPCServices/TypeWhisperICloudBridge.xpc"
 main_profile_path="$app_path/Contents/embedded.provisionprofile"
 helper_profile_path="$helper_path/Contents/embedded.provisionprofile"
@@ -202,6 +204,10 @@ if [[ ! -d "$widget_path" ]]; then
 fi
 if [[ ! -d "$action_path" ]]; then
   echo "error: Finder transcription action is missing" >&2
+  exit 1
+fi
+if [[ ! -f "$safari_path/Contents/Resources/manifest.json" ]]; then
+  echo "error: Safari web extension or its manifest is missing" >&2
   exit 1
 fi
 if [[ ! -d "$helper_path" ]]; then
@@ -219,10 +225,12 @@ decoded_profile="$temporary_dir/profile.plist"
 main_entitlements="$temporary_dir/main-entitlements.plist"
 widget_entitlements="$temporary_dir/widget-entitlements.plist"
 action_entitlements="$temporary_dir/action-entitlements.plist"
+safari_entitlements="$temporary_dir/safari-entitlements.plist"
 helper_entitlements="$temporary_dir/helper-entitlements.plist"
 codesign -d --entitlements :- "$app_path" > "$main_entitlements" 2>/dev/null
 codesign -d --entitlements :- "$widget_path" > "$widget_entitlements" 2>/dev/null
 codesign -d --entitlements :- "$action_path" > "$action_entitlements" 2>/dev/null
+codesign -d --entitlements :- "$safari_path" > "$safari_entitlements" 2>/dev/null
 codesign -d --entitlements :- "$helper_path" > "$helper_entitlements" 2>/dev/null
 
 actual_bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")"
@@ -432,7 +440,34 @@ if plutil -convert xml1 -o - "$action_entitlements" | widget_has_forbidden_entit
   exit 1
 fi
 
-plists_to_check=("$info_plist" "$main_entitlements" "$widget_entitlements" "$action_info_plist" "$action_entitlements" "$helper_entitlements")
+safari_info_plist="$safari_path/Contents/Info.plist"
+safari_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$safari_info_plist")"
+safari_extension_point="$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$safari_info_plist")"
+safari_group_key="$(/usr/libexec/PlistBuddy -c 'Print :AppGroupIdentifier' "$safari_info_plist")"
+safari_sandbox="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$safari_entitlements")"
+# The handler finds its app's connection file by removing this suffix from its identifier.
+[[ "$safari_id" == "$safari_bundle_id" && "$safari_id" == "$bundle_id.safari-extension" ]] || {
+  echo "error: Safari web extension bundle identifier is '$safari_id'" >&2
+  exit 1
+}
+[[ "$safari_extension_point" == "com.apple.Safari.web-extension" ]] || {
+  echo "error: Safari web extension point is '$safari_extension_point'" >&2
+  exit 1
+}
+if [[ "$safari_sandbox" != "true" || "$safari_group_key" != "$app_group" ]] ||
+  ! plist_array_equals_single_value \
+    "$safari_entitlements" \
+    "com.apple.security.application-groups" \
+    "$app_group"; then
+  echo "error: Safari web extension sandbox or app group is incorrect" >&2
+  exit 1
+fi
+if plutil -convert xml1 -o - "$safari_entitlements" | widget_has_forbidden_entitlement; then
+  echo "error: Safari web extension contains main-app-only entitlements" >&2
+  exit 1
+fi
+
+plists_to_check=("$info_plist" "$main_entitlements" "$widget_entitlements" "$action_info_plist" "$action_entitlements" "$safari_info_plist" "$safari_entitlements" "$helper_entitlements")
 if [[ -f "$decoded_profile" ]]; then
   plists_to_check+=("$decoded_profile")
 fi

@@ -1,0 +1,96 @@
+{
+  "extensionName": {
+    "message": "TypeWhisper"
+  },
+  "extensionDescription": {
+    "message": "Dictate into any text field with TypeWhisper and let website workflows match the page you are on."
+  },
+  "commandToggleDictation": {
+    "message": "Start or stop dictation"
+  },
+  "menuStartDictation": {
+    "message": "Dictate with TypeWhisper"
+  },
+  "menuStopDictation": {
+    "message": "Stop TypeWhisper dictation"
+  },
+  "buttonStartDictation": {
+    "message": "Dictate with TypeWhisper"
+  },
+  "buttonStopDictation": {
+    "message": "Stop dictation"
+  },
+  "errorOffline": {
+    "message": "TypeWhisper is not running, or its API server is turned off."
+  },
+  "errorUnauthorized": {
+    "message": "TypeWhisper rejected the API token. Paste the current token in the extension."
+  },
+  "errorUnsupported": {
+    "message": "This TypeWhisper version cannot receive the active website. Update TypeWhisper."
+  },
+  "errorGeneric": {
+    "message": "TypeWhisper could not start the dictation."
+  },
+  "labelToken": {
+    "message": "API token"
+  },
+  "hintToken": {
+    "message": "In TypeWhisper, turn on the API server under Settings › Advanced and click “Copy API Token”."
+  },
+  "labelPort": {
+    "message": "Port"
+  },
+  "buttonSave": {
+    "message": "Save"
+  },
+  "labelReportContext": {
+    "message": "Share the active website with TypeWhisper"
+  },
+  "hintReportContext": {
+    "message": "Lets website workflows match. The address and title of the active tab only go to TypeWhisper on this computer. Private windows are never shared."
+  },
+  "labelShowMicButton": {
+    "message": "Show a microphone button in text fields"
+  },
+  "hintShowMicButton": {
+    "message": "Needs access to all websites to draw the button."
+  },
+  "linkEditShortcut": {
+    "message": "Change shortcut"
+  },
+  "labelShortcut": {
+    "message": "Shortcut: $SHORTCUT$",
+    "placeholders": {
+      "shortcut": {
+        "content": "$1"
+      }
+    }
+  },
+  "labelNoShortcut": {
+    "message": "No shortcut set"
+  },
+  "statusChecking": {
+    "message": "Connecting to TypeWhisper…"
+  },
+  "statusOffline": {
+    "message": "TypeWhisper is not running, or its API server is turned off."
+  },
+  "statusUnauthorized": {
+    "message": "Paste the API token from TypeWhisper."
+  },
+  "statusUnsupported": {
+    "message": "Connected. Update TypeWhisper to use website workflows from this browser."
+  },
+  "statusConnected": {
+    "message": "Connected to TypeWhisper"
+  },
+  "statusModel": {
+    "message": " · $MODEL$",
+    "placeholders": {
+      "model": {
+        "content": "$1"
+      }
+    }
+  }
+}

@@ -43,13 +43,19 @@ struct AdvancedSettingsView: View {
         }
 #if APPSTORE
         return localizedAppText(
-            "Dictate into text fields in Chrome and Firefox. In this edition, website workflows need the extension, because TypeWhisper cannot read browser addresses itself. Requires the API server to be running.",
-            de: "Diktiere in Textfelder in Chrome und Firefox. In dieser Edition brauchen Website-Workflows die Erweiterung, weil TypeWhisper Browser-Adressen nicht selbst lesen kann. Der API-Server muss laufen."
+            "Dictate into text fields in Chrome, Firefox and Safari. In this edition, website workflows need the extension, because TypeWhisper cannot read browser addresses itself. The Safari extension comes with TypeWhisper and connects by itself. Requires the API server to be running.",
+            de: "Diktiere in Textfelder in Chrome, Firefox und Safari. In dieser Edition brauchen Website-Workflows die Erweiterung, weil TypeWhisper Browser-Adressen nicht selbst lesen kann. Die Safari-Erweiterung ist in TypeWhisper enthalten und verbindet sich selbst. Der API-Server muss laufen.",
+            ja: "Chrome、Firefox、Safari のテキストフィールドに音声入力できます。このエディションでは TypeWhisper がブラウザのアドレスを読み取れないため、Web サイトのワークフローには拡張機能が必要です。Safari 拡張機能は TypeWhisper に含まれており、自動的に接続します。API サーバーが動作している必要があります。",
+            zh: "在 Chrome、Firefox 和 Safari 的文本字段中听写。在此版本中，网站工作流需要该扩展，因为 TypeWhisper 无法自行读取浏览器地址。Safari 扩展随 TypeWhisper 提供，并会自动连接。需要运行 API 服务器。",
+            es: "Dicta en campos de texto de Chrome, Firefox y Safari. En esta edición, los flujos de trabajo por sitio web necesitan la extensión, porque TypeWhisper no puede leer las direcciones del navegador por sí mismo. La extensión de Safari viene con TypeWhisper y se conecta sola. Requiere que el servidor de API esté en marcha."
         )
 #else
         return localizedAppText(
-            "Dictate into text fields in Chrome and Firefox, and let website workflows match the page you are on. Requires the API server to be running.",
-            de: "Diktiere in Textfelder in Chrome und Firefox und lass Website-Workflows zur geöffneten Seite passen. Der API-Server muss laufen."
+            "Dictate into text fields in Chrome, Firefox and Safari, and let website workflows match the page you are on. The Safari extension comes with TypeWhisper and connects by itself. Requires the API server to be running.",
+            de: "Diktiere in Textfelder in Chrome, Firefox und Safari und lass Website-Workflows zur geöffneten Seite passen. Die Safari-Erweiterung ist in TypeWhisper enthalten und verbindet sich selbst. Der API-Server muss laufen.",
+            ja: "Chrome、Firefox、Safari のテキストフィールドに音声入力し、Web サイトのワークフローを開いているページに合わせます。Safari 拡張機能は TypeWhisper に含まれており、自動的に接続します。API サーバーが動作している必要があります。",
+            zh: "在 Chrome、Firefox 和 Safari 的文本字段中听写，并让网站工作流匹配当前页面。Safari 扩展随 TypeWhisper 提供，并会自动连接。需要运行 API 服务器。",
+            es: "Dicta en campos de texto de Chrome, Firefox y Safari, y haz que los flujos de trabajo por sitio web coincidan con la página abierta. La extensión de Safari viene con TypeWhisper y se conecta sola. Requiere que el servidor de API esté en marcha."
         )
 #endif
     }
@@ -630,6 +636,8 @@ struct AdvancedSettingsView: View {
                 let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung", ja: "ブラウザ拡張機能", zh: "浏览器扩展")
                 integrationRow(systemImage: "globe", title: browserExtensionTitle) {
                     HStack {
+                        SafariExtensionButton()
+
                         Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
                             NSWorkspace.shared.open(URL(string: "https://www.typewhisper.com/extensions#browser")!)
                         }

@@ -1806,6 +1806,11 @@ final class APIHandlers: @unchecked Sendable {
         } else {
             "ignored"
         }
+        // Without the page address, only whether one arrived: Safari leaves it out until the
+        // user grants the extension access to the website.
+        apiLogger.debug(
+            "Browser context report: status=\(status, privacy: .public), bundle=\(report?.bundleIdentifier ?? "nil", privacy: .public), hasURL=\(url != nil, privacy: .public), hasTitle=\(title != nil, privacy: .public)"
+        )
         return .json(BrowserContextResponse(
             status: status,
             app_bundle_id: report?.bundleIdentifier,

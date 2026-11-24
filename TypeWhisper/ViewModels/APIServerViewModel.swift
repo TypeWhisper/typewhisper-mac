@@ -3,6 +3,8 @@ import Combine
 import Security
 import os
 
+private let apiServerLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "APIServer")
+
 @MainActor
 final class APIServerViewModel: ObservableObject {
     nonisolated(unsafe) static var _shared: APIServerViewModel?
@@ -67,7 +69,10 @@ final class APIServerViewModel: ObservableObject {
                 do {
                     try writeDiscoveryFiles(apiToken: apiToken, port: selectedPort)
                 } catch {
+                    // The stopped listener no longer reports, so nothing else removes
+                    // a discovery file that was written before the failure.
                     httpServer.stop()
+                    removeDiscoveryFiles()
                     throw error
                 }
             } catch is CancellationError {
@@ -131,11 +136,35 @@ final class APIServerViewModel: ObservableObject {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.discoveryFileURL.path)
 
         try String(port).write(to: url, atomically: true, encoding: .utf8)
+
+        // The Safari extension works without it, after the user pastes the token.
+        do {
+            if let connectionURL = Self.safariExtensionConnectionURL {
+                try SafariExtensionConnection(port: Int(port), token: apiToken).write(to: connectionURL)
+            }
+        } catch {
+            apiServerLogger.error("Could not share the API connection with the Safari extension: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func removeDiscoveryFiles() {
         try? FileManager.default.removeItem(at: Self.portFileURL)
         try? FileManager.default.removeItem(at: Self.discoveryFileURL)
+        if let connectionURL = Self.safariExtensionConnectionURL {
+            try? FileManager.default.removeItem(at: connectionURL)
+        }
+    }
+
+    /// Where the Safari extension's handler reads the port and token. Tests and screenshot
+    /// runs use the development app's bundle identifier and must not replace its connection.
+    private static var safariExtensionConnectionURL: URL? {
+        guard !AppConstants.isRunningTests,
+              !AppConstants.isScreenshotAutomation,
+              let bundleIdentifier = Bundle.main.bundleIdentifier,
+              let container = SafariExtensionConnection.containerURL() else {
+            return nil
+        }
+        return SafariExtensionConnection.fileURL(hostBundleIdentifier: bundleIdentifier, in: container)
     }
 }
 

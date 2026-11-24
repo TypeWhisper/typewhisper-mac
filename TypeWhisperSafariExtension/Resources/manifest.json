@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "short_name": "TypeWhisper",
+  "description": "__MSG_extensionDescription__",
+  "version": "0.1.1",
+  "default_locale": "en",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "TypeWhisper",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
+  "commands": {
+    "toggle-dictation": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "__MSG_commandToggleDictation__"
+    }
+  },
+  "permissions": [
+    "alarms",
+    "contextMenus",
+    "scripting",
+    "storage",
+    "tabs",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
