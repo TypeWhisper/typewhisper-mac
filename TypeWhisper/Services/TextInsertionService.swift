@@ -1475,6 +1475,7 @@ final class TextInsertionService {
             ) ?? resultingState
         }
 
+        let bundleIdentifier = target.applicationBundleIdentifier
         guard liveFieldApplicationIsValid(for: target),
               let resultingState = captureFocusedTextState(
                 for: target.element,
@@ -1493,11 +1494,21 @@ final class TextInsertionService {
                unchangedState.value == target.expectedValue,
                unchangedState.selectedRange == target.expectedCaret,
                unchangedState.selectedText?.isEmpty != false {
+                // An earlier partial in the field rules out a second insertion of the transcript.
+                let outcome = target.hasAttemptedMutation
+                    ? "an earlier partial is in the field, so the final transcript goes to Recent Transcriptions"
+                    : "the final transcript uses normal insertion"
+                logger.info(
+                    "Live field stopped: bundle=\(bundleIdentifier, privacy: .public) left the field unchanged after the Accessibility write (writeReported=\(writeSucceeded, privacy: .public)); \(outcome, privacy: .public)"
+                )
                 return .detached
             }
 
             // The resulting state is not provably unchanged. Text may be
             // present, so paste is unsafe.
+            logger.info(
+                "Live field stopped: bundle=\(bundleIdentifier, privacy: .public) shows an unexpected field state after the Accessibility write; the final transcript goes to Recent Transcriptions instead of being inserted again"
+            )
             target.hasAttemptedMutation = true
             return .detached
         }
@@ -2680,6 +2691,13 @@ final class TextInsertionService {
     /// A dictation there ends with the normal paste. Measured for #1856 and #1858 and decided
     /// against: a live field built on `AXValue` would rewrite the whole field for every partial
     /// and lose undo and the caret.
+    ///
+    /// Measured again on macOS 27: Chrome 158 (textarea and contenteditable) and Safari
+    /// (textarea) report success for `AXSelectedText` writes and leave the field unchanged.
+    /// Chrome also lists `AXReplaceRangeWithText`, which answers `kAXErrorNoValue` and
+    /// changes nothing. Microsoft Word is reported to behave the same.
+    /// The first partial then finds the field provably unchanged, the live field stops, and
+    /// the dictation ends with the normal insertion. The setting's help text names these apps.
     private func applicationSupportsVerifiedLiveFieldUpdates(
         _ bundleIdentifier: String
     ) -> Bool {
