@@ -5529,7 +5529,7 @@ final class CoreAudioHALInputRingTests: XCTestCase {
 }
 
 final class AudioInputSliceConverterTests: XCTestCase {
-    func testSliceConverterMatchesLegacyPerSliceConversion() throws {
+    func testSliceConverterMatchesPerSliceReferenceConversion() throws {
         let formats: [(sampleRate: Double, channels: AVAudioChannelCount)] = [
             (16_000, 1),
             (44_100, 1),
@@ -5561,7 +5561,7 @@ final class AudioInputSliceConverterTests: XCTestCase {
                 )
             }
             let converter = try XCTUnwrap(AudioInputSliceConverter(inputFormat: format, targetSampleRate: 16_000))
-            let legacy = try LegacyInputSliceConversion(inputFormat: format)
+            let reference = try PerSliceReferenceConversion(inputFormat: format)
             var startFrame = 0
             var convertedFrameCount = 0
 
@@ -5583,13 +5583,41 @@ final class AudioInputSliceConverterTests: XCTestCase {
                 let converted = converter.convert(deliveredBuffer) ?? []
                 XCTAssertEqual(
                     converted,
-                    legacy.convert(slice),
+                    reference.convert(slice),
                     "sampleRate=\(sampleRate) channels=\(channels) slice=\(sliceIndex)"
                 )
                 convertedFrameCount += converted.count
             }
             XCTAssertGreaterThan(convertedFrameCount, 0, "sampleRate=\(sampleRate) channels=\(channels)")
         }
+    }
+
+    /// With room for each slice's frames rounded down, 512-frame slices at 48 kHz lost
+    /// 0.4 % of the audio.
+    func testSliceConverterKeepsEveryFrameOverAMinute() throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 2,
+            interleaved: false
+        ))
+        let converter = try XCTUnwrap(AudioInputSliceConverter(inputFormat: format, targetSampleRate: 16_000))
+        let sliceFrames = 512
+        let sliceCount = 48_000 * 60 / sliceFrames
+        var convertedFrameCount = 0
+        for sliceIndex in 0..<sliceCount {
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(sliceFrames)))
+            try fill(buffer, with: makeSyntheticInputSlice(
+                channelCount: 2,
+                frameCount: sliceFrames,
+                sliceIndex: sliceIndex,
+                startFrame: sliceIndex * sliceFrames
+            ))
+            convertedFrameCount += converter.convert(buffer)?.count ?? 0
+        }
+
+        // Only the converter's filter delay of a few frames is missing.
+        XCTAssertEqual(Double(convertedFrameCount), Double(sliceCount * sliceFrames) / 3, accuracy: 32)
     }
 }
 
@@ -5643,8 +5671,8 @@ final class AudioRecordingServiceInputOnlyCaptureTests: XCTestCase {
 
         let samples = await service.stopRecording(policy: .immediate)
 
-        let legacy = try LegacyInputSliceConversion(inputFormat: format)
-        let expected = renderedSlices.flatMap { legacy.convert($0) }
+        let reference = try PerSliceReferenceConversion(inputFormat: format)
+        let expected = renderedSlices.flatMap { reference.convert($0) }
         XCTAssertFalse(expected.isEmpty)
         XCTAssertEqual(samples, expected)
 
@@ -6640,9 +6668,10 @@ private final class HALBackedAudioInputCaptureFactory: AudioInputCaptureFactory,
     }
 }
 
-/// The pre-#1027 conversion that ran on the IO thread: fresh buffers per slice, the
-/// strongest channel per slice, and an output capacity of `frames * 16 kHz / inputRate`.
-private final class LegacyInputSliceConversion {
+/// Converts like the former IO-thread path, with fresh buffers and the strongest channel
+/// per slice, and keeps every frame: the output has room for `frames * 16 kHz / inputRate`
+/// rounded up and is read out until the converter needs more input.
+private final class PerSliceReferenceConversion {
     private final class ConsumedFlag: @unchecked Sendable {
         var value = false
     }
@@ -6700,30 +6729,31 @@ private final class LegacyInputSliceConversion {
             destination.update(from: source.baseAddress!, count: mono.count)
         }
 
-        let frameCount = AVAudioFrameCount(Double(buffer.frameLength) * 16_000 / buffer.format.sampleRate)
-        guard frameCount > 0,
-              let convertedBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: frameCount) else {
+        let frameCount = AVAudioFrameCount((Double(buffer.frameLength) * 16_000 / buffer.format.sampleRate).rounded(.up)) + 16
+        guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: frameCount) else {
             return []
         }
 
-        var error: NSError?
         let consumed = ConsumedFlag()
-        converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-            if consumed.value {
-                outStatus.pointee = .noDataNow
-                return nil
+        var samples: [Float] = []
+        while true {
+            var error: NSError?
+            convertedBuffer.frameLength = 0
+            let status = converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+                if consumed.value {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                consumed.value = true
+                outStatus.pointee = .haveData
+                return buffer
             }
-            consumed.value = true
-            outStatus.pointee = .haveData
-            return buffer
+            guard error == nil else { return [] }
+            if let channelData = convertedBuffer.floatChannelData?[0] {
+                samples += UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength))
+            }
+            guard status == .haveData, convertedBuffer.frameLength == frameCount else { return samples }
         }
-
-        guard error == nil,
-              convertedBuffer.frameLength > 0,
-              let channelData = convertedBuffer.floatChannelData?[0] else {
-            return []
-        }
-        return Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
     }
 }
 
