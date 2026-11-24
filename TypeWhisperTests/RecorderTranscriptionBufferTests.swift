@@ -186,10 +186,14 @@ final class RecorderLiveEchoTests: XCTestCase {
         buffer.measureLiveEcho(sampleRate: sampleRate)
         XCTAssertNil(buffer.liveMicrophoneHearsSystemAudio, "one sample short of ten seconds")
 
-        buffer.appendMic(Array(loudspeakers[(tenSeconds - 1)...]))
-        buffer.appendSystem(Array(remote[(tenSeconds - 1)...]))
+        buffer.appendMic([loudspeakers[tenSeconds - 1]])
+        buffer.appendSystem([remote[tenSeconds - 1]])
         buffer.measureLiveEcho(sampleRate: sampleRate)
-        XCTAssertEqual(buffer.liveMicrophoneHearsSystemAudio, true)
+        XCTAssertEqual(buffer.liveMicrophoneHearsSystemAudio, true, "at ten seconds")
+
+        buffer.appendMic(Array(loudspeakers[tenSeconds...]))
+        buffer.appendSystem(Array(remote[tenSeconds...]))
+        buffer.measureLiveEcho(sampleRate: sampleRate)
         for _ in 0..<9 {
             buffer.appendMic(loudspeakers)
             buffer.appendSystem(remote)
