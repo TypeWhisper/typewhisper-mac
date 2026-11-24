@@ -1,6 +1,6 @@
 import { APIError, getDictationStatus, getStatus } from "../api.js";
 import { enableMicButton, reconcileMicButton } from "../mic-setting.js";
-import { getSettings, saveSettings, setConnectionStatus } from "../settings.js";
+import { getSettings, hasAppMessaging, saveSettings, setConnectionStatus } from "../settings.js";
 
 const message = (key, substitutions) => chrome.i18n.getMessage(key, substitutions);
 
@@ -53,9 +53,10 @@ async function load() {
   const settings = await getSettings();
   tokenInput.value = settings.token;
   portInput.value = String(settings.port);
-  // Safari gets the connection from TypeWhisper and lists shortcuts in its own settings.
+  // Safari gets the connection from TypeWhisper and lists shortcuts in its own settings,
+  // also while TypeWhisper is not running.
   document.getElementById("connection").hidden = settings.fromApp;
-  document.getElementById("editShortcut").hidden = settings.fromApp;
+  document.getElementById("editShortcut").hidden = hasAppMessaging();
   reportContextInput.checked = settings.reportContext;
   showMicButtonInput.checked = await reconcileMicButton(chrome);
 

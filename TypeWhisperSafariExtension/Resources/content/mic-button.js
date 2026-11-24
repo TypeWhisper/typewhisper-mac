@@ -12,6 +12,8 @@
   const MAX_SINGLE_LINE_HEIGHT = 48;
 
   let field = null;
+  // Turning the setting off cannot unload this script from open pages, so it stops here.
+  let enabled = true;
   let recording = false;
   let busy = false;
   let errorTimer = null;
@@ -124,7 +126,7 @@
     "focusin",
     (event) => {
       const target = event.composedPath()[0];
-      if (isEditable(target)) show(target);
+      if (enabled && isEditable(target)) show(target);
     },
     true,
   );
@@ -188,9 +190,12 @@
       render();
       if (!recording && !isEditable(document.activeElement)) hide();
     }
-    if (area === "local" && changes.showMicButton && !changes.showMicButton.newValue) {
-      field = null;
-      host.remove();
+    if (area === "local" && changes.showMicButton) {
+      enabled = Boolean(changes.showMicButton.newValue);
+      if (!enabled) {
+        field = null;
+        host.remove();
+      }
     }
   });
 })();

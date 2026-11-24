@@ -21,13 +21,25 @@ export async function getSettings() {
 }
 
 /**
+ * Whether this package runs inside TypeWhisper for Mac, which is the Safari package.
+ * It stays true while TypeWhisper is not running, unlike a successful app connection.
+ */
+export function hasAppMessaging(runtime = defaultRuntime()) {
+  return typeof runtime?.sendNativeMessage === "function";
+}
+
+function defaultRuntime() {
+  return globalThis.browser?.runtime ?? chrome.runtime;
+}
+
+/**
  * In Safari the extension ships inside TypeWhisper for Mac, whose extension handler returns
  * the port and token of the running API server. Chrome and Firefox packages do not request
  * native messaging, so their runtime has no `sendNativeMessage` and this returns null.
  * It also returns null while TypeWhisper is not running or its API server is off.
  */
-export async function getAppConnection(runtime = globalThis.browser?.runtime ?? chrome.runtime) {
-  if (typeof runtime?.sendNativeMessage !== "function") return null;
+export async function getAppConnection(runtime = defaultRuntime()) {
+  if (!hasAppMessaging(runtime)) return null;
   let reply;
   try {
     reply = await runtime.sendNativeMessage("com.typewhisper.mac", { type: "connection" });
