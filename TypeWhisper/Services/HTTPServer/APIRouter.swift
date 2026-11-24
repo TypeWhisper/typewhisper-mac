@@ -34,7 +34,10 @@ final class APIRouter: Sendable {
         // Only Remote Link may name a paired device; a local client that
         // sends the header is treated like any other local client.
         let request = Self.withoutRemoteDeviceHeader(request)
-        if let rejection = Self.browserRequestRejection(request) {
+        if let rejection = Self.browserRequestRejection(
+            request,
+            carriesValidToken: carriesValidToken(request)
+        ) {
             return .error(status: 403, message: rejection)
         }
 
@@ -100,19 +103,43 @@ final class APIRouter: Sendable {
             expectedToken = token
         }
 
+        return Self.request(request, carriesToken: expectedToken)
+    }
+
+    /// Whether the request carries the local API token, whether or not the server requires it.
+    private func carriesValidToken(_ request: HTTPRequest) -> Bool {
+        let expectedToken: String?
+        if case .required(let token) = authenticationProvider() {
+            expectedToken = token
+        } else {
+            expectedToken = tokenProvider()
+        }
+        return Self.request(request, carriesToken: expectedToken)
+    }
+
+    private static func request(_ request: HTTPRequest, carriesToken expectedToken: String?) -> Bool {
         guard let expectedToken, !expectedToken.isEmpty,
               let providedToken = request.bearerToken ?? request.apiTokenHeader else {
             return false
         }
 
-        return Self.constantTimeEquals(providedToken, expectedToken)
+        return constantTimeEquals(providedToken, expectedToken)
     }
 
     /// The API serves local tools, which either send no browser headers or
     /// talk to 127.0.0.1 directly. Web pages from other sites, including
     /// DNS-rebinding attempts that point a foreign host name at 127.0.0.1,
     /// are refused even when no API token is required.
-    static func browserRequestRejection(_ request: HTTPRequest) -> String? {
+    ///
+    /// Safari marks every request of a web extension as cross-site and sends
+    /// GET requests without an Origin. A request that carries the API token
+    /// passes that check: a web page does not know the token, and it cannot add
+    /// the header to a cross-site request without a preflight, which sends the
+    /// page's Origin and is refused.
+    static func browserRequestRejection(
+        _ request: HTTPRequest,
+        carriesValidToken: Bool = false
+    ) -> String? {
         if let host = request.headers["host"], !isLoopbackHost(host) {
             return "Requests must be addressed to 127.0.0.1 or localhost"
         }
@@ -126,6 +153,7 @@ final class APIRouter: Sendable {
         // page on localhost also arrives as cross-site. Only a loopback
         // Origin vouches for it; navigations and embeds send none.
         if request.headers["sec-fetch-site"]?.lowercased() == "cross-site",
+           !carriesValidToken,
            !(origin.map(isLoopbackWebOrigin) ?? false) {
             return "Requests from web pages on other sites are not allowed"
         }
