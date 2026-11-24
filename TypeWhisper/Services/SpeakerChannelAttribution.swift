@@ -131,6 +131,36 @@ enum SpeakerChannelAttribution {
         }
     }
 
+    /// Share of the transcribed speech outside the user's own speech from
+    /// which others are taken to speak in the recording as well.
+    static let otherSpeechShare = 0.2
+
+    /// Whether people other than the user speak in the recording: at least
+    /// `otherSpeechShare` of `speech`, the transcribed words, lies outside
+    /// `ownSpeech`. A recording of the user alone leaves only what the
+    /// microphone missed of them outside it. False without own speech.
+    static func othersSpeak(
+        in speech: [ClosedRange<TimeInterval>],
+        besides ownSpeech: [ClosedRange<TimeInterval>]
+    ) -> Bool {
+        guard !ownSpeech.isEmpty else { return false }
+        let own = ownSpeech.sorted { $0.lowerBound < $1.lowerBound }
+        var total: TimeInterval = 0
+        var outside: TimeInterval = 0
+        for range in speech {
+            let length = range.upperBound - range.lowerBound
+            guard length > 0 else { continue }
+            total += length
+            var covered: TimeInterval = 0
+            for ownRange in own {
+                guard ownRange.lowerBound < range.upperBound else { break }
+                covered += max(0, min(range.upperBound, ownRange.upperBound) - max(range.lowerBound, ownRange.lowerBound))
+            }
+            outside += max(0, length - covered)
+        }
+        return total > 0 && outside >= otherSpeechShare * total
+    }
+
     /// Diarizer turns with the user's own speech cut out of them and added
     /// as turns of `ownSpeakerLabel`.
     ///

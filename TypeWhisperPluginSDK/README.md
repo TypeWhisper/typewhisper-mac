@@ -449,6 +449,29 @@ manifest capability and keeps getting no language in that case:
 var languagesForHostDetection: [String] { ["en-US", "de-DE", "fr-FR"] }
 ```
 
+### SpeakerDiarizationProviderPlugin
+
+Tell who spoke when in a recording. The host owns the audio file, aligns the turns with the
+transcription's timing and numbers the speakers; the provider owns its models and the inference.
+`request.speakerCount` is a fixed number of speakers from `supportedSpeakerCounts`, or nil to
+detect it.
+
+A provider that can take a lower bound adopts `SpeakerDiarizationMinimumCountProviding`. The host
+then asks for at least two speakers where it knows that more than one person talks, such as a call
+recorded with the user's microphone and the other side on the system audio:
+
+```swift
+func diarize(
+    _ request: PluginDiarizationRequest,   // speakerCount is nil
+    minimumSpeakerCount: Int,
+    onProgress: @Sendable @escaping (Double) -> Void
+) async throws -> PluginDiarizationResult
+```
+
+`SpeakerDiarizationMinimumCountProviding` requires TypeWhisper 1.9.0 or later; declare
+`"minHostVersion": "1.9.0"` when you adopt it. Providers without it get
+`diarize(_:onProgress:)` for these recordings as well.
+
 ### Multi-Purpose Plugins
 
 A single plugin class can conform to multiple protocols:

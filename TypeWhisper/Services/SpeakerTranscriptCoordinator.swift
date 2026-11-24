@@ -614,13 +614,23 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             try Task.checkCancellation()
             guard isCurrent() else { return }
             stages[recordID] = .detecting(0)
-            let result = try await provider.diarize(
-                PluginDiarizationRequest(audioURL: audioURL, duration: duration, speakerCount: speakerCount)
-            ) { [weak self] progress in
+            let request = PluginDiarizationRequest(audioURL: audioURL, duration: duration, speakerCount: speakerCount)
+            let onProgress: @Sendable (Double) -> Void = { [weak self] progress in
                 Task { @MainActor in
                     guard self?.stages[recordID] != nil else { return }
                     self?.stages[recordID] = .detecting(progress)
                 }
+            }
+            // A call recorded with the microphone has the user and someone else.
+            // Only word timing tells: a segment also spans the pauses inside it.
+            let speech = record.speakerWords.map { $0.start...max($0.start, $0.end) }
+            let result: PluginDiarizationResult
+            if speakerCount == nil,
+               let provider = provider as? any SpeakerDiarizationMinimumCountProviding,
+               SpeakerChannelAttribution.othersSpeak(in: speech, besides: ownSpeech) {
+                result = try await provider.diarize(request, minimumSpeakerCount: 2, onProgress: onProgress)
+            } else {
+                result = try await provider.diarize(request, onProgress: onProgress)
             }
             try Task.checkCancellation()
             guard isCurrent() else { return }
