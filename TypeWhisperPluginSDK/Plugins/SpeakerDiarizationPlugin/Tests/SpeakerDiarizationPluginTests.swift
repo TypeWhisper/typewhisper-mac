@@ -87,6 +87,11 @@ final class SpeakerDiarizationPluginTests: XCTestCase {
             PluginSpeakerTurn(speakerLabel: "S2", start: 60, end: 100),
         ]
         XCTAssertNil(SpeakerDiarizationPlugin.speakerCountForSecondPass(after: call, minimum: 2))
+
+        // Nine speakers can't be detected again with a fixed count; they stay.
+        let crowd = [PluginSpeakerTurn(speakerLabel: "S1", start: 0, end: 92)]
+            + (2...9).map { PluginSpeakerTurn(speakerLabel: "S\($0)", start: Double(90 + $0), end: Double(91 + $0)) }
+        XCTAssertNil(SpeakerDiarizationPlugin.speakerCountForSecondPass(after: crowd, minimum: 2))
     }
 
     func testAMinimumSpeakerCountNeedsTheModelsToo() async throws {

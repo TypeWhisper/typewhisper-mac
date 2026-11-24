@@ -62,10 +62,12 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationMinimumCountPr
     /// automatic result: when fewer than `minimum` speakers have
     /// `minimumSpeakerShare` of the speech. It is never below the number of
     /// speakers the automatic pass found, so the quieter people of a meeting
-    /// stay apart.
+    /// stay apart; with more speakers than a fixed count allows, the
+    /// automatic result stays.
     static func speakerCountForSecondPass(after turns: [PluginSpeakerTurn], minimum: Int) -> Int? {
         guard speakersWithShare(of: turns) < minimum else { return nil }
-        return min(max(minimum, Set(turns.map(\.speakerLabel)).count), speakerCounts.upperBound)
+        let count = max(minimum, Set(turns.map(\.speakerLabel)).count)
+        return speakerCounts.contains(count) ? count : nil
     }
 
     /// The offline diarizer's settings for automatic detection or a fixed number of speakers.

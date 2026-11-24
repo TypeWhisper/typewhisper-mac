@@ -94,7 +94,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         )
     }
 
-    private func input(labels: Bool = false) -> SpeakerRecordingInput {
+    private func input(labels: Bool = false, words: [TranscriptionWord] = []) -> SpeakerRecordingInput {
         SpeakerRecordingInput(
             result: TranscriptionResult(
                 text: "Good morning. Morning. Let's start.",
@@ -106,7 +106,8 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
                     TranscriptionSegment(text: "Good morning.", start: 0, end: 1, speakerLabel: labels ? "A" : nil),
                     TranscriptionSegment(text: "Morning.", start: 1, end: 2, speakerLabel: labels ? "B" : nil),
                     TranscriptionSegment(text: "Let's start.", start: 2, end: 3, speakerLabel: labels ? "A" : nil),
-                ]
+                ],
+                words: words
             ),
             samples: [Float](repeating: 0.1, count: 48_000),
             title: "Meeting",
@@ -803,7 +804,14 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
     func testACallWithOwnSpeechAsksForAtLeastTwoSpeakers() async throws {
         provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
         let coordinator = makeCoordinator()
-        var call = input()
+        let words = [
+            TranscriptionWord(text: "Good", start: 0, end: 0.4),
+            TranscriptionWord(text: "morning.", start: 0.5, end: 0.9),
+            TranscriptionWord(text: "Morning.", start: 1.1, end: 1.8),
+            TranscriptionWord(text: "Let's", start: 2.1, end: 2.4),
+            TranscriptionWord(text: "start.", start: 2.5, end: 2.9),
+        ]
+        var call = input(words: words)
         call.ownSpeech = [1...2]
 
         let addedID = await coordinator.addRecording(call)
@@ -815,11 +823,18 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         try await waitUntilIdle(coordinator)
         XCTAssertEqual(provider.minimumSpeakerCounts, [2, nil])
 
-        var alone = input()
+        var alone = input(words: words)
         alone.ownSpeech = [0...3]
         _ = await coordinator.addRecording(alone)
         try await waitUntilIdle(coordinator)
         XCTAssertEqual(provider.minimumSpeakerCounts, [2, nil, nil])
+
+        // Segments alone also span their pauses, so they don't count as other speech.
+        var withoutWords = input()
+        withoutWords.ownSpeech = [1...2]
+        _ = await coordinator.addRecording(withoutWords)
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(provider.minimumSpeakerCounts, [2, nil, nil, nil])
     }
 
     func testLabellingForAPIAndWatchFolderWritesSpeakerNumbersWithoutAHistoryRecord() async throws {

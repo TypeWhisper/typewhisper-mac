@@ -622,9 +622,8 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                 }
             }
             // A call recorded with the microphone has the user and someone else.
-            let speech = record.speakerWords.isEmpty
-                ? timedText.map { $0.start...max($0.start, $0.end) }
-                : record.speakerWords.map { $0.start...max($0.start, $0.end) }
+            // Only word timing tells: a segment also spans the pauses inside it.
+            let speech = record.speakerWords.map { $0.start...max($0.start, $0.end) }
             let result: PluginDiarizationResult
             if speakerCount == nil,
                let provider = provider as? any SpeakerDiarizationMinimumCountProviding,
