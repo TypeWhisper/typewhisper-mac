@@ -797,6 +797,31 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(history.record(withID: id)?.speakerNames?.displayName(for: "S2"), "Marco")
     }
 
+    /// A call recorded with the microphone has the user and someone else, so
+    /// detection asks for at least two speakers. A fixed count and a
+    /// recording of the user alone don't.
+    func testACallWithOwnSpeechAsksForAtLeastTwoSpeakers() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        let coordinator = makeCoordinator()
+        var call = input()
+        call.ownSpeech = [1...2]
+
+        let addedID = await coordinator.addRecording(call)
+        let id = try XCTUnwrap(addedID)
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(provider.minimumSpeakerCounts, [2])
+
+        XCTAssertNil(coordinator.start(recordID: id, speakerCount: 3))
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(provider.minimumSpeakerCounts, [2, nil])
+
+        var alone = input()
+        alone.ownSpeech = [0...3]
+        _ = await coordinator.addRecording(alone)
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(provider.minimumSpeakerCounts, [2, nil, nil])
+    }
+
     func testLabellingForAPIAndWatchFolderWritesSpeakerNumbersWithoutAHistoryRecord() async throws {
         provider.turns = [
             PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 1),
@@ -980,7 +1005,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
     }
 }
 
-private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @unchecked Sendable {
+private final class FakeDiarizationProvider: SpeakerDiarizationMinimumCountProviding, @unchecked Sendable {
     static let pluginId = "test.diarizer"
     static let pluginName = "Test Diarizer"
 
@@ -993,6 +1018,8 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
     var beforePreparation: (@MainActor () async -> Void)?
     var beforeDiarization: (@MainActor () async -> Void)?
     private(set) var requests: [PluginDiarizationRequest] = []
+    /// The minimum speaker count of each request, nil for plain detection.
+    private(set) var minimumSpeakerCounts: [Int?] = []
     private(set) var prepareCalls = 0
 
     init() {}
@@ -1020,7 +1047,20 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
         _ request: PluginDiarizationRequest,
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult {
+        try await detect(request, minimumSpeakerCount: nil)
+    }
+
+    func diarize(
+        _ request: PluginDiarizationRequest,
+        minimumSpeakerCount: Int,
+        onProgress: @Sendable @escaping (Double) -> Void
+    ) async throws -> PluginDiarizationResult {
+        try await detect(request, minimumSpeakerCount: minimumSpeakerCount)
+    }
+
+    private func detect(_ request: PluginDiarizationRequest, minimumSpeakerCount: Int?) async throws -> PluginDiarizationResult {
         requests.append(request)
+        minimumSpeakerCounts.append(minimumSpeakerCount)
         if let beforeDiarization { await beforeDiarization() }
         if let delay { try await Task.sleep(for: delay) }
         if let error { throw error }
@@ -1175,6 +1215,16 @@ final class SpeakerChannelAttributionTests: XCTestCase {
             system: track(duration: 5, speech: [], level: 0)
         ).isEmpty)
         XCTAssertTrue(SpeakerChannelAttribution.ownSpeechRanges(microphone: [], system: system).isEmpty)
+    }
+
+    func testOthersSpeakWhereMuchOfTheSpeechIsOutsideOwnSpeech() {
+        let words: [ClosedRange<TimeInterval>] = (0..<20).map { Double($0)...(Double($0) + 0.8) }
+
+        XCTAssertTrue(SpeakerChannelAttribution.othersSpeak(in: words, besides: [0...10]))
+        // The microphone missed a few of the user's words.
+        XCTAssertFalse(SpeakerChannelAttribution.othersSpeak(in: words, besides: [0...7.5, 9...20]))
+        XCTAssertFalse(SpeakerChannelAttribution.othersSpeak(in: words, besides: []))
+        XCTAssertFalse(SpeakerChannelAttribution.othersSpeak(in: [], besides: [0...10]))
     }
 
     func testOwnSpeechIsCutOutOfDiarizerTurns() {

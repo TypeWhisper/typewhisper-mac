@@ -46,6 +46,39 @@ final class SpeakerDiarizationPluginTests: XCTestCase {
         }
     }
 
+    /// Automatic detection put both people of a 56-minute call into one
+    /// speaker and left 16 seconds in a second one, which doesn't count
+    /// towards a minimum of two.
+    func testOnlySpeakersWithAShareOfTheSpeechCountTowardsAMinimum() {
+        let merged = [
+            PluginSpeakerTurn(speakerLabel: "S1", start: 0, end: 2_385),
+            PluginSpeakerTurn(speakerLabel: "S2", start: 2_385, end: 2_401),
+        ]
+        XCTAssertEqual(SpeakerDiarizationPlugin.speakersWithShare(of: merged), 1)
+
+        let call = [
+            PluginSpeakerTurn(speakerLabel: "S1", start: 0, end: 60),
+            PluginSpeakerTurn(speakerLabel: "S2", start: 60, end: 75),
+            PluginSpeakerTurn(speakerLabel: "S1", start: 75, end: 120),
+        ]
+        XCTAssertEqual(SpeakerDiarizationPlugin.speakersWithShare(of: call), 2)
+        XCTAssertEqual(SpeakerDiarizationPlugin.speakersWithShare(of: []), 0)
+    }
+
+    func testAMinimumSpeakerCountNeedsTheModelsToo() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = SpeakerDiarizationPlugin()
+        plugin.activate(host: host)
+        let request = PluginDiarizationRequest(audioURL: URL(fileURLWithPath: "/dev/null"), duration: 1)
+
+        do {
+            _ = try await plugin.diarize(request, minimumSpeakerCount: 2) { _ in }
+            XCTFail("Expected missing models")
+        } catch let error as PluginDiarizationError {
+            XCTAssertEqual(error, .modelsNotInstalled)
+        }
+    }
+
     /// FluidAudio's defaults (a window every two seconds, Fb 0.8) merged the
     /// two people of short table recordings into one speaker (#1966).
     func testDiarizerUsesOneSecondWindowsAndALowerSpeakerPrior() {
