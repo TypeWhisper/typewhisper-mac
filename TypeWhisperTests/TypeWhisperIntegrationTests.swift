@@ -2233,6 +2233,26 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    func testStoppedHTTPServerDoesNotReportItsCancellation() throws {
+        let server = HTTPServer(router: APIRouter())
+        let states = OSAllocatedUnfairLock<[Bool]>(initialState: [])
+        let ready = expectation(description: "listener ready")
+        server.onStateChange = { running in
+            states.withLock { $0.append(running) }
+            if running { ready.fulfill() }
+        }
+
+        try server.start(port: UInt16.random(in: 40_000...49_000))
+        wait(for: [ready], timeout: 5)
+        server.stop()
+
+        // The cancelled listener would report on the server queue right after stop().
+        let settled = expectation(description: "server queue settled")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+        XCTAssertEqual(states.withLock { $0 }, [true])
+    }
+
     func testSafariExtensionReadsTheConnectionOfItsOwnApp() throws {
         XCTAssertEqual(
             SafariExtensionConnection.hostBundleIdentifier(ofExtension: "com.typewhisper.mac.safari-extension"),

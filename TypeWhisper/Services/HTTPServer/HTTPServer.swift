@@ -50,7 +50,11 @@ final class HTTPServer: @unchecked Sendable {
         self.listener = newListener
     }
 
+    /// A stopped listener reports `.cancelled` later on the server queue. It must not reach
+    /// `onStateChange`, or a restart could see the old listener's stop after the new one is
+    /// ready and remove the new server's discovery files.
     func stop() {
+        listener?.stateUpdateHandler = nil
         listener?.cancel()
         listener = nil
     }

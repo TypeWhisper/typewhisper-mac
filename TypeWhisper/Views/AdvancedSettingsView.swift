@@ -51,11 +51,11 @@ struct AdvancedSettingsView: View {
         )
 #else
         return localizedAppText(
-            "Dictate into text fields in Chrome, Firefox and Safari, and let website workflows match the page you are on. The Safari extension comes with TypeWhisper and connects by itself; Safari then no longer asks to let TypeWhisper control it. Requires the API server to be running.",
-            de: "Diktiere in Textfelder in Chrome, Firefox und Safari und lass Website-Workflows zur geöffneten Seite passen. Die Safari-Erweiterung ist in TypeWhisper enthalten und verbindet sich selbst; Safari fragt dann nicht mehr, ob TypeWhisper es steuern darf. Der API-Server muss laufen.",
-            ja: "Chrome、Firefox、Safari のテキストフィールドに音声入力し、Web サイトのワークフローを開いているページに合わせます。Safari 拡張機能は TypeWhisper に含まれており、自動的に接続します。その後、Safari は TypeWhisper による操作の許可を求めなくなります。API サーバーが動作している必要があります。",
-            zh: "在 Chrome、Firefox 和 Safari 的文本字段中听写，并让网站工作流匹配当前页面。Safari 扩展随 TypeWhisper 提供，并会自动连接；之后 Safari 不再询问是否允许 TypeWhisper 控制它。需要运行 API 服务器。",
-            es: "Dicta en campos de texto de Chrome, Firefox y Safari, y haz que los flujos de trabajo por sitio web coincidan con la página abierta. La extensión de Safari viene con TypeWhisper y se conecta sola; así Safari deja de pedir permiso para que TypeWhisper lo controle. Requiere que el servidor de API esté en marcha."
+            "Dictate into text fields in Chrome, Firefox and Safari, and let website workflows match the page you are on. The Safari extension comes with TypeWhisper and connects by itself. Requires the API server to be running.",
+            de: "Diktiere in Textfelder in Chrome, Firefox und Safari und lass Website-Workflows zur geöffneten Seite passen. Die Safari-Erweiterung ist in TypeWhisper enthalten und verbindet sich selbst. Der API-Server muss laufen.",
+            ja: "Chrome、Firefox、Safari のテキストフィールドに音声入力し、Web サイトのワークフローを開いているページに合わせます。Safari 拡張機能は TypeWhisper に含まれており、自動的に接続します。API サーバーが動作している必要があります。",
+            zh: "在 Chrome、Firefox 和 Safari 的文本字段中听写，并让网站工作流匹配当前页面。Safari 扩展随 TypeWhisper 提供，并会自动连接。需要运行 API 服务器。",
+            es: "Dicta en campos de texto de Chrome, Firefox y Safari, y haz que los flujos de trabajo por sitio web coincidan con la página abierta. La extensión de Safari viene con TypeWhisper y se conecta sola. Requiere que el servidor de API esté en marcha."
         )
 #endif
     }
