@@ -1248,6 +1248,22 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         ), true)
     }
 
+    /// System audio whose level changes from frame to frame comes back on
+    /// the microphone at an eighth: an echo to duck, although the widened
+    /// level own speech uses would put it at a sixteenth.
+    func testAnEchoOfQuicklyChangingSystemAudioCountsAtItsTrueGain() {
+        let frame = Int(SpeakerChannelAttribution.frameDuration * sampleRate)
+        let system = (0..<(180 * frame)).map { index -> Float in
+            let frameIndex = index / frame
+            guard (40..<140).contains(frameIndex) else { return 0 }
+            let level: Float = frameIndex % 2 == 0 ? 0.25 : 0.125
+            return index % 2 == 0 ? level : -level
+        }
+        let microphone = system.map { $0 * 0.125 }
+
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system), true)
+    }
+
     func testTooLittleSystemAudioLeavesTheDuckingDecisionOpen() {
         let microphone = track(duration: 5, speech: [1...3], level: 0.2)
 

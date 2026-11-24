@@ -112,10 +112,22 @@ enum SpeakerChannelAttribution {
             return nil
         case .absent:
             return false
-        case let .measured(source, gain, systemThreshold):
+        case let .measured(_, _, systemThreshold, delay):
+            // Against the system level at the echo's delay, not the widened
+            // one own speech uses: that overstates the system audio where its
+            // level changes quickly, so an audible echo would look faint.
+            let pairs = microphoneLevels.indices.compactMap { index -> (microphone: Float, system: Float)? in
+                let systemIndex = index - delay
+                guard systemLevels.indices.contains(systemIndex), systemLevels[systemIndex] > systemThreshold else {
+                    return nil
+                }
+                return (microphoneLevels[index], systemLevels[systemIndex])
+            }
+            guard Double(pairs.count) * frameDuration >= 1 else { return nil }
+            let loudest = pairs.sorted { $0.system > $1.system }.prefix(max(1, pairs.count / 4))
+            let gain = percentile(loudest.map { $0.microphone / $0.system }, 0.25)
             guard gain >= audibleEchoGain else { return false }
-            let heard = source.filter { $0 > systemThreshold }.map { $0 * gain }
-            return percentile(heard, 0.5) > activityThreshold(microphoneLevels)
+            return percentile(pairs.map { $0.system * gain }, 0.5) > activityThreshold(microphoneLevels)
         }
     }
 
@@ -183,16 +195,17 @@ enum SpeakerChannelAttribution {
     /// its lower quarter: the echo is there whenever the system audio is
     /// loud, the user's voice only now and then.
     private static func expectedEcho(microphone: [Float], system: [Float]) -> [Float]? {
-        guard case let .measured(source, gain, _) = echo(microphone: microphone, system: system) else { return nil }
+        guard case let .measured(source, gain, _, _) = echo(microphone: microphone, system: system) else { return nil }
         return source.map { $0 * gain }
     }
 
     /// What the recording tells about the echo.
     private enum EchoMeasurement {
         /// The system level held over the echo's delay and reverberation,
-        /// how loud it comes back on the microphone, and the level from
-        /// which the system audio counts as sound; see `expectedEcho`.
-        case measured(source: [Float], gain: Float, systemThreshold: Float)
+        /// how loud it comes back on the microphone, the level from which
+        /// the system audio counts as sound, and the delay in frames; see
+        /// `expectedEcho`.
+        case measured(source: [Float], gain: Float, systemThreshold: Float, delay: Int)
         /// The microphone doesn't follow the system audio at any delay.
         case absent
         /// The system audio doesn't vary, or has too little loud sound, to tell.
@@ -226,7 +239,7 @@ enum SpeakerChannelAttribution {
         guard Double(loudest.count) * frameDuration >= 1 else { return .unmeasurable }
         let sampled = loudest.prefix(max(1, loudest.count / 4))
         let gain = percentile(sampled.map { microphone[$0] / source[$0] }, 0.25)
-        return .measured(source: source, gain: gain, systemThreshold: systemThreshold)
+        return .measured(source: source, gain: gain, systemThreshold: systemThreshold, delay: delay)
     }
 
     /// The level above which a track's frame counts as sound, relative to
