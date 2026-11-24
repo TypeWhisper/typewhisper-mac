@@ -347,7 +347,7 @@ struct AdvancedSettingsView: View {
                 Toggle(isOn: $dictation.liveFieldTranscriptEnabled) {
                     SettingsInfoLabel(
                         title: String(localized: "Show live transcript in the active text field"),
-                        info: String(localized: "Supported text fields are updated while you speak. The field focused when recording starts remains the final insertion target, including apps that require paste. If it can no longer be restored safely, the final transcript remains in Recent Transcriptions.")
+                        info: String(localized: "Works in standard macOS text fields, such as in Notes and TextEdit. Text fields on web pages, Microsoft Office, Electron apps and terminals ignore live updates and receive the transcript when you stop. The field focused when recording starts remains the final insertion target, including apps that require paste. If it can no longer be restored safely, the final transcript remains in Recent Transcriptions.")
                     )
                 }
 #endif
