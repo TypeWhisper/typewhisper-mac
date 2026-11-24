@@ -360,18 +360,19 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
 }
 
 /// Converts input-only HAL capture slices to mono samples at the target rate on the
-/// delivery queue. Each slice is handled exactly like the former render-thread path: the
-/// strongest channel is selected per slice and the converter output capacity is
-/// `frames * targetRate / inputRate`, so the audio is unchanged. Only the output buffer is
-/// reused; input buffers must stay untouched because the converter may read them again.
+/// delivery queue. The strongest channel is selected per slice, as on the former
+/// render-thread path. Only the output buffer is reused; input buffers must stay untouched
+/// because the converter may read them again.
 final class AudioInputSliceConverter {
     private final class PendingInput: @unchecked Sendable {
         var buffer: AVAudioPCMBuffer?
     }
 
+    /// Extra output room for the converter's varying frame count per slice.
+    static let headroomFrames: AVAudioFrameCount = 16
+
     private let converter: AVAudioConverter
     private let targetFormat: AVAudioFormat
-    private let pendingInput = PendingInput()
     private var convertedBuffer: AVAudioPCMBuffer?
 
     init?(inputFormat: AVAudioFormat, targetSampleRate: Double) {
@@ -391,40 +392,60 @@ final class AudioInputSliceConverter {
 
     /// Returns the converted samples for one slice. `buffer` must not be modified afterwards.
     func convert(_ buffer: AVAudioPCMBuffer) -> [Float]? {
-        guard let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else {
+        guard let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer),
+              monoBuffer.frameLength > 0,
+              let outputBuffer = reusableConvertedBuffer(frameCapacity: Self.outputCapacity(
+                  for: monoBuffer,
+                  targetSampleRate: targetFormat.sampleRate
+              )) else {
             return nil
         }
-        let frameCount = AVAudioFrameCount(
-            Double(monoBuffer.frameLength) * targetFormat.sampleRate / monoBuffer.format.sampleRate
-        )
-        guard frameCount > 0, let outputBuffer = reusableConvertedBuffer(frameCapacity: frameCount) else {
-            return nil
-        }
-        outputBuffer.frameLength = 0
-
-        var error: NSError?
-        pendingInput.buffer = monoBuffer
-        converter.convert(to: outputBuffer, error: &error) { [pendingInput] _, outStatus in
-            guard let input = pendingInput.buffer else {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            pendingInput.buffer = nil
-            outStatus.pointee = .haveData
-            return input
-        }
-        pendingInput.buffer = nil
-
-        guard error == nil,
-              outputBuffer.frameLength > 0,
-              let channelData = outputBuffer.floatChannelData?[0] else {
-            return nil
-        }
-        return Array(UnsafeBufferPointer(start: channelData, count: Int(outputBuffer.frameLength)))
+        return Self.convert(monoBuffer, with: converter, into: outputBuffer)
     }
 
-    /// The converter emits at most `frameCapacity` frames per call, so the capacity must
-    /// match the per-slice frame count exactly; it only changes with the slice size.
+    /// Room for a slice's frames at the target rate, rounded up, plus `headroomFrames`.
+    ///
+    /// With room for the count rounded down, every slice lost the fraction of a frame left
+    /// over: 0.4 % of the audio at 48 kHz in 512-frame slices.
+    static func outputCapacity(for buffer: AVAudioPCMBuffer, targetSampleRate: Double) -> AVAudioFrameCount {
+        AVAudioFrameCount(
+            (Double(buffer.frameLength) * targetSampleRate / buffer.format.sampleRate).rounded(.up)
+        ) + headroomFrames
+    }
+
+    /// Offers `input` to `converter` once and collects all it emits for it. A full output
+    /// buffer can leave converted frames behind, so it is read out and filled again until
+    /// the converter asks for more input. Nil on a conversion error or without output.
+    static func convert(
+        _ input: AVAudioPCMBuffer,
+        with converter: AVAudioConverter,
+        into output: AVAudioPCMBuffer
+    ) -> [Float]? {
+        let pendingInput = PendingInput()
+        pendingInput.buffer = input
+        var samples: [Float] = []
+        while true {
+            output.frameLength = 0
+            var error: NSError?
+            let status = converter.convert(to: output, error: &error) { [pendingInput] _, outStatus in
+                guard let input = pendingInput.buffer else {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                pendingInput.buffer = nil
+                outStatus.pointee = .haveData
+                return input
+            }
+            guard error == nil else { return nil }
+            if output.frameLength > 0, let channelData = output.floatChannelData?[0] {
+                samples.append(contentsOf: UnsafeBufferPointer(start: channelData, count: Int(output.frameLength)))
+            }
+            guard status == .haveData, output.frameLength == output.frameCapacity else { break }
+        }
+        return samples.isEmpty ? nil : samples
+    }
+
+    /// The capacity only changes with the slice size.
     private func reusableConvertedBuffer(frameCapacity: AVAudioFrameCount) -> AVAudioPCMBuffer? {
         if let convertedBuffer, convertedBuffer.frameCapacity == frameCapacity {
             return convertedBuffer
@@ -3570,38 +3591,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         stream: CaptureStreamToken? = nil
     ) {
         // Convert sample rate on the render thread (AVAudioConverter requires thread consistency)
-        let frameCount = AVAudioFrameCount(
-            Double(buffer.frameLength) * Self.targetSampleRate / buffer.format.sampleRate
-        )
-        guard frameCount > 0 else { return }
-
-        guard let convertedBuffer = AVAudioPCMBuffer(
-            pcmFormat: targetFormat,
-            frameCapacity: frameCount
-        ) else { return }
-
-        var error: NSError?
-        let consumed = OSAllocatedUnfairLock(initialState: false)
-
-        converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-            let wasConsumed = consumed.withLock { flag in
-                let prev = flag
-                flag = true
-                return prev
-            }
-            if wasConsumed {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            outStatus.pointee = .haveData
-            return buffer
-        }
-
-        guard error == nil, convertedBuffer.frameLength > 0 else { return }
-        guard let channelData = convertedBuffer.floatChannelData?[0] else { return }
-
-        // Quick copy of converted samples, then dispatch heavy work off the render thread
-        let samples = Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
+        guard buffer.frameLength > 0,
+              let convertedBuffer = AVAudioPCMBuffer(
+                  pcmFormat: targetFormat,
+                  frameCapacity: AudioInputSliceConverter.outputCapacity(
+                      for: buffer,
+                      targetSampleRate: Self.targetSampleRate
+                  )
+              ),
+              // Quick copy of converted samples, then dispatch heavy work off the render thread
+              let samples = AudioInputSliceConverter.convert(buffer, with: converter, into: convertedBuffer) else { return }
 
         processingQueue.async { [weak self] in
             var samples = samples

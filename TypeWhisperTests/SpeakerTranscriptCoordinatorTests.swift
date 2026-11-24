@@ -1232,6 +1232,103 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         XCTAssertTrue(SpeakerChannelAttribution.ownSpeechRanges(microphone: [], system: system).isEmpty)
     }
 
+    /// On headphones the microphone only hears the user, even while another
+    /// voice talks on the system audio, so the Recorder mixes it without ducking.
+    func testMicrophoneOnHeadphonesDoesNotHearTheSystemAudio() {
+        let remote = words(from: 1, count: 6, variant: 1) + words(from: 13, count: 6, variant: 3)
+        let background = words(from: 4, count: 14, variant: 2)
+        let user = words(from: 4.2, count: 5, variant: 4) + words(from: 7.5, count: 5, variant: 5)
+        let system = zip(
+            track(duration: 18, words: remote, level: 0.3),
+            track(duration: 18, words: background, level: 0.1, noise: 0)
+        ).map { $0 + $1 }
+        let microphone = track(duration: 18, words: user, level: 0.05)
+
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system), false)
+    }
+
+    /// Near loudspeakers the remote voice comes back on the microphone, which
+    /// ducking keeps from being heard twice; a faint echo doesn't need it.
+    func testMicrophoneNearLoudspeakersHearsTheSystemAudio() {
+        let remote = words(from: 1, count: 6, variant: 1) + words(from: 7, count: 6, variant: 2)
+            + words(from: 13, count: 6, variant: 3)
+        let user = words(from: 4.2, count: 5, variant: 4) + words(from: 10.2, count: 5, variant: 5)
+        let system = track(duration: 18, words: remote, level: 0.3)
+        let speech = track(duration: 18, words: user, level: 0.05)
+        for (echoLevel, hears) in [(Float(0.05), true), (0.012, false)] {
+            let echo = track(duration: 18, words: remote, level: echoLevel, delay: 0.24, noise: 0)
+            let microphone = zip(speech, echo).map { $0 + $1 }
+
+            XCTAssertEqual(
+                SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system),
+                hears,
+                "echo level \(echoLevel)"
+            )
+        }
+    }
+
+    /// Playback without a pause still counts as system audio: the
+    /// microphone on headphones doesn't follow it, so there is no echo.
+    func testPlaybackWithoutPausesOnHeadphonesIsNoEcho() {
+        let system = (0..<Int(5 * sampleRate)).map { index -> Float in
+            let time = Double(index) / sampleRate
+            let level = 0.2 * Float(1 + 0.25 * sin(2 * .pi * time / 1.3))
+            return index % 2 == 0 ? level : -level
+        }
+        let microphone = track(duration: 5, speech: [], level: 0)
+
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system), false)
+    }
+
+    /// System audio of steady loudness gives the echo search nothing to
+    /// correlate, even with its copy on the microphone, so the decision stays
+    /// open. Where the tone starts and stops, those edges show the echo.
+    func testSteadySystemAudioLeavesTheDuckingDecisionOpen() {
+        let delay = Int(0.24 * sampleRate)
+        func microphone(hearing system: [Float]) -> [Float] {
+            system.indices.map { $0 >= delay ? 0.2 * system[$0 - delay] : 0 }
+        }
+        let steady = (0..<Int(10 * sampleRate)).map { index -> Float in index % 2 == 0 ? 0.3 : -0.3 }
+        let toneWithEdges = steady.indices.map { index -> Float in
+            (3...6).contains(Double(index) / sampleRate) ? steady[index] : 0
+        }
+
+        XCTAssertNil(SpeakerChannelAttribution.microphoneHearsSystemAudio(
+            microphone: microphone(hearing: steady),
+            system: steady
+        ))
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(
+            microphone: microphone(hearing: toneWithEdges),
+            system: toneWithEdges
+        ), true)
+    }
+
+    /// System audio whose level changes from frame to frame comes back on
+    /// the microphone at an eighth: an echo to duck, although the widened
+    /// level own speech uses would put it at a sixteenth.
+    func testAnEchoOfQuicklyChangingSystemAudioCountsAtItsTrueGain() {
+        let frame = Int(SpeakerChannelAttribution.frameDuration * sampleRate)
+        let system = (0..<(180 * frame)).map { index -> Float in
+            let frameIndex = index / frame
+            guard (40..<140).contains(frameIndex) else { return 0 }
+            let level: Float = frameIndex % 2 == 0 ? 0.25 : 0.125
+            return index % 2 == 0 ? level : -level
+        }
+        let microphone = system.map { $0 * 0.125 }
+
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system), true)
+    }
+
+    func testTooLittleSystemAudioLeavesTheDuckingDecisionOpen() {
+        let microphone = track(duration: 5, speech: [1...3], level: 0.2)
+
+        XCTAssertNil(SpeakerChannelAttribution.microphoneHearsSystemAudio(
+            microphone: microphone,
+            system: track(duration: 5, speech: [2...2.5], level: 0.3)
+        ))
+        XCTAssertNil(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: [], system: []))
+    }
+
     func testOthersSpeakWhereMuchOfTheSpeechIsOutsideOwnSpeech() {
         let words: [ClosedRange<TimeInterval>] = (0..<20).map { Double($0)...(Double($0) + 0.8) }
 

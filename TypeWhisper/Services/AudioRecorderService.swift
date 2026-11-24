@@ -14,6 +14,8 @@ struct SystemAudioSampleProcessingResult {
     let rms: Float
     let level: Float
     let transcriptionSamples: [Float]
+    /// Pass to the next buffer's `process` call; see `transcriptionPhase` there.
+    let nextTranscriptionPhase: Int
 }
 
 enum SystemAudioSampleProcessingError: LocalizedError {
@@ -49,9 +51,12 @@ enum SystemAudioSampleProcessingError: LocalizedError {
 }
 
 struct SystemAudioSampleProcessor {
+    /// - Parameter transcriptionPhase: The previous buffer's `nextTranscriptionPhase`,
+    ///   0 for a stream's first buffer.
     static func process(
         _ sampleBuffer: CMSampleBuffer,
-        transcriptionSampleRate: Double = AudioRecorderService.transcriptionSampleRate
+        transcriptionSampleRate: Double = AudioRecorderService.transcriptionSampleRate,
+        transcriptionPhase: Int = 0
     ) throws -> SystemAudioSampleProcessingResult {
         guard sampleBuffer.isValid else {
             throw SystemAudioSampleProcessingError.invalidSampleBuffer
@@ -102,14 +107,16 @@ struct SystemAudioSampleProcessor {
         return try process(
             audioBufferList: audioBufferList,
             asbd: asbdPointer.pointee,
-            transcriptionSampleRate: transcriptionSampleRate
+            transcriptionSampleRate: transcriptionSampleRate,
+            transcriptionPhase: transcriptionPhase
         )
     }
 
     static func process(
         audioBufferList: UnsafeMutableAudioBufferListPointer,
         asbd: AudioStreamBasicDescription,
-        transcriptionSampleRate: Double
+        transcriptionSampleRate: Double,
+        transcriptionPhase: Int = 0
     ) throws -> SystemAudioSampleProcessingResult {
         guard asbd.mFormatID == kAudioFormatLinearPCM,
               asbd.mSampleRate > 0,
@@ -181,18 +188,21 @@ struct SystemAudioSampleProcessor {
         }
 
         let rms = rms(outputChannels: outputChannels, channelCount: channelCount, frameCount: frameCount)
+        let transcription = transcriptionSamples(
+            outputChannels: outputChannels,
+            channelCount: channelCount,
+            frameCount: frameCount,
+            sampleRate: asbd.mSampleRate,
+            targetSampleRate: transcriptionSampleRate,
+            phase: transcriptionPhase
+        )
         return SystemAudioSampleProcessingResult(
             pcmBuffer: pcmBuffer,
             frameCount: frameCount,
             rms: rms,
             level: min(1, rms * 5),
-            transcriptionSamples: transcriptionSamples(
-                outputChannels: outputChannels,
-                channelCount: channelCount,
-                frameCount: frameCount,
-                sampleRate: asbd.mSampleRate,
-                targetSampleRate: transcriptionSampleRate
-            )
+            transcriptionSamples: transcription.samples,
+            nextTranscriptionPhase: transcription.nextPhase
         )
     }
 
@@ -303,27 +313,36 @@ struct SystemAudioSampleProcessor {
         return sqrt(sum / Float(frameCount * channelCount))
     }
 
+    /// Every `decimationFactor`-th frame of the stream, starting `phase` frames
+    /// into this buffer. The phase carries the stride across buffers. Started
+    /// anew at each buffer's first frame, it takes 342 samples from a
+    /// 1024-frame buffer at 48 kHz instead of 341⅓, and the system audio
+    /// gains 0.2 % on the microphone.
     private static func transcriptionSamples(
         outputChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
         channelCount: Int,
         frameCount: Int,
         sampleRate: Double,
-        targetSampleRate: Double
-    ) -> [Float] {
-        guard frameCount > 0, channelCount > 0, sampleRate > 0, targetSampleRate > 0 else { return [] }
+        targetSampleRate: Double,
+        phase: Int
+    ) -> (samples: [Float], nextPhase: Int) {
+        guard frameCount > 0, channelCount > 0, sampleRate > 0, targetSampleRate > 0 else { return ([], 0) }
         let decimationFactor = max(1, Int(sampleRate / targetSampleRate))
+        let start = min(max(0, phase), decimationFactor - 1)
         var samples: [Float] = []
-        samples.reserveCapacity(frameCount / decimationFactor)
+        samples.reserveCapacity(frameCount / decimationFactor + 1)
 
-        for frame in stride(from: 0, to: frameCount, by: decimationFactor) {
+        var frame = start
+        while frame < frameCount {
             var sample: Float = 0
             for channel in 0..<channelCount {
                 sample += outputChannels[channel][frame]
             }
             samples.append(sample / Float(channelCount))
+            frame += decimationFactor
         }
 
-        return samples
+        return (samples, frame - frameCount)
     }
 }
 
@@ -716,12 +735,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Thread-safe snapshot of the current 16kHz mono buffer for streaming transcription.
     func getCurrentBuffer() -> [Float] {
+        currentBuffer(micDuckingMode: micDuckingMode)
+    }
+
+    private func currentBuffer(micDuckingMode: MicDuckingMode) -> [Float] {
         if let currentBufferOverride {
             return currentBufferOverride()
         }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
-        let micDuckingMode = self.micDuckingMode
         return transcriptionBufferLock.withLock { buffer in
             buffer.currentBuffer(
                 micEnabled: micEnabled,
@@ -915,7 +937,6 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let stoppedFinalOutputURL = finalOutputURL
         let stoppedOutputFormat = outputFormat
         let stoppedTrackMode = trackMode
-        let stoppedMicDuckingMode = micDuckingMode
 
         // Test overrides own their capture lifecycle. Production capture must be fully
         // stopped before any live-session or file finalization work begins.
@@ -951,7 +972,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             micFileLock.withLock { $0 = nil }
         }
 
-        let transcriptionSamples = includeTranscriptionSamples ? getCurrentBuffer() : []
+        let stoppedMicDuckingMode = stoppedTrackMode == .mixed && stoppedMicEnabled && stoppedSystemAudioEnabled
+            ? effectiveMicDuckingMode(micDuckingMode)
+            : micDuckingMode
+        let transcriptionSamples = includeTranscriptionSamples
+            ? currentBuffer(micDuckingMode: stoppedMicDuckingMode)
+            : []
         let ownSpeech = includeTranscriptionSamples && stoppedMicEnabled && stoppedSystemAudioEnabled
             ? transcriptionBufferLock.withLock { buffer in
                 SpeakerChannelAttribution.ownSpeechRanges(
@@ -1128,15 +1154,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
 
         // 16kHz converter for transcription buffer
-        guard let transcriptionFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Self.transcriptionSampleRate,
-            channels: 1,
-            interleaved: false
+        guard let transcriptionResampler = RecorderTranscriptionResampler(
+            inputFormat: monoFormat,
+            sampleRate: Self.transcriptionSampleRate
         ) else {
             throw RecorderError.engineStartFailed(String(localized: "Cannot create transcription format"))
         }
-        let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
 
         micFileLock.withLock { $0 = audioFile }
 
@@ -1190,33 +1213,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             }
 
             // Convert to 16kHz mono for transcription buffer
-            if let transcriptionConverter {
-                let targetFrameCount = AVAudioFrameCount(
-                    Double(writeBuffer.frameLength) * Self.transcriptionSampleRate / monoFormat.sampleRate
-                )
-                guard targetFrameCount > 0,
-                      let convertedBuffer = AVAudioPCMBuffer(pcmFormat: transcriptionFormat, frameCapacity: targetFrameCount) else { return }
-                var convError: NSError?
-                let convConsumed = OSAllocatedUnfairLock(initialState: false)
-                transcriptionConverter.convert(to: convertedBuffer, error: &convError) { _, outStatus in
-                    let wasConsumed = convConsumed.withLock { flag in
-                        let prev = flag
-                        flag = true
-                        return prev
-                    }
-                    if wasConsumed {
-                        outStatus.pointee = .noDataNow
-                        return nil
-                    }
-                    outStatus.pointee = .haveData
-                    return writeBuffer
-                }
-                if convError == nil, convertedBuffer.frameLength > 0,
-                   let data = convertedBuffer.floatChannelData?[0] {
-                    let samples = Array(UnsafeBufferPointer(start: data, count: Int(convertedBuffer.frameLength)))
-                    self.appendMicTranscriptionSamples(samples)
-                }
-            }
+            self.appendMicTranscriptionSamples(transcriptionResampler.convert(writeBuffer))
         }
 
         try engine.start()
@@ -1241,15 +1238,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             ]
         )
 
-        guard let transcriptionFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Self.transcriptionSampleRate,
-            channels: 1,
-            interleaved: false
+        guard let transcriptionResampler = RecorderTranscriptionResampler(
+            inputFormat: monoFormat,
+            sampleRate: Self.transcriptionSampleRate
         ) else {
             throw RecorderError.engineStartFailed(String(localized: "Cannot create transcription format"))
         }
-        let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
 
         micFileLock.withLock { $0 = audioFile }
 
@@ -1280,33 +1274,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 }
             }
 
-            if let transcriptionConverter {
-                let targetFrameCount = AVAudioFrameCount(
-                    Double(writeBuffer.frameLength) * Self.transcriptionSampleRate / monoFormat.sampleRate
-                )
-                guard targetFrameCount > 0,
-                      let convertedBuffer = AVAudioPCMBuffer(pcmFormat: transcriptionFormat, frameCapacity: targetFrameCount) else { return }
-                var convError: NSError?
-                let convConsumed = OSAllocatedUnfairLock(initialState: false)
-                transcriptionConverter.convert(to: convertedBuffer, error: &convError) { _, outStatus in
-                    let wasConsumed = convConsumed.withLock { flag in
-                        let prev = flag
-                        flag = true
-                        return prev
-                    }
-                    if wasConsumed {
-                        outStatus.pointee = .noDataNow
-                        return nil
-                    }
-                    outStatus.pointee = .haveData
-                    return writeBuffer
-                }
-                if convError == nil, convertedBuffer.frameLength > 0,
-                   let data = convertedBuffer.floatChannelData?[0] {
-                    let samples = Array(UnsafeBufferPointer(start: data, count: Int(convertedBuffer.frameLength)))
-                    self.appendMicTranscriptionSamples(samples)
-                }
-            }
+            self.appendMicTranscriptionSamples(transcriptionResampler.convert(writeBuffer))
         }
 
         micInputCaptureSession = session
@@ -1703,6 +1671,26 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// The ducking a mixed recording gets: none when the microphone didn't
+    /// pick up the system audio. Ducking keeps a call on loudspeakers from
+    /// being heard twice, but on headphones it only lowered the user's voice
+    /// whenever the system audio had sound, such as another voice or noise
+    /// on the line, and the transcript lost the user's words there.
+    private func effectiveMicDuckingMode(_ mode: MicDuckingMode) -> MicDuckingMode {
+        guard mode != .off else { return mode }
+        let hearsSystemAudio = transcriptionBufferLock.withLock { buffer in
+            SpeakerChannelAttribution.microphoneHearsSystemAudio(
+                microphone: buffer.micSamples,
+                system: buffer.systemSamples,
+                sampleRate: Self.transcriptionSampleRate
+            )
+        }
+        // Without enough audio to measure, the setting applies as it is.
+        guard hearsSystemAudio == false else { return mode }
+        logger.info("Microphone didn't pick up the system audio; mixing without ducking")
+        return .off
+    }
+
     private func createDirectoryIfNeeded(_ url: URL) throws {
         if !FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -2012,11 +2000,14 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput, SCStreamD
     var transcriptionBufferCallback: (([Float]) -> Void)?
     var processingResultCallback: ((SystemAudioSampleProcessingResult) -> Void)?
     var processingErrorCallback: ((Error) -> Void)?
+    /// Only touched on the stream's serial sample handler queue.
+    private var transcriptionPhase = 0
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
         do {
-            let result = try SystemAudioSampleProcessor.process(sampleBuffer)
+            let result = try SystemAudioSampleProcessor.process(sampleBuffer, transcriptionPhase: transcriptionPhase)
+            transcriptionPhase = result.nextTranscriptionPhase
             processingResultCallback?(result)
             levelCallback?(result.level)
 
