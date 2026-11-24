@@ -1212,6 +1212,42 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         }
     }
 
+    /// Playback without a pause still counts as system audio: the
+    /// microphone on headphones doesn't follow it, so there is no echo.
+    func testPlaybackWithoutPausesOnHeadphonesIsNoEcho() {
+        let system = (0..<Int(5 * sampleRate)).map { index -> Float in
+            let time = Double(index) / sampleRate
+            let level = 0.2 * Float(1 + 0.25 * sin(2 * .pi * time / 1.3))
+            return index % 2 == 0 ? level : -level
+        }
+        let microphone = track(duration: 5, speech: [], level: 0)
+
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(microphone: microphone, system: system), false)
+    }
+
+    /// System audio of steady loudness gives the echo search nothing to
+    /// correlate, even with its copy on the microphone, so the decision stays
+    /// open. Where the tone starts and stops, those edges show the echo.
+    func testSteadySystemAudioLeavesTheDuckingDecisionOpen() {
+        let delay = Int(0.24 * sampleRate)
+        func microphone(hearing system: [Float]) -> [Float] {
+            system.indices.map { $0 >= delay ? 0.2 * system[$0 - delay] : 0 }
+        }
+        let steady = (0..<Int(10 * sampleRate)).map { index -> Float in index % 2 == 0 ? 0.3 : -0.3 }
+        let toneWithEdges = steady.indices.map { index -> Float in
+            (3...6).contains(Double(index) / sampleRate) ? steady[index] : 0
+        }
+
+        XCTAssertNil(SpeakerChannelAttribution.microphoneHearsSystemAudio(
+            microphone: microphone(hearing: steady),
+            system: steady
+        ))
+        XCTAssertEqual(SpeakerChannelAttribution.microphoneHearsSystemAudio(
+            microphone: microphone(hearing: toneWithEdges),
+            system: toneWithEdges
+        ), true)
+    }
+
     func testTooLittleSystemAudioLeavesTheDuckingDecisionOpen() {
         let microphone = track(duration: 5, speech: [1...3], level: 0.2)
 
