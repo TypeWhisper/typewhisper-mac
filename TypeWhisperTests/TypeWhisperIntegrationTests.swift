@@ -7029,6 +7029,28 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertTrue(TextInsertionService.focusedElementShowsKeyboardTarget(role: "AXLink"))
     }
 
+    func testFocusedWebElementWithSettableValueAndCaretTakesText() {
+        // Safari names a contenteditable composer with role="group" as a focused AXGroup without
+        // an editable ancestor, although the paste lands in it (#2031).
+        XCTAssertTrue(TextInsertionService.focusedWebElementTakesText(
+            valueSettable: true,
+            holdsTextMarkerSelection: true
+        ))
+        // A focused slider has a settable value but no caret; a button or link has neither.
+        XCTAssertFalse(TextInsertionService.focusedWebElementTakesText(
+            valueSettable: true,
+            holdsTextMarkerSelection: false
+        ))
+        XCTAssertFalse(TextInsertionService.focusedWebElementTakesText(
+            valueSettable: false,
+            holdsTextMarkerSelection: false
+        ))
+        XCTAssertFalse(TextInsertionService.focusedWebElementTakesText(
+            valueSettable: nil,
+            holdsTextMarkerSelection: true
+        ))
+    }
+
     @MainActor
     func testDetectMissedTextFieldIgnoresAppThatHidesFocusedElement() async throws {
         // Chromium and Electron apps name no focused element until their accessibility tree is
