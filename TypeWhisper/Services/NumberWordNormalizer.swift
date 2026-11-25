@@ -254,9 +254,22 @@ enum NumberWordNormalizer {
             parsed = wordParser.parse(normalized)
         } else {
             let wordTexts = words.map(\.text)
-            if (languageCode == "zh" || languageCode == "ja"),
-               isHanLexicalNumberWord(startingAt: index, text: wordTexts[0], in: tokens) {
-                return nil
+            if languageCode == "zh" || languageCode == "ja" {
+                if isHanLexicalNumberWord(startingAt: index, text: wordTexts[0], in: tokens) {
+                    return nil
+                }
+                if index > 1,
+                   tokens[index - 1].kind == .other,
+                   tokens[index - 1].text == ".",
+                   tokens[index - 2].kind == .digit {
+                    // A merged numeric run directly preceded by "<digits>."
+                    // belongs to a decimal fraction (1.5万, 2.3亿), not to
+                    // the large unit. The Han parsers cannot represent
+                    // fractional unit scaling yet, so leave the text
+                    // unchanged rather than producing a plausible-looking
+                    // wrong value such as 1.50000元.
+                    return nil
+                }
             }
             switch languageCode {
             case "zh":
@@ -393,8 +406,12 @@ enum NumberWordNormalizer {
             // and 訂單數 end in the same character, so only treat the prefix
             // as approximating when the number itself contains no digit, e.g.
             // keep 數百 intact but still normalize 总数一百 to 总数100.
+            // 上 and 成 only approximate with 百, 千 and 万 (上百, 上千,
+            // 上万, 成千上万); before 十 they end ordinary words such as
+            // 完成十项 and 楼上十个, which still normalize.
             if hanApproximationPrefixes.contains(left),
-               isBareHanUnitRun(text) {
+               isBareHanUnitRun(text),
+               !(text.first == "十" && (left == "上" || left == "成")) {
                 return true
             }
             if hanLexicalNumberWords.contains(String(left) + text) {

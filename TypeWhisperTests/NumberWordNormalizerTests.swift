@@ -417,6 +417,19 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "幾千", language: "zh"), "幾千")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "上百", language: "zh"), "上百")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "成千上萬", language: "zh"), "成千上萬")
+        // 上 and 成 only approximate with 百, 千 and 万; before 十 they end
+        // ordinary words and the number still normalizes.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "完成十项任务", language: "zh"), "完成10项任务")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "分成十组", language: "zh"), "分成10组")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "楼上十个人", language: "zh"), "楼上10个人")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "加上十块", language: "zh"), "加上10块")
+    }
+
+    func testChineseDecimalsBeforeLargeUnitsStayUnchanged() {
+        // The Han parser cannot represent fractional unit scaling, so leave
+        // the decimal text unchanged instead of producing a wrong value.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1.5万元", language: "zh"), "1.5万元")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "2.3亿", language: "zh"), "2.3亿")
     }
 
     func testChineseUnitCharactersInsideWordsArePreserved() {
