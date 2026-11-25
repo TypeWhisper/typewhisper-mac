@@ -101,19 +101,27 @@ final class ParakeetModelImportTests: XCTestCase {
     }
 
     /// An import only selects and loads its model while no newer choice was made since it began.
-    func testModelChoicesSinceAnImportBeganChangeTheGeneration() throws {
+    func testModelChoicesSinceAnImportBeganChangeTheGeneration() async throws {
         let host = try PluginTestHostServices(defaults: [:], shouldRestoreLoadedModelsPassively: false)
         let plugin = ParakeetPlugin()
         plugin.restoresModelOnActivate = false
         plugin.asrModelLoadOverrideForTests = { _ in }
         plugin.activate(host: host)
-        addTeardownBlock { plugin.deactivate() }
+        defer { plugin.deactivate() }
 
         var generation = plugin.modelChoiceGeneration
         plugin.unloadModel(clearPersistence: false)
         XCTAssertEqual(plugin.modelChoiceGeneration, generation, "Internal unloads keep the user's choice")
+        let notifications = host.capabilitiesChangedCount
         plugin.selectModel("parakeet-tdt-0.6b-v3")
         XCTAssertGreaterThan(plugin.modelChoiceGeneration, generation)
+        // The selection loads the model in the background and notifies the host as its last step.
+        // Deactivating while that load still used the host released it under the load and
+        // crashed the test process, so the load finishes first.
+        for _ in 0..<200 where host.capabilitiesChangedCount == notifications {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-tdt-0.6b-v3")
         generation = plugin.modelChoiceGeneration
         plugin.unloadModel()
         XCTAssertGreaterThan(plugin.modelChoiceGeneration, generation)
