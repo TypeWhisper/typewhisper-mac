@@ -14661,6 +14661,56 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    /// #2021: switching the system input from a Bluetooth headset to the built-in microphone
+    /// changes neither the device list nor the selection. The recording input must still
+    /// follow the new default before the next dictation instead of keeping the headset route.
+    @MainActor
+    func testSystemDefaultInputChangeRefreshesTheRecordingInputRoute() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        let headsetInputDeviceID = AudioDeviceID(2_116)
+        let builtInInputDeviceID = AudioDeviceID(2_090)
+        let defaultInputController = APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: headsetInputDeviceID)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(transports: [
+                headsetInputDeviceID: kAudioDeviceTransportTypeBluetooth,
+                builtInInputDeviceID: kAudioDeviceTransportTypeBuiltIn
+            ]),
+            audioDeviceDefaultInputController: defaultInputController
+        )
+        let context = try XCTUnwrap(dictationContext)
+        // Never prepare a real input in the test host.
+        context.audioRecordingService.hasMicrophonePermissionOverride = false
+
+        for _ in 0..<80 where context.audioRecordingService.testingSelectedInputRoute().deviceID != headsetInputDeviceID {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.audioRecordingService.testingSelectedInputRoute().deviceID, headsetInputDeviceID)
+        XCTAssertTrue(context.audioRecordingService.testingSelectedInputRoute().usesBluetoothTransport)
+
+        _ = defaultInputController.setDefaultInputDeviceID(builtInInputDeviceID)
+        context.audioDeviceService.handleDefaultInputDeviceChange()
+
+        XCTAssertEqual(context.audioDeviceService.systemDefaultInputDeviceID, builtInInputDeviceID)
+        for _ in 0..<80 where context.audioRecordingService.testingSelectedInputRoute().deviceID != nil {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertNil(context.audioRecordingService.testingSelectedInputRoute().deviceID)
+        XCTAssertFalse(context.audioRecordingService.testingSelectedInputRoute().usesBluetoothTransport)
+    }
+
     @MainActor
     func testSubmitEnterStopsForcedWorkflowDuringBluetoothPreparation() async throws {
         try await assertSubmitEnterStopsBluetoothPreparation(forced: true)

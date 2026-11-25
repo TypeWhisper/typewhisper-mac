@@ -1855,12 +1855,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func setupBindings() {
-        Publishers.CombineLatest(
+        Publishers.CombineLatest3(
             audioDeviceService.$selectedDeviceUID.removeDuplicates(),
-            audioDeviceService.$inputDevices
+            audioDeviceService.$inputDevices,
+            audioDeviceService.$systemDefaultInputDeviceID.removeDuplicates()
         )
         .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
-        .sink { [weak self] _, _ in
+        .sink { [weak self] _, _, _ in
             self?.refreshRecordingInputConfiguration()
         }
         .store(in: &cancellables)

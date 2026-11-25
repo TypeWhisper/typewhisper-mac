@@ -268,6 +268,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
     }
     @Published private(set) var inputDevicePriorityList: [AudioInputDevicePriorityItem] = []
+    /// The system default input as last read from CoreAudio. Automatic input selection follows
+    /// it, so the recording input configuration is refreshed whenever it changes (#2021).
+    @Published private(set) var systemDefaultInputDeviceID: AudioDeviceID?
     @Published var disconnectedDeviceName: String?
     @Published var isPreviewActive: Bool = false
     @Published var previewAudioLevel: Float = 0
@@ -315,10 +318,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private var listenerBlock: AudioObjectPropertyListenerBlock?
+    private var defaultInputListenerBlock: AudioObjectPropertyListenerBlock?
     private var previewEngine: AVAudioEngine?
     private var previewInputCaptureSession: AudioInputCaptureSession?
     private var previewConfigChangeObserver: NSObjectProtocol?
     private let deviceChangeSubject = PassthroughSubject<Void, Never>()
+    private let defaultInputChangeSubject = PassthroughSubject<Void, Never>()
     private var cancellables = Set<AnyCancellable>()
     private var disconnectVerificationTask: Task<Void, Never>?
     private let previewLock = NSLock()
@@ -456,8 +461,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             savedSelectionUID: selectedDeviceUID,
             devices: inputDevices
         )
+        systemDefaultInputDeviceID = defaultInputDeviceController.defaultInputDeviceID()
         if monitorDeviceChanges {
             installDeviceListener()
+            installDefaultInputListener()
         }
         if probeCompatibilities, let selectedDeviceUID {
             compatibilityCache[selectedDeviceUID] = .unknown
@@ -470,6 +477,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                     self?.handleDeviceChange()
                 }
                 .store(in: &cancellables)
+            defaultInputChangeSubject
+                .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
+                .sink { [weak self] in
+                    self?.handleDefaultInputDeviceChange()
+                }
+                .store(in: &cancellables)
         }
         isInitializingSelection = false
     }
@@ -477,6 +490,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     deinit {
         disconnectVerificationTask?.cancel()
         removeDeviceListener()
+        removeDefaultInputListener()
         stopPreview()
     }
 
@@ -1865,6 +1879,52 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             block
         )
         listenerBlock = nil
+    }
+
+    /// Choosing another input in System Settings > Sound changes neither the device list nor
+    /// TypeWhisper's selection, so without this listener the recording service kept the
+    /// previous default's route and prepared input until the next dictation (#2021).
+    private func installDefaultInputListener() {
+        var address = Self.defaultInputDeviceAddress
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.defaultInputChangeSubject.send()
+        }
+        defaultInputListenerBlock = block
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            DispatchQueue.main,
+            block
+        )
+    }
+
+    private func removeDefaultInputListener() {
+        guard let block = defaultInputListenerBlock else { return }
+        var address = Self.defaultInputDeviceAddress
+        AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            DispatchQueue.main,
+            block
+        )
+        defaultInputListenerBlock = nil
+    }
+
+    private static var defaultInputDeviceAddress: AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+    }
+
+    /// Reads the system default input again and publishes it when it changed.
+    func handleDefaultInputDeviceChange() {
+        let deviceID = defaultInputDeviceController.defaultInputDeviceID()
+        guard deviceID != systemDefaultInputDeviceID else { return }
+        logger.info("System default input changed to \(deviceID.map(String.init) ?? "none", privacy: .public)")
+        systemDefaultInputDeviceID = deviceID
     }
 
     private func handleDeviceChange() {
