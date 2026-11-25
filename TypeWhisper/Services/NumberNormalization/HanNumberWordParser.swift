@@ -113,9 +113,9 @@ enum HanNumberWordParser {
                     number = digit
                     trailingDigitCount = 1
                 }
-                if digit == 0 {
-                    lastUnitHadExplicitZero = true
-                }
+                // No explicit-zero tracking needed here: ASCII zeroes only
+                // appear in multi-digit tails, which trailingDigitCount
+                // already keeps literal (1万05 = 10005).
                 lastCharacterWasDigit = true
                 previousCharacterWasASCIIDigit = true
                 continue
@@ -151,8 +151,6 @@ enum HanNumberWordParser {
             if let largeUnit = largeUnitValues[character] {
                 let (sectionSum, sectionOverflow) = section.addingReportingOverflow(number)
                 guard !sectionOverflow else { return nil }
-                let (product, multiplyOverflow) = max(sectionSum, 1).multipliedReportingOverflow(by: largeUnit)
-                guard !multiplyOverflow else { return nil }
                 if largeUnit > (lastLargeUnit ?? 0), total > 0 {
                     // Ascending large units compose multiplicatively: the
                     // accumulated total scales by the larger unit, as in
@@ -163,13 +161,17 @@ enum HanNumberWordParser {
                     let (composed, composeOverflow) = total.multipliedReportingOverflow(by: largeUnit)
                     guard !composeOverflow else { return nil }
                     if sectionSum > 0 {
-                        let (totalSum, totalOverflow) = composed.addingReportingOverflow(product)
+                        let (sectionProduct, multiplyOverflow) = sectionSum.multipliedReportingOverflow(by: largeUnit)
+                        guard !multiplyOverflow else { return nil }
+                        let (totalSum, totalOverflow) = composed.addingReportingOverflow(sectionProduct)
                         guard !totalOverflow else { return nil }
                         total = totalSum
                     } else {
                         total = composed
                     }
                 } else {
+                    let (product, multiplyOverflow) = max(sectionSum, 1).multipliedReportingOverflow(by: largeUnit)
+                    guard !multiplyOverflow else { return nil }
                     let (totalSum, totalOverflow) = total.addingReportingOverflow(product)
                     guard !totalOverflow else { return nil }
                     total = totalSum

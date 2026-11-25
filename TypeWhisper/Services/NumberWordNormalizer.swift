@@ -350,9 +350,11 @@ enum NumberWordNormalizer {
             var endIndex = index
             var text = ""
             var containsCJKNumber = false
+            var stoppedAtLexicalWord = false
             while endIndex < tokens.count,
                   (tokens[endIndex].kind == .digit || tokens[endIndex].kind == .cjkNumber) {
                 if tokens[endIndex].kind == .digit,
+                   !text.isEmpty,
                    let lexical = hanLexicalNumberWords.first(where: { text.hasSuffix($0) }) {
                     // A digit run must not merge into a lexical word: in
                     // 万一5个人都来了 the 万一 is "in case", not a number.
@@ -365,6 +367,7 @@ enum NumberWordNormalizer {
                     }
                     result.append(Token(text: lexical, kind: .cjkNumber))
                     index = endIndex
+                    stoppedAtLexicalWord = true
                     break
                 }
                 text += tokens[endIndex].text
@@ -372,7 +375,7 @@ enum NumberWordNormalizer {
                 endIndex += 1
             }
 
-            if index == endIndex, !text.isEmpty {
+            if stoppedAtLexicalWord {
                 // The loop above stopped at a protected lexical word and
                 // already emitted it; continue merging at the digit run.
                 continue
