@@ -395,6 +395,53 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(imports.count, 1)
     }
 
+    /// Issue #2024: History plays a recording saved as text only from the Recorder's folder.
+    func testRecordingAudioIsFoundByItsRecordingID() throws {
+        let earlierFolder = makeTemporaryDirectory()
+        let currentFolder = makeTemporaryDirectory()
+        func recording(_ name: String, in folder: URL, idFile: String, id: UUID, hasAudio: Bool = true) throws -> URL {
+            let audioURL = folder.appendingPathComponent(name)
+            if hasAudio { try Data([0]).write(to: audioURL) }
+            try Data(#"{"recording_id":"\#(id.uuidString)"}"#.utf8)
+                .write(to: audioURL.appendingPathExtension(idFile))
+            return audioURL
+        }
+        let renamedID = UUID()
+        let olderID = UUID()
+        let deletedID = UUID()
+        _ = try recording("Standup.wav", in: currentFolder, idFile: "recording-id.json", id: UUID())
+        // The user renamed the file together with its ID file; the title no longer matches.
+        let renamed = try recording("Renamed.m4a", in: currentFolder, idFile: "recording-id.json", id: renamedID)
+        // Recordings from before the ID files have the ID in their receipt only.
+        let older = try recording("Older.wav", in: earlierFolder, idFile: "transcript-ready.json", id: olderID)
+        _ = try recording("Deleted.wav", in: currentFolder, idFile: "recording-id.json", id: deletedID, hasAudio: false)
+        // A damaged ID file leaves the receipt to tell the ID.
+        let damagedID = UUID()
+        let damaged = try recording("Damaged.wav", in: currentFolder, idFile: "transcript-ready.json", id: damagedID)
+        try Data("{".utf8).write(to: damaged.appendingPathExtension("recording-id.json"))
+        let folders = [currentFolder, earlierFolder]
+
+        XCTAssertEqual(
+            AudioRecorderViewModel.audioURL(ofRecordingID: renamedID, title: "Standup", in: folders),
+            renamed.resolvingSymlinksInPath()
+        )
+        XCTAssertEqual(
+            AudioRecorderViewModel.audioURL(ofRecordingID: olderID, title: "Older", in: folders),
+            older.resolvingSymlinksInPath()
+        )
+        XCTAssertEqual(
+            AudioRecorderViewModel.audioURL(ofRecordingID: damagedID, title: "Damaged", in: folders),
+            damaged.resolvingSymlinksInPath()
+        )
+        XCTAssertNil(AudioRecorderViewModel.audioURL(ofRecordingID: deletedID, title: "Deleted", in: folders))
+        XCTAssertNil(AudioRecorderViewModel.audioURL(ofRecordingID: UUID(), in: folders))
+        // The audio icon and the With Audio filter count the recordings whose file is there.
+        let recordingIDs = AudioRecorderViewModel.recordingIDsWithAudio(in: folders)
+        XCTAssertTrue(recordingIDs.isSuperset(of: [renamedID, olderID, damagedID]))
+        XCTAssertFalse(recordingIDs.contains(deletedID))
+        XCTAssertEqual(recordingIDs.count, 4)
+    }
+
     /// Issue #887: with speaker detection the completion waits for the speakers,
     /// so a receiver gets one delivery that tells who said what.
     func testRecorderCompletionWaitsForSpeakerDetection() async throws {

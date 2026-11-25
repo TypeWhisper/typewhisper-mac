@@ -737,6 +737,38 @@ final class HistoryService: ObservableObject {
         return addedIDs.count
     }
 
+    /// Marks which records of Recorder recordings can play the Recorder's file, for the
+    /// audio icon and the With Audio filter. `recordingIDs` are the recordings whose
+    /// audio the Recorder's folders hold. Records with History audio are left as they are.
+    func updateRecorderAudioAvailability(recordingIDs: Set<UUID>) {
+        let descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.recorderRecordingID != nil && $0.audioFileName == nil }
+        )
+        guard let records = try? modelContext.fetch(descriptor) else {
+            logger.error("Failed to look up the records of Recorder recordings")
+            return
+        }
+        var changed = false
+        for record in records {
+            let isAvailable = record.recorderRecordingID.map(recordingIDs.contains) ?? false
+            guard record.recorderAudioAvailable != isAvailable else { continue }
+            record.recorderAudioAvailable = isAvailable
+            changed = true
+        }
+        guard changed else { return }
+        // Not a content change: no `changes` event, so sync and the search index skip it.
+        save()
+        refreshRecentRecords()
+    }
+
+    func setRecorderAudioAvailable(_ isAvailable: Bool, forRecordID id: UUID) {
+        guard let record = record(withID: id), record.audioFileName == nil,
+              record.recorderAudioAvailable != isAvailable else { return }
+        record.recorderAudioAvailable = isAvailable
+        save()
+        refreshRecentRecords()
+    }
+
     private func makeRecorderRecord(_ transcript: RecorderTranscript, text: String) -> TranscriptionRecord {
         let record = TranscriptionRecord(
             timestamp: transcript.recordedAt ?? Date(),
@@ -754,6 +786,7 @@ final class HistoryService: ObservableObject {
         // The audio stays in the Recorder's folder.
         record.historySyncAudioEligible = false
         record.recorderRecordingID = transcript.recordingID
+        record.recorderAudioAvailable = true
         return record
     }
 
@@ -1197,6 +1230,7 @@ final class HistoryService: ObservableObject {
             \TranscriptionRecord.processingStateRaw,
             \TranscriptionRecord.audioFileName,
             \TranscriptionRecord.remoteAudioRelativePath,
+            \TranscriptionRecord.recorderAudioAvailable,
             \TranscriptionRecord.speakerTranscriptStateRaw,
         ]
 
@@ -1204,7 +1238,7 @@ final class HistoryService: ObservableObject {
             if checksCancellation, totalCount.isMultiple(of: 500) { try Task.checkCancellation() }
             totalCount += 1
             if record.isOpenInInbox { inboxCount += 1 }
-            if record.audioFileName != nil || record.hasRemoteAudio { audioCount += 1 }
+            if record.audioFileName != nil || record.hasRemoteAudio || record.recorderAudioAvailable { audioCount += 1 }
             if record.speakerTranscriptStateRaw != nil { speakerCount += 1 }
             if record.processingState == .failed { failedCount += 1 }
 
@@ -1903,7 +1937,9 @@ final class HistoryService: ObservableObject {
         case .inbox:
             predicate = #Predicate { $0.inboxStateRaw == openInboxState }
         case .withAudio:
-            predicate = #Predicate { $0.audioFileName != nil || $0.remoteAudioRelativePath != nil }
+            predicate = #Predicate {
+                $0.audioFileName != nil || $0.remoteAudioRelativePath != nil || $0.recorderAudioAvailable
+            }
         case .withSpeakers:
             predicate = #Predicate { $0.speakerTranscriptStateRaw != nil }
         case .failed:

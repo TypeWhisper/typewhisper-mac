@@ -114,6 +114,9 @@ final class TranscriptionRecord {
     /// The `recording_id` of the Recorder file this record was made from.
     /// It names a file on this Mac and does not sync.
     var recorderRecordingID: UUID?
+    /// True while the Recorder's folder holds that file, for a record without
+    /// History audio. Kept on this device only.
+    var recorderAudioAvailable: Bool = false
     /// When the speaker transcript and the speaker names last changed, for
     /// syncing them as separate components. Epoch 0 means never.
     var speakerTranscriptUpdatedAt: Date = Date(timeIntervalSince1970: 0)

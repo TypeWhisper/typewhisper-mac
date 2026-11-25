@@ -95,7 +95,7 @@ struct HistoryRecordRow: View {
         if record.processingState == .failed {
             statuses.append(String(localized: "Processing failed"))
         }
-        if record.audioFileName != nil {
+        if record.audioFileName != nil || record.recorderAudioAvailable {
             statuses.append(String(localized: "Audio available"))
         }
         if isSynchronizedFromOtherDevice {
@@ -155,7 +155,7 @@ struct HistoryRecordRow: View {
                 .help(String(localized: "Processing failed"))
                 .accessibilityLabel(String(localized: "Processing failed"))
         }
-        if record.audioFileName != nil {
+        if record.audioFileName != nil || record.recorderAudioAvailable {
             Image(systemName: "waveform")
                 .help(String(localized: "Audio available"))
                 .accessibilityLabel(String(localized: "Audio available"))
@@ -179,6 +179,14 @@ struct HistoryRecordDetailView: View {
         let finalText: String
     }
 
+    /// The Recorder lookup runs again when History finds the file gone or back, and
+    /// when the file it found is no longer there, as after a rename.
+    private struct RecorderAudioInput: Equatable {
+        let recordID: UUID
+        let isAvailable: Bool
+        let foundFileIsGone: Bool
+    }
+
     let record: TranscriptionRecord
     @ObservedObject var viewModel: HistoryViewModel
     @ObservedObject private var coordinator: SpeakerTranscriptCoordinator
@@ -186,6 +194,8 @@ struct HistoryRecordDetailView: View {
     @StateObject private var speakers: SpeakerWorkspaceModel
     @State private var showsSpeakers = true
     @State private var pendingSpeakerCount: SpeakerCountChoice?
+    /// A Recorder recording saved as text only keeps its audio in the Recorder's folder.
+    @State private var recorderAudioURL: URL?
 
     private enum SpeakerCountChoice: Identifiable, Equatable {
         case automatic
@@ -220,7 +230,11 @@ struct HistoryRecordDetailView: View {
     }
 
     var body: some View {
-        let audioURL = viewModel.audioFileURL(for: record)
+        let historyAudioURL = viewModel.audioFileURL(for: record)
+        let foundRecorderAudioURL = recorderAudioURL.flatMap {
+            FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+        }
+        let audioURL = historyAudioURL ?? foundRecorderAudioURL
         VStack(spacing: 0) {
             identityHeader
             Divider()
@@ -233,9 +247,10 @@ struct HistoryRecordDetailView: View {
                 Divider()
             }
 
+            // Speaker detection reads History's own audio only.
             HistorySpeakerDetectionRow(
                 record: record,
-                hasAudio: audioURL != nil,
+                hasAudio: historyAudioURL != nil,
                 coordinator: coordinator,
                 onStart: { showsSpeakers = true }
             )
@@ -264,6 +279,13 @@ struct HistoryRecordDetailView: View {
         .onAppear {
             if let audioURL { speakers.playback.load(url: audioURL) }
             revealRequestedTime()
+        }
+        .task(id: RecorderAudioInput(
+            recordID: record.id,
+            isAvailable: record.recorderAudioAvailable,
+            foundFileIsGone: recorderAudioURL != nil && foundRecorderAudioURL == nil
+        )) {
+            recorderAudioURL = await viewModel.recorderAudioURL(for: record)
         }
         .onChange(of: viewModel.recordTimeRequest) { revealRequestedTime() }
         .onDisappear { speakers.playback.unload() }

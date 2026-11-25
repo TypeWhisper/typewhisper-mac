@@ -613,6 +613,8 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             syncController: cloudFolderSyncController
         )
+        historyViewModel.recorderFolders = { [audioRecorderService] in audioRecorderService.recordingsDirectories }
+        historyViewModel.observeRecorderRecordings(audioRecorderViewModel.$recordings.dropFirst().map { _ in })
         installedAppsViewModel = InstalledAppsViewModel()
         dictionaryViewModel = DictionaryViewModel(
             dictionaryService: dictionaryService,

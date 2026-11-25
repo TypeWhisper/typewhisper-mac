@@ -454,6 +454,7 @@ final class HistoryViewModel: ObservableObject {
         observeModuleGroupsIfNeeded()
         reloadCurrentQuery(resetListIdentity: false)
         refreshFacets()
+        refreshRecorderAudioAvailability()
     }
 
     func deactivate() {
@@ -829,6 +830,55 @@ final class HistoryViewModel: ObservableObject {
 
     func audioFileURL(for record: TranscriptionRecord) -> URL? {
         historyService.audioFileURL(for: record)
+    }
+
+    /// The folders the Recorder lists recordings from, set by the service container.
+    /// Without them, records without History audio have no player.
+    var recorderFolders: (@Sendable () -> [URL])?
+    private var recorderAudioRefresh: Task<Void, Never>?
+    private var needsRecorderAudioRefresh = false
+
+    /// The audio of a Recorder recording that History saved as text only, which
+    /// stays in the Recorder's folder. Nil when the file was moved or deleted.
+    func recorderAudioURL(for record: TranscriptionRecord) async -> URL? {
+        guard record.audioFileName == nil, let recordingID = record.recorderRecordingID,
+              let recorderFolders else { return nil }
+        let title = record.appName
+        let url = await Task.detached(priority: .userInitiated) {
+            AudioRecorderViewModel.audioURL(ofRecordingID: recordingID, title: title, in: recorderFolders())
+        }.value
+        // The audio icon and the With Audio filter follow what the lookup found.
+        historyService.setRecorderAudioAvailable(url != nil, forRecordID: record.id)
+        return url
+    }
+
+    /// Checks which Recorder recordings still have their audio file, for the audio
+    /// icon and the With Audio filter. Runs while History is shown.
+    func refreshRecorderAudioAvailability() {
+        guard isActive, let recorderFolders else { return }
+        guard recorderAudioRefresh == nil else {
+            needsRecorderAudioRefresh = true
+            return
+        }
+        recorderAudioRefresh = Task { [weak self] in
+            let recordingIDs = await Task.detached(priority: .utility) {
+                AudioRecorderViewModel.recordingIDsWithAudio(in: recorderFolders())
+            }.value
+            guard let self else { return }
+            historyService.updateRecorderAudioAvailability(recordingIDs: recordingIDs)
+            recorderAudioRefresh = nil
+            if needsRecorderAudioRefresh {
+                needsRecorderAudioRefresh = false
+                refreshRecorderAudioAvailability()
+            }
+        }
+    }
+
+    /// Checks again when the Recorder's list of recordings changes while History is shown.
+    func observeRecorderRecordings(_ changes: some Publisher<Void, Never>) {
+        changes
+            .sink { [weak self] in self?.refreshRecorderAudioAvailability() }
+            .store(in: &cancellables)
     }
 
     /// Returns the diff for the record's current texts from the cache. Small inputs are
@@ -1547,7 +1597,7 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private static func hasAudio(_ record: TranscriptionRecord) -> Bool {
-        record.audioFileName != nil || record.hasRemoteAudio
+        record.audioFileName != nil || record.hasRemoteAudio || record.recorderAudioAvailable
     }
 
     private static func visibleRecordIDs(
