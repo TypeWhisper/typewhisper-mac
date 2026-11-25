@@ -1492,9 +1492,10 @@ final class CloudFolderSyncController: ObservableObject {
 
         isCheckingForChanges = true
         defer { isCheckingForChanges = false }
+        var iCloudStorageFull: Bool?
         if syncMode == .automaticICloud {
             do {
-                showICloudStorageFull(try await automaticICloudBridge.synchronize().iCloudStorageFull)
+                iCloudStorageFull = try await automaticICloudBridge.synchronize().iCloudStorageFull
             } catch {
                 // Let a full sync report the bridge failure, as the unconditional poll did.
                 await syncNow()
@@ -1514,6 +1515,11 @@ final class CloudFolderSyncController: ObservableObject {
             folderURL.stopAccessingSecurityScopedResource()
         }
         guard mode == syncMode else { return true }
+        // Only after the mode check: deleting the sync folder meanwhile turns sync off and
+        // clears the message, and the check's answer must not bring it back.
+        if let iCloudStorageFull {
+            showICloudStorageFull(iCloudStorageFull)
+        }
         guard !isSyncing else {
             // A sync started meanwhile; compare again once it has recorded its package state.
             needsChangeCheck = true

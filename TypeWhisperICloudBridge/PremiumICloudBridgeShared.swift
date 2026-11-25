@@ -212,6 +212,13 @@ struct PremiumICloudBridgeReply: Codable, Equatable, Sendable {
     }
 }
 
+/// Whether iCloud has uploaded a file this Mac wrote.
+enum PremiumICloudBridgeUploadStatus: Sendable {
+    case uploaded
+    /// iCloud still has to upload the file; the error says why the last attempt failed.
+    case waiting(lastError: (any Error)?)
+}
+
 /// How the mirror reaches the folders of one side.
 ///
 /// iCloud Drive keeps a folder that another device created, or that macOS evicted to save
@@ -232,21 +239,26 @@ struct PremiumICloudBridgeFolderAccess: Sendable {
     let prepareDirectory: @Sendable (URL) throws -> Void
     /// Whether this side creates and removes items through file coordination.
     let coordinatesChanges: Bool
-    /// Why iCloud has not uploaded an item, if it recorded a reason.
-    let uploadError: @Sendable (URL) -> (any Error)?
+    /// Whether iCloud has uploaded a file, and why it could not so far.
+    let uploadStatus: @Sendable (URL) -> PremiumICloudBridgeUploadStatus
 
     static let local = PremiumICloudBridgeFolderAccess(
         prepareDirectory: { _ in },
         coordinatesChanges: false,
-        uploadError: { _ in nil }
+        uploadStatus: { _ in .uploaded }
     )
 
     static let iCloud = PremiumICloudBridgeFolderAccess(
         prepareDirectory: { try fetchListingIfDataless($0) },
         coordinatesChanges: true,
-        uploadError: { url in
-            try? url.resourceValues(forKeys: [.ubiquitousItemUploadingErrorKey])
-                .ubiquitousItemUploadingError
+        uploadStatus: { url in
+            guard let values = try? url.resourceValues(forKeys: [
+                .ubiquitousItemIsUploadedKey,
+                .ubiquitousItemUploadingErrorKey,
+            ]), values.ubiquitousItemIsUploaded == false else {
+                return .uploaded
+            }
+            return .waiting(lastError: values.ubiquitousItemUploadingError)
         }
     )
 
@@ -398,6 +410,8 @@ enum PremiumICloudBridgeFileMirror {
     /// Package directories whose files get new names instead of being rewritten: operations
     /// are named by timestamp and ID, assets by their SHA-256 digest.
     private static let writeOnceDirectoryNames: Set<String> = ["ops", "assets"]
+    /// Bounds the upload checks of one pass while iCloud keeps refusing files.
+    private static let maximumPendingUploads = 1_000
     private static let local = PremiumICloudBridgeFolderAccess.local
 
     @discardableResult
@@ -422,7 +436,8 @@ enum PremiumICloudBridgeFileMirror {
 
         // Both sides are listed before anything is deleted, so a listing failure aborts the
         // pass without touching either side.
-        if let base = readMirrorState(at: stateURL, fileManager: fileManager) {
+        let previousState = readMirrorState(at: stateURL, fileManager: fileManager)
+        if let base = previousState {
             let remoteFiles = try listFiles(in: remotePackage, access: remoteAccess, fileManager: fileManager)
             let localFiles = try listFiles(in: localPackage, access: local, fileManager: fileManager)
             try propagateDeletions(
@@ -436,6 +451,7 @@ enum PremiumICloudBridgeFileMirror {
             )
         }
 
+        var copiedToICloud: [URL] = []
         if try local.itemKind(at: localPackage) != .missing {
             try mergeDirectory(
                 from: localPackage,
@@ -443,16 +459,19 @@ enum PremiumICloudBridgeFileMirror {
                 to: remotePackage,
                 writingWith: remoteAccess,
                 isPackageRoot: true,
+                copied: &copiedToICloud,
                 fileManager: fileManager
             )
         }
         if try remoteAccess.itemKind(at: remotePackage) != .missing {
+            var copiedToMirror: [URL] = []
             try mergeDirectory(
                 from: remotePackage,
                 readingWith: remoteAccess,
                 to: localPackage,
                 writingWith: local,
                 isPackageRoot: true,
+                copied: &copiedToMirror,
                 fileManager: fileManager
             )
         }
@@ -467,14 +486,16 @@ enum PremiumICloudBridgeFileMirror {
                 remote: remote.modificationDate
             )
         }
-        try writeMirrorState(base, to: stateURL)
-        return PremiumICloudBridgeReport(
-            iCloudStorageFull: uploadsRefusedForFullStorage(
-                in: remotePackage,
-                access: remoteAccess,
-                fileManager: fileManager
-            )
+        let uploads = checkUploads(
+            pending: previousState?.pendingUploads ?? [],
+            copied: copiedToICloud,
+            remotePackage: remotePackage,
+            remoteFiles: remoteFiles,
+            access: remoteAccess
         )
+        base.pendingUploads = uploads.pending
+        try writeMirrorState(base, to: stateURL)
+        return PremiumICloudBridgeReport(iCloudStorageFull: uploads.iCloudStorageFull)
     }
 
     static func deletePackages(
@@ -506,26 +527,35 @@ enum PremiumICloudBridgeFileMirror {
         }
     }
 
-    /// iCloud Drive keeps files it cannot upload on this Mac and records why. Every sync
-    /// rewrites the manifest and this Mac's device record, so their upload errors tell whether
-    /// iCloud accepts uploads at the moment.
-    private static func uploadsRefusedForFullStorage(
-        in package: URL,
-        access: PremiumICloudBridgeFolderAccess,
-        fileManager: FileManager
-    ) -> Bool {
-        let devices = package.appendingPathComponent("devices", isDirectory: true)
-        let files = [package.appendingPathComponent("manifest.json", isDirectory: false)]
-            + ((try? access.contentsOfDirectory(
-                at: devices,
-                includingPropertiesForKeys: [],
-                fileManager: fileManager
-            )) ?? [])
-        return files.contains { file in
-            access.uploadError(file).map {
-                PremiumICloudBridgeError.classify($0) == .iCloudStorageFull
-            } ?? false
+    /// Files this Mac copied into iCloud are checked on every pass until iCloud has uploaded
+    /// them. iCloud Drive keeps a file it cannot upload on this Mac and records why. Whether
+    /// the remaining storage takes a file depends on its size, so a large audio file can be
+    /// refused while small records still upload; any refusal for quota means iCloud is full.
+    private static func checkUploads(
+        pending previous: [String],
+        copied: [URL],
+        remotePackage: URL,
+        remoteFiles: [String: ListedFile],
+        access: PremiumICloudBridgeFolderAccess
+    ) -> (pending: [String], iCloudStorageFull: Bool) {
+        let packagePrefix = remotePackage.standardizedFileURL.path + "/"
+        let copiedPaths = copied.compactMap { file -> String? in
+            let path = file.standardizedFileURL.path
+            return path.hasPrefix(packagePrefix) ? String(path.dropFirst(packagePrefix.count)) : nil
         }
+        var pending: [String] = []
+        var iCloudStorageFull = false
+        // Files deleted since drop out; they no longer need an upload.
+        for path in Set(previous).union(copiedPaths).sorted() where remoteFiles[path] != nil {
+            guard pending.count < maximumPendingUploads else { break }
+            let file = remotePackage.appendingPathComponent(path, isDirectory: false)
+            guard case let .waiting(lastError) = access.uploadStatus(file) else { continue }
+            pending.append(path)
+            if let lastError, PremiumICloudBridgeError.classify(lastError) == .iCloudStorageFull {
+                iCloudStorageFull = true
+            }
+        }
+        return (pending, iCloudStorageFull)
     }
 
     static func mirrorStateURL(localRoot: URL) -> URL {
@@ -546,6 +576,8 @@ enum PremiumICloudBridgeFileMirror {
 
         var version = 1
         var files: [String: Entry]
+        /// Package-relative paths this Mac copied into iCloud that iCloud has not uploaded yet.
+        var pendingUploads: [String]?
     }
 
     private struct ListedFile {
@@ -701,6 +733,7 @@ enum PremiumICloudBridgeFileMirror {
         writingWith destinationAccess: PremiumICloudBridgeFolderAccess,
         isPackageRoot: Bool = false,
         isWriteOnce: Bool = false,
+        copied: inout [URL],
         fileManager: FileManager
     ) throws {
         try destinationAccess.createDirectory(at: destination, fileManager: fileManager)
@@ -733,27 +766,29 @@ enum PremiumICloudBridgeFileMirror {
                     writingWith: destinationAccess,
                     isWriteOnce: isWriteOnce
                         || (isPackageRoot && writeOnceDirectoryNames.contains(child.lastPathComponent)),
+                    copied: &copied,
                     fileManager: fileManager
                 )
-            } else {
-                try copyNewerFile(
-                    from: child,
-                    to: destinationChild,
-                    writingWith: destinationAccess,
-                    isWriteOnce: isWriteOnce,
-                    fileManager: fileManager
-                )
+            } else if try copyNewerFile(
+                from: child,
+                to: destinationChild,
+                writingWith: destinationAccess,
+                isWriteOnce: isWriteOnce,
+                fileManager: fileManager
+            ) {
+                copied.append(destinationChild)
             }
         }
     }
 
+    /// Returns whether the file was copied.
     private static func copyNewerFile(
         from source: URL,
         to destination: URL,
         writingWith destinationAccess: PremiumICloudBridgeFolderAccess,
         isWriteOnce: Bool,
         fileManager: FileManager
-    ) throws {
+    ) throws -> Bool {
         let sourceValues = try? source.resourceValues(forKeys: [
             .isUbiquitousItemKey,
             .fileSizeKey,
@@ -781,11 +816,11 @@ enum PremiumICloudBridgeFileMirror {
                    let sourceDate,
                    let destinationDate,
                    abs(sourceDate.timeIntervalSince(destinationDate)) < modificationDateTolerance {
-                    return
+                    return false
                 }
             }
             // An older source never replaces the destination, whatever its contents are.
-            guard (sourceDate ?? .distantPast) >= (destinationDate ?? .distantPast) else { return }
+            guard (sourceDate ?? .distantPast) >= (destinationDate ?? .distantPast) else { return false }
         }
 
         if isUbiquitous {
@@ -798,14 +833,14 @@ enum PremiumICloudBridgeFileMirror {
         } catch where isUbiquitous {
             // A dataless iCloud placeholder is downloaded asynchronously. The
             // next periodic bridge pass will copy it without blocking uploads.
-            return
+            return false
         }
         if destinationExists {
             // Metadata was inconclusive; files of different sizes cannot be equal.
             if !sizesDiffer,
                let destinationData = try? Data(contentsOf: destination),
                destinationData == sourceData {
-                return
+                return false
             }
         } else {
             try destinationAccess.createDirectory(
@@ -824,6 +859,7 @@ enum PremiumICloudBridgeFileMirror {
                 ofItemAtPath: destination.path
             )
         }
+        return true
     }
 }
 

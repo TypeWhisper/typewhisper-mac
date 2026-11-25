@@ -383,12 +383,19 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
 
     @discardableResult
     func synchronize() async throws -> PremiumICloudBridgeReport {
-        try lock.withLock {
+        let (error, report) = lock.withLock {
             storedSynchronizeCount += 1
-            if let storedSynchronizeError { throw storedSynchronizeError }
-            return storedReport
+            return (storedSynchronizeError, storedReport)
         }
+        if let synchronizeGate {
+            await synchronizeGate.wait()
+        }
+        if let error { throw error }
+        return report
     }
+
+    /// Holds mirror passes until opened, to act while one is running.
+    var synchronizeGate: RemovalGate?
 
     func deleteRemotePackage() async throws {
         lock.withLock { storedDeleteCount += 1 }
@@ -415,7 +422,7 @@ private final class LockedFolderAccess: @unchecked Sendable {
 
     func access(
         unlocks: Bool = true,
-        uploadError: @escaping @Sendable (URL) -> (any Error)? = { _ in nil }
+        uploadStatus: @escaping @Sendable (URL) -> PremiumICloudBridgeUploadStatus = { _ in .uploaded }
     ) -> PremiumICloudBridgeFolderAccess {
         PremiumICloudBridgeFolderAccess(
             prepareDirectory: { [self] url in
@@ -426,7 +433,7 @@ private final class LockedFolderAccess: @unchecked Sendable {
                 }
             },
             coordinatesChanges: true,
-            uploadError: uploadError
+            uploadStatus: uploadStatus
         )
     }
 }
@@ -1643,6 +1650,48 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testFullICloudReportDoesNotReturnAfterThePrivateFolderWasDeleted() async throws {
+        let suiteName = "PremiumSyncICloudFullDelete-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncICloudFullDelete")
+        defer { TestSupport.remove(folder) }
+        let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
+        let controller = try Self.makeAutomaticSyncController(
+            suiteName: suiteName,
+            defaults: defaults,
+            folder: folder,
+            store: InMemoryUserDataSyncStore(),
+            bridge: bridge
+        )
+        defer { controller.deactivate() }
+        try await XCTUnwrap(controller.initialSyncTask).value
+        // Nothing changed, so the next check only mirrors and compares.
+        let checkedOnly = await controller.syncIfNeeded()
+        XCTAssertFalse(checkedOnly)
+
+        // The idle check waits for the helper while the user deletes the sync folder.
+        let gate = RemovalGate()
+        bridge.synchronizeGate = gate
+        bridge.report = PremiumICloudBridgeReport(iCloudStorageFull: true)
+        let passesBefore = bridge.synchronizeCount
+        let check = Task { await controller.syncIfNeeded() }
+        var yields = 0
+        while bridge.synchronizeCount == passesBefore, yields < 10_000 {
+            await Task.yield()
+            yields += 1
+        }
+        XCTAssertGreaterThan(bridge.synchronizeCount, passesBefore)
+        bridge.synchronizeGate = nil
+        await controller.deletePrivateSyncFolder()
+        await gate.open()
+        _ = await check.value
+
+        XCTAssertEqual(controller.mode, .off)
+        XCTAssertNil(controller.errorMessage)
+    }
+
+    @MainActor
     func testSwitchingTheSyncLocationClearsTheDevicesOfThePreviousOne() async throws {
         let suiteName = "PremiumSyncSwitchDevices-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -2593,29 +2642,33 @@ final class CloudFolderSyncTests: XCTestCase {
         }
         try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
         try Self.writeBridgeFile("devices/mac.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("assets/history/history-v1/record/audio.m4a", in: localRoot, seconds: 10)
         let folders = LockedFolderAccess()
+        func synchronize(_ uploadStatus: @escaping @Sendable (URL) -> PremiumICloudBridgeUploadStatus) throws -> Bool {
+            try PremiumICloudBridgeFileMirror.synchronize(
+                localRoot: localRoot,
+                remoteRoot: remoteRoot,
+                remoteAccess: folders.access(uploadStatus: uploadStatus)
+            ).iCloudStorageFull
+        }
+        // Only the large audio file no longer fits; the small records upload.
+        let audioRefused: @Sendable (URL) -> PremiumICloudBridgeUploadStatus = { file in
+            file.pathExtension == "m4a"
+                ? .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError))
+                : .uploaded
+        }
 
-        let full = try PremiumICloudBridgeFileMirror.synchronize(
-            localRoot: localRoot,
-            remoteRoot: remoteRoot,
-            remoteAccess: folders.access(uploadError: { file in
-                file.lastPathComponent == "mac.json"
-                    ? NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError)
-                    : nil
-            })
-        )
-        XCTAssertTrue(full.iCloudStorageFull)
-        XCTAssertTrue(Self.bridgeFileExists("devices/mac.json", in: remoteRoot))
-
+        XCTAssertTrue(try synchronize(audioRefused))
+        XCTAssertTrue(Self.bridgeFileExists("assets/history/history-v1/record/audio.m4a", in: remoteRoot))
+        // A later pass copies nothing and still checks the waiting file.
+        XCTAssertTrue(try synchronize(audioRefused))
         // Offline, iCloud also keeps files back, but its storage is not full.
-        let offline = try PremiumICloudBridgeFileMirror.synchronize(
-            localRoot: localRoot,
-            remoteRoot: remoteRoot,
-            remoteAccess: folders.access(uploadError: { _ in
-                NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileUbiquityServerNotAvailable)
-            })
-        )
-        XCTAssertFalse(offline.iCloudStorageFull)
+        XCTAssertFalse(try synchronize { _ in
+            .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileUbiquityServerNotAvailable))
+        })
+        // Once uploaded, the file is no longer checked.
+        XCTAssertFalse(try synchronize { _ in .uploaded })
+        XCTAssertFalse(try synchronize(audioRefused))
     }
 
     func testICloudBridgeDeletesAPackageWhoseFoldersHaveNoListingYet() throws {
