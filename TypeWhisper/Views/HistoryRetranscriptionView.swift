@@ -643,6 +643,18 @@ final class HistoryPlainCopyTextView: NSTextView {
         super.writablePasteboardTypes.filter { $0 == .string || $0.rawValue == "NSStringPboardType" }
     }
 
+    // Like a selectable SwiftUI `Text`, the text is selected with the mouse and is no Tab
+    // stop. Tab after a selection goes to SwiftUI, which moves the focus to a control.
+    override var canBecomeKeyView: Bool { false }
+    override func insertTab(_ sender: Any?) { passKeyToWindowContent() }
+    override func insertBacktab(_ sender: Any?) { passKeyToWindowContent() }
+
+    private func passKeyToWindowContent() {
+        guard let window, let content = window.contentView, let event = NSApp.currentEvent,
+              event.type == .keyDown, window.makeFirstResponder(content) else { return }
+        content.keyDown(with: event)
+    }
+
     func show(_ text: String, marks: [Range<String.Index>], style: HistoryComparisonTextView.MarkStyle) {
         if let shown, shown.text == text, shown.marks == marks, shown.style == style { return }
         let base: [NSAttributedString.Key: Any] = [
