@@ -334,12 +334,19 @@ extension ServiceContainer {
             let text = languageCode == "de"
                 ? "Wir verschieben die Veröffentlichung auf Freitag. Bitte prüfe vorher die deutsche Übersetzung."
                 : "We will move the release to Friday. Please check the German translation first."
-            let version = HistoryTranscriptionVersion(
+            // The dictation broke the sentence and missed a capital, so the comparison marks both.
+            let dictated = languageCode == "de"
+                ? "Wir verschieben die Veröffentlichung auf freitag. Bitte prüfe vorher. Die deutsche Übersetzung."
+                : "We will move the release to friday. Please check. The German translation first."
+            record.rawText = dictated
+            record.finalText = dictated
+            var version = HistoryTranscriptionVersion(
                 createdAt: referenceDate.addingTimeInterval(120),
                 rawText: text, finalText: text, engineID: "parakeet", engineName: "Parakeet",
                 modelID: "parakeet-tdt-0.6b-v3", modelName: "Parakeet TDT 0.6B v3",
                 language: languageCode, workflowRecorded: true
             )
+            version.engineSeconds = 0.4
             if AppConstants.screenshotState != "history-comparison-first" {
                 try? historyService.appendTranscriptionVersion(version, to: record, expected: .capture(record))
             }

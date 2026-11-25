@@ -34,6 +34,14 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
     /// The LLM requests behind this version's text (`HistoryLLMUsage` as JSON).
     /// Nil for versions saved before this existed.
     var llmUsageData: Data?
+    /// Seconds from handing this run's audio to the engine until its text came back. Preparing
+    /// or loading the model beforehand is not included; for a cloud engine the upload and the
+    /// provider's queue are. Nil for versions saved before this existed, for the original
+    /// dictation and for archived manual edits.
+    var engineSeconds: Double?
+    /// Seconds the Workflow's text step took after transcription, such as an LLM request or a
+    /// translation. Nil when the run used no Workflow.
+    var workflowSeconds: Double?
 
     static func capture(_ record: TranscriptionRecord, provenance: Self? = nil) -> Self {
         Self(
@@ -58,7 +66,10 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
             processingStateRaw: record.processingStateRaw,
             processingFailureCategory: record.processingFailureCategory,
             processingFailureMessage: record.processingFailureMessage,
-            llmUsageData: record.llmUsageData
+            llmUsageData: record.llmUsageData,
+            // Measurements belong to the run, like the engine name, not to the entry's content.
+            engineSeconds: provenance?.engineSeconds,
+            workflowSeconds: provenance?.workflowSeconds
         )
     }
 
