@@ -8,6 +8,16 @@ enum NumberWordNormalizer {
     private static let ordinaryWordsByLanguage: [String: Set<String>] = [
         "pl": ["ten", "one"],
     ]
+    private static let hanLexicalNumberWords: Set<String> = [
+        "萬能", "万能", "萬一", "万一", "萬分", "万分",
+        "百般", "百姓",
+    ]
+    private static let hanApproximationPrefixes: Set<Character> = [
+        "幾", "几", "數", "数", "上", "成",
+    ]
+    private static let hanUnitCharacters: Set<Character> = [
+        "十", "百", "千", "万", "萬", "亿", "億",
+    ]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
     static func supports(language: String?) -> Bool {
@@ -244,6 +254,23 @@ enum NumberWordNormalizer {
             parsed = wordParser.parse(normalized)
         } else {
             let wordTexts = words.map(\.text)
+            if languageCode == "zh" || languageCode == "ja" {
+                if isHanLexicalNumberWord(startingAt: index, text: wordTexts[0], in: tokens) {
+                    return nil
+                }
+                if index > 1,
+                   tokens[index - 1].kind == .other,
+                   tokens[index - 1].text == ".",
+                   tokens[index - 2].kind == .digit {
+                    // A merged numeric run directly preceded by "<digits>."
+                    // belongs to a decimal fraction (1.5万, 2.3亿), not to
+                    // the large unit. The Han parsers cannot represent
+                    // fractional unit scaling yet, so leave the text
+                    // unchanged rather than producing a plausible-looking
+                    // wrong value such as 1.50000元.
+                    return nil
+                }
+            }
             switch languageCode {
             case "zh":
                 parsed = ChineseNumberWordParser.parse(wordTexts)
@@ -306,7 +333,107 @@ enum NumberWordNormalizer {
             tokens.append(Token(text: current, kind: currentKind))
         }
 
-        return tokens
+        return mergingAdjacentNumericRuns(tokens)
+    }
+
+    private static func mergingAdjacentNumericRuns(_ tokens: [Token]) -> [Token] {
+        var result: [Token] = []
+        var index = 0
+
+        while index < tokens.count {
+            guard tokens[index].kind == .digit || tokens[index].kind == .cjkNumber else {
+                result.append(tokens[index])
+                index += 1
+                continue
+            }
+
+            var endIndex = index
+            var text = ""
+            var containsCJKNumber = false
+            var stoppedAtLexicalWord = false
+            while endIndex < tokens.count,
+                  (tokens[endIndex].kind == .digit || tokens[endIndex].kind == .cjkNumber) {
+                if tokens[endIndex].kind == .digit,
+                   !text.isEmpty,
+                   let lexical = hanLexicalNumberWords.first(where: { text.hasSuffix($0) }) {
+                    // A digit run must not merge into a lexical word: in
+                    // 万一5个人都来了 the 万一 is "in case", not a number.
+                    // Mixed numbers such as 1万5 keep merging because 万
+                    // alone is never lexical. Merging resumes after the
+                    // protected word so later numerals still combine.
+                    if text.count > lexical.count {
+                        let numberPart = String(text.dropLast(lexical.count))
+                        result.append(Token(text: numberPart, kind: .cjkNumber))
+                    }
+                    result.append(Token(text: lexical, kind: .cjkNumber))
+                    index = endIndex
+                    stoppedAtLexicalWord = true
+                    break
+                }
+                text += tokens[endIndex].text
+                containsCJKNumber = containsCJKNumber || tokens[endIndex].kind == .cjkNumber
+                endIndex += 1
+            }
+
+            if stoppedAtLexicalWord {
+                // The loop above stopped at a protected lexical word and
+                // already emitted it; continue merging at the digit run.
+                continue
+            }
+
+            if containsCJKNumber {
+                result.append(Token(text: text, kind: .cjkNumber))
+            } else {
+                result.append(contentsOf: tokens[index..<endIndex])
+            }
+            index = endIndex
+        }
+
+        return result
+    }
+
+    private static func isHanLexicalNumberWord(
+        startingAt index: Int,
+        text: String,
+        in tokens: [Token]
+    ) -> Bool {
+        if hanLexicalNumberWords.contains(text) {
+            return true
+        }
+
+        if index > 0,
+           tokens[index - 1].kind == .word,
+           let left = tokens[index - 1].text.last {
+            // Approximations attach the prefix directly to bare units
+            // (幾千, 數百, 成千上萬). Count-label suffixes such as 总数, 人数
+            // and 訂單數 end in the same character, so only treat the prefix
+            // as approximating when the number itself contains no digit, e.g.
+            // keep 數百 intact but still normalize 总数一百 to 总数100.
+            // 上 and 成 only approximate with 百, 千 and 万 (上百, 上千,
+            // 上万, 成千上万); before 十 they end ordinary words such as
+            // 完成十项 and 楼上十个, which still normalize.
+            if hanApproximationPrefixes.contains(left),
+               isBareHanUnitRun(text),
+               !(text.first == "十" && (left == "上" || left == "成")) {
+                return true
+            }
+            if hanLexicalNumberWords.contains(String(left) + text) {
+                return true
+            }
+        }
+
+        if index + 1 < tokens.count,
+           tokens[index + 1].kind == .word,
+           let right = tokens[index + 1].text.first,
+           hanLexicalNumberWords.contains(text + String(right)) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func isBareHanUnitRun(_ text: String) -> Bool {
+        !text.isEmpty && text.allSatisfy { hanUnitCharacters.contains($0) }
     }
 
     private static func tokenKind(for character: Character) -> TokenKind {
