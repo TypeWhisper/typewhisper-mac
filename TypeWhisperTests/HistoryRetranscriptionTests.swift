@@ -179,6 +179,7 @@ final class HistoryRetranscriptionTests: XCTestCase {
 
     func testRunMeasuresEngineAndWorkflowSeparately() async throws {
         let engine = HistoryComparisonSlowEngine()
+        engine.delay = .milliseconds(50)
         engine.resultOverride = PluginTranscriptionResult(text: "timed text")
         let llm = HistoryComparisonLLM()
         llm.handler = { text in
@@ -189,8 +190,12 @@ final class HistoryRetranscriptionTests: XCTestCase {
         let plain = try HistoryRetranscriptionEnvironment.plan(.init(engineID: engine.providerId),
             manager: environment.manager, dictionary: environment.dictionary, workflows: [], promptProcessing: environment.promptProcessing)
         let version = try await plain.run([0.1])
-        XCTAssertGreaterThanOrEqual(try XCTUnwrap(version.engineSeconds), 0.24)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(version.engineSeconds), 0.045)
         XCTAssertNil(version.workflowSeconds)
+
+        // The engine takes far longer than the Workflow, so a Workflow time that included the
+        // engine call would exceed the engine time.
+        engine.delay = .seconds(1)
 
         let workflow = Workflow(name: "Cleanup", template: .cleanedText, trigger: .manual(),
             behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test"),
@@ -199,10 +204,11 @@ final class HistoryRetranscriptionTests: XCTestCase {
             manager: environment.manager, dictionary: environment.dictionary, workflows: [workflow],
             promptProcessing: environment.promptProcessing).run([0.1])
         XCTAssertEqual(processed.finalText, "TIMED TEXT")
-        XCTAssertGreaterThanOrEqual(try XCTUnwrap(processed.engineSeconds), 0.24)
+        let engineSeconds = try XCTUnwrap(processed.engineSeconds)
+        XCTAssertGreaterThanOrEqual(engineSeconds, 0.99)
         let workflowSeconds = try XCTUnwrap(processed.workflowSeconds)
         XCTAssertGreaterThanOrEqual(workflowSeconds, 0.025)
-        XCTAssertLessThan(workflowSeconds, 0.25, "The Workflow time must not include the engine call.")
+        XCTAssertLessThan(workflowSeconds, engineSeconds, "The Workflow time must not include the engine call.")
     }
 
     func testSanitizedVersionSurvivesReopenAndPromotion() async throws {
@@ -1578,8 +1584,9 @@ private final class HistoryEnforcedTestEngine: NSObject, TranscriptionEnginePlug
 }
 
 private final class HistoryComparisonSlowEngine: HistoryComparisonTestEngine, @unchecked Sendable {
+    var delay: Duration = .zero
     override func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        try await Task.sleep(for: .milliseconds(250))
+        try await Task.sleep(for: delay)
         return try await super.transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
     }
 }

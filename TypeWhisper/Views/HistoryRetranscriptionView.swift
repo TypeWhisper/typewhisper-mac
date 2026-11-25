@@ -504,6 +504,12 @@ struct HistoryRetranscriptionView: View {
     private struct ComparisonKey: Equatable {
         let current: String
         let other: String
+
+        /// Byte for byte: `String ==` treats composed and decomposed accents as equal, but the
+        /// marks are positions in one particular encoding of the text.
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.current.utf8.elementsEqual(rhs.current.utf8) && lhs.other.utf8.elementsEqual(rhs.other.utf8)
+        }
     }
 
     private struct Highlights {
@@ -656,7 +662,8 @@ final class HistoryPlainCopyTextView: NSTextView {
     }
 
     func show(_ text: String, marks: [Range<String.Index>], style: HistoryComparisonTextView.MarkStyle) {
-        if let shown, shown.text == text, shown.marks == marks, shown.style == style { return }
+        let sameText = shown.map { $0.text.utf8.elementsEqual(text.utf8) } ?? false
+        if let shown, sameText, shown.marks == marks, shown.style == style { return }
         let base: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
             .foregroundColor: NSColor.labelColor,
@@ -673,9 +680,11 @@ final class HistoryPlainCopyTextView: NSTextView {
         }
         let content = NSMutableAttributedString(string: text, attributes: base)
         for mark in marks where mark.upperBound <= text.endIndex {
-            content.addAttributes(marked, range: NSRange(mark, in: text))
+            let range = NSRange(mark, in: text)
+            guard NSMaxRange(range) <= content.length else { continue }
+            content.addAttributes(marked, range: range)
         }
-        if shown?.text != text { setSelectedRange(NSRange(location: 0, length: 0)) }
+        if !sameText { setSelectedRange(NSRange(location: 0, length: 0)) }
         textStorage?.setAttributedString(content)
         shown = (text, marks, style)
         measured = nil
