@@ -734,10 +734,15 @@ final class TextInsertionService {
         if let descendant = descendantSearch.element {
             return (descendant, true)
         }
+        let liesInEditableWebContent = axElementAttribute("AXEditableAncestor" as CFString, from: element) != nil
+            || Self.focusedWebElementTakesText(
+                valueSettable: isAttributeSettable(kAXValueAttribute as CFString, on: element),
+                holdsTextMarkerSelection: hasAttributeValue("AXSelectedTextMarkerRange" as CFString, on: element)
+            )
         return (nil, Self.focusedElementShowsKeyboardTarget(
             role: stringAttribute(kAXRoleAttribute as CFString, from: element),
             hostsWebContent: descendantSearch.foundWebArea,
-            liesInEditableWebContent: axElementAttribute("AXEditableAncestor" as CFString, from: element) != nil
+            liesInEditableWebContent: liesInEditableWebContent
         ))
     }
 
@@ -758,6 +763,19 @@ final class TextInsertionService {
         liesInEditableWebContent: Bool = false
     ) -> Bool {
         role != kAXWindowRole && !hostsWebContent && !liesInEditableWebContent
+    }
+
+    /// Whether a focused web element without a text role takes typed text. Safari gives an
+    /// editable region whose role is not a text role, such as a `contenteditable` composer with
+    /// `role="group"`, `"application"` or `"region"`, no editable ancestor when the region itself
+    /// has focus (#2031). Such an element still has a settable value and holds the caret as a
+    /// text marker range. A focused slider has a settable value but no caret, and a focused
+    /// button, link or dialog has neither.
+    nonisolated static func focusedWebElementTakesText(
+        valueSettable: Bool?,
+        holdsTextMarkerSelection: Bool
+    ) -> Bool {
+        valueSettable == true && holdsTextMarkerSelection
     }
 
     /// Apps that build their accessibility tree on demand, such as Chromium browsers and Electron
@@ -2837,6 +2855,11 @@ final class TextInsertionService {
             return nil
         }
         return settable.boolValue
+    }
+
+    private func hasAttributeValue(_ attribute: CFString, on element: AXUIElement) -> Bool {
+        var value: AnyObject?
+        return AXUIElementCopyAttributeValue(element, attribute, &value) == .success && value != nil
     }
 
     /// A focused text element without any area is an input proxy, not the field the user sees.
