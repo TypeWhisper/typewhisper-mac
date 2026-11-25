@@ -410,8 +410,8 @@ enum PremiumICloudBridgeFileMirror {
     /// Package directories whose files get new names instead of being rewritten: operations
     /// are named by timestamp and ID, assets by their SHA-256 digest.
     private static let writeOnceDirectoryNames: Set<String> = ["ops", "assets"]
-    /// Bounds the upload checks of one pass while iCloud keeps refusing files.
-    private static let maximumPendingUploads = 1_000
+    /// Bounds the upload checks of one pass while iCloud keeps files back.
+    static let uploadChecksPerPass = 1_000
     private static let local = PremiumICloudBridgeFolderAccess.local
 
     @discardableResult
@@ -419,7 +419,8 @@ enum PremiumICloudBridgeFileMirror {
         localRoot: URL,
         remoteRoot: URL,
         fileManager: FileManager = .default,
-        remoteAccess: PremiumICloudBridgeFolderAccess = .iCloud
+        remoteAccess: PremiumICloudBridgeFolderAccess = .iCloud,
+        uploadChecksPerPass: Int = PremiumICloudBridgeFileMirror.uploadChecksPerPass
     ) throws -> PremiumICloudBridgeReport {
         try local.createDirectory(at: localRoot, fileManager: fileManager)
         try remoteAccess.createDirectory(at: remoteRoot, fileManager: fileManager)
@@ -491,7 +492,8 @@ enum PremiumICloudBridgeFileMirror {
             copied: copiedToICloud,
             remotePackage: remotePackage,
             remoteFiles: remoteFiles,
-            access: remoteAccess
+            access: remoteAccess,
+            limit: uploadChecksPerPass
         )
         base.pendingUploads = uploads.pending
         try writeMirrorState(base, to: stateURL)
@@ -527,35 +529,39 @@ enum PremiumICloudBridgeFileMirror {
         }
     }
 
-    /// Files this Mac copied into iCloud are checked on every pass until iCloud has uploaded
+    /// Files this Mac copied into iCloud are checked on later passes until iCloud has uploaded
     /// them. iCloud Drive keeps a file it cannot upload on this Mac and records why. Whether
     /// the remaining storage takes a file depends on its size, so a large audio file can be
     /// refused while small records still upload; any refusal for quota means iCloud is full.
+    /// A pass checks at most `limit` files. The others stay listed and go first next time.
     private static func checkUploads(
         pending previous: [String],
         copied: [URL],
         remotePackage: URL,
         remoteFiles: [String: ListedFile],
-        access: PremiumICloudBridgeFolderAccess
+        access: PremiumICloudBridgeFolderAccess,
+        limit: Int
     ) -> (pending: [String], iCloudStorageFull: Bool) {
         let packagePrefix = remotePackage.standardizedFileURL.path + "/"
+        let previousPaths = Set(previous)
         let copiedPaths = copied.compactMap { file -> String? in
             let path = file.standardizedFileURL.path
             return path.hasPrefix(packagePrefix) ? String(path.dropFirst(packagePrefix.count)) : nil
         }
-        var pending: [String] = []
-        var iCloudStorageFull = false
         // Files deleted since drop out; they no longer need an upload.
-        for path in Set(previous).union(copiedPaths).sorted() where remoteFiles[path] != nil {
-            guard pending.count < maximumPendingUploads else { break }
+        let candidates = (previous + Set(copiedPaths).subtracting(previousPaths).sorted())
+            .filter { remoteFiles[$0] != nil }
+        var stillWaiting: [String] = []
+        var iCloudStorageFull = false
+        for path in candidates.prefix(max(limit, 0)) {
             let file = remotePackage.appendingPathComponent(path, isDirectory: false)
             guard case let .waiting(lastError) = access.uploadStatus(file) else { continue }
-            pending.append(path)
+            stillWaiting.append(path)
             if let lastError, PremiumICloudBridgeError.classify(lastError) == .iCloudStorageFull {
                 iCloudStorageFull = true
             }
         }
-        return (pending, iCloudStorageFull)
+        return (Array(candidates.dropFirst(max(limit, 0))) + stillWaiting, iCloudStorageFull)
     }
 
     static func mirrorStateURL(localRoot: URL) -> URL {

@@ -2671,6 +2671,35 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertFalse(try synchronize(audioRefused))
     }
 
+    func testICloudBridgeKeepsUncheckedUploadsForTheNextPass() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("devices/mac.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        // Both files wait for an upload; only the manifest is refused for quota.
+        let access = LockedFolderAccess().access(uploadStatus: { file in
+            file.lastPathComponent == "manifest.json"
+                ? .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError))
+                : .waiting(lastError: nil)
+        })
+        func synchronize() throws -> Bool {
+            try PremiumICloudBridgeFileMirror.synchronize(
+                localRoot: localRoot,
+                remoteRoot: remoteRoot,
+                remoteAccess: access,
+                uploadChecksPerPass: 1
+            ).iCloudStorageFull
+        }
+
+        // One check per pass: the first pass looks at the device record only.
+        XCTAssertFalse(try synchronize())
+        // The manifest stayed listed although nothing is copied again.
+        XCTAssertTrue(try synchronize())
+    }
+
     func testICloudBridgeDeletesAPackageWhoseFoldersHaveNoListingYet() throws {
         let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
         defer {
