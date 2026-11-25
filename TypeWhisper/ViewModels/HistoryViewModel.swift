@@ -215,6 +215,8 @@ private enum PendingHistoryTransition: Equatable {
 final class HistoryViewModel: ObservableObject {
     typealias BackgroundPageLoader = @MainActor (HistoryQuery, _ offset: Int, _ limit: Int) async -> HistoryPage?
     typealias DiffPresentationLoader = @MainActor (_ rawText: String, _ finalText: String) async -> HistoryDiffPresentation?
+    /// Finds a Recorder recording's audio file by its `recording_id` and title.
+    typealias RecorderAudioLocator = @MainActor (_ recordingID: UUID, _ title: String?) async -> URL?
 
     private static let pageSize = 100
     /// Diffs whose inputs fit in this many UTF-8 bytes are computed inline while rendering.
@@ -829,6 +831,17 @@ final class HistoryViewModel: ObservableObject {
 
     func audioFileURL(for record: TranscriptionRecord) -> URL? {
         historyService.audioFileURL(for: record)
+    }
+
+    /// Set by the service container; without it, records without History audio have no player.
+    var recorderAudioLocator: RecorderAudioLocator?
+
+    /// The audio of a Recorder recording that History saved as text only, which
+    /// stays in the Recorder's folder. Nil when the file was moved or deleted.
+    func recorderAudioURL(for record: TranscriptionRecord) async -> URL? {
+        guard record.audioFileName == nil, let recordingID = record.recorderRecordingID,
+              let recorderAudioLocator else { return nil }
+        return await recorderAudioLocator(recordingID, record.appName)
     }
 
     /// Returns the diff for the record's current texts from the cache. Small inputs are

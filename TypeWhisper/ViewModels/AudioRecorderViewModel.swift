@@ -2090,6 +2090,40 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
 
+    /// The audio file of the recording with this ID, found through the ID files beside
+    /// the recordings. Files of the recording named `title` are read first. Returns nil
+    /// when no folder holds the recording any more. Reads files, so call it off the main actor.
+    nonisolated static func audioURL(
+        ofRecordingID recordingID: UUID,
+        title: String? = nil,
+        in directories: [URL]
+    ) -> URL? {
+        let identitySuffix = ".recording-id.json"
+        let receiptSuffix = ".transcript-ready.json"
+        for directory in directories {
+            guard let files = try? FileManager.default.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ) else { continue }
+            let names = Set(files.map(\.lastPathComponent))
+            // The receipt holds the ID only for recordings from before the ID files.
+            let idFiles = files.filter { file in
+                let name = file.lastPathComponent
+                if name.hasSuffix(identitySuffix) { return true }
+                guard name.hasSuffix(receiptSuffix) else { return false }
+                return !names.contains(String(name.dropLast(receiptSuffix.count)) + identitySuffix)
+            }
+            let isTitled = { (file: URL) in title.map { file.lastPathComponent.hasPrefix($0 + ".") } ?? false }
+            for idFile in idFiles.filter(isTitled) + idFiles.filter({ !isTitled($0) }) {
+                guard let data = try? Data(contentsOf: idFile),
+                      let identity = try? JSONDecoder().decode(RecordingIdentity.self, from: data),
+                      identity.recordingID == recordingID else { continue }
+                let audioURL = idFile.deletingPathExtension().deletingPathExtension().resolvingSymlinksInPath()
+                if (try? isRegularRecorderAutomationFile(audioURL)) == true { return audioURL }
+            }
+        }
+        return nil
+    }
+
     /// The engine gets only the parts of the recording that hold speech; the
     /// result's times are on the recording's timeline again.
     private func transcribeFinalRecording(

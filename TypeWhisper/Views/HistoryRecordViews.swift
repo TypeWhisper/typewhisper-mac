@@ -186,6 +186,8 @@ struct HistoryRecordDetailView: View {
     @StateObject private var speakers: SpeakerWorkspaceModel
     @State private var showsSpeakers = true
     @State private var pendingSpeakerCount: SpeakerCountChoice?
+    /// A Recorder recording saved as text only keeps its audio in the Recorder's folder.
+    @State private var recorderAudioURL: URL?
 
     private enum SpeakerCountChoice: Identifiable, Equatable {
         case automatic
@@ -220,7 +222,10 @@ struct HistoryRecordDetailView: View {
     }
 
     var body: some View {
-        let audioURL = viewModel.audioFileURL(for: record)
+        let historyAudioURL = viewModel.audioFileURL(for: record)
+        let audioURL = historyAudioURL ?? recorderAudioURL.flatMap {
+            FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+        }
         VStack(spacing: 0) {
             identityHeader
             Divider()
@@ -233,9 +238,10 @@ struct HistoryRecordDetailView: View {
                 Divider()
             }
 
+            // Speaker detection reads History's own audio only.
             HistorySpeakerDetectionRow(
                 record: record,
-                hasAudio: audioURL != nil,
+                hasAudio: historyAudioURL != nil,
                 coordinator: coordinator,
                 onStart: { showsSpeakers = true }
             )
@@ -264,6 +270,9 @@ struct HistoryRecordDetailView: View {
         .onAppear {
             if let audioURL { speakers.playback.load(url: audioURL) }
             revealRequestedTime()
+        }
+        .task(id: record.id) {
+            recorderAudioURL = await viewModel.recorderAudioURL(for: record)
         }
         .onChange(of: viewModel.recordTimeRequest) { revealRequestedTime() }
         .onDisappear { speakers.playback.unload() }
