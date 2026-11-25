@@ -261,8 +261,9 @@ struct PremiumICloudBridgeFolderAccess: Sendable {
             ]) else {
                 return .unknown
             }
+            guard let isUbiquitous = values.isUbiquitousItem else { return .unknown }
             // A file outside iCloud has nothing to upload.
-            guard values.isUbiquitousItem == true else { return .uploaded }
+            guard isUbiquitous else { return .uploaded }
             guard let isUploaded = values.ubiquitousItemIsUploaded else { return .unknown }
             return isUploaded ? .uploaded : .waiting(lastError: values.ubiquitousItemUploadingError)
         }
