@@ -2091,19 +2091,19 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     /// The audio file of the recording with this ID, found through the ID files beside
-    /// the recordings. Files of the recording named `title` are read first. Returns nil
-    /// when no folder holds the recording any more. Reads files, so call it off the main actor.
+    /// the recordings. The recording named `title` is read first. Returns nil when no
+    /// folder holds the recording any more. Reads files, so call it off the main actor.
     nonisolated static func audioURL(
         ofRecordingID recordingID: UUID,
         title: String? = nil,
         in directories: [URL]
     ) -> URL? {
         for directory in directories {
-            let idFiles = recordingIDFiles(in: directory)
-            let isTitled = { (file: URL) in title.map { file.lastPathComponent.hasPrefix($0 + ".") } ?? false }
-            for idFile in idFiles.filter(isTitled) + idFiles.filter({ !isTitled($0) })
-            where self.recordingID(in: idFile) == recordingID {
-                if let audioURL = audioURL(besideIDFile: idFile) { return audioURL }
+            let audioURLs = identifiedAudioURLs(in: directory)
+            let isTitled = { (url: URL) in title == url.deletingPathExtension().lastPathComponent }
+            for audioURL in audioURLs.filter(isTitled) + audioURLs.filter({ !isTitled($0) })
+            where self.recordingID(ofAudio: audioURL) == recordingID {
+                if let existingURL = existingAudioURL(audioURL) { return existingURL }
             }
         }
         return nil
@@ -2113,38 +2113,44 @@ final class AudioRecorderViewModel: ObservableObject {
     /// it off the main actor.
     nonisolated static func recordingIDsWithAudio(in directories: [URL]) -> Set<UUID> {
         var recordingIDs = Set<UUID>()
-        for idFile in directories.flatMap(recordingIDFiles) where audioURL(besideIDFile: idFile) != nil {
-            if let recordingID = recordingID(in: idFile) { recordingIDs.insert(recordingID) }
+        for audioURL in directories.flatMap(identifiedAudioURLs) where existingAudioURL(audioURL) != nil {
+            if let recordingID = recordingID(ofAudio: audioURL) { recordingIDs.insert(recordingID) }
         }
         return recordingIDs
     }
 
-    /// Each recording's `.recording-id.json`, or its `.transcript-ready.json` receipt
-    /// for a recording from before the ID files.
-    nonisolated private static func recordingIDFiles(in directory: URL) -> [URL] {
-        let identitySuffix = ".recording-id.json"
-        let receiptSuffix = ".transcript-ready.json"
+    /// The recordings in `directory` that have an ID file or a receipt beside them.
+    nonisolated private static func identifiedAudioURLs(in directory: URL) -> [URL] {
+        let suffixes = [".recording-id.json", ".transcript-ready.json"]
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
         ) else { return [] }
-        let names = Set(files.map(\.lastPathComponent))
-        return files.filter { file in
+        var audioNames = Set<String>()
+        return files.compactMap { file in
             let name = file.lastPathComponent
-            if name.hasSuffix(identitySuffix) { return true }
-            guard name.hasSuffix(receiptSuffix) else { return false }
-            return !names.contains(String(name.dropLast(receiptSuffix.count)) + identitySuffix)
+            guard let suffix = suffixes.first(where: name.hasSuffix) else { return nil }
+            let audioName = String(name.dropLast(suffix.count))
+            guard audioNames.insert(audioName).inserted else { return nil }
+            return directory.appendingPathComponent(audioName)
         }
     }
 
-    nonisolated private static func recordingID(in idFile: URL) -> UUID? {
-        (try? Data(contentsOf: idFile))
-            .flatMap { try? JSONDecoder().decode(RecordingIdentity.self, from: $0) }?
-            .recordingID
+    /// Like `recordingIdentity(for:)`: the ID file decides, and the receipt stands in
+    /// when the ID file is missing or damaged.
+    nonisolated private static func recordingID(ofAudio audioURL: URL) -> UUID? {
+        for url in [audioURL.appendingPathExtension("recording-id.json"),
+                    audioURL.appendingPathExtension("transcript-ready.json")] {
+            if let data = try? Data(contentsOf: url),
+               let identity = try? JSONDecoder().decode(RecordingIdentity.self, from: data) {
+                return identity.recordingID
+            }
+        }
+        return nil
     }
 
-    nonisolated private static func audioURL(besideIDFile idFile: URL) -> URL? {
-        let audioURL = idFile.deletingPathExtension().deletingPathExtension().resolvingSymlinksInPath()
-        return (try? isRegularRecorderAutomationFile(audioURL)) == true ? audioURL : nil
+    nonisolated private static func existingAudioURL(_ audioURL: URL) -> URL? {
+        let resolvedURL = audioURL.resolvingSymlinksInPath()
+        return (try? isRegularRecorderAutomationFile(resolvedURL)) == true ? resolvedURL : nil
     }
 
     /// The engine gets only the parts of the recording that hold speech; the

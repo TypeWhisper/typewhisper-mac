@@ -415,6 +415,10 @@ final class AudioRecorderViewModelTests: XCTestCase {
         // Recordings from before the ID files have the ID in their receipt only.
         let older = try recording("Older.wav", in: earlierFolder, idFile: "transcript-ready.json", id: olderID)
         _ = try recording("Deleted.wav", in: currentFolder, idFile: "recording-id.json", id: deletedID, hasAudio: false)
+        // A damaged ID file leaves the receipt to tell the ID.
+        let damagedID = UUID()
+        let damaged = try recording("Damaged.wav", in: currentFolder, idFile: "transcript-ready.json", id: damagedID)
+        try Data("{".utf8).write(to: damaged.appendingPathExtension("recording-id.json"))
         let folders = [currentFolder, earlierFolder]
 
         XCTAssertEqual(
@@ -425,13 +429,17 @@ final class AudioRecorderViewModelTests: XCTestCase {
             AudioRecorderViewModel.audioURL(ofRecordingID: olderID, title: "Older", in: folders),
             older.resolvingSymlinksInPath()
         )
+        XCTAssertEqual(
+            AudioRecorderViewModel.audioURL(ofRecordingID: damagedID, title: "Damaged", in: folders),
+            damaged.resolvingSymlinksInPath()
+        )
         XCTAssertNil(AudioRecorderViewModel.audioURL(ofRecordingID: deletedID, title: "Deleted", in: folders))
         XCTAssertNil(AudioRecorderViewModel.audioURL(ofRecordingID: UUID(), in: folders))
         // The audio icon and the With Audio filter count the recordings whose file is there.
         let recordingIDs = AudioRecorderViewModel.recordingIDsWithAudio(in: folders)
-        XCTAssertTrue(recordingIDs.isSuperset(of: [renamedID, olderID]))
+        XCTAssertTrue(recordingIDs.isSuperset(of: [renamedID, olderID, damagedID]))
         XCTAssertFalse(recordingIDs.contains(deletedID))
-        XCTAssertEqual(recordingIDs.count, 3)
+        XCTAssertEqual(recordingIDs.count, 4)
     }
 
     /// Issue #887: with speaker detection the completion waits for the speakers,
