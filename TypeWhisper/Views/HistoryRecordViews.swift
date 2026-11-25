@@ -179,6 +179,12 @@ struct HistoryRecordDetailView: View {
         let finalText: String
     }
 
+    /// The Recorder lookup runs again when History finds the file gone or back.
+    private struct RecorderAudioInput: Equatable {
+        let recordID: UUID
+        let isAvailable: Bool
+    }
+
     let record: TranscriptionRecord
     @ObservedObject var viewModel: HistoryViewModel
     @ObservedObject private var coordinator: SpeakerTranscriptCoordinator
@@ -271,7 +277,7 @@ struct HistoryRecordDetailView: View {
             if let audioURL { speakers.playback.load(url: audioURL) }
             revealRequestedTime()
         }
-        .task(id: record.id) {
+        .task(id: RecorderAudioInput(recordID: record.id, isAvailable: record.recorderAudioAvailable)) {
             recorderAudioURL = await viewModel.recorderAudioURL(for: record)
         }
         .onChange(of: viewModel.recordTimeRequest) { revealRequestedTime() }
