@@ -49,6 +49,9 @@ final class InstalledAppsViewModel: ObservableObject {
             URL(fileURLWithPath: "/Applications"),
             FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
             URL(fileURLWithPath: "/System/Applications"),
+            // Safari ships in the system cryptex. /Applications only holds a hidden symlink to it,
+            // which the hidden-files filter below skips.
+            URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications"),
         ]
 
         for dir in directories {
