@@ -489,6 +489,7 @@ enum PremiumICloudBridgeFileMirror {
         }
         let uploads = checkUploads(
             pending: previousState?.pendingUploads ?? [],
+            refusedForQuota: Set(previousState?.quotaRefusedUploads ?? []),
             copied: copiedToICloud,
             remotePackage: remotePackage,
             remoteFiles: remoteFiles,
@@ -496,8 +497,9 @@ enum PremiumICloudBridgeFileMirror {
             limit: uploadChecksPerPass
         )
         base.pendingUploads = uploads.pending
+        base.quotaRefusedUploads = uploads.refusedForQuota
         try writeMirrorState(base, to: stateURL)
-        return PremiumICloudBridgeReport(iCloudStorageFull: uploads.iCloudStorageFull)
+        return PremiumICloudBridgeReport(iCloudStorageFull: !uploads.refusedForQuota.isEmpty)
     }
 
     static func deletePackages(
@@ -533,15 +535,17 @@ enum PremiumICloudBridgeFileMirror {
     /// them. iCloud Drive keeps a file it cannot upload on this Mac and records why. Whether
     /// the remaining storage takes a file depends on its size, so a large audio file can be
     /// refused while small records still upload; any refusal for quota means iCloud is full.
-    /// A pass checks at most `limit` files. The others stay listed and go first next time.
+    /// A pass checks at most `limit` files. The others stay listed and go first next time;
+    /// a file refused for quota counts as refused until a later check finds it uploaded.
     private static func checkUploads(
         pending previous: [String],
+        refusedForQuota previouslyRefused: Set<String>,
         copied: [URL],
         remotePackage: URL,
         remoteFiles: [String: ListedFile],
         access: PremiumICloudBridgeFolderAccess,
         limit: Int
-    ) -> (pending: [String], iCloudStorageFull: Bool) {
+    ) -> (pending: [String], refusedForQuota: [String]) {
         let packagePrefix = remotePackage.standardizedFileURL.path + "/"
         let previousPaths = Set(previous)
         let copiedPaths = copied.compactMap { file -> String? in
@@ -551,17 +555,18 @@ enum PremiumICloudBridgeFileMirror {
         // Files deleted since drop out; they no longer need an upload.
         let candidates = (previous + Set(copiedPaths).subtracting(previousPaths).sorted())
             .filter { remoteFiles[$0] != nil }
+        let unchecked = Array(candidates.dropFirst(max(limit, 0)))
         var stillWaiting: [String] = []
-        var iCloudStorageFull = false
+        var refused = previouslyRefused.intersection(unchecked)
         for path in candidates.prefix(max(limit, 0)) {
             let file = remotePackage.appendingPathComponent(path, isDirectory: false)
             guard case let .waiting(lastError) = access.uploadStatus(file) else { continue }
             stillWaiting.append(path)
             if let lastError, PremiumICloudBridgeError.classify(lastError) == .iCloudStorageFull {
-                iCloudStorageFull = true
+                refused.insert(path)
             }
         }
-        return (Array(candidates.dropFirst(max(limit, 0))) + stillWaiting, iCloudStorageFull)
+        return (unchecked + stillWaiting, refused.sorted())
     }
 
     static func mirrorStateURL(localRoot: URL) -> URL {
@@ -584,6 +589,8 @@ enum PremiumICloudBridgeFileMirror {
         var files: [String: Entry]
         /// Package-relative paths this Mac copied into iCloud that iCloud has not uploaded yet.
         var pendingUploads: [String]?
+        /// The pending paths whose last check found them refused for quota.
+        var quotaRefusedUploads: [String]?
     }
 
     private struct ListedFile {

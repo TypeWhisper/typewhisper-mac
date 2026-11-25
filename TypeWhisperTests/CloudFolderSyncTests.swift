@@ -438,6 +438,17 @@ private final class LockedFolderAccess: @unchecked Sendable {
     }
 }
 
+/// A flag shared with an upload status closure.
+private final class UploadedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedIsUploaded = false
+
+    var isUploaded: Bool {
+        get { lock.withLock { storedIsUploaded } }
+        set { lock.withLock { storedIsUploaded = newValue } }
+    }
+}
+
 private actor RemovalGate {
     private var isOpen = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -2680,8 +2691,10 @@ final class CloudFolderSyncTests: XCTestCase {
         try Self.writeBridgeFile("devices/mac.json", in: localRoot, seconds: 10)
         try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
         // Both files wait for an upload; only the manifest is refused for quota.
+        let uploads = UploadedFlag()
         let access = LockedFolderAccess().access(uploadStatus: { file in
-            file.lastPathComponent == "manifest.json"
+            if uploads.isUploaded { return .uploaded }
+            return file.lastPathComponent == "manifest.json"
                 ? .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError))
                 : .waiting(lastError: nil)
         })
@@ -2698,6 +2711,13 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertFalse(try synchronize())
         // The manifest stayed listed although nothing is copied again.
         XCTAssertTrue(try synchronize())
+        // A pass that checks only the device record keeps the known refusal.
+        XCTAssertTrue(try synchronize())
+
+        uploads.isUploaded = true
+        // Checked again, the manifest uploaded; the device record still waits for its check.
+        XCTAssertFalse(try synchronize())
+        XCTAssertFalse(try synchronize())
     }
 
     func testICloudBridgeDeletesAPackageWhoseFoldersHaveNoListingYet() throws {
