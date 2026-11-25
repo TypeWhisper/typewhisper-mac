@@ -4,7 +4,9 @@ protocol PremiumICloudBridging: Sendable {
     var isAvailable: Bool { get }
     var localFolderURL: URL? { get }
 
-    func synchronize() async throws
+    /// Mirrors the local sync package and the iCloud container.
+    @discardableResult
+    func synchronize() async throws -> PremiumICloudBridgeReport
     func deleteRemotePackage() async throws
     func removeDevice(_ deviceID: String) async throws
 }
@@ -21,13 +23,13 @@ enum PremiumICloudBridgeFactory {
 
 private final class PremiumICloudBridgeReplyGate: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<Void, Error>?
+    private var continuation: CheckedContinuation<PremiumICloudBridgeReport, Error>?
 
-    init(continuation: CheckedContinuation<Void, Error>) {
+    init(continuation: CheckedContinuation<PremiumICloudBridgeReport, Error>) {
         self.continuation = continuation
     }
 
-    func finish(with result: Result<Void, Error>) {
+    func finish(with result: Result<PremiumICloudBridgeReport, Error>) {
         let pendingContinuation = lock.withLock {
             let pendingContinuation = continuation
             self.continuation = nil
@@ -61,7 +63,8 @@ final class PremiumICloudBridgeClient: PremiumICloudBridging, @unchecked Sendabl
         )
     }
 
-    func synchronize() async throws {
+    @discardableResult
+    func synchronize() async throws -> PremiumICloudBridgeReport {
         try await perform { proxy, reply in
             proxy.synchronize(reply: reply)
         }
@@ -79,16 +82,17 @@ final class PremiumICloudBridgeClient: PremiumICloudBridging, @unchecked Sendabl
         }
     }
 
+    @discardableResult
     private func perform(
         _ operation: @escaping (
             PremiumICloudBridgeXPCProtocol,
-            @escaping (String?) -> Void
+            @escaping (Data) -> Void
         ) -> Void
-    ) async throws {
+    ) async throws -> PremiumICloudBridgeReport {
         guard isAvailable else {
             throw PremiumICloudBridgeError.serviceUnavailable
         }
-        try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             let gate = PremiumICloudBridgeReplyGate(continuation: continuation)
             let connection = NSXPCConnection(serviceName: serviceName)
             connection.remoteObjectInterface = NSXPCInterface(
@@ -110,13 +114,12 @@ final class PremiumICloudBridgeClient: PremiumICloudBridging, @unchecked Sendabl
                 connection.invalidate()
                 return
             }
-            operation(proxy) { message in
-                if let message {
-                    gate.finish(with: .failure(
-                        PremiumICloudBridgeError.operationFailed(message)
-                    ))
+            operation(proxy) { data in
+                let reply = PremiumICloudBridgeReply.decoded(from: data)
+                if let failure = reply.failure {
+                    gate.finish(with: .failure(failure))
                 } else {
-                    gate.finish(with: .success(()))
+                    gate.finish(with: .success(reply.report))
                 }
                 connection.invalidate()
             }
