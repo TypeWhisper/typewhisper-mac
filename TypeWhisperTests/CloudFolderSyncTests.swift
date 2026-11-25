@@ -2720,6 +2720,41 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertFalse(try synchronize())
     }
 
+    func testICloudBridgeTracksUploadsOfAPassThatFailedLater() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            Self.unlockTree(remoteRoot)
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        let audio = "assets/history/history-v1/record/audio.m4a"
+        try Self.writeBridgeFile(audio, in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/iphone/1700000010000-op.json", in: remoteRoot, seconds: 10)
+        // The audio file is copied into iCloud, then reading the iPhone's folder fails.
+        let iPhoneOperations = remoteRoot.appendingPathComponent("typewhisper-sync/ops/iphone", isDirectory: true)
+        try Self.lock([iPhoneOperations])
+        let folders = LockedFolderAccess()
+        XCTAssertThrowsError(try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot,
+            remoteAccess: folders.access(unlocks: false)
+        ))
+        XCTAssertTrue(Self.bridgeFileExists(audio, in: remoteRoot))
+
+        // The next pass does not copy the audio file again but still checks its upload.
+        Self.unlockTree(remoteRoot)
+        let report = try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot,
+            remoteAccess: folders.access(uploadStatus: { file in
+                file.pathExtension == "m4a"
+                    ? .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError))
+                    : .uploaded
+            })
+        )
+        XCTAssertTrue(report.iCloudStorageFull)
+    }
+
     func testICloudBridgeDeletesAPackageWhoseFoldersHaveNoListingYet() throws {
         let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
         defer {

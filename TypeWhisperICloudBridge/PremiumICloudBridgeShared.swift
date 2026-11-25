@@ -453,32 +453,45 @@ enum PremiumICloudBridgeFileMirror {
         }
 
         var copiedToICloud: [URL] = []
-        if try local.itemKind(at: localPackage) != .missing {
-            try mergeDirectory(
-                from: localPackage,
-                readingWith: local,
-                to: remotePackage,
-                writingWith: remoteAccess,
-                isPackageRoot: true,
-                copied: &copiedToICloud,
-                fileManager: fileManager
+        let remoteFiles: [String: ListedFile]
+        let localFiles: [String: ListedFile]
+        do {
+            if try local.itemKind(at: localPackage) != .missing {
+                try mergeDirectory(
+                    from: localPackage,
+                    readingWith: local,
+                    to: remotePackage,
+                    writingWith: remoteAccess,
+                    isPackageRoot: true,
+                    copied: &copiedToICloud,
+                    fileManager: fileManager
+                )
+            }
+            if try remoteAccess.itemKind(at: remotePackage) != .missing {
+                var copiedToMirror: [URL] = []
+                try mergeDirectory(
+                    from: remotePackage,
+                    readingWith: remoteAccess,
+                    to: localPackage,
+                    writingWith: local,
+                    isPackageRoot: true,
+                    copied: &copiedToMirror,
+                    fileManager: fileManager
+                )
+            }
+            remoteFiles = try listFiles(in: remotePackage, access: remoteAccess, fileManager: fileManager)
+            localFiles = try listFiles(in: localPackage, access: local, fileManager: fileManager)
+        } catch {
+            // The next pass finds the copied files unchanged and does not copy them again,
+            // so their uploads are remembered before the pass fails.
+            rememberUploads(
+                copiedToICloud,
+                previousState: previousState,
+                remotePackage: remotePackage,
+                stateURL: stateURL
             )
+            throw error
         }
-        if try remoteAccess.itemKind(at: remotePackage) != .missing {
-            var copiedToMirror: [URL] = []
-            try mergeDirectory(
-                from: remotePackage,
-                readingWith: remoteAccess,
-                to: localPackage,
-                writingWith: local,
-                isPackageRoot: true,
-                copied: &copiedToMirror,
-                fileManager: fileManager
-            )
-        }
-
-        let remoteFiles = try listFiles(in: remotePackage, access: remoteAccess, fileManager: fileManager)
-        let localFiles = try listFiles(in: localPackage, access: local, fileManager: fileManager)
         var base = MirrorState(files: [:])
         for (path, local) in localFiles {
             guard let remote = remoteFiles[path] else { continue }
@@ -546,14 +559,8 @@ enum PremiumICloudBridgeFileMirror {
         access: PremiumICloudBridgeFolderAccess,
         limit: Int
     ) -> (pending: [String], refusedForQuota: [String]) {
-        let packagePrefix = remotePackage.standardizedFileURL.path + "/"
-        let previousPaths = Set(previous)
-        let copiedPaths = copied.compactMap { file -> String? in
-            let path = file.standardizedFileURL.path
-            return path.hasPrefix(packagePrefix) ? String(path.dropFirst(packagePrefix.count)) : nil
-        }
         // Files deleted since drop out; they no longer need an upload.
-        let candidates = (previous + Set(copiedPaths).subtracting(previousPaths).sorted())
+        let candidates = adding(packagePaths(of: copied, in: remotePackage), to: previous)
             .filter { remoteFiles[$0] != nil }
         let unchecked = Array(candidates.dropFirst(max(limit, 0)))
         var stillWaiting: [String] = []
@@ -567,6 +574,33 @@ enum PremiumICloudBridgeFileMirror {
             }
         }
         return (unchecked + stillWaiting, refused.sorted())
+    }
+
+    private static func rememberUploads(
+        _ copied: [URL],
+        previousState: MirrorState?,
+        remotePackage: URL,
+        stateURL: URL
+    ) {
+        let paths = packagePaths(of: copied, in: remotePackage)
+        guard !paths.isEmpty else { return }
+        // Without a recorded base an empty one is written, which deletes nothing.
+        var state = previousState ?? MirrorState(files: [:])
+        state.pendingUploads = adding(paths, to: state.pendingUploads ?? [])
+        try? writeMirrorState(state, to: stateURL)
+    }
+
+    /// `paths` that are not in `list` yet, sorted, after the entries of `list`.
+    private static func adding(_ paths: [String], to list: [String]) -> [String] {
+        list + Set(paths).subtracting(list).sorted()
+    }
+
+    private static func packagePaths(of files: [URL], in package: URL) -> [String] {
+        let packagePrefix = package.standardizedFileURL.path + "/"
+        return files.compactMap { file in
+            let path = file.standardizedFileURL.path
+            return path.hasPrefix(packagePrefix) ? String(path.dropFirst(packagePrefix.count)) : nil
+        }
     }
 
     static func mirrorStateURL(localRoot: URL) -> URL {
