@@ -427,6 +427,11 @@ final class AudioRecorderViewModelTests: XCTestCase {
         )
         XCTAssertNil(AudioRecorderViewModel.audioURL(ofRecordingID: deletedID, title: "Deleted", in: folders))
         XCTAssertNil(AudioRecorderViewModel.audioURL(ofRecordingID: UUID(), in: folders))
+        // The audio icon and the With Audio filter count the recordings whose file is there.
+        let recordingIDs = AudioRecorderViewModel.recordingIDsWithAudio(in: folders)
+        XCTAssertTrue(recordingIDs.isSuperset(of: [renamedID, olderID]))
+        XCTAssertFalse(recordingIDs.contains(deletedID))
+        XCTAssertEqual(recordingIDs.count, 3)
     }
 
     /// Issue #887: with speaker detection the completion waits for the speakers,

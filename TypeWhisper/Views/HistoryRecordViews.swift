@@ -95,7 +95,7 @@ struct HistoryRecordRow: View {
         if record.processingState == .failed {
             statuses.append(String(localized: "Processing failed"))
         }
-        if record.audioFileName != nil {
+        if record.audioFileName != nil || record.recorderAudioAvailable {
             statuses.append(String(localized: "Audio available"))
         }
         if isSynchronizedFromOtherDevice {
@@ -155,7 +155,7 @@ struct HistoryRecordRow: View {
                 .help(String(localized: "Processing failed"))
                 .accessibilityLabel(String(localized: "Processing failed"))
         }
-        if record.audioFileName != nil {
+        if record.audioFileName != nil || record.recorderAudioAvailable {
             Image(systemName: "waveform")
                 .help(String(localized: "Audio available"))
                 .accessibilityLabel(String(localized: "Audio available"))

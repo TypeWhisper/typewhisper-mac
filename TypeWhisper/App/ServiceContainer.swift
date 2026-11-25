@@ -613,15 +613,8 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             syncController: cloudFolderSyncController
         )
-        historyViewModel.recorderAudioLocator = { [audioRecorderService] recordingID, title in
-            await Task.detached(priority: .userInitiated) {
-                AudioRecorderViewModel.audioURL(
-                    ofRecordingID: recordingID,
-                    title: title,
-                    in: audioRecorderService.recordingsDirectories
-                )
-            }.value
-        }
+        historyViewModel.recorderFolders = { [audioRecorderService] in audioRecorderService.recordingsDirectories }
+        historyViewModel.observeRecorderRecordings(audioRecorderViewModel.$recordings.dropFirst().map { _ in })
         installedAppsViewModel = InstalledAppsViewModel()
         dictionaryViewModel = DictionaryViewModel(
             dictionaryService: dictionaryService,

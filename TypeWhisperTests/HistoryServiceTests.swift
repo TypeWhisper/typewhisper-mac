@@ -1109,6 +1109,34 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(try service.record(forRecorderRecordingID: earlier.recordingID)?.engineUsed, "unknown")
     }
 
+    /// Issue #2024: a Recorder recording saved as text only counts as audio while the
+    /// Recorder's folder holds its file.
+    @MainActor
+    func testRecorderRecordCountsAsAudioWhileItsFileIsThere() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let recordingID = UUID()
+        let id = try XCTUnwrap(service.saveRecorderTranscript(RecorderTranscript(
+            recordingID: recordingID, text: "Weekly sync notes.", title: "Weekly sync",
+            recordedAt: nil, durationSeconds: 90
+        )))
+        let withAudio = HistoryQuery(collection: .withAudio)
+        func audioRecordIDs() -> [UUID] {
+            service.fetchPage(query: withAudio, offset: 0, limit: 10).records.map(\.id)
+        }
+
+        XCTAssertEqual(audioRecordIDs(), [id])
+        XCTAssertEqual(service.facets(currentDeviceID: nil).audioCount, 1)
+
+        service.updateRecorderAudioAvailability(recordingIDs: [])
+        XCTAssertEqual(audioRecordIDs(), [])
+        XCTAssertEqual(service.facets(currentDeviceID: nil).audioCount, 0)
+
+        service.updateRecorderAudioAvailability(recordingIDs: [recordingID])
+        XCTAssertEqual(audioRecordIDs(), [id])
+    }
+
     /// Issue #1558: editing a speaker paragraph changes `finalText` like any other text edit.
     @MainActor
     func testEditingASpeakerParagraphEmitsThePluginSyncEvent() throws {
