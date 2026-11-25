@@ -179,10 +179,12 @@ struct HistoryRecordDetailView: View {
         let finalText: String
     }
 
-    /// The Recorder lookup runs again when History finds the file gone or back.
+    /// The Recorder lookup runs again when History finds the file gone or back, and
+    /// when the file it found is no longer there, as after a rename.
     private struct RecorderAudioInput: Equatable {
         let recordID: UUID
         let isAvailable: Bool
+        let foundFileIsGone: Bool
     }
 
     let record: TranscriptionRecord
@@ -229,9 +231,10 @@ struct HistoryRecordDetailView: View {
 
     var body: some View {
         let historyAudioURL = viewModel.audioFileURL(for: record)
-        let audioURL = historyAudioURL ?? recorderAudioURL.flatMap {
+        let foundRecorderAudioURL = recorderAudioURL.flatMap {
             FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
         }
+        let audioURL = historyAudioURL ?? foundRecorderAudioURL
         VStack(spacing: 0) {
             identityHeader
             Divider()
@@ -277,7 +280,11 @@ struct HistoryRecordDetailView: View {
             if let audioURL { speakers.playback.load(url: audioURL) }
             revealRequestedTime()
         }
-        .task(id: RecorderAudioInput(recordID: record.id, isAvailable: record.recorderAudioAvailable)) {
+        .task(id: RecorderAudioInput(
+            recordID: record.id,
+            isAvailable: record.recorderAudioAvailable,
+            foundFileIsGone: recorderAudioURL != nil && foundRecorderAudioURL == nil
+        )) {
             recorderAudioURL = await viewModel.recorderAudioURL(for: record)
         }
         .onChange(of: viewModel.recordTimeRequest) { revealRequestedTime() }
