@@ -2673,6 +2673,9 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertTrue(Self.bridgeFileExists("assets/history/history-v1/record/audio.m4a", in: remoteRoot))
         // A later pass copies nothing and still checks the waiting file.
         XCTAssertTrue(try synchronize(audioRefused))
+        // An unreadable status keeps the file listed with its known refusal.
+        XCTAssertTrue(try synchronize { _ in .unknown })
+        XCTAssertTrue(try synchronize(audioRefused))
         // Offline, iCloud also keeps files back, but its storage is not full.
         XCTAssertFalse(try synchronize { _ in
             .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileUbiquityServerNotAvailable))

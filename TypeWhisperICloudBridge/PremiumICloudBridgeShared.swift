@@ -217,6 +217,8 @@ enum PremiumICloudBridgeUploadStatus: Sendable {
     case uploaded
     /// iCloud still has to upload the file; the error says why the last attempt failed.
     case waiting(lastError: (any Error)?)
+    /// The status could not be read; the file stays listed with its last known state.
+    case unknown
 }
 
 /// How the mirror reaches the folders of one side.
@@ -253,12 +255,16 @@ struct PremiumICloudBridgeFolderAccess: Sendable {
         coordinatesChanges: true,
         uploadStatus: { url in
             guard let values = try? url.resourceValues(forKeys: [
+                .isUbiquitousItemKey,
                 .ubiquitousItemIsUploadedKey,
                 .ubiquitousItemUploadingErrorKey,
-            ]), values.ubiquitousItemIsUploaded == false else {
-                return .uploaded
+            ]) else {
+                return .unknown
             }
-            return .waiting(lastError: values.ubiquitousItemUploadingError)
+            // A file outside iCloud has nothing to upload.
+            guard values.isUbiquitousItem == true else { return .uploaded }
+            guard let isUploaded = values.ubiquitousItemIsUploaded else { return .unknown }
+            return isUploaded ? .uploaded : .waiting(lastError: values.ubiquitousItemUploadingError)
         }
     )
 
@@ -548,8 +554,8 @@ enum PremiumICloudBridgeFileMirror {
     /// them. iCloud Drive keeps a file it cannot upload on this Mac and records why. Whether
     /// the remaining storage takes a file depends on its size, so a large audio file can be
     /// refused while small records still upload; any refusal for quota means iCloud is full.
-    /// A pass checks at most `limit` files. The others stay listed and go first next time;
-    /// a file refused for quota counts as refused until a later check finds it uploaded.
+    /// A pass checks at most `limit` files. The others stay listed and go first next time.
+    /// A file refused for quota counts as refused until a check reads a different status.
     private static func checkUploads(
         pending previous: [String],
         refusedForQuota previouslyRefused: Set<String>,
@@ -567,10 +573,19 @@ enum PremiumICloudBridgeFileMirror {
         var refused = previouslyRefused.intersection(unchecked)
         for path in candidates.prefix(max(limit, 0)) {
             let file = remotePackage.appendingPathComponent(path, isDirectory: false)
-            guard case let .waiting(lastError) = access.uploadStatus(file) else { continue }
-            stillWaiting.append(path)
-            if let lastError, PremiumICloudBridgeError.classify(lastError) == .iCloudStorageFull {
-                refused.insert(path)
+            switch access.uploadStatus(file) {
+            case .uploaded:
+                continue
+            case .unknown:
+                stillWaiting.append(path)
+                if previouslyRefused.contains(path) {
+                    refused.insert(path)
+                }
+            case let .waiting(lastError):
+                stillWaiting.append(path)
+                if let lastError, PremiumICloudBridgeError.classify(lastError) == .iCloudStorageFull {
+                    refused.insert(path)
+                }
             }
         }
         return (unchecked + stillWaiting, refused.sorted())
