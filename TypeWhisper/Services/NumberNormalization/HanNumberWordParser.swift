@@ -93,6 +93,11 @@ enum HanNumberWordParser {
         var lastUnitHadExplicitZero = false
         var lastCharacterWasDigit = false
         var previousCharacterWasASCIIDigit = false
+        // Length of the digit run after the most recent unit. The spoken-tail
+        // reading only exists for a single trailing digit; longer runs such as
+        // the `2345` in `1万2345` or the `05` in `1万05` keep their literal
+        // place values.
+        var trailingDigitCount = 0
 
         for character in characters {
             if let digit = asciiDigitValue(character) {
@@ -102,8 +107,13 @@ enum HanNumberWordParser {
                     let (sum, addOverflow) = multiplied.addingReportingOverflow(digit)
                     guard !addOverflow else { return nil }
                     number = sum
+                    trailingDigitCount += 1
                 } else {
                     number = digit
+                    trailingDigitCount = 1
+                }
+                if digit == 0 {
+                    lastUnitHadExplicitZero = true
                 }
                 lastCharacterWasDigit = true
                 previousCharacterWasASCIIDigit = true
@@ -117,41 +127,64 @@ enum HanNumberWordParser {
                 }
                 lastCharacterWasDigit = true
                 previousCharacterWasASCIIDigit = false
+                trailingDigitCount += 1
                 continue
             }
 
             if let unit = unitValues[character] {
-                section += (number == 0 ? 1 : number) * unit
+                let magnitude = number == 0 ? 1 : number
+                let (product, multiplyOverflow) = magnitude.multipliedReportingOverflow(by: unit)
+                guard !multiplyOverflow else { return nil }
+                let (sectionSum, addOverflow) = section.addingReportingOverflow(product)
+                guard !addOverflow else { return nil }
+                section = sectionSum
                 number = 0
                 lastUnit = unit
                 lastUnitHadExplicitZero = false
                 lastCharacterWasDigit = false
                 previousCharacterWasASCIIDigit = false
+                trailingDigitCount = 0
                 continue
             }
 
             if let largeUnit = largeUnitValues[character] {
-                section += number
-                total += max(section, 1) * largeUnit
+                let (sectionSum, sectionOverflow) = section.addingReportingOverflow(number)
+                guard !sectionOverflow else { return nil }
+                let (product, multiplyOverflow) = max(sectionSum, 1).multipliedReportingOverflow(by: largeUnit)
+                guard !multiplyOverflow else { return nil }
+                let (totalSum, totalOverflow) = total.addingReportingOverflow(product)
+                guard !totalOverflow else { return nil }
+                total = totalSum
                 section = 0
                 number = 0
                 lastUnit = largeUnit
                 lastUnitHadExplicitZero = false
                 lastCharacterWasDigit = false
                 previousCharacterWasASCIIDigit = false
+                trailingDigitCount = 0
                 continue
             }
 
             return nil
         }
 
-        if spokenTailEnabled, let lastUnit, lastCharacterWasDigit, !lastUnitHadExplicitZero {
-            // In spoken Chinese, a trailing digit after a unit fills the next
-            // lower place: 一萬五 = 15000, 千二 = 1200. An explicit zero
-            // keeps the literal reading: 一萬零五 = 10005.
-            return total + section + number * max(lastUnit / 10, 1)
+        if spokenTailEnabled, let lastUnit, lastCharacterWasDigit, trailingDigitCount == 1, !lastUnitHadExplicitZero {
+            // In spoken Chinese, a single trailing digit after a unit fills the
+            // next lower place: 一萬五 = 15000, 千二 = 1200. An explicit zero
+            // keeps the literal reading: 一萬零五 = 10005, 1万05 = 10005.
+            let (product, multiplyOverflow) = number.multipliedReportingOverflow(by: max(lastUnit / 10, 1))
+            guard !multiplyOverflow else { return nil }
+            let (sectionTotal, sectionOverflow) = section.addingReportingOverflow(product)
+            guard !sectionOverflow else { return nil }
+            let (grandTotal, totalOverflow) = total.addingReportingOverflow(sectionTotal)
+            guard !totalOverflow else { return nil }
+            return grandTotal
         }
-        return total + section + number
+        let (sectionTotal, sectionOverflow) = section.addingReportingOverflow(number)
+        guard !sectionOverflow else { return nil }
+        let (grandTotal, totalOverflow) = total.addingReportingOverflow(sectionTotal)
+        guard !totalOverflow else { return nil }
+        return grandTotal
     }
 
     private static func isHanNumberWord(_ word: String) -> Bool {

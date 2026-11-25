@@ -15,6 +15,9 @@ enum NumberWordNormalizer {
     private static let hanApproximationPrefixes: Set<Character> = [
         "幾", "几", "數", "数", "上", "成",
     ]
+    private static let hanUnitCharacters: Set<Character> = [
+        "十", "百", "千", "万", "萬", "亿", "億",
+    ]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
     static func supports(language: String?) -> Bool {
@@ -364,8 +367,16 @@ enum NumberWordNormalizer {
         if index > 0,
            tokens[index - 1].kind == .word,
            let left = tokens[index - 1].text.last {
-            if hanApproximationPrefixes.contains(left) ||
-                hanLexicalNumberWords.contains(String(left) + text) {
+            // Approximations attach the prefix directly to bare units
+            // (幾千, 數百, 成千上萬). Count-label suffixes such as 总数, 人数
+            // and 訂單數 end in the same character, so only treat the prefix
+            // as approximating when the number itself contains no digit, e.g.
+            // keep 數百 intact but still normalize 总数一百 to 总数100.
+            if hanApproximationPrefixes.contains(left),
+               isBareHanUnitRun(text) {
+                return true
+            }
+            if hanLexicalNumberWords.contains(String(left) + text) {
                 return true
             }
         }
@@ -378,6 +389,10 @@ enum NumberWordNormalizer {
         }
 
         return false
+    }
+
+    private static func isBareHanUnitRun(_ text: String) -> Bool {
+        !text.isEmpty && text.allSatisfy { hanUnitCharacters.contains($0) }
     }
 
     private static func tokenKind(for character: Character) -> TokenKind {
