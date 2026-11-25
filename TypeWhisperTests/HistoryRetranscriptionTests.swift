@@ -139,6 +139,78 @@ final class HistoryRetranscriptionTests: XCTestCase {
         }
     }
 
+    func testProcessingTimesBelongToTheirRunAndArchivesWithoutThemStillDecode() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        var timed = alternative()
+        timed.engineSeconds = 2.4
+        timed.workflowSeconds = 1.1
+        try append(timed, to: f)
+        // A version archived before the times existed has no keys for them.
+        let legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(alternative())) as? [String: Any])
+        XCTAssertNil(legacy["engineSeconds"])
+        XCTAssertNil(legacy["workflowSeconds"])
+        var archive = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(f.record.transcriptionVersionsData)
+        ) as? [[String: Any]])
+        XCTAssertEqual(archive[1]["engineSeconds"] as? Double, 2.4)
+        archive.append(legacy)
+        f.record.transcriptionVersionsData = try JSONSerialization.data(withJSONObject: archive)
+        let versions = try f.record.savedTranscriptionVersions()
+        XCTAssertEqual(versions.map(\.engineSeconds), [nil, 2.4, nil])
+        XCTAssertEqual(versions.map(\.workflowSeconds), [nil, 1.1, nil])
+
+        try f.history.promoteTranscriptionVersion(timed.id, in: f.record)
+        XCTAssertTrue(timed.isActive(in: f.record))
+        let restored = try XCTUnwrap(HistoryService(appSupportDirectory: f.directory).record(withID: f.record.id))
+        XCTAssertEqual(try restored.savedTranscriptionVersions().map(\.engineSeconds), [nil, 2.4, nil])
+        XCTAssertTrue(timed.isActive(in: restored))
+
+        // The edited text did not come out of that run, so its archive keeps no time.
+        f.history.updateRecord(f.record, finalText: "manual correction")
+        try f.history.promoteTranscriptionVersion(versions[2].id, in: f.record)
+        let edited = try XCTUnwrap(f.record.savedTranscriptionVersions().last)
+        XCTAssertEqual(edited.finalText, "manual correction")
+        XCTAssertEqual(edited.engineName, timed.engineName)
+        XCTAssertNil(edited.engineSeconds)
+        XCTAssertNil(edited.workflowSeconds)
+        XCTAssertTrue(versions[2].isActive(in: f.record))
+    }
+
+    func testRunMeasuresEngineAndWorkflowSeparately() async throws {
+        let engine = HistoryComparisonSlowEngine()
+        engine.delay = .milliseconds(50)
+        engine.resultOverride = PluginTranscriptionResult(text: "timed text")
+        let llm = HistoryComparisonLLM()
+        llm.handler = { text in
+            try await Task.sleep(for: .milliseconds(30))
+            return text.uppercased()
+        }
+        let environment = try makeEnvironment(plugins: [engine, llm])
+        let plain = try HistoryRetranscriptionEnvironment.plan(.init(engineID: engine.providerId),
+            manager: environment.manager, dictionary: environment.dictionary, workflows: [], promptProcessing: environment.promptProcessing)
+        let version = try await plain.run([0.1])
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(version.engineSeconds), 0.045)
+        XCTAssertNil(version.workflowSeconds)
+
+        // The engine takes far longer than the Workflow, so a Workflow time that included the
+        // engine call would exceed the engine time.
+        engine.delay = .seconds(1)
+
+        let workflow = Workflow(name: "Cleanup", template: .cleanedText, trigger: .manual(),
+            behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test"),
+            output: WorkflowOutput(format: "plaintext"))
+        let processed = try await HistoryRetranscriptionEnvironment.plan(.init(engineID: engine.providerId, workflowID: workflow.id),
+            manager: environment.manager, dictionary: environment.dictionary, workflows: [workflow],
+            promptProcessing: environment.promptProcessing).run([0.1])
+        XCTAssertEqual(processed.finalText, "TIMED TEXT")
+        let engineSeconds = try XCTUnwrap(processed.engineSeconds)
+        XCTAssertGreaterThanOrEqual(engineSeconds, 0.99)
+        let workflowSeconds = try XCTUnwrap(processed.workflowSeconds)
+        XCTAssertGreaterThanOrEqual(workflowSeconds, 0.025)
+        XCTAssertLessThan(workflowSeconds, engineSeconds, "The Workflow time must not include the engine call.")
+    }
+
     func testSanitizedVersionSurvivesReopenAndPromotion() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
@@ -1508,6 +1580,14 @@ private final class HistoryEnforcedTestEngine: NSObject, TranscriptionEnginePlug
     func selectModel(_ modelId: String) {}
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "enforced", detectedLanguage: language)
+    }
+}
+
+private final class HistoryComparisonSlowEngine: HistoryComparisonTestEngine, @unchecked Sendable {
+    var delay: Duration = .zero
+    override func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        try await Task.sleep(for: delay)
+        return try await super.transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
     }
 }
 

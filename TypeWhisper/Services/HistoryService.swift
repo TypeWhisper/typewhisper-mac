@@ -2130,6 +2130,9 @@ final class HistoryService: ObservableObject {
             var edited = HistoryTranscriptionVersion.capture(record, provenance: source)
             edited.id = UUID()
             edited.createdAt = record.contentUpdatedAt
+            // The source run's times did not produce the edited text.
+            edited.engineSeconds = nil
+            edited.workflowSeconds = nil
             versions.append(edited)
         }
         try onSpeakerNamesWillChange?(record)

@@ -190,8 +190,10 @@ enum HistoryRetranscriptionEnvironment {
                 var steps = final == raw ? [] : ["Corrections"]
                 // The run's own LLM requests; promoting the version makes them the entry's usage.
                 let llmUsage = LLMUsageLedger()
+                var workflowSeconds: Double?
                 if let frozenWorkflow {
                     let beforeWorkflow = final
+                    let workflowStart = ContinuousClock.now
                     let segmentedRequest = frozenWorkflow.usesSegmentedPostProcessing
                         ? workflowProcessor.segmentedPromptRequest(
                             workflow: frozenWorkflow, detectedLanguage: result.detectedLanguage,
@@ -238,6 +240,7 @@ enum HistoryRetranscriptionEnvironment {
                             )
                         }
                     }
+                    workflowSeconds = seconds(ContinuousClock.now - workflowStart)
                     if final != beforeWorkflow { steps.append(frozenWorkflow.name) }
                     let beforeCorrections = final
                     final = dictionary.previewCorrections(to: final)
@@ -254,6 +257,10 @@ enum HistoryRetranscriptionEnvironment {
                     workflowConfiguration: configuration, workflowRecorded: true,
                     pipelineSteps: steps.isEmpty ? nil : String(data: try JSONEncoder().encode(steps), encoding: .utf8)
                 )
+                // The engine call alone, measured by the model manager after the model is ready.
+                version.engineSeconds = result.processingTime.isFinite && result.processingTime > 0
+                    ? result.processingTime : nil
+                version.workflowSeconds = workflowSeconds
                 // Explicitly empty without LLM requests, so promoting this version also
                 // clears the earlier usage on other Macs instead of leaving it unknown.
                 version.llmUsageData = (llmUsage.usage ?? HistoryLLMUsage(entries: [])).encodedData()
@@ -275,6 +282,10 @@ enum HistoryRetranscriptionEnvironment {
                 return version
             }
         )
+    }
+
+    private static func seconds(_ duration: Duration) -> Double {
+        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
     }
 
     /// Include cached models when a local engine only advertises its loaded model.

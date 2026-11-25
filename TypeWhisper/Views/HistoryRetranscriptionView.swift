@@ -21,6 +21,8 @@ struct HistoryRetranscriptionView: View {
     @State private var showDiscardConfirmation = false
     @State private var showDetails = false
     @State private var cancelRequested = false
+    @State private var highlights: Highlights?
+    @AppStorage(UserDefaultsKeys.historyComparisonHighlightsDifferences) private var highlightsDifferences = true
 
     private var container: ServiceContainer { .shared }
     private var engines: [any TranscriptionEnginePlugin] { PluginManager.shared?.transcriptionEngines ?? [] }
@@ -117,6 +119,7 @@ struct HistoryRetranscriptionView: View {
             guard let message else { return }
             container.accessibilityAnnouncementService.announceError(message)
         }
+        .task(id: comparisonKey) { await refreshHighlights(for: comparisonKey) }
         .onDisappear { service.cancel() }
     }
 
@@ -272,7 +275,17 @@ struct HistoryRetranscriptionView: View {
 
     private var compareSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel(2, String(localized: "history.retranscribe.step2"))
+            HStack(alignment: .firstTextBaseline) {
+                stepLabel(2, String(localized: "history.retranscribe.step2"))
+                Spacer()
+                if !candidates.isEmpty {
+                    Toggle(String(localized: "history.retranscribe.highlightDifferences"), isOn: $highlightsDifferences)
+                        .toggleStyle(.checkbox)
+                        .help(String(localized: "history.retranscribe.highlightHelp"))
+                        .accessibilityHint(String(localized: "history.retranscribe.highlightHelp"))
+                        .accessibilityIdentifier("history.retranscribe.highlightDifferences")
+                }
+            }
             HStack(alignment: .top, spacing: 14) {
                 currentPanel
                 resultPanel
@@ -283,7 +296,7 @@ struct HistoryRetranscriptionView: View {
     private var currentPanel: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                versionBody(activeVersion)
+                versionBody(activeVersion, marks: shownHighlights?.comparison.currentRanges ?? [], style: .removed)
                 Button(String(localized: "history.retranscribe.copyText")) { copy(activeVersion.finalText) }
                     .controlSize(.small)
             }
@@ -315,11 +328,8 @@ struct HistoryRetranscriptionView: View {
                                 }
                             }
                         }
-                        versionBody(version)
-                        if version.finalText == activeVersion.finalText {
-                            Label(String(localized: "history.retranscribe.sameText"), systemImage: "equal.circle")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                        versionBody(version, marks: shownHighlights?.comparison.otherRanges ?? [], style: .added)
+                        differenceSummary(version)
                         Divider()
                         HStack(spacing: 10) {
                             Button(String(localized: "history.retranscribe.promote")) { showPromotionConfirmation = true }
@@ -371,12 +381,15 @@ struct HistoryRetranscriptionView: View {
         .padding(.horizontal, 12)
     }
 
-    private func versionBody(_ version: HistoryTranscriptionVersion) -> some View {
+    private func versionBody(
+        _ version: HistoryTranscriptionVersion, marks: [Range<String.Index>], style: HistoryComparisonTextView.MarkStyle
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(provenance(version)).font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(provenanceParts(version).joined(separator: ", "))
-            Text(version.finalText).textSelection(.enabled)
+            timing(version)
+            HistoryComparisonTextView(text: version.finalText, marks: marks, style: style)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             if version.rawText != version.finalText {
@@ -437,6 +450,127 @@ struct HistoryRetranscriptionView: View {
         return parts
     }
 
+    // MARK: Processing time
+
+    @ViewBuilder
+    private func timing(_ version: HistoryTranscriptionVersion) -> some View {
+        let parts = timingParts(version, spoken: false)
+        if !parts.isEmpty {
+            Label {
+                Text(parts.joined(separator: " · "))
+            } icon: {
+                Image(systemName: "stopwatch")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .help(String(localized: "history.retranscribe.timingHelp"))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(timingParts(version, spoken: true).joined(separator: ", "))
+            .accessibilityHint(String(localized: "history.retranscribe.timingHelp"))
+        }
+    }
+
+    /// Only measured values: versions without a measurement show no time at all.
+    private func timingParts(_ version: HistoryTranscriptionVersion, spoken: Bool) -> [String] {
+        var parts: [String] = []
+        if let seconds = version.engineSeconds, seconds.isFinite, seconds > 0 {
+            parts.append(String(format: String(localized: "history.retranscribe.engineTime"),
+                                Self.formattedSeconds(seconds, spoken: spoken)))
+            let audioSeconds = record.durationSeconds
+            if audioSeconds.isFinite, audioSeconds > 0 {
+                let factor = audioSeconds / seconds
+                let shown = factor.formatted(.number.precision(.fractionLength(factor < 10 ? 0...1 : 0...0)))
+                parts.append(String(format: String(localized: "history.retranscribe.realTimeFactor"), shown))
+            }
+        }
+        if let seconds = version.workflowSeconds, seconds.isFinite, seconds >= 0 {
+            parts.append(String(format: String(localized: "history.retranscribe.workflowTime"),
+                                Self.formattedSeconds(seconds, spoken: spoken)))
+        }
+        return parts
+    }
+
+    /// "2.4s" or "3m 5s"; VoiceOver hears "2.4 seconds". Below 0.1 s shows 0.1 s, not 0.
+    private static func formattedSeconds(_ seconds: Double, spoken: Bool) -> String {
+        let shown = max(seconds, 0.1)
+        return Duration.milliseconds(Int64((shown * 1_000).rounded())).formatted(.units(
+            allowed: [.hours, .minutes, .seconds], width: spoken ? .wide : .narrow, maximumUnitCount: 2,
+            fractionalPart: shown < 10 ? .show(length: 1) : .hide
+        ))
+    }
+
+    // MARK: Differences
+
+    private struct ComparisonKey: Equatable {
+        let current: String
+        let other: String
+
+        /// Byte for byte: `String ==` treats composed and decomposed accents as equal, but the
+        /// marks are positions in one particular encoding of the text.
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.current.utf8.elementsEqual(rhs.current.utf8) && lhs.other.utf8.elementsEqual(rhs.other.utf8)
+        }
+    }
+
+    private struct Highlights {
+        let key: ComparisonKey
+        let comparison: HistoryTextComparison
+    }
+
+    /// The pair the result panel shows, or nil while a run replaces it or marking is off.
+    private var comparisonKey: ComparisonKey? {
+        guard highlightsDifferences, !running, let selectedVersion else { return nil }
+        let current = activeVersion.finalText
+        guard selectedVersion.finalText != current else { return nil }
+        return ComparisonKey(current: current, other: selectedVersion.finalText)
+    }
+
+    /// Highlights computed for another pair are never shown: their ranges belong to other text.
+    private var shownHighlights: Highlights? {
+        guard let highlights, let key = comparisonKey, highlights.key == key else { return nil }
+        return highlights
+    }
+
+    /// Long recordings are compared off the main thread; the panels show plain text until then.
+    private func refreshHighlights(for key: ComparisonKey?) async {
+        guard let key else {
+            highlights = nil
+            return
+        }
+        if highlights?.key == key { return }
+        let comparison = await Task.detached(priority: .userInitiated) {
+            HistoryTextComparison(current: key.current, other: key.other)
+        }.value
+        guard !Task.isCancelled else { return }
+        highlights = Highlights(key: key, comparison: comparison)
+    }
+
+    /// The visible count is also what VoiceOver reads; the marking itself is not announced.
+    @ViewBuilder
+    private func differenceSummary(_ version: HistoryTranscriptionVersion) -> some View {
+        if version.finalText == activeVersion.finalText {
+            Label(String(localized: "history.retranscribe.sameText"), systemImage: "equal.circle")
+                .font(.caption).foregroundStyle(.secondary)
+        } else if let highlights = shownHighlights {
+            Group {
+                switch highlights.comparison.outcome {
+                case .changed(let count):
+                    Label(String.localizedStringWithFormat(String(localized: "history.retranscribe.differences"), Int64(count)),
+                          systemImage: "highlighter")
+                case .whitespaceOnly:
+                    Label(String(localized: "history.retranscribe.whitespaceOnly"), systemImage: "equal.circle")
+                case .tooManyChanges:
+                    Label(String(localized: "history.retranscribe.tooManyChanges"), systemImage: "exclamationmark.circle")
+                case .identical:
+                    EmptyView()
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("history.retranscribe.differenceSummary")
+        }
+    }
+
     private func refreshPlan() {
         cloudConfirmed = false
         do { plan = try service.previewPlan(request); planError = nil }
@@ -446,5 +580,129 @@ struct HistoryRetranscriptionView: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// A version's text, selectable and read-only, with the differences marked. SwiftUI's
+/// selectable `Text` copies rich text, which would paste the marks into other apps; this view
+/// writes only plain text when the selection is copied, dragged or sent to a service.
+struct HistoryComparisonTextView: NSViewRepresentable {
+    enum MarkStyle {
+        /// Removed or replaced in the other version: light red and struck through.
+        case removed
+        /// New in this version: yellow and underlined.
+        case added
+    }
+
+    let text: String
+    let marks: [Range<String.Index>]
+    let style: MarkStyle
+
+    func makeNSView(context: Context) -> HistoryPlainCopyTextView {
+        HistoryPlainCopyTextView()
+    }
+
+    func updateNSView(_ view: HistoryPlainCopyTextView, context: Context) {
+        view.show(text, marks: marks, style: style)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView view: HistoryPlainCopyTextView, context: Context) -> CGSize? {
+        view.size(forWidth: proposal.width)
+    }
+}
+
+final class HistoryPlainCopyTextView: NSTextView {
+    private var shown: (text: String, marks: [Range<String.Index>], style: HistoryComparisonTextView.MarkStyle)?
+    private var measured: (width: CGFloat, size: CGSize)?
+
+    init() {
+        // TextKit 1 measures the height for SwiftUI without switching layout systems later.
+        let storage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = true
+        layoutManager.addTextContainer(container)
+        super.init(frame: .zero, textContainer: container)
+        isEditable = false
+        isSelectable = true
+        importsGraphics = false
+        drawsBackground = false
+        textContainerInset = .zero
+        isVerticallyResizable = false
+        isHorizontallyResizable = false
+    }
+
+    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        super.init(frame: frameRect, textContainer: container)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Only the plain-text type. AppKit lists it under the legacy name `NSStringPboardType`
+    /// here, and writes nothing for `.string`.
+    override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.writablePasteboardTypes.filter { $0 == .string || $0.rawValue == "NSStringPboardType" }
+    }
+
+    // Like a selectable SwiftUI `Text`, the text is selected with the mouse and is no Tab
+    // stop. Tab after a selection goes to SwiftUI, which moves the focus to a control.
+    override var canBecomeKeyView: Bool { false }
+    override func insertTab(_ sender: Any?) { passKeyToWindowContent() }
+    override func insertBacktab(_ sender: Any?) { passKeyToWindowContent() }
+
+    private func passKeyToWindowContent() {
+        guard let window, let content = window.contentView, let event = NSApp.currentEvent,
+              event.type == .keyDown, window.makeFirstResponder(content) else { return }
+        content.keyDown(with: event)
+    }
+
+    func show(_ text: String, marks: [Range<String.Index>], style: HistoryComparisonTextView.MarkStyle) {
+        let sameText = shown.map { $0.text.utf8.elementsEqual(text.utf8) } ?? false
+        if let shown, sameText, shown.marks == marks, shown.style == style { return }
+        let base: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            .foregroundColor: NSColor.labelColor,
+        ]
+        let marked: [NSAttributedString.Key: Any] = switch style {
+        case .removed: [
+            .backgroundColor: NSColor.systemRed.withAlphaComponent(0.22),
+            .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+        ]
+        case .added: [
+            .backgroundColor: NSColor.systemYellow.withAlphaComponent(0.38),
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+        ]
+        }
+        let content = NSMutableAttributedString(string: text, attributes: base)
+        for mark in marks where mark.upperBound <= text.endIndex {
+            let range = NSRange(mark, in: text)
+            guard NSMaxRange(range) <= content.length else { continue }
+            content.addAttributes(marked, range: range)
+        }
+        if !sameText { setSelectedRange(NSRange(location: 0, length: 0)) }
+        textStorage?.setAttributedString(content)
+        shown = (text, marks, style)
+        measured = nil
+    }
+
+    /// The height of the text wrapped to the proposed width; without one, its unwrapped size.
+    func size(forWidth proposedWidth: CGFloat?) -> CGSize {
+        let width = proposedWidth.flatMap { $0.isFinite ? max($0, 1) : nil }
+        let wrapWidth = width ?? CGFloat.greatestFiniteMagnitude
+        if let measured, measured.width == wrapWidth { return measured.size }
+        guard let layoutManager, let textContainer else { return .zero }
+        let previous = textContainer.containerSize
+        textContainer.containerSize = NSSize(width: wrapWidth, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let used = layoutManager.usedRect(for: textContainer)
+        textContainer.containerSize = previous
+        let size = CGSize(width: width ?? ceil(used.width), height: ceil(used.height))
+        measured = (wrapWidth, size)
+        return size
     }
 }

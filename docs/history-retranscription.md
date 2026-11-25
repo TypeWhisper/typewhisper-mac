@@ -6,6 +6,21 @@ Each successful run stores a result under the same entry. The active text, origi
 
 Without usable local or retrievable audio, **Compare versions** is available only when a saved version differs from the active entry.
 
+## Processing time
+
+- Each new result stores how long its run took, shown under the provenance line as, for example, `Transcription 2.4s · 12× real time · Workflow 1.1s`. VoiceOver reads the spelled-out units; the tooltip explains what the numbers include.
+- **Transcription** is the model manager's measurement of the engine call: from handing the audio to the engine until its text comes back. Preparing or loading the model beforehand, retrieving synchronized audio and decoding the recording are not included. For cloud engines it includes the upload and the provider's queue. The real-time factor divides the entry's recording duration by this time.
+- **Workflow** is measured separately and covers the Workflow's text step after transcription, such as an LLM request or Apple Translate. It appears only when the run used a Workflow. Dictionary corrections are not timed.
+- The times are stored as optional fields of the saved version. The original dictation, versions saved before this existed, and archived manual edits show no time instead of a placeholder. Promoting a version keeps its time with that version; times are local and are not synchronized or counted in statistics.
+- A re-transcription always transcribes the saved recording as a file. Engines that stream during live dictation, such as Soniox, may use a different API for files, so these times describe file transcription, not the latency of the original dictation.
+
+## Differences
+
+- **Highlight differences** (on by default, remembered per Mac) marks what differs between the current text and the selected result. Words, single punctuation marks and capitalization are compared exactly; spaces and line breaks only separate words. Characters of scripts written without spaces, such as Chinese, Japanese and Thai, are compared one by one.
+- The current text shows removed or replaced parts on a light red background and struck through. The result shows new parts on a yellow background and underlined, so the marking does not rely on color alone. The result panel states how many places differ, which is also what VoiceOver reads; texts that differ only in spacing say so.
+- Selecting and copying marked text, and **Copy text**, give the plain text.
+- The comparison runs off the main thread after unchanged beginnings and endings are skipped, and the panels show plain text until it finishes. It follows up to 3,000 token edits; beyond that nothing is marked and the result panel says that the texts differ too much to mark word by word.
+
 ## Processing
 
 - Engine, model, language and Workflow settings are captured for the run. The normal engine/model preferences are restored by the existing one-shot model override path. Engines with a selectable model but no restorable previous selection must first be configured in Integrations.
@@ -33,6 +48,7 @@ xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper \
   -destination 'platform=macOS,arch=arm64' \
   -parallel-testing-enabled NO \
   -only-testing:TypeWhisperTests/HistoryRetranscriptionTests \
+  -only-testing:TypeWhisperTests/HistoryTextComparisonTests \
   -only-testing:TypeWhisperTests/HistoryServiceTests \
   -only-testing:TypeWhisperTests/SpeakerSyncHistoryTests \
   -only-testing:TypeWhisperTests/SpeakerTranscriptCoordinatorTests \
@@ -57,7 +73,7 @@ Tracked in [#1149](https://github.com/TypeWhisper/typewhisper-mac/issues/1149). 
 
 ## Screenshots
 
-These native app captures use isolated synthetic entries. The "before" images show the earlier comparison layout, before the usability changes; they are not screenshots of a released version. The result shown in the comparison is a fixture, not output from a live provider run.
+These native app captures use isolated synthetic entries. The "before" images show the earlier comparison layout, before the usability changes; they are not screenshots of a released version. The result shown in the comparison is a fixture, not output from a live provider run. The captures predate the processing time and the difference marking; the `history-comparison` screenshot state now shows both.
 
 | State | English | German |
 | --- | --- | --- |

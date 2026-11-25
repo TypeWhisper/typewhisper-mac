@@ -5272,6 +5272,357 @@
         }
       }
     },
+    "history.retranscribe.engineTime" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcription %@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkription %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcripción %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こし %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写 %@"
+          }
+        }
+      }
+    },
+    "history.retranscribe.realTimeFactor" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@× real time"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@× Echtzeit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@× tiempo real"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実時間の%@倍"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时速度的 %@ 倍"
+          }
+        }
+      }
+    },
+    "history.retranscribe.workflowTime" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workflow %@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workflow %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flujo de trabajo %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフロー %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流 %@"
+          }
+        }
+      }
+    },
+    "history.retranscribe.timingHelp" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcription counts from handing the audio to the engine until the text comes back. For cloud engines that includes the upload and the wait, but not loading the model beforehand. Workflow counts the text step after it."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkription zählt von der Übergabe des Audios an die Engine bis zum fertigen Text. Bei Cloud-Engines gehören Upload und Wartezeit dazu, das vorherige Laden des Modells nicht. Workflow zählt den Textschritt danach."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcripción cuenta desde que el audio se entrega al motor hasta que vuelve el texto. En los motores en la nube incluye la subida y la espera, pero no la carga previa del modelo. Flujo de trabajo cuenta el paso de texto posterior."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こしは、音声をエンジンに渡してからテキストが返るまでの時間です。クラウドエンジンではアップロードと待ち時間を含み、事前のモデル読み込みは含みません。ワークフローはその後のテキスト処理の時間です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写时间指从把音频交给引擎到返回文本的时间。云端引擎包含上传和等待时间，但不包含事先加载模型。工作流时间指之后的文本处理步骤。"
+          }
+        }
+      }
+    },
+    "history.retranscribe.highlightDifferences" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Highlight differences"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterschiede markieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resaltar diferencias"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "違いをハイライト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "突出显示差异"
+          }
+        }
+      }
+    },
+    "history.retranscribe.highlightHelp" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marks words, punctuation and capitalization that differ. Removed text is struck through in the current text, new text is underlined in the result."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markiert abweichende Wörter, Satzzeichen und Groß- und Kleinschreibung. Entferntes ist im aktuellen Text durchgestrichen, Neues im Ergebnis unterstrichen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marca las palabras, los signos de puntuación y las mayúsculas que difieren. Lo eliminado aparece tachado en el texto actual y lo nuevo, subrayado en el resultado."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "異なる単語、句読点、大文字と小文字をマークします。削除された部分は現在のテキストに取り消し線で、新しい部分は結果に下線で表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记不同的词语、标点和大小写。删除的内容在当前文本中显示删除线，新增的内容在结果中显示下划线。"
+          }
+        }
+      }
+    },
+    "history.retranscribe.differences" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld difference highlighted"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld differences highlighted"
+                }
+              }
+            }
+          }
+        },
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Unterschied markiert"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Unterschiede markiert"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld diferencia resaltada"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld diferencias resaltadas"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 箇所の違いをハイライトしています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已突出显示 %lld 处差异"
+          }
+        }
+      }
+    },
+    "history.retranscribe.whitespaceOnly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only spaces or line breaks differ."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Leerzeichen oder Zeilenumbrüche unterscheiden sich."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo difieren los espacios o los saltos de línea."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スペースまたは改行だけが異なります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅空格或换行不同。"
+          }
+        }
+      }
+    },
+    "history.retranscribe.tooManyChanges" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The texts differ too much to highlight word by word."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Texte weichen zu stark ab, um sie Wort für Wort zu markieren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los textos difieren demasiado para resaltarlos palabra por palabra."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "違いが多すぎるため、単語ごとにハイライトできません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本差异过大，无法逐词突出显示。"
+          }
+        }
+      }
+    },
     "history.retranscribe.details" : {
       "extractionState" : "manual",
       "localizations" : {

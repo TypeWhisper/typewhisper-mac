@@ -150,6 +150,8 @@ enum UserDefaultsKeys {
     /// IDs of the cloud providers the user allowed Ask History to send excerpts to.
     static let askHistoryCloudConsents = "askHistoryCloudConsents"
     static let saveAudioWithHistory = "saveAudioWithHistory"
+    /// Whether History's version comparison marks the words that differ. On by default.
+    static let historyComparisonHighlightsDifferences = "historyComparisonHighlightsDifferences"
 
     // MARK: - Notch Indicator
     static let overlayPosition = "overlayPosition"
