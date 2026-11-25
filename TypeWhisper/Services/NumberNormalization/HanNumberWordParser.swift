@@ -90,6 +90,7 @@ enum HanNumberWordParser {
         var section = 0
         var number = 0
         var lastUnit: Int?
+        var lastLargeUnit: Int?
         var lastUnitHadExplicitZero = false
         var lastCharacterWasDigit = false
         var previousCharacterWasASCIIDigit = false
@@ -152,12 +153,31 @@ enum HanNumberWordParser {
                 guard !sectionOverflow else { return nil }
                 let (product, multiplyOverflow) = max(sectionSum, 1).multipliedReportingOverflow(by: largeUnit)
                 guard !multiplyOverflow else { return nil }
-                let (totalSum, totalOverflow) = total.addingReportingOverflow(product)
-                guard !totalOverflow else { return nil }
-                total = totalSum
+                if largeUnit > (lastLargeUnit ?? 0), total > 0 {
+                    // Ascending large units compose multiplicatively: the
+                    // accumulated total scales by the larger unit, as in
+                    // 1万亿 = 1万 × 1亿 = 10^12. A non-empty section joins the
+                    // composition (一万二千亿 = (一万二千)亿); an empty section
+                    // adds nothing. Descending expressions such as 1亿2万
+                    // stay additive.
+                    let (composed, composeOverflow) = total.multipliedReportingOverflow(by: largeUnit)
+                    guard !composeOverflow else { return nil }
+                    if sectionSum > 0 {
+                        let (totalSum, totalOverflow) = composed.addingReportingOverflow(product)
+                        guard !totalOverflow else { return nil }
+                        total = totalSum
+                    } else {
+                        total = composed
+                    }
+                } else {
+                    let (totalSum, totalOverflow) = total.addingReportingOverflow(product)
+                    guard !totalOverflow else { return nil }
+                    total = totalSum
+                }
                 section = 0
                 number = 0
                 lastUnit = largeUnit
+                lastLargeUnit = largeUnit
                 lastUnitHadExplicitZero = false
                 lastCharacterWasDigit = false
                 previousCharacterWasASCIIDigit = false

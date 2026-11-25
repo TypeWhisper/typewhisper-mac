@@ -385,6 +385,24 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "10万", language: "zh"), "100000")
     }
 
+    func testChineseAscendingLargeUnitsComposeMultiplicatively() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1万亿", language: "zh"), "1000000000000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一万亿", language: "zh"), "1000000000000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "万亿", language: "zh"), "1000000000000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一万二千亿", language: "zh"), "1200000000000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "一千二百万亿", language: "zh"), "1200000000000000")
+        // Descending large units stay additive.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1亿2万", language: "zh"), "100020000")
+    }
+
+    func testChineseLexicalWordsStayIntactBeforeASCIIDigits() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "万一5个人都来了", language: "zh"), "万一5个人都来了")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "萬一5個人都來了", language: "zh"), "萬一5個人都來了")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "萬能5", language: "zh"), "萬能5")
+        // Mixed numerals that do not form lexical words keep merging.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1万5", language: "zh"), "15000")
+    }
+
     func testChineseCountLabelSuffixesStillNormalize() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "总数一百", language: "zh"), "总数100")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "總數一百", language: "zh"), "總數100")

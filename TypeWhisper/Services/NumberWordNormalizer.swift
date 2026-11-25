@@ -337,11 +337,32 @@ enum NumberWordNormalizer {
             var endIndex = index
             var text = ""
             var containsCJKNumber = false
+            var mergeBlocked = false
             while endIndex < tokens.count,
                   (tokens[endIndex].kind == .digit || tokens[endIndex].kind == .cjkNumber) {
+                if tokens[endIndex].kind == .digit,
+                   let lexical = hanLexicalNumberWords.first(where: { text.hasSuffix($0) }) {
+                    // A digit run must not merge into a lexical word: in
+                    // 万一5个人都来了 the 万一 is "in case", not a number.
+                    // Mixed numbers such as 1万5 keep merging because 万
+                    // alone is never lexical.
+                    if text.count > lexical.count {
+                        let numberPart = String(text.dropLast(lexical.count))
+                        result.append(Token(text: numberPart, kind: .cjkNumber))
+                    }
+                    result.append(Token(text: lexical, kind: .cjkNumber))
+                    result.append(contentsOf: tokens[endIndex...])
+                    mergeBlocked = true
+                    break
+                }
                 text += tokens[endIndex].text
                 containsCJKNumber = containsCJKNumber || tokens[endIndex].kind == .cjkNumber
                 endIndex += 1
+            }
+
+            if mergeBlocked {
+                index = tokens.count
+                continue
             }
 
             if containsCJKNumber {
