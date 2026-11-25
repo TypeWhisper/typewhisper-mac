@@ -1143,6 +1143,12 @@ final class CloudFolderSyncController: ObservableObject {
         pendingChanges = 0
         statusMessage = nil
         errorMessage = nil
+        if newMode != .off {
+            // The list shows the devices of the previous sync location until a sync in the
+            // new one replaces it; a failing first sync would leave them on screen.
+            devices = []
+            deviceCount = 0
+        }
         updateICloudObservation()
         lastSyncDate = state(for: newMode)?.lastSyncAt
         if isConfigured { await syncNow() }
@@ -1281,6 +1287,7 @@ final class CloudFolderSyncController: ObservableObject {
         }
 
         do {
+            var iCloudStorageFull = false
             if syncMode == .automaticICloud {
                 try await automaticICloudBridge.synchronize()
             }
@@ -1295,7 +1302,7 @@ final class CloudFolderSyncController: ObservableObject {
             )
             setState(syncState, for: syncMode)
             if syncMode == .automaticICloud {
-                try await automaticICloudBridge.synchronize()
+                iCloudStorageFull = try await automaticICloudBridge.synchronize().iCloudStorageFull
             }
             let audioDiagnostics = await installPendingSynchronizedAudio(in: folderURL)
             guard mode == syncMode else { return }
@@ -1321,8 +1328,20 @@ final class CloudFolderSyncController: ObservableObject {
                     Int64(synchronizedChanges), Int64(diagnostics.count)
                 )
             }
+            showICloudStorageFull(iCloudStorageFull)
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// A pass still completes while iCloud is full: this Mac's changes wait in the iCloud
+    /// container on disk until iCloud has space, and files already in iCloud still download.
+    private func showICloudStorageFull(_ isFull: Bool) {
+        let message = PremiumICloudBridgeError.iCloudStorageFull.localizedDescription
+        if isFull {
+            errorMessage = message
+        } else if errorMessage == message {
+            errorMessage = nil
         }
     }
 
@@ -1473,9 +1492,10 @@ final class CloudFolderSyncController: ObservableObject {
 
         isCheckingForChanges = true
         defer { isCheckingForChanges = false }
+        var iCloudStorageFull: Bool?
         if syncMode == .automaticICloud {
             do {
-                try await automaticICloudBridge.synchronize()
+                iCloudStorageFull = try await automaticICloudBridge.synchronize().iCloudStorageFull
             } catch {
                 // Let a full sync report the bridge failure, as the unconditional poll did.
                 await syncNow()
@@ -1495,6 +1515,11 @@ final class CloudFolderSyncController: ObservableObject {
             folderURL.stopAccessingSecurityScopedResource()
         }
         guard mode == syncMode else { return true }
+        // Only after the mode check: deleting the sync folder meanwhile turns sync off and
+        // clears the message, and the check's answer must not bring it back.
+        if let iCloudStorageFull {
+            showICloudStorageFull(iCloudStorageFull)
+        }
         guard !isSyncing else {
             // A sync started meanwhile; compare again once it has recorded its package state.
             needsChangeCheck = true

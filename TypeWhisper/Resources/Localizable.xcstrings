@@ -29,6 +29,90 @@
         }
       }
     },
+    "The private iCloud sync helper is unavailable." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die private iCloud-Sync-Hilfe ist nicht verfügbar."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El asistente privado de sincronización de iCloud no está disponible."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プライベートiCloud同期ヘルパーを利用できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私有 iCloud 同步辅助程序不可用。"
+          }
+        }
+      }
+    },
+    "The shared TypeWhisper container is unavailable." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der gemeinsame TypeWhisper-Container ist nicht verfügbar."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El contenedor compartido de TypeWhisper no está disponible."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperの共有コンテナを利用できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 共享容器不可用。"
+          }
+        }
+      }
+    },
+    "This Mac is out of storage space, so TypeWhisper can't sync. Free up space and TypeWhisper tries again automatically." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Mac ist kein Speicherplatz mehr frei, daher kann TypeWhisper nicht synchronisieren. Gib Speicherplatz frei, dann versucht es TypeWhisper automatisch erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este Mac no tiene espacio de almacenamiento disponible, así que TypeWhisper no puede sincronizar. Libera espacio y TypeWhisper lo volverá a intentar automáticamente."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacのストレージ容量が不足しているため、TypeWhisperは同期できません。空き容量を確保すると、TypeWhisperが自動的に再試行します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 的储存空间不足，TypeWhisper 无法同步。请释放空间，TypeWhisper 会自动重试。"
+          }
+        }
+      }
+    },
     "TypeWhisper pastes dictations into terminal apps and does not report “No text field detected” for them, because a terminal often shows pasted text only once the shell echoes it. Terminal, iTerm2, WezTerm, Warp, Ghostty, cmux and agterm are always included. Add another terminal if dictating into it ends with that message." : {
       "localizations" : {
         "de" : {
@@ -53,6 +137,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TypeWhisper 会把听写内容粘贴到终端应用中，并且不会对它们提示“未检测到文本字段”，因为终端通常要等 shell 回显后才显示粘贴的文本。Terminal、iTerm2、WezTerm、Warp、Ghostty、cmux 和 agterm 始终包含在内。如果在其他终端中听写后出现该提示，请将它添加到这里。"
+          }
+        }
+      }
+    },
+    "Your iCloud storage is full. TypeWhisper keeps your changes on this Mac and uploads them once iCloud has space again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein iCloud-Speicher ist voll. TypeWhisper behält deine Änderungen auf diesem Mac und lädt sie hoch, sobald in iCloud wieder Platz ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu almacenamiento de iCloud está lleno. TypeWhisper conserva tus cambios en este Mac y los sube cuando vuelva a haber espacio en iCloud."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudのストレージがいっぱいです。TypeWhisperは変更をこのMacに保持し、iCloudに空きができたらアップロードします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的 iCloud 储存空间已满。TypeWhisper 会将更改保留在这台 Mac 上，并在 iCloud 有可用空间后上传。"
           }
         }
       }
@@ -2703,6 +2815,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最多 50 台设备"
+          }
+        }
+      }
+    },
+    "iCloud Drive hasn't made the TypeWhisper sync folder available on this Mac yet. TypeWhisper tries again automatically. Check that this Mac is online." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Drive hat den TypeWhisper-Sync-Ordner auf diesem Mac noch nicht bereitgestellt. TypeWhisper versucht es automatisch erneut. Prüfe, ob dieser Mac online ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Drive todavía no ha puesto a disposición la carpeta de sincronización de TypeWhisper en este Mac. TypeWhisper lo volverá a intentar automáticamente. Comprueba que este Mac esté conectado a internet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud DriveはまだこのMacでTypeWhisperの同期フォルダを利用可能にしていません。TypeWhisperは自動的に再試行します。このMacがオンラインになっているか確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud 云盘尚未在这台 Mac 上提供 TypeWhisper 同步文件夹。TypeWhisper 会自动重试。请检查这台 Mac 是否已联网。"
           }
         }
       }
@@ -48331,6 +48471,12 @@
       "comment" : "Error message displayed when automatic iCloud sync is not available.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich bei iCloud an und aktiviere iCloud Drive, um die automatische Synchronisierung zu verwenden."
+          }
+        },
         "es" : {
           "stringUnit" : {
             "state" : "translated",

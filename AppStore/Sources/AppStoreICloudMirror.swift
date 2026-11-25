@@ -30,7 +30,8 @@ final class AppStoreICloudMirror: PremiumICloudBridging, @unchecked Sendable {
         )
     }
 
-    func synchronize() async throws {
+    @discardableResult
+    func synchronize() async throws -> PremiumICloudBridgeReport {
         try await perform { local, remote in
             try PremiumICloudBridgeFileMirror.synchronize(localRoot: local, remoteRoot: remote)
         }
@@ -39,6 +40,7 @@ final class AppStoreICloudMirror: PremiumICloudBridging, @unchecked Sendable {
     func deleteRemotePackage() async throws {
         try await perform { local, remote in
             try PremiumICloudBridgeFileMirror.deletePackages(localRoot: local, remoteRoot: remote)
+            return PremiumICloudBridgeReport()
         }
     }
 
@@ -55,12 +57,17 @@ final class AppStoreICloudMirror: PremiumICloudBridging, @unchecked Sendable {
                     )
                 }
             )
+            return PremiumICloudBridgeReport()
         }
     }
 
     /// Runs `operation` on a serial background queue: resolving the ubiquity
-    /// container can block, and mirror passes must not overlap.
-    private func perform(_ operation: @escaping @Sendable (URL, URL) throws -> Void) async throws {
+    /// container can block, and mirror passes must not overlap. Failures are
+    /// reported as the cause the user can act on, as the helper does.
+    @discardableResult
+    private func perform(
+        _ operation: @escaping @Sendable (URL, URL) throws -> PremiumICloudBridgeReport
+    ) async throws -> PremiumICloudBridgeReport {
         guard let local = localFolderURL else {
             throw PremiumICloudBridgeError.appGroupUnavailable
         }
@@ -69,7 +76,8 @@ final class AppStoreICloudMirror: PremiumICloudBridging, @unchecked Sendable {
         }
         let containerIdentifier = containerIdentifier
         let fileManager = fileManager
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        return try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<PremiumICloudBridgeReport, Error>) in
             queue.async {
                 do {
                     guard let container = fileManager.url(
@@ -77,10 +85,12 @@ final class AppStoreICloudMirror: PremiumICloudBridging, @unchecked Sendable {
                     ) else {
                         throw PremiumICloudBridgeError.iCloudUnavailable
                     }
-                    try operation(local, container.appendingPathComponent("Documents", isDirectory: true))
-                    continuation.resume()
+                    continuation.resume(returning: try operation(
+                        local,
+                        container.appendingPathComponent("Documents", isDirectory: true)
+                    ))
                 } catch {
-                    continuation.resume(throwing: error)
+                    continuation.resume(throwing: PremiumICloudBridgeError.classify(error))
                 }
             }
         }

@@ -368,9 +368,34 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
         self.localFolderURL = localFolderURL
     }
 
-    func synchronize() async throws {
-        lock.withLock { storedSynchronizeCount += 1 }
+    /// Thrown by every mirror pass while set.
+    var synchronizeError: PremiumICloudBridgeError? {
+        get { lock.withLock { storedSynchronizeError } }
+        set { lock.withLock { storedSynchronizeError = newValue } }
     }
+    /// Reported by every completed mirror pass.
+    var report: PremiumICloudBridgeReport {
+        get { lock.withLock { storedReport } }
+        set { lock.withLock { storedReport = newValue } }
+    }
+    private var storedSynchronizeError: PremiumICloudBridgeError?
+    private var storedReport = PremiumICloudBridgeReport()
+
+    @discardableResult
+    func synchronize() async throws -> PremiumICloudBridgeReport {
+        let (error, report) = lock.withLock {
+            storedSynchronizeCount += 1
+            return (storedSynchronizeError, storedReport)
+        }
+        if let synchronizeGate {
+            await synchronizeGate.wait()
+        }
+        if let error { throw error }
+        return report
+    }
+
+    /// Holds mirror passes until opened, to act while one is running.
+    var synchronizeGate: RemovalGate?
 
     func deleteRemotePackage() async throws {
         lock.withLock { storedDeleteCount += 1 }
@@ -385,6 +410,43 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
 
     /// Holds removals until opened, to request a sync while one is running.
     var removalGate: RemovalGate?
+}
+
+/// iCloud access for tests: preparing a folder unlocks it, standing in for iCloud Drive
+/// fetching the listing of a dataless folder, and every prepared folder is recorded.
+private final class LockedFolderAccess: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedPrepared: [String] = []
+
+    var prepared: Set<String> { lock.withLock { Set(storedPrepared) } }
+
+    func access(
+        unlocks: Bool = true,
+        uploadStatus: @escaping @Sendable (URL) -> PremiumICloudBridgeUploadStatus = { _ in .uploaded }
+    ) -> PremiumICloudBridgeFolderAccess {
+        PremiumICloudBridgeFolderAccess(
+            prepareDirectory: { [self] url in
+                lock.withLock { storedPrepared.append(url.standardizedFileURL.path) }
+                let permissions = try? FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions]
+                if unlocks, (permissions as? NSNumber)?.intValue == 0 {
+                    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+                }
+            },
+            coordinatesChanges: true,
+            uploadStatus: uploadStatus
+        )
+    }
+}
+
+/// A flag shared with an upload status closure.
+private final class UploadedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedIsUploaded = false
+
+    var isUploaded: Bool {
+        get { lock.withLock { storedIsUploaded } }
+        set { lock.withLock { storedIsUploaded = newValue } }
+    }
 }
 
 private actor RemovalGate {
@@ -1562,6 +1624,129 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertNil(controller.errorMessage)
     }
 
+    @MainActor
+    func testAutomaticSyncCompletesAndReportsFullICloudStorage() async throws {
+        let suiteName = "PremiumSyncICloudFull-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncICloudFull")
+        defer { TestSupport.remove(folder) }
+        let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
+        bridge.report = PremiumICloudBridgeReport(iCloudStorageFull: true)
+        let controller = try Self.makeAutomaticSyncController(
+            suiteName: suiteName,
+            defaults: defaults,
+            folder: folder,
+            store: InMemoryUserDataSyncStore(dictionaryEntries: [
+                Self.dictionaryEntry(original: "Full", updatedAt: Self.date(10)),
+            ]),
+            bridge: bridge
+        )
+        defer { controller.deactivate() }
+        try await XCTUnwrap(controller.initialSyncTask).value
+
+        // The pass completed; only the upload waits for space in iCloud.
+        XCTAssertEqual(bridge.synchronizeCount, 2)
+        XCTAssertNotNil(controller.lastSyncDate)
+        XCTAssertEqual(controller.deviceCount, 1)
+        XCTAssertEqual(
+            controller.errorMessage,
+            PremiumICloudBridgeError.iCloudStorageFull.localizedDescription
+        )
+
+        bridge.report = PremiumICloudBridgeReport()
+        await controller.syncIfNeeded()
+
+        XCTAssertNil(controller.errorMessage)
+    }
+
+    @MainActor
+    func testFullICloudReportDoesNotReturnAfterThePrivateFolderWasDeleted() async throws {
+        let suiteName = "PremiumSyncICloudFullDelete-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncICloudFullDelete")
+        defer { TestSupport.remove(folder) }
+        let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
+        let controller = try Self.makeAutomaticSyncController(
+            suiteName: suiteName,
+            defaults: defaults,
+            folder: folder,
+            store: InMemoryUserDataSyncStore(),
+            bridge: bridge
+        )
+        defer { controller.deactivate() }
+        try await XCTUnwrap(controller.initialSyncTask).value
+        // Nothing changed, so the next check only mirrors and compares.
+        let checkedOnly = await controller.syncIfNeeded()
+        XCTAssertFalse(checkedOnly)
+
+        // The idle check waits for the helper while the user deletes the sync folder.
+        let gate = RemovalGate()
+        bridge.synchronizeGate = gate
+        bridge.report = PremiumICloudBridgeReport(iCloudStorageFull: true)
+        let passesBefore = bridge.synchronizeCount
+        let check = Task { await controller.syncIfNeeded() }
+        var yields = 0
+        while bridge.synchronizeCount == passesBefore, yields < 10_000 {
+            await Task.yield()
+            yields += 1
+        }
+        XCTAssertGreaterThan(bridge.synchronizeCount, passesBefore)
+        bridge.synchronizeGate = nil
+        await controller.deletePrivateSyncFolder()
+        await gate.open()
+        _ = await check.value
+
+        XCTAssertEqual(controller.mode, .off)
+        XCTAssertNil(controller.errorMessage)
+    }
+
+    @MainActor
+    func testSwitchingTheSyncLocationClearsTheDevicesOfThePreviousOne() async throws {
+        let suiteName = "PremiumSyncSwitchDevices-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let cloudFolder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncSwitchCloud")
+        let mirror = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncSwitchMirror")
+        defer {
+            TestSupport.remove(cloudFolder)
+            TestSupport.remove(mirror)
+        }
+        defaults.set(
+            try cloudFolder.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            ),
+            forKey: "cloudFolderSync.folderBookmark"
+        )
+        let bridge = RecordingPremiumICloudBridge(localFolderURL: mirror)
+        bridge.synchronizeError = .iCloudFolderNotReady
+        let controller = try Self.makeAutomaticSyncController(
+            suiteName: suiteName,
+            defaults: defaults,
+            folder: mirror,
+            store: InMemoryUserDataSyncStore(),
+            mode: .cloudFolder,
+            bridge: bridge
+        )
+        defer { controller.deactivate() }
+        try await XCTUnwrap(controller.initialSyncTask).value
+        XCTAssertEqual(controller.deviceCount, 1)
+
+        await controller.setMode(.automaticICloud)
+
+        // The first automatic sync failed, so no device has been read from iCloud yet.
+        XCTAssertEqual(controller.mode, .automaticICloud)
+        XCTAssertEqual(controller.deviceCount, 0)
+        XCTAssertTrue(controller.devices.isEmpty)
+        XCTAssertEqual(
+            controller.errorMessage,
+            PremiumICloudBridgeError.iCloudFolderNotReady.localizedDescription
+        )
+    }
+
     func testDeviceRemovalRemovesTheRecordsOfOneInstallationOnly() throws {
         let package = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemoval")
         defer { TestSupport.remove(package) }
@@ -1600,6 +1785,26 @@ final class CloudFolderSyncTests: XCTestCase {
 
         XCTAssertEqual(try Self.deviceRecordNames(in: mirror), [])
         XCTAssertEqual(try Self.deviceRecordNames(in: cloud), ["mac.json"])
+    }
+
+    func testDeviceRemovalPreparesICloudFoldersWithoutAListing() throws {
+        let root = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemovalICloud")
+        defer {
+            Self.unlockTree(root)
+            TestSupport.remove(root)
+        }
+        let package = root.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        try Self.writeDeviceRecord("phone", origin: "phone-origin", in: package)
+        try Self.writeDeviceRecord("mac", origin: "mac-origin", in: package)
+        try Self.lock([package.appendingPathComponent("devices", isDirectory: true), package, root])
+
+        try PremiumSyncDeviceRemoval.removeRecords(
+            of: "phone",
+            inPackages: [package],
+            access: LockedFolderAccess().access()
+        )
+
+        XCTAssertEqual(try Self.deviceRecordNames(in: package), ["mac.json"])
     }
 
     private static func writeDeviceRecord(_ deviceID: String, origin: String?, in package: URL) throws {
@@ -2328,6 +2533,256 @@ final class CloudFolderSyncTests: XCTestCase {
             XCTAssertTrue(Self.bridgeFileExists("ops/mac/new.json", in: root))
             XCTAssertTrue(Self.bridgeFileExists("ops/ios/new.json", in: root))
         }
+    }
+
+    func testICloudBridgeNamesTheCauseOfFileErrors() throws {
+        func error(_ domain: String, _ code: Int, underlying: NSError? = nil) -> NSError {
+            NSError(domain: domain, code: code, userInfo: underlying.map { [NSUnderlyingErrorKey: $0] } ?? [:])
+        }
+        let posix = { (code: Int32) in error(NSPOSIXErrorDomain, Int(code)) }
+        let classify = PremiumICloudBridgeError.classify
+
+        // Creating the package in a container folder iCloud Drive has not fetched yet.
+        let datalessFolder = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError, userInfo: [
+            NSFilePathErrorKey: "/Users/me/Library/Mobile Documents/iCloud~com~typewhisper~sync/Documents/typewhisper-sync",
+            NSUnderlyingErrorKey: posix(EDEADLK),
+        ])
+        XCTAssertEqual(classify(datalessFolder), .iCloudFolderNotReady)
+        XCTAssertEqual(classify(POSIXError(.EDEADLK)), .iCloudFolderNotReady)
+        XCTAssertEqual(classify(error(NSCocoaErrorDomain, NSUbiquitousFileUbiquityServerNotAvailable)), .iCloudFolderNotReady)
+        XCTAssertEqual(classify(error(NSCocoaErrorDomain, NSUbiquitousFileNotUploadedDueToQuotaError)), .iCloudStorageFull)
+        XCTAssertEqual(classify(error("NSFileProviderErrorDomain", -1003)), .iCloudStorageFull)
+        XCTAssertEqual(classify(error(NSCocoaErrorDomain, NSFileWriteOutOfSpaceError, underlying: posix(EDQUOT))), .iCloudStorageFull)
+        XCTAssertEqual(classify(error(NSCocoaErrorDomain, NSFileWriteOutOfSpaceError, underlying: posix(ENOSPC))), .macStorageFull)
+        XCTAssertEqual(classify(error(NSCocoaErrorDomain, NSFileWriteOutOfSpaceError)), .macStorageFull)
+        XCTAssertEqual(classify(error("NSFileProviderErrorDomain", -1000)), .iCloudUnavailable)
+        XCTAssertEqual(classify(PremiumICloudBridgeError.appGroupUnavailable), .appGroupUnavailable)
+        XCTAssertEqual(
+            classify(PremiumSyncDeviceRemoval.Failure.recordUnreadable),
+            .operationFailed(PremiumSyncDeviceRemoval.Failure.recordUnreadable.localizedDescription)
+        )
+
+        // Other errors keep their description and gain their codes.
+        let unknown = classify(error(NSCocoaErrorDomain, NSFileReadNoPermissionError, underlying: posix(EACCES)))
+        guard case let .operationFailed(message) = unknown else {
+            return XCTFail("Unexpected cause \(unknown)")
+        }
+        XCTAssertTrue(message.hasSuffix("(NSCocoaErrorDomain 257, NSPOSIXErrorDomain 13)"), message)
+    }
+
+    func testICloudBridgeReplyCarriesTheCauseAndTheReport() {
+        let replies = [
+            PremiumICloudBridgeReply(),
+            PremiumICloudBridgeReply(failure: .iCloudFolderNotReady),
+            PremiumICloudBridgeReply(failure: .operationFailed("The disk failed. (NSCocoaErrorDomain 512)")),
+            PremiumICloudBridgeReply(report: PremiumICloudBridgeReport(iCloudStorageFull: true)),
+        ]
+        for reply in replies {
+            XCTAssertEqual(PremiumICloudBridgeReply.decoded(from: reply.encoded()), reply)
+        }
+        XCTAssertEqual(PremiumICloudBridgeReply.decoded(from: Data("not json".utf8)).failure, .serviceUnavailable)
+    }
+
+    func testICloudBridgePreparesICloudFoldersBeforeLookingIntoThem() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            Self.unlockTree(remoteRoot)
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("devices/mac.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/mac/1700000010000-op.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("devices/iphone.json", in: remoteRoot, seconds: 20)
+        try Self.writeBridgeFile("ops/iphone/1700000020000-op.json", in: remoteRoot, seconds: 20)
+        // The iPhone created the package; on this Mac none of its folders has a listing yet.
+        let remotePackage = remoteRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        let fetchedFolders = [
+            remotePackage.appendingPathComponent("ops/iphone", isDirectory: true),
+            remotePackage.appendingPathComponent("ops", isDirectory: true),
+            remotePackage.appendingPathComponent("devices", isDirectory: true),
+            remotePackage,
+            remoteRoot,
+        ]
+        try Self.lock(fetchedFolders)
+        let folders = LockedFolderAccess()
+
+        try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot,
+            remoteAccess: folders.access()
+        )
+
+        XCTAssertTrue(folders.prepared.isSuperset(of: fetchedFolders.map(\.standardizedFileURL.path)))
+        XCTAssertTrue(Self.bridgeFileExists("devices/mac.json", in: remoteRoot))
+        XCTAssertTrue(Self.bridgeFileExists("ops/mac/1700000010000-op.json", in: remoteRoot))
+        XCTAssertTrue(Self.bridgeFileExists("devices/iphone.json", in: localRoot))
+        XCTAssertTrue(Self.bridgeFileExists("ops/iphone/1700000020000-op.json", in: localRoot))
+    }
+
+    func testICloudBridgeKeepsLocalFilesWhenICloudCannotListItsFolder() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            Self.unlockTree(remoteRoot)
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("devices/iphone.json", in: remoteRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        // iCloud Drive cannot provide the container folder's listing, for example while the
+        // Mac is offline. The package in it must not count as deleted.
+        try Self.lock([remoteRoot])
+        XCTAssertThrowsError(try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot,
+            remoteAccess: LockedFolderAccess().access(unlocks: false)
+        ))
+
+        for path in ["manifest.json", "devices/iphone.json"] {
+            XCTAssertTrue(Self.bridgeFileExists(path, in: localRoot), path)
+        }
+    }
+
+    func testICloudBridgeReportsUploadsRefusedBecauseICloudIsFull() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("devices/mac.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("assets/history/history-v1/record/audio.m4a", in: localRoot, seconds: 10)
+        let folders = LockedFolderAccess()
+        func synchronize(_ uploadStatus: @escaping @Sendable (URL) -> PremiumICloudBridgeUploadStatus) throws -> Bool {
+            try PremiumICloudBridgeFileMirror.synchronize(
+                localRoot: localRoot,
+                remoteRoot: remoteRoot,
+                remoteAccess: folders.access(uploadStatus: uploadStatus)
+            ).iCloudStorageFull
+        }
+        // Only the large audio file no longer fits; the small records upload.
+        let audioRefused: @Sendable (URL) -> PremiumICloudBridgeUploadStatus = { file in
+            file.pathExtension == "m4a"
+                ? .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError))
+                : .uploaded
+        }
+
+        XCTAssertTrue(try synchronize(audioRefused))
+        XCTAssertTrue(Self.bridgeFileExists("assets/history/history-v1/record/audio.m4a", in: remoteRoot))
+        // A later pass copies nothing and still checks the waiting file.
+        XCTAssertTrue(try synchronize(audioRefused))
+        // An unreadable status keeps the file listed with its known refusal.
+        XCTAssertTrue(try synchronize { _ in .unknown })
+        XCTAssertTrue(try synchronize(audioRefused))
+        // Offline, iCloud also keeps files back, but its storage is not full.
+        XCTAssertFalse(try synchronize { _ in
+            .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileUbiquityServerNotAvailable))
+        })
+        // Once uploaded, the file is no longer checked.
+        XCTAssertFalse(try synchronize { _ in .uploaded })
+        XCTAssertFalse(try synchronize(audioRefused))
+    }
+
+    func testICloudBridgeKeepsUncheckedUploadsForTheNextPass() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("devices/mac.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        // Both files wait for an upload; only the manifest is refused for quota.
+        let uploads = UploadedFlag()
+        let access = LockedFolderAccess().access(uploadStatus: { file in
+            if uploads.isUploaded { return .uploaded }
+            return file.lastPathComponent == "manifest.json"
+                ? .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError))
+                : .waiting(lastError: nil)
+        })
+        func synchronize() throws -> Bool {
+            try PremiumICloudBridgeFileMirror.synchronize(
+                localRoot: localRoot,
+                remoteRoot: remoteRoot,
+                remoteAccess: access,
+                uploadChecksPerPass: 1
+            ).iCloudStorageFull
+        }
+
+        // One check per pass: the first pass looks at the device record only.
+        XCTAssertFalse(try synchronize())
+        // The manifest stayed listed although nothing is copied again.
+        XCTAssertTrue(try synchronize())
+        // A pass that checks only the device record keeps the known refusal.
+        XCTAssertTrue(try synchronize())
+
+        uploads.isUploaded = true
+        // Checked again, the manifest uploaded; the device record still waits for its check.
+        XCTAssertFalse(try synchronize())
+        XCTAssertFalse(try synchronize())
+    }
+
+    func testICloudBridgeTracksUploadsOfAPassThatFailedLater() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            Self.unlockTree(remoteRoot)
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        let audio = "assets/history/history-v1/record/audio.m4a"
+        try Self.writeBridgeFile(audio, in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/iphone/1700000010000-op.json", in: remoteRoot, seconds: 10)
+        // The audio file is copied into iCloud, then reading the iPhone's folder fails.
+        let iPhoneOperations = remoteRoot.appendingPathComponent("typewhisper-sync/ops/iphone", isDirectory: true)
+        try Self.lock([iPhoneOperations])
+        let folders = LockedFolderAccess()
+        XCTAssertThrowsError(try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot,
+            remoteAccess: folders.access(unlocks: false)
+        ))
+        XCTAssertTrue(Self.bridgeFileExists(audio, in: remoteRoot))
+
+        // The next pass does not copy the audio file again but still checks its upload.
+        Self.unlockTree(remoteRoot)
+        let report = try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot,
+            remoteAccess: folders.access(uploadStatus: { file in
+                file.pathExtension == "m4a"
+                    ? .waiting(lastError: NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileNotUploadedDueToQuotaError))
+                    : .uploaded
+            })
+        )
+        XCTAssertTrue(report.iCloudStorageFull)
+    }
+
+    func testICloudBridgeDeletesAPackageWhoseFoldersHaveNoListingYet() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            Self.unlockTree(remoteRoot)
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("devices/iphone.json", in: remoteRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/iphone/1700000010000-op.json", in: remoteRoot, seconds: 10)
+        let remotePackage = remoteRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        try Self.lock([
+            remotePackage.appendingPathComponent("ops/iphone", isDirectory: true),
+            remotePackage.appendingPathComponent("ops", isDirectory: true),
+            remotePackage.appendingPathComponent("devices", isDirectory: true),
+            remotePackage,
+            remoteRoot,
+        ])
+
+        try PremiumICloudBridgeFileMirror.deletePackages(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot,
+            remoteAccess: LockedFolderAccess().access()
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: remotePackage.path))
     }
 
     func testICloudBridgeMirrorCarriesFoldersOfNewerClients() throws {
@@ -5883,14 +6338,16 @@ final class CloudFolderSyncTests: XCTestCase {
         suiteName: String,
         defaults: UserDefaults,
         folder: URL,
-        store: InMemoryUserDataSyncStore
+        store: InMemoryUserDataSyncStore,
+        mode: PremiumSyncMode = .automaticICloud,
+        bridge: RecordingPremiumICloudBridge? = nil
     ) throws -> CloudFolderSyncController {
         let privateKey = P256.Signing.PrivateKey()
         defaults.set(
             try entitlementEncoder.encode(signedEntitlement(privateKey: privateKey)),
             forKey: "premium.account.cachedEntitlement"
         )
-        defaults.set(PremiumSyncMode.automaticICloud.rawValue, forKey: "premiumSync.mode")
+        defaults.set(mode.rawValue, forKey: "premiumSync.mode")
         let account = PremiumAccountService(
             defaults: defaults,
             keychainService: suiteName,
@@ -5902,7 +6359,7 @@ final class CloudFolderSyncTests: XCTestCase {
             premiumAccountService: account,
             syncStore: store,
             defaults: defaults,
-            automaticICloudBridge: RecordingPremiumICloudBridge(localFolderURL: folder),
+            automaticICloudBridge: bridge ?? RecordingPremiumICloudBridge(localFolderURL: folder),
             automaticICloudAvailable: true
         )
     }
@@ -5916,6 +6373,26 @@ final class CloudFolderSyncTests: XCTestCase {
             try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeLocal"),
             try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeRemote")
         )
+    }
+
+    /// Locks folders, deepest first: a locked folder cannot be listed or looked into, as a
+    /// dataless iCloud Drive folder cannot until something fetches its listing.
+    private static func lock(_ folders: [URL]) throws {
+        for folder in folders {
+            try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: folder.path)
+        }
+    }
+
+    /// Unlocks every folder below `root`, so the test can remove it.
+    private static func unlockTree(_ root: URL) {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        )) ?? []
+        for child in children where (try? child.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            unlockTree(child)
+        }
     }
 
     private static func bridgeFileURL(_ path: String, in root: URL) -> URL {
