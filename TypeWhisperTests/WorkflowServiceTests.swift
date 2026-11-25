@@ -289,6 +289,13 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(scan.mainThreadCallCount, 0)
     }
 
+    func testInstalledAppsScanFindsSafariInTheSystemCryptex() {
+        // /Applications/Safari.app is a hidden symlink into the cryptex volume since macOS 13.
+        let apps = InstalledAppsViewModel.scanInstalledApps()
+
+        XCTAssertTrue(apps.contains { $0.id == "com.apple.Safari" })
+    }
+
     func testWorkflowDraftPreservesSpokenAutoEnterMode() {
         let workflow = Workflow(
             name: "Spoken Submit",
