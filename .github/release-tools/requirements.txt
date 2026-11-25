@@ -3,9 +3,9 @@
 # https://pypi.org/pypi/dmgbuild/1.6.7/json
 dmgbuild==1.6.7 \
     --hash=sha256:37ee5771c377beb3203d9164aae8046ffed8531c06edf9227f5788b3c599b1bf
-# https://pypi.org/pypi/ds-store/1.3.3/json
-ds-store==1.3.3 \
-    --hash=sha256:b92a371efbf1b4ccce2a04d1ed13fceacc4736c81ba09cf5aefb74c088160a35
-# https://pypi.org/pypi/mac-alias/2.2.3/json
-mac-alias==2.2.3 \
-    --hash=sha256:7362b521d2132ef92f606a37abfed5fcd849ceb2f28b6f9743e014b02af92f0d
+# https://pypi.org/pypi/ds-store/1.3.4/json
+ds-store==1.3.4 \
+    --hash=sha256:6d8ae662921846c96b03c244a92aab19a5b4fb3d9cada118fc83cace9250f049
+# https://pypi.org/pypi/mac-alias/2.2.4/json
+mac-alias==2.2.4 \
+    --hash=sha256:c20f95f75d7f966dd8ea2f84c317d4ff4abee0db9cc8a13b454891c15aa04226
