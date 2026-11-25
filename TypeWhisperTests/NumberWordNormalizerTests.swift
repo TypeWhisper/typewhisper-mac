@@ -401,6 +401,9 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "萬能5", language: "zh"), "萬能5")
         // Mixed numerals that do not form lexical words keep merging.
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "1万5", language: "zh"), "15000")
+        // Numerals after a protected lexical word still merge and normalize.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "万一5个人，10万", language: "zh"), "万一5个人，100000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "萬一5個人，10萬", language: "zh"), "萬一5個人，100000")
     }
 
     func testChineseCountLabelSuffixesStillNormalize() {

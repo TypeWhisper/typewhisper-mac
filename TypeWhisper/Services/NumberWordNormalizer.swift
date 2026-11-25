@@ -337,7 +337,6 @@ enum NumberWordNormalizer {
             var endIndex = index
             var text = ""
             var containsCJKNumber = false
-            var mergeBlocked = false
             while endIndex < tokens.count,
                   (tokens[endIndex].kind == .digit || tokens[endIndex].kind == .cjkNumber) {
                 if tokens[endIndex].kind == .digit,
@@ -345,14 +344,14 @@ enum NumberWordNormalizer {
                     // A digit run must not merge into a lexical word: in
                     // 万一5个人都来了 the 万一 is "in case", not a number.
                     // Mixed numbers such as 1万5 keep merging because 万
-                    // alone is never lexical.
+                    // alone is never lexical. Merging resumes after the
+                    // protected word so later numerals still combine.
                     if text.count > lexical.count {
                         let numberPart = String(text.dropLast(lexical.count))
                         result.append(Token(text: numberPart, kind: .cjkNumber))
                     }
                     result.append(Token(text: lexical, kind: .cjkNumber))
-                    result.append(contentsOf: tokens[endIndex...])
-                    mergeBlocked = true
+                    index = endIndex
                     break
                 }
                 text += tokens[endIndex].text
@@ -360,8 +359,9 @@ enum NumberWordNormalizer {
                 endIndex += 1
             }
 
-            if mergeBlocked {
-                index = tokens.count
+            if index == endIndex, !text.isEmpty {
+                // The loop above stopped at a protected lexical word and
+                // already emitted it; continue merging at the digit run.
                 continue
             }
 
