@@ -18,6 +18,9 @@ enum NumberWordNormalizer {
     private static let hanUnitCharacters: Set<Character> = [
         "十", "百", "千", "万", "萬", "亿", "億",
     ]
+    private static let hanFractionalDigitCharacters: Set<Character> = [
+        "零", "〇", "一", "二", "两", "兩", "三", "四", "五", "六", "七", "八", "九",
+    ]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
     static func supports(language: String?) -> Bool {
@@ -261,13 +264,16 @@ enum NumberWordNormalizer {
                 if index > 1,
                    tokens[index - 1].kind == .other,
                    tokens[index - 1].text == ".",
-                   tokens[index - 2].kind == .digit {
+                   tokens[index - 2].kind == .digit,
+                   isHanDecimalFractionStart(wordTexts[0]) {
                     // A merged numeric run directly preceded by "<digits>."
-                    // belongs to a decimal fraction (1.5万, 2.3亿), not to
-                    // the large unit. The Han parsers cannot represent
-                    // fractional unit scaling yet, so leave the text
-                    // unchanged rather than producing a plausible-looking
-                    // wrong value such as 1.50000元.
+                    // belongs to a decimal fraction when it starts with a
+                    // fractional digit (1.5万, 1.五万, 2.3亿), not to the
+                    // large unit. Unit-first text such as 1.十个人 can be an
+                    // ordinary numbered-list item instead. The Han parsers
+                    // cannot represent fractional unit scaling yet, so leave
+                    // decimal text unchanged rather than producing a
+                    // plausible-looking wrong value such as 1.50000元.
                     return nil
                 }
             }
@@ -430,6 +436,11 @@ enum NumberWordNormalizer {
         }
 
         return false
+    }
+
+    private static func isHanDecimalFractionStart(_ text: String) -> Bool {
+        guard let first = text.first else { return false }
+        return (first.isASCII && first.isNumber) || hanFractionalDigitCharacters.contains(first)
     }
 
     private static func isBareHanUnitRun(_ text: String) -> Bool {

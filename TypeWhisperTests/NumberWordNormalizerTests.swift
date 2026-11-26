@@ -429,7 +429,17 @@ final class NumberWordNormalizerTests: XCTestCase {
         // The Han parser cannot represent fractional unit scaling, so leave
         // the decimal text unchanged instead of producing a wrong value.
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "1.5万元", language: "zh"), "1.5万元")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1.五万元", language: "zh"), "1.五万元")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1.五万", language: "zh"), "1.五万")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "2.3亿", language: "zh"), "2.3亿")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "2.三亿", language: "zh"), "2.三亿")
+    }
+
+    func testHanNumberedListPrefixDoesNotBlockUnitFirstNumerals() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1.十个人", language: "zh"), "1.10个人")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1.十個人", language: "zh"), "1.10個人")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "2.百名參與者", language: "zh"), "2.100名參與者")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1.十人", language: "ja"), "1.10人")
     }
 
     func testChineseUnitCharactersInsideWordsArePreserved() {
