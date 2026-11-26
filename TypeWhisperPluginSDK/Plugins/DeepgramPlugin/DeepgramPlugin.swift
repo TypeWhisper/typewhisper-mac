@@ -590,7 +590,8 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
 
 @objc(DeepgramPlugin)
 final class DeepgramPlugin: NSObject,
-    LiveTranscriptionCapablePlugin,
+    LanguageHintTranscriptionEnginePlugin,
+    LiveLanguageHintTranscriptionCapablePlugin,
     DictionaryTermsCapabilityProviding,
     DictionaryTermsBudgetProviding,
     @unchecked Sendable {
@@ -805,6 +806,17 @@ final class DeepgramPlugin: NSObject,
         language.flatMap { $0.isEmpty ? nil : $0 } ?? "multi"
     }
 
+    /// The language to send for the user's selection. One language hint is
+    /// sent as that language; two or more leave it open, so Deepgram uses
+    /// `multi` instead of transcribing every language as the first one.
+    static func requestLanguage(for selection: PluginLanguageSelection) -> String? {
+        if let requested = selection.requestedLanguage, !requested.isEmpty {
+            return requested
+        }
+        let hints = selection.languageHints.filter { !$0.isEmpty }
+        return hints.count == 1 ? hints[0] : nil
+    }
+
     // MARK: - Long Recordings
 
     /// Deepgram reads a stream at no more than 1.25x real time, so a two-hour
@@ -911,6 +923,52 @@ final class DeepgramPlugin: NSObject,
         return try await DeepgramLiveTranscriptionSession.connect(
             webSocket: webSocket,
             language: language,
+            onProgress: onProgress
+        )
+    }
+
+    // MARK: - Language Hints
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: Self.requestLanguage(for: languageSelection),
+            translate: translate,
+            prompt: prompt
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: Self.requestLanguage(for: languageSelection),
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            language: Self.requestLanguage(for: languageSelection),
+            translate: translate,
+            prompt: prompt,
             onProgress: onProgress
         )
     }

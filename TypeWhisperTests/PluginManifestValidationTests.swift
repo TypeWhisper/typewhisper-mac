@@ -2281,6 +2281,29 @@ final class PluginDictionaryGuardTests: XCTestCase {
         XCTAssertFalse(plugin is any LiveTranscriptionProgressModeProviding)
     }
 
+    func testDeepgramSendsMultiForTwoSelectedLanguages() throws {
+        let plugin = DeepgramPlugin()
+        XCTAssertTrue(plugin.acceptsLanguageHints)
+        XCTAssertTrue((plugin as Any) is any LiveLanguageHintTranscriptionCapablePlugin)
+
+        func requestLanguage(_ selection: PluginLanguageSelection) throws -> [String] {
+            let url = try DeepgramPlugin.restRequestURL(
+                baseURL: "https://api.deepgram.com",
+                modelId: "nova-3",
+                language: DeepgramPlugin.requestLanguage(for: selection),
+                prompt: nil
+            )
+            return (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+                .filter { $0.name == "language" }
+                .compactMap(\.value)
+        }
+
+        XCTAssertEqual(try requestLanguage(PluginLanguageSelection(languageHints: ["en", "fr"])), ["multi"])
+        XCTAssertEqual(try requestLanguage(PluginLanguageSelection(languageHints: ["fr"])), ["fr"])
+        XCTAssertEqual(try requestLanguage(PluginLanguageSelection(requestedLanguage: "de")), ["de"])
+        XCTAssertEqual(try requestLanguage(PluginLanguageSelection()), ["multi"])
+    }
+
     func testDeepgramRemainsLoadableByDeclaredTypeWhisper16Host() throws {
         let sourceURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/DeepgramPlugin/DeepgramPlugin.swift"
