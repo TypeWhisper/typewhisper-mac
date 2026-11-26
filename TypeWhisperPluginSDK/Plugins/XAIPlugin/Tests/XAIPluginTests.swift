@@ -52,6 +52,14 @@ final class XAIPluginTests: XCTestCase {
         XCTAssertEqual(query["language"], "de")
     }
 
+    func testUrduIsOfferedAndSentToTheStream() throws {
+        XCTAssertTrue(XAIPlugin().supportedLanguages.contains("ur"))
+
+        let request = try XAIPlugin.makeSTTStreamingRequest(apiKey: "xai_test", language: "ur", interimResults: true)
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.queryItems?.first { $0.name == "language" }?.value, "ur")
+    }
+
     func testTranscriptCollectorPublishesInterimFinalAndDoneText() async throws {
         let collector = XAITranscriptCollector()
 

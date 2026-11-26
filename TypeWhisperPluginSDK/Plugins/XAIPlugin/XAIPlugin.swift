@@ -616,10 +616,12 @@ final class XAIPlugin: NSObject,
     var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
 
     var supportedLanguages: [String] {
+        // https://docs.x.ai/developers/model-capabilities/audio/speech-to-text#supported-languages
         [
-            "ar", "cs", "da", "de", "en", "es", "fa", "fil", "fr", "hi",
-            "id", "it", "ja", "ko", "mk", "ms", "nl", "pl", "pt", "ro",
-            "ru", "sv", "th", "tr", "vi",
+            "ar", "bg", "bs", "ca", "cs", "da", "de", "el", "en", "es",
+            "fa", "fi", "fil", "fr", "hi", "hr", "hu", "id", "it", "ja",
+            "ko", "mk", "ms", "nb", "nl", "pl", "pt", "ro", "ru", "sk",
+            "sv", "th", "tr", "uk", "ur", "vi", "yue", "zh",
         ]
     }
 
