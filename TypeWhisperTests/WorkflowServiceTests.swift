@@ -2042,11 +2042,14 @@ final class WorkflowServiceTests: XCTestCase {
 
     func testScreenContextSpellingHintsPairOnlyDictatedNamesWithSoundAlikeNamesOnScreen() {
         let screen = """
-            Lynda Ganesaguru
-            See you soon at ILTM
+            Lynda Whitfield
+            See you soon at the fair
             Reply to Lynda
             Stephen Clarke
             Marc Dubois
+            Tom Mayer
+            June 12
+            Инна
             Send
             """
         func hints(_ dictation: String) -> [String] {
@@ -2056,6 +2059,9 @@ final class WorkflowServiceTests: XCTestCase {
 
         XCTAssertEqual(hints("See you soon, Linda. Thanks, Steven and Ryan."), ["Linda→Lynda", "Steven→Stephen"])
         XCTAssertEqual(hints("I asked Mr. Steven about it."), ["Steven→Stephen"])
+        XCTAssertEqual(hints("Thanks, Herr Meier."), ["Meier→Mayer"])
+        // Other vowels make other names, and Cyrillic names have no sound key to compare.
+        XCTAssertEqual(hints("Please ask Tim, Jane and Анна about it."), [])
         // Speech recognition capitalizes every sentence start, so it is no sign of a name.
         XCTAssertEqual(hints("Mark my words. Linda will reply."), [])
         // Lowercase words and spellings that are on screen already need no hint.
@@ -2082,7 +2088,7 @@ final class WorkflowServiceTests: XCTestCase {
         _ = try await service.process(
             workflow: workflow,
             text: "See you soon, Linda.",
-            screenContext: "Home\n" + feed + "Lynda Ganesaguru\nReply to Lynda"
+            screenContext: "Home\n" + feed + "Lynda Whitfield\nReply to Lynda"
         )
 
         let sentPrompt = try XCTUnwrap(prompt)

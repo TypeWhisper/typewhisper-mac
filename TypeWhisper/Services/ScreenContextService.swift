@@ -180,15 +180,17 @@ extension ScreenContextService {
     /// They follow it even where the word is no name ("Mark my words" with "Marc" on
     /// screen), so the match is strict: only capitalized dictated words that do not start
     /// a sentence count, because there speech recognition capitalizes names and not
-    /// ordinary words. The screen word must be capitalized as well, sound the same and
-    /// differ by a few letters, the dictated spelling must not appear on screen, and the
-    /// screen must offer only one such spelling.
+    /// ordinary words. The screen word must be capitalized as well, have the same sound
+    /// key and vowel sounds and differ by a few letters, the dictated spelling must not
+    /// appear on screen, and the screen must offer only one such spelling.
     static func spellingHints(dictation: String, screenText: String) -> [SpellingHint] {
         let screenWords = words(in: screenText)
         let screenSpellings = Set(screenWords.map { $0.text.lowercased() })
         var namesByKey: [String: [String]] = [:]
         for word in screenWords where isNameCandidate(word.text) {
             let key = soundKey(word.text)
+            // Scripts other than Latin give an empty key, and an empty key says nothing about the sound.
+            guard !key.isEmpty else { continue }
             if !(namesByKey[key] ?? []).contains(where: { $0.lowercased() == word.text.lowercased() }) {
                 namesByKey[key, default: []].append(word.text)
             }
@@ -200,9 +202,11 @@ extension ScreenContextService {
         for word in words(in: dictation) where !word.startsSentence && isNameCandidate(word.text) {
             let dictated = word.text.lowercased()
             guard !screenSpellings.contains(dictated), seen.insert(dictated).inserted else { continue }
+            let vowels = vowelSounds(word.text)
             let matches = (namesByKey[soundKey(word.text)] ?? []).filter { name in
                 let spelled = name.lowercased()
-                return editDistance(dictated, spelled) <= (max(dictated.count, spelled.count) > 6 ? 3 : 2)
+                return vowelSounds(name) == vowels
+                    && editDistance(dictated, spelled) <= (max(dictated.count, spelled.count) > 6 ? 3 : 2)
             }
             guard matches.count == 1 else { continue }
             hints.append(SpellingHint(dictated: word.text, screen: matches[0]))
@@ -241,7 +245,51 @@ extension ScreenContextService {
 
     /// A rough sound key for names: "Linda" and "Lynda" give "landa", "John" and "Jon"
     /// give "jan", "Steven" and "Stephen" give "stafan", "Meier" and "Mayer" give "mar".
+    /// The key treats all vowels alike, so `vowelSounds` has to agree as well.
     static func soundKey(_ word: String) -> String {
+        let letters = Array(soundSpelling(word))
+        var key = ""
+        for (index, letter) in letters.enumerated() {
+            let softens = index + 1 < letters.count && "eiy".contains(letters[index + 1])
+            let sound: Character? = switch letter {
+            case "c": softens ? "s" : "k"
+            case "g": softens ? "j" : "g"
+            case "h": index == 0 ? "h" : nil
+            case "a", "e", "i", "o", "u", "y": "a"
+            default: letter
+            }
+            if let sound, key.last != sound {
+                key.append(sound)
+            }
+        }
+        return key
+    }
+
+    /// The vowel sounds of a name, one per group of vowels, so that "Tim" and "Tom" or
+    /// "Jane" and "June" do not pass as the same name. "Linda" and "Lynda" give ["i", "a"],
+    /// "Meier" and "Mayer" give ["ai"], "Müller" and "Mueller" give ["u", "e"].
+    static func vowelSounds(_ word: String) -> [String] {
+        var groups: [String] = []
+        var current = ""
+        for letter in soundSpelling(word) + " " {
+            if "aeiouy".contains(letter) {
+                // A repeated letter sounds like one: "Aaron" and "Aron".
+                let vowel: Character = letter == "y" ? "i" : letter
+                if current.last != vowel { current.append(vowel) }
+                continue
+            }
+            guard !current.isEmpty else { continue }
+            // A trailing e lengthens the vowel before it ("Marie", "Mueller"), and ei
+            // and ai sound the same in names ("Meier", "Maier").
+            if current.count > 1, current.hasSuffix("e") { current.removeLast() }
+            groups.append(current == "ei" ? "ai" : current)
+            current = ""
+        }
+        return groups
+    }
+
+    /// The lowercased letters of `word` with common spellings of the same sound unified.
+    private static func soundSpelling(_ word: String) -> String {
         var spelled = String(
             word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
                 .lowercased()
@@ -260,23 +308,7 @@ extension ScreenContextService {
         if spelled.count > 3, spelled.hasSuffix("e"), !"aeiouy".contains(spelled.dropLast().last ?? "a") {
             spelled.removeLast()
         }
-
-        let letters = Array(spelled)
-        var key = ""
-        for (index, letter) in letters.enumerated() {
-            let softens = index + 1 < letters.count && "eiy".contains(letters[index + 1])
-            let sound: Character? = switch letter {
-            case "c": softens ? "s" : "k"
-            case "g": softens ? "j" : "g"
-            case "h": index == 0 ? "h" : nil
-            case "a", "e", "i", "o", "u", "y": "a"
-            default: letter
-            }
-            if let sound, key.last != sound {
-                key.append(sound)
-            }
-        }
-        return key
+        return spelled
     }
 
     private static func editDistance(_ lhs: String, _ rhs: String) -> Int {
