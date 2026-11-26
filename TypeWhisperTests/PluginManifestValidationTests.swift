@@ -2317,6 +2317,38 @@ final class PluginDictionaryGuardTests: XCTestCase {
         XCTAssertEqual(queryItems.last?.value, "Term100-xx")
     }
 
+    func testDeepgramNova3KeytermsStayWithinTokenBudgetAndPreserveOrder() {
+        let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 100, length: 10), maxLength: 10_000)
+        let queryItems = DeepgramPlugin.dictionaryQueryItems(prompt: prompt, modelId: "nova-3")
+        let keyterms = queryItems.compactMap(\.value)
+
+        // Each 10-byte term counts 6 + 10 = 16 tokens, so 30 terms fill the 480-token budget.
+        XCTAssertEqual(queryItems.count, 30)
+        XCTAssertTrue(queryItems.allSatisfy { $0.name == "keyterm" })
+        XCTAssertEqual(keyterms.first, "Term1-xxxx")
+        XCTAssertEqual(keyterms.last, "Term30-xxx")
+        XCTAssertLessThanOrEqual(
+            keyterms.map(DeepgramPlugin.estimatedKeytermTokens).reduce(0, +),
+            DeepgramPlugin.keytermTokenBudget
+        )
+        XCTAssertLessThan(DeepgramPlugin.keytermTokenBudget, DeepgramPlugin.keytermTokenLimit)
+    }
+
+    func testDeepgramKeytermTokenEstimateCountsUTF8BytesAndPerTermCost() {
+        XCTAssertEqual(DeepgramPlugin.estimatedKeytermTokens("Deepgram"), 14)
+        XCTAssertEqual(DeepgramPlugin.estimatedKeytermTokens("Zürich"), 13)
+        XCTAssertEqual(DeepgramPlugin.estimatedKeytermTokens("東京"), 12)
+    }
+
+    func testDeepgramKeytermBudgetStopsAtFirstTermThatDoesNotFit() {
+        let longTerm = String(repeating: "x", count: 470)
+        XCTAssertEqual(
+            DeepgramPlugin.keytermsWithinTokenBudget(["TypeWhisper", longTerm, "Deepgram"]),
+            ["TypeWhisper"]
+        )
+        XCTAssertEqual(DeepgramPlugin.keytermsWithinTokenBudget([longTerm + "xxxxx"]), [])
+    }
+
     func testDeepgramRESTRequestURLRejectsMalformedBaseURL() {
         XCTAssertThrowsError(
             try DeepgramPlugin.restRequestURL(
