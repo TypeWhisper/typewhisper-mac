@@ -2040,6 +2040,59 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(disabledPrompt?.contains("screen_context") == true)
     }
 
+    func testScreenContextSpellingHintsPairOnlyDictatedNamesWithSoundAlikeNamesOnScreen() {
+        let screen = """
+            Lynda Ganesaguru
+            See you soon at ILTM
+            Reply to Lynda
+            Stephen Clarke
+            Marc Dubois
+            Send
+            """
+        func hints(_ dictation: String) -> [String] {
+            ScreenContextService.spellingHints(dictation: dictation, screenText: screen)
+                .map { "\($0.dictated)→\($0.screen)" }
+        }
+
+        XCTAssertEqual(hints("See you soon, Linda. Thanks, Steven and Ryan."), ["Linda→Lynda", "Steven→Stephen"])
+        XCTAssertEqual(hints("I asked Mr. Steven about it."), ["Steven→Stephen"])
+        // Speech recognition capitalizes every sentence start, so it is no sign of a name.
+        XCTAssertEqual(hints("Mark my words. Linda will reply."), [])
+        // Lowercase words and spellings that are on screen already need no hint.
+        XCTAssertEqual(hints("I'll mark it and see you soon, Lynda."), [])
+    }
+
+    func testScreenContextPromptKeepsTheWindowEndAndListsNameSpellings() async throws {
+        let workflow = Workflow(
+            name: "Clean",
+            template: .cleanedText,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(screenContextEnabled: true)
+        )
+        var prompt: String?
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { capturedPrompt, _, _, _, _ in
+                prompt = capturedPrompt
+                return "See you soon, Lynda."
+            },
+            appleTranslator: nil
+        )
+        // Vision returns a chat popup at the bottom right after the rest of the window.
+        let feed = String(repeating: "Hotel rates climb ahead of the holidays\n", count: 300)
+        _ = try await service.process(
+            workflow: workflow,
+            text: "See you soon, Linda.",
+            screenContext: "Home\n" + feed + "Lynda Ganesaguru\nReply to Lynda"
+        )
+
+        let sentPrompt = try XCTUnwrap(prompt)
+        XCTAssertTrue(sentPrompt.contains("<screen_context>\nHome\n"))
+        XCTAssertTrue(sentPrompt.contains("\n…\n"))
+        XCTAssertTrue(sentPrompt.contains("Reply to Lynda\n</screen_context>"))
+        XCTAssertLessThan(sentPrompt.count, ScreenContextService.maxCharacters + 3_000)
+        XCTAssertTrue(sentPrompt.contains("\n- \"Linda\" → \"Lynda\""))
+    }
+
     func testWorkflowTextProcessingServiceAppendsProtectedVocabularyToLLMPrompt() async throws {
         let workflow = Workflow(
             name: "ct",
