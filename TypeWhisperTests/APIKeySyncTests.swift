@@ -864,7 +864,18 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertFalse(service.isEnabled)
         XCTAssertFalse(service.vault.current.isActive)
         XCTAssertEqual(local.values, [groq.pluginId: "gsk-mac"], "this Mac keeps its keys")
-        XCTAssertNil(defaults.string(forKey: APIKeySyncService.storageLocationKey))
+        XCTAssertEqual(defaults.string(forKey: APIKeySyncService.storageLocationKey), "thisDevice")
+    }
+
+    func testTurningOffLeavesACustomServersKeyAloneWhenTheAccountIsNotShared() throws {
+        let deepgram = plugin("deepgram")
+        local.write("dg-custom-server", pluginId: deepgram.pluginId)
+        try APIKeySyncMigrator(shared: shared, local: local).copySharedKeysToLocal(
+            plugins: [deepgram],
+            keys: [:],
+            keepsKeyLocal: { $0 == "com.typewhisper.deepgram" }
+        )
+        XCTAssertEqual(local.values[deepgram.pluginId], "dg-custom-server")
     }
 
     func testAKeySavedWhileTurningOffReachesThisMac() async {

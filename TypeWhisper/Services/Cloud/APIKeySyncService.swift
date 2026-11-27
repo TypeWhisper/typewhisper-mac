@@ -179,7 +179,7 @@ struct APIKeySyncMigrator: Sendable {
             guard !keepsKeyLocal(pluginId) else { continue }
             try local.write(value, pluginId: pluginId)
         }
-        for plugin in plugins where keys[plugin.account] == nil {
+        for plugin in plugins where keys[plugin.account] == nil && !keepsKeyLocal(plugin.pluginId) {
             try local.delete(pluginId: plugin.pluginId)
         }
     }
@@ -442,17 +442,19 @@ final class APIKeySyncService: ObservableObject {
                 }
             }
             guard let result = activated else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
-            // A policy that arrived during the switch: undo it in the same main-actor step that
-            // would save the setting, so no later policy check can miss it.
-            guard restriction == nil else {
-                vault.deactivate()
-                throw APIKeySyncMigrator.Stopped()
-            }
             save(enabled: true)
             notifyChanged(result.changed)
             apiKeySyncLogger.info(
                 "API key sync on. Shared: \(Self.names(result.keys.keys), privacy: .public). Uploaded: \(Self.names(result.uploaded), privacy: .public). Received: \(Self.names(result.changed), privacy: .public)"
             )
+            // A policy that arrived during the switch found sync still off and queued nothing.
+            // Turn off the regular way, which copies every key back, also one saved meanwhile;
+            // this Mac's copies stay until then.
+            guard restriction == nil else {
+                apiKeySyncLogger.info("The managed settings changed while turning API key sync on; turning it off")
+                enqueue { [weak self] in await self?.turnOff() }
+                return
+            }
             await removeLocalCopies()
         } catch is APIKeySyncMigrator.Stopped {
             apiKeySyncLogger.info("API key sync stays off: the managed settings or the region changed while turning it on")
