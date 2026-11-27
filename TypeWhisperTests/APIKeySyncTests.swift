@@ -1015,6 +1015,40 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: APIKeySyncService.storageLocationKey), "thisDevice")
     }
 
+    func testASwitchToACustomServerDuringTheTurnOffCopyKeepsItsOwnKey() throws {
+        let vault = SharedAPIKeyVault(store: shared)
+        var migrator = APIKeySyncMigrator(shared: shared, local: local)
+        migrator.serializeLocal = { step in try vault.withLocalLock(step) }
+        let store = local!
+        let switched = Decision()
+        let changeDone = DispatchSemaphore(value: 0)
+        let firstCheck = Decision()
+
+        try migrator.copySharedKeysToLocal(
+            plugins: [],
+            keys: ["deepgram": "dg-cloud"],
+            keepsKeyLocal: { _ in
+                if !firstCheck.confirms {
+                    firstCheck.confirms = true
+                    // Right after the check, the plugin switches to a custom server and saves its key.
+                    DispatchQueue.global().async {
+                        vault.withLocalChange {
+                            switched.confirms = true
+                            store.put("dg-custom-server", pluginId: "com.typewhisper.deepgram")
+                        }
+                        changeDone.signal()
+                    }
+                    Thread.sleep(forTimeInterval: 0.05)
+                }
+                return switched.confirms
+            }
+        )
+        XCTAssertEqual(changeDone.wait(timeout: .now() + 2), .success)
+
+        XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-custom-server",
+                       "the change waits for the copy step, so the custom server's key is written last")
+    }
+
     func testTurningOffLeavesACustomServersKeyAloneWhenTheAccountIsNotShared() throws {
         let deepgram = plugin("deepgram")
         local.put("dg-custom-server", pluginId: deepgram.pluginId)
