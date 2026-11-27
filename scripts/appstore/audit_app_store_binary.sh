@@ -29,6 +29,8 @@ FORBIDDEN_ENTITLEMENTS=(
     com.apple.security.cs.disable-library-validation
     com.apple.security.automation.apple-events
 )
+# API key sync shares this group with TypeWhisper for iOS; the signed value must be expanded.
+EXPECTED_KEYCHAIN_ACCESS_GROUP="2D8ALY3LCL.com.typewhisper.writing-services"
 # Undefined symbols that indicate launching other processes.
 # shellcheck disable=SC2016 # the dollar sign is part of the ObjC class symbol
 PROCESS_SYMBOL_PATTERN='^_(posix_spawn|posix_spawnp|execve|execv|execvp|fork|vfork|system|popen)$|^_OBJC_CLASS_\$_NSTask$'
@@ -408,6 +410,12 @@ else
         done
         if [[ "$(plist_value "$entitlements_path" com.apple.security.get-task-allow)" == "true" ]]; then
             fail "com.apple.security.get-task-allow is true (development signature)"
+        fi
+        if [[ "$(plist_value "$entitlements_path" keychain-access-groups:0)" == "$EXPECTED_KEYCHAIN_ACCESS_GROUP" ]] \
+            && ! plist_value "$entitlements_path" keychain-access-groups:1 >/dev/null; then
+            pass "keychain-access-groups $EXPECTED_KEYCHAIN_ACCESS_GROUP"
+        else
+            fail "keychain-access-groups must be exactly $EXPECTED_KEYCHAIN_ACCESS_GROUP (API key sync)"
         fi
     fi
 

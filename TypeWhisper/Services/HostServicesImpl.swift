@@ -53,6 +53,13 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
 
     private let policyStore: ManagedPolicySnapshotStore
     private let locality: PluginLocality?
+    /// The plugin's name for the label of a synced API key.
+    private let pluginName: String?
+    private let apiKeyVault: SharedAPIKeyVault
+    /// Asks before a synced key is deleted on every device; returns whether to go ahead.
+    private let confirmSharedKeyDeletion: @Sendable (_ providerName: String) -> Bool
+    /// Called after the user kept a synced key, with this plugin's ID.
+    private let sharedKeyDeletionCancelled: @Sendable (_ pluginId: String) -> Void
 
     init(
         pluginId: String,
@@ -61,9 +68,17 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         eventBus: EventBusProtocol,
         ruleNamesProvider: @escaping @MainActor () -> [String],
         workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] },
-        backsSelectedTranscriptionEngine: @escaping @Sendable () -> Bool = { true }
+        backsSelectedTranscriptionEngine: @escaping @Sendable () -> Bool = { true },
+        pluginName: String? = nil,
+        apiKeyVault: SharedAPIKeyVault = .shared,
+        confirmSharedKeyDeletion: @escaping @Sendable (_ providerName: String) -> Bool = SharedAPIKeyDeletionPrompt.confirm,
+        sharedKeyDeletionCancelled: @escaping @Sendable (_ pluginId: String) -> Void = SharedAPIKeyDeletionPrompt.restoreKey
     ) {
         self.pluginId = pluginId
+        self.pluginName = pluginName
+        self.apiKeyVault = apiKeyVault
+        self.confirmSharedKeyDeletion = confirmSharedKeyDeletion
+        self.sharedKeyDeletionCancelled = sharedKeyDeletionCancelled
         self.backsSelectedEngine = backsSelectedTranscriptionEngine
         self.policyStore = policyStore
         self.locality = locality
@@ -94,11 +109,54 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         }
 
         let scopedService = "\(pluginId).\(key)"
-        if value.isEmpty {
-            try KeychainService.delete(service: scopedService)
-        } else {
-            try KeychainService.save(key: value, service: scopedService)
+        let writeLocally = {
+            if value.isEmpty {
+                try KeychainService.delete(service: scopedService)
+            } else {
+                try KeychainService.save(key: value, service: scopedService)
+            }
         }
+
+        // A first-party plugin's `api-key` lives in iCloud Keychain while API key sync is on. The
+        // vault decides where it goes, so turning sync on or off never misses the write.
+        guard key == SharedAPIKeyItemFormat.pluginSecretKey,
+              let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId) else {
+            try writeLocally()
+            return
+        }
+        guard !apiKeyVault.keepsKeyLocal(pluginId) else {
+            // A custom server's key: turning sync on must notice it before it switches. A key the
+            // user saves or removes here also cancels a pending hand-off of the shared key, once the
+            // Keychain took it; a refused write leaves the hand-off pending.
+            try apiKeyVault.withLocalChange {
+                try writeLocally()
+                apiKeyVault.setPendingHandOff(false, pluginId: pluginId)
+            }
+            return
+        }
+        let displayName = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: pluginName)
+        // Clearing a key this Mac does not know leaves a key that another device just added alone.
+        if SharedAPIKeyItemFormat.encode(value) == nil,
+           apiKeyVault.routedAccount(pluginId: pluginId, key: key) != nil,
+           apiKeyVault.current.isLoaded,
+           apiKeyVault.value(forAccount: account) == nil {
+            return
+        }
+        // Asked before the vault's lock is taken: the alert runs the main run loop.
+        // Until the shared keys are read, a key may exist on other devices: ask as well.
+        if SharedAPIKeyItemFormat.encode(value) == nil,
+           apiKeyVault.routedAccount(pluginId: pluginId, key: key) != nil,
+           apiKeyVault.value(forAccount: account) != nil || !apiKeyVault.current.isLoaded,
+           !confirmSharedKeyDeletion(displayName) {
+            sharedKeyDeletionCancelled(pluginId)
+            throw SharedAPIKeyStoreError.deletionCancelled
+        }
+        try apiKeyVault.storePluginKey(
+            value,
+            account: account,
+            displayName: displayName,
+            writeLocally: writeLocally
+        )
     }
 
     func loadSecret(key: String) -> String? {
@@ -108,6 +166,10 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
                 pluginId: pluginId,
                 key: key
             )
+        }
+
+        if let account = apiKeyVault.routedAccount(pluginId: pluginId, key: key) {
+            return apiKeyVault.value(forAccount: account)
         }
 
         let scopedService = "\(pluginId).\(key)"
@@ -133,7 +195,46 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     }
 
     func setUserDefault(_ value: Any?, forKey key: String) {
-        UserDefaults.standard.set(value, forKey: "plugin.\(pluginId).\(key)")
+        let defaultsKey = "plugin.\(pluginId).\(key)"
+        guard let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
+              SharedAPIKeyEndpointPolicy.customEndpointDefaults[account] == key else {
+            UserDefaults.standard.set(value, forKey: defaultsKey)
+            return
+        }
+        // A custom server setting decides where the plugin's key lives. The change, and the copy
+        // below, run as one step that turning sync on sees before it switches.
+        apiKeyVault.withLocalChange {
+            let keptKeyLocal = apiKeyVault.keepsKeyLocal(pluginId)
+            UserDefaults.standard.set(value, forKey: defaultsKey)
+            let keepsKeyLocal = apiKeyVault.keepsKeyLocal(pluginId)
+            guard keepsKeyLocal != keptKeyLocal else { return }
+            guard keepsKeyLocal else {
+                apiKeyVault.setPendingHandOff(false, pluginId: pluginId)
+                return
+            }
+            // The plugin was just set to a custom server, so its key now lives on this Mac. While
+            // sync is on, that copy does not exist yet: keep the shared key here, so the plugin
+            // stays configured until the user enters the server's own key. A key saved meanwhile
+            // waits for this step, so it is written after the copy and wins.
+            let vaultState = apiKeyVault.current
+            guard vaultState.isActive else { return }
+            guard vaultState.isLoaded else {
+                // The shared keys are not read yet: hand the key over once they are.
+                apiKeyVault.setPendingHandOff(true, pluginId: pluginId)
+                return
+            }
+            let scopedService = "\(pluginId).\(SharedAPIKeyItemFormat.pluginSecretKey)"
+            guard let shared = apiKeyVault.sharedKeyToKeepLocally(pluginId: pluginId),
+                  KeychainService.load(service: scopedService) == nil else {
+                return
+            }
+            do {
+                try KeychainService.save(key: shared, service: scopedService)
+            } catch {
+                // Retried with the next read of the shared keys, or when sync turns off.
+                apiKeyVault.setPendingHandOff(true, pluginId: pluginId)
+            }
+        }
     }
 
     // MARK: - Model Lifecycle Policy

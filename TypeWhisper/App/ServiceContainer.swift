@@ -84,6 +84,7 @@ final class ServiceContainer: ObservableObject {
     let promptActionService: PromptActionService
     let promptProcessingService: PromptProcessingService
     let pluginManager: PluginManager
+    let apiKeySyncService: APIKeySyncService
     let pluginRegistryService: PluginRegistryService
     let termPackRegistryService: TermPackRegistryService
     let localTermPackStore: LocalTermPackStore
@@ -238,6 +239,7 @@ final class ServiceContainer: ObservableObject {
         )
         promptProcessingService = PromptProcessingService()
         pluginManager = PluginManager()
+        apiKeySyncService = APIKeySyncService()
         pluginRegistryService = PluginRegistryService()
         termPackRegistryService = TermPackRegistryService()
         localTermPackStore = LocalTermPackStore(
@@ -704,6 +706,10 @@ final class ServiceContainer: ObservableObject {
         PluginManager.shared = pluginManager
         PluginRegistryService.shared = pluginRegistryService
         TermPackRegistryService.shared = termPackRegistryService
+        apiKeySyncService.pluginKeys = { [pluginManager] in pluginManager.syncablePluginKeys }
+        apiKeySyncService.reloadPlugins = { [pluginManager] pluginIds in
+            pluginManager.reloadCredentials(ofPluginIds: pluginIds)
+        }
 
         modelManagerService.observePluginManager()
         promptProcessingService.observePluginManager()
@@ -725,6 +731,8 @@ final class ServiceContainer: ObservableObject {
             // At launch these run after the plugins are loaded.
             modelManagerService.restoreProviderSelection()
             promptProcessingService.applyRecommendedLlmPairIfNeeded()
+            // At launch API key sync reads the policy right before plugins activate.
+            apiKeySyncService.applyManagedPolicy(snapshot)
         }
         launchAtLoginController.apply(
             snapshot,
@@ -783,7 +791,11 @@ final class ServiceContainer: ObservableObject {
         pluginManager.setWorkflowProvider { [weak self] in
             self?.workflowService.workflows.map(\.pluginWorkflowInfo) ?? []
         }
+        // Plugins read their API key while they activate; with API key sync on it comes from
+        // iCloud Keychain. Returns at once while sync is off.
+        await apiKeySyncService.prepareForPluginActivation(policy: managedPolicyService.current)
         pluginManager.scanAndLoadPlugins()
+        apiKeySyncService.pluginsDidLoad()
 
         // Activation hydrates credentials and custom profiles before selection can settle.
         // Reconciliation also requests passive restore from the final selected engine.

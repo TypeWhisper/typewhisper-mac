@@ -57,6 +57,7 @@ KEYS = {
     "SkipOnboardingWhenReady": ("boolean", False, 0),
     "SuppressOptionalPrompts": ("boolean", True, 0),
     "AllowHistoryAsk": ("boolean", False, 0),
+    "AllowAPIKeySync": ("boolean", False, 0),
     "ManagedLicenseKey": ("text", False, 0),
 }
 PAIRS = [("TranscriptionProviderId", "TranscriptionModelId"), ("LlmProviderId", "LlmModelId")]

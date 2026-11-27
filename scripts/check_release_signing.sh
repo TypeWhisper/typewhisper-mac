@@ -9,6 +9,8 @@ action_bundle_id="com.typewhisper.mac.transcribe-action"
 safari_bundle_id="com.typewhisper.mac.safari-extension"
 app_group="$team_id.com.typewhisper.mac"
 icloud_container="iCloud.com.typewhisper.sync"
+# API key sync: shared with TypeWhisper for iOS, used only by the iCloud helper.
+keychain_access_group="$team_id.com.typewhisper.writing-services"
 require_notarization=false
 spawn_test=false
 app_path=""
@@ -248,6 +250,10 @@ if plutil -convert xml1 -o - "$main_entitlements" | main_has_icloud_entitlement;
   echo "error: main app contains iCloud entitlements; its existing TCC identity must stay unchanged" >&2
   exit 1
 fi
+if /usr/libexec/PlistBuddy -c 'Print :keychain-access-groups' "$main_entitlements" >/dev/null 2>&1; then
+  echo "error: main app contains keychain access groups; only the iCloud helper may use them" >&2
+  exit 1
+fi
 [[ -f "$helper_profile_path" ]] || {
   echo "error: Developer ID provisioning profile is missing from the iCloud helper" >&2
   exit 1
@@ -298,6 +304,17 @@ plist_array_contains_or_wildcard \
   "Entitlements:com.apple.developer.icloud-services" \
   "CloudDocuments" || {
   echo "error: profile does not enable CloudDocuments" >&2
+  exit 1
+}
+plist_array_contains \
+  "$decoded_profile" \
+  "Entitlements:keychain-access-groups" \
+  "$keychain_access_group" ||
+  plist_array_contains \
+    "$decoded_profile" \
+    "Entitlements:keychain-access-groups" \
+    "$team_id.*" || {
+  echo "error: profile does not allow keychain access group '$keychain_access_group'" >&2
   exit 1
 }
 expiration_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$profile_expiration" '+%s')"
@@ -373,6 +390,13 @@ if ! plist_array_equals_single_value \
   echo "error: signed helper iCloud containers are incorrect" >&2
   exit 1
 fi
+plist_array_equals_single_value \
+  "$helper_entitlements" \
+  "keychain-access-groups" \
+  "$keychain_access_group" || {
+  echo "error: signed helper keychain access group is incorrect (API key sync)" >&2
+  exit 1
+}
 if /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.applesignin' "$main_entitlements" >/dev/null 2>&1; then
   echo "error: native Sign in with Apple entitlement must not be signed into the Developer ID app" >&2
   exit 1

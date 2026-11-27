@@ -171,6 +171,22 @@ enum ManagedAskHistoryPolicy {
     }
 }
 
+/// Whether the organization allows API key sync through iCloud Keychain. The same rule as
+/// TypeWhisper for iOS, so one payload covers both apps.
+enum ManagedAPIKeySyncPolicy {
+    /// Forbidden by `AllowAPIKeySync = false`, by a value that is not a Boolean or cannot be read,
+    /// and when both cloud transcription and cloud text processing are off: then no key is used.
+    static func allowsAPIKeySync(_ snapshot: ManagedPolicySnapshot) -> Bool {
+        guard isAllowed(ManagedPolicyKeys.allowAPIKeySync, in: snapshot) else { return false }
+        return isAllowed(ManagedPolicyKeys.allowCloudTranscription, in: snapshot)
+            || isAllowed(ManagedPolicyKeys.allowCloudTextProcessing, in: snapshot)
+    }
+
+    private static func isAllowed(_ key: String, in snapshot: ManagedPolicySnapshot) -> Bool {
+        !snapshot.isBlocked(key) && snapshot.enforced(key)?.booleanValue != false
+    }
+}
+
 /// What first-time setup needs before `SkipOnboardingWhenReady` may keep it closed.
 struct ManagedSetupReadiness: Equatable, Sendable {
     var engineReady: Bool

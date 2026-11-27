@@ -84,6 +84,7 @@ struct GeneralSettingsView: View {
                 }
             }
 
+                APIKeySyncSettingsSection()
             }
             .formStyle(.grouped)
             .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
