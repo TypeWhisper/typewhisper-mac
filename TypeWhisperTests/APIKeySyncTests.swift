@@ -54,12 +54,23 @@ private final class InMemorySharedAPIKeyStore: SharedAPIKeyStoring, @unchecked S
         return items
     }
 
+    /// Runs once, right after the next write, like a plugin acting while an upload is under way.
+    /// The copy step holds no lock then, so the hook may save through the vault.
+    func afterNextWrite(_ hook: @escaping @Sendable () -> Void) { lock.withLock { writeHook = hook; keepsWriteHook = false } }
+    /// Like `afterNextWrite`, for every write.
+    func afterEveryWrite(_ hook: @escaping @Sendable () -> Void) { lock.withLock { writeHook = hook; keepsWriteHook = true } }
+    private var writeHook: (@Sendable () -> Void)?
+    private var keepsWriteHook = false
+
     func write(_ value: String, account: String, displayName: String) throws {
-        try lock.withLock {
+        let hook = try lock.withLock { () throws -> (@Sendable () -> Void)? in
             if failsWrites { throw SharedAPIKeyStoreError.keychain(errSecInteractionNotAllowed) }
             storage[account] = SharedAPIKeyStoredItem(value: Data(value.utf8), modificationDate: modificationDate)
             labels[account] = SharedAPIKeyItemFormat.label(displayName: displayName)
+            defer { if !keepsWriteHook { writeHook = nil } }
+            return writeHook
         }
+        hook?()
     }
 
     func delete(account: String) throws {
@@ -348,6 +359,18 @@ final class APIKeySyncMigratorTests: XCTestCase {
         XCTAssertEqual(local.values, [deepgram.pluginId: "dg-custom-server"])
     }
 
+    func testAnUploadOverAnotherDevicesKeyRecordsThatKeyAsItsPredecessor() throws {
+        // This switch uploaded "gsk-x" over "gsk-a"; another device has since written "gsk-b".
+        let shared = InMemorySharedAPIKeyStore(["groq": item("gsk-b", 100)])
+        let local = InMemoryLocalSecretStore([groq.pluginId: secret("gsk-y", 500)])
+        let result = try APIKeySyncMigrator(shared: shared, local: local).copyLocalKeysToShared(
+            plugins: [groq],
+            earlierUploads: ["groq": .init(value: "gsk-x", previous: "gsk-a")]
+        )
+        XCTAssertEqual(shared.values["groq"], "gsk-y")
+        XCTAssertEqual(result.ownUploads["groq"], .init(value: "gsk-y", previous: "gsk-b"))
+    }
+
     func testTurningOffCopiesKeysBackAndKeepsTheICloudCopies() throws {
         let shared = InMemorySharedAPIKeyStore(["groq": item("gsk-shared", 1), "assemblyai": item("aai", 1)])
         let local = InMemoryLocalSecretStore([openAI.pluginId: secret("sk-deleted-elsewhere", 1)])
@@ -457,6 +480,28 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
         XCTAssertThrowsError(try host.storeSecret(key: "api-key", value: ""))
         XCTAssertEqual(answers.events, ["Groq"])
         XCTAssertEqual(shared.values["groq"], "gsk-elsewhere")
+    }
+
+    func testClearingAKeyThisMacDoesNotKnowLeavesTheSharedKeyAlone() throws {
+        let shared = InMemorySharedAPIKeyStore()
+        let vault = SharedAPIKeyVault(store: shared)
+        vault.activate(keys: [:])
+        // Another device adds a key after this Mac read the shared keys.
+        shared.set("gsk-from-iphone", account: "groq")
+        let host = makeHost("com.typewhisper.groq", vault: vault)
+
+        try host.storeSecret(key: "api-key", value: "")
+        XCTAssertEqual(shared.values["groq"], "gsk-from-iphone")
+    }
+
+    func testPluginSavesDoNotReachICloudWhileAPolicyForbidsSync() {
+        let shared = InMemorySharedAPIKeyStore()
+        let vault = SharedAPIKeyVault(store: shared)
+        vault.activate(keys: [:])
+        vault.setSharedWritesAllowed(false)
+
+        XCTAssertThrowsError(try vault.storePluginKey("gsk", account: "groq", displayName: "Groq") {})
+        XCTAssertTrue(shared.items.isEmpty)
     }
 
     func testOtherSecretsAndOtherPublishersStayOnThisMac() {
@@ -704,7 +749,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         let service = makeService()
         let vault = service.vault
         let store = local!
-        local.afterNextRead {
+        shared.afterNextWrite {
             // The plugin saves a new key while the copy runs; sync is not on yet.
             try? vault.storePluginKey("gsk-new", account: "groq", displayName: "Groq") {
                 store.write("gsk-new", pluginId: "com.typewhisper.groq")
@@ -728,10 +773,10 @@ final class APIKeySyncServiceTests: XCTestCase {
         let customServerCleared = Decision()
         service.pluginKeys = { [groq] in customServerCleared.confirms ? [groq, deepgram] : [groq] }
         let vault = service.vault
-        local.afterNextRead {
+        shared.afterNextWrite {
             // The custom server is cleared while the copy runs: Deepgram's key syncs from now on.
             customServerCleared.confirms = true
-            vault.noteLocalChange()
+            vault.withLocalChange {}
         }
 
         service.setEnabled(true)
@@ -747,7 +792,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         let service = makeService()
         let vault = service.vault
         let store = local!
-        local.afterNextRead {
+        shared.afterNextWrite {
             // The plugin removes its key while the copy runs; sync is not on yet.
             try? vault.storePluginKey("", account: "groq", displayName: "Groq") {
                 store.delete(pluginId: "com.typewhisper.groq")
@@ -767,7 +812,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         let service = makeService()
         let vault = service.vault
         let store = local!
-        local.afterEveryRead {
+        shared.afterEveryWrite {
             try? vault.storePluginKey("gsk-\(UUID().uuidString)", account: "groq", displayName: "Groq") {
                 store.write("gsk-\(UUID().uuidString)", pluginId: "com.typewhisper.groq")
             }
@@ -872,15 +917,12 @@ final class APIKeySyncServiceTests: XCTestCase {
         local.write("gsk-mac", pluginId: groq.pluginId)
         let service = makeService()
         service.beforeSwitchForTesting = { [unowned service] in
-            // Applied after the last policy check of the copy, while the switch is under way.
-            Task { @MainActor in
-                service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
-            }
+            // Applied after the last policy check of the copy, right before the switch.
+            service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
         }
 
         service.setEnabled(true)
         await service.waitForPendingOperation()
-        await Task.yield()
         await service.waitForPendingOperation()
 
         XCTAssertFalse(service.isEnabled)

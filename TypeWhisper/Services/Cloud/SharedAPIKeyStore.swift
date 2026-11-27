@@ -244,6 +244,7 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         /// Advances when a plugin writes its key to this Mac's Keychain, so turning sync on
         /// notices an edit made while it copied the keys.
         var localWriteGeneration = 0
+        var sharedWritesAllowed = true
     }
 
     let store: any SharedAPIKeyStoring
@@ -289,7 +290,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
     ) throws {
         saveLock.lock()
         defer { saveLock.unlock() }
-        if state.withLock({ $0.isActive }) {
+        let (isActive, allowed) = state.withLock { ($0.isActive, $0.sharedWritesAllowed) }
+        if isActive {
+            // Sync is about to turn off; the user saves again once it has.
+            guard allowed else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
             try saveLocked(value, account: account, displayName: displayName)
         } else {
             try writeLocally()
@@ -301,12 +305,29 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         state.withLock { $0.keys[account] }
     }
 
-    /// Records a change that turning sync on must see before it switches: a plugin key written to
-    /// this Mac outside `storePluginKey`, or a plugin set to or away from a custom server.
-    func noteLocalChange() {
+    /// Runs a change that turning sync on must see before it switches, ordered with the switch and
+    /// with the copy steps: a custom server's key written to this Mac, or a plugin set to or away
+    /// from a custom server.
+    func withLocalChange<T>(_ body: () throws -> T) rethrows -> T {
+        saveLock.lock()
+        defer {
+            state.withLock { $0.localWriteGeneration += 1 }
+            saveLock.unlock()
+        }
+        return try body()
+    }
+
+    /// Runs a copy step's look at one plugin, ordered with `withLocalChange`.
+    func withLocalLock(_ body: () throws -> Void) throws {
         saveLock.lock()
         defer { saveLock.unlock() }
-        state.withLock { $0.localWriteGeneration += 1 }
+        try body()
+    }
+
+    /// Off while a managed setting or the region forbids sync: plugin saves then do not reach
+    /// iCloud Keychain, also in the moment before sync is turned off.
+    func setSharedWritesAllowed(_ allowed: Bool) {
+        state.withLock { $0.sharedWritesAllowed = allowed }
     }
 
     /// The shared key of a plugin that was just set to a custom server, while sync is on, so the
@@ -392,7 +413,8 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         state.withLock { state in
             state = State(
                 generation: state.generation + 1,
-                localWriteGeneration: state.localWriteGeneration
+                localWriteGeneration: state.localWriteGeneration,
+                sharedWritesAllowed: state.sharedWritesAllowed
             )
         }
     }
@@ -407,7 +429,8 @@ final class SharedAPIKeyVault: @unchecked Sendable {
             guard state.generation == generation else { return false }
             state = State(
                 generation: state.generation + 1,
-                localWriteGeneration: state.localWriteGeneration
+                localWriteGeneration: state.localWriteGeneration,
+                sharedWritesAllowed: state.sharedWritesAllowed
             )
             return true
         }

@@ -82,6 +82,9 @@ struct APIKeySyncMigrator: Sendable {
 
     let shared: any SharedAPIKeyStoring
     let local: any LocalPluginSecretStoring
+    /// Runs one plugin's look at its custom-server setting and its key on this Mac as a single
+    /// step, ordered with the host's custom-server changes (`SharedAPIKeyVault.withLocalLock`).
+    var serializeLocal: @Sendable (_ step: () throws -> Void) throws -> Void = { try $0() }
 
     func loadSharedKeys() throws -> [String: String] {
         try shared.readAll().compactMapValues { SharedAPIKeyItemFormat.decode($0.value) }
@@ -108,9 +111,15 @@ struct APIKeySyncMigrator: Sendable {
             keys: sharedItems.compactMapValues { SharedAPIKeyItemFormat.decode($0.value) },
             ownUploads: earlierUploads
         )
-        for plugin in plugins where !keepsKeyLocal(plugin.pluginId) {
+        for plugin in plugins {
+            var keptLocal = false
+            var localItem: LocalPluginSecret?
+            try serializeLocal {
+                keptLocal = keepsKeyLocal(plugin.pluginId)
+                if !keptLocal { localItem = try local.read(pluginId: plugin.pluginId) }
+            }
+            guard !keptLocal else { continue }
             let sharedValue = result.keys[plugin.account]
-            let localItem = try local.read(pluginId: plugin.pluginId)
             let localValue = localItem.flatMap {
                 SharedAPIKeyItemFormat.encode($0.value).flatMap(SharedAPIKeyItemFormat.decode)
             }
@@ -153,9 +162,12 @@ struct APIKeySyncMigrator: Sendable {
         keepsKeyLocal: (_ pluginId: String) -> Bool = { _ in false }
     ) throws {
         var firstError: Error?
-        for plugin in plugins where !keepsKeyLocal(plugin.pluginId) {
+        for plugin in plugins {
             do {
-                try local.delete(pluginId: plugin.pluginId)
+                try serializeLocal {
+                    guard !keepsKeyLocal(plugin.pluginId) else { return }
+                    try local.delete(pluginId: plugin.pluginId)
+                }
             } catch {
                 firstError = firstError ?? error
             }
@@ -176,11 +188,16 @@ struct APIKeySyncMigrator: Sendable {
     ) throws {
         for (account, value) in keys.sorted(by: { $0.key < $1.key }) {
             let pluginId = SharedAPIKeyItemFormat.pluginId(forAccount: account)
-            guard !keepsKeyLocal(pluginId) else { continue }
-            try local.write(value, pluginId: pluginId)
+            try serializeLocal {
+                guard !keepsKeyLocal(pluginId) else { return }
+                try local.write(value, pluginId: pluginId)
+            }
         }
-        for plugin in plugins where keys[plugin.account] == nil && !keepsKeyLocal(plugin.pluginId) {
-            try local.delete(pluginId: plugin.pluginId)
+        for plugin in plugins where keys[plugin.account] == nil {
+            try serializeLocal {
+                guard !keepsKeyLocal(plugin.pluginId) else { return }
+                try local.delete(pluginId: plugin.pluginId)
+            }
         }
     }
 
@@ -195,9 +212,9 @@ struct APIKeySyncMigrator: Sendable {
         try shared.write(value, account: plugin.account, displayName: plugin.displayName)
         result.keys[plugin.account] = value
         result.uploaded.insert(plugin.account)
-        // Keeps the key from before the switch when an earlier attempt already replaced it.
-        let original = result.ownUploads[plugin.account].map(\.previous) ?? previous
-        result.ownUploads[plugin.account] = OwnUpload(value: value, previous: original)
+        // The caller passes the key this upload replaces: the one from before the switch when it
+        // replaces this switch's own upload, otherwise the shared key it found.
+        result.ownUploads[plugin.account] = OwnUpload(value: value, previous: previous)
     }
 
     /// Undoes this switch's upload of a key that was deleted on this Mac meanwhile.
@@ -290,7 +307,9 @@ final class APIKeySyncService: ObservableObject {
         self.launchWait = launchWait
         self.retryDelay = retryDelay
         self.vault = vault
-        migrator = APIKeySyncMigrator(shared: vault.store, local: local)
+        var migrator = APIKeySyncMigrator(shared: vault.store, local: local)
+        migrator.serializeLocal = { [vault] step in try vault.withLocalLock(step) }
+        self.migrator = migrator
         self.storefrontCountryCode = storefrontCountryCode
         self.now = now
         isEnabled = defaults.string(forKey: Self.storageLocationKey) == Self.iCloudKeychainLocation
@@ -336,6 +355,7 @@ final class APIKeySyncService: ObservableObject {
     private func updateUploadGate() {
         let allowed = !managedConfigurationForbids && !storefrontForbids
         uploadsAllowed.withLock { $0 = allowed }
+        vault.setSharedWritesAllowed(allowed)
     }
 
     /// Follows the managed settings: `AllowAPIKeySync` and both cloud keys.
