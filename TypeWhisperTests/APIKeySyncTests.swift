@@ -111,6 +111,8 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
     var values: [String: String] { secrets.mapValues(\.value) }
 
     func failReads(_ fails: Bool) { lock.withLock { failsReads = fails } }
+    func failWrites(_ fails: Bool) { lock.withLock { failsWrites = fails } }
+    private var failsWrites = false
 
     /// Runs once, right after the next read took its value, like a plugin saving its key at
     /// that moment.
@@ -131,7 +133,15 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
     }
 
     /// Stamps the time of the write, as the Keychain does.
-    func write(_ value: String, pluginId: String) {
+    func write(_ value: String, pluginId: String) throws {
+        try lock.withLock {
+            if failsWrites { throw KeychainError.saveFailed(errSecInteractionNotAllowed) }
+            storage[pluginId] = LocalPluginSecret(value: value, modificationDate: Date())
+        }
+    }
+
+    /// A write that the test sets up or makes on a plugin's behalf; it never fails.
+    func put(_ value: String, pluginId: String) {
         lock.withLock { storage[pluginId] = LocalPluginSecret(value: value, modificationDate: Date()) }
     }
 
@@ -494,6 +504,32 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
         XCTAssertEqual(shared.values["groq"], "gsk-from-iphone")
     }
 
+    func testAPolicyChangeWaitsForAnUploadUnderWayAndRefusesLaterOnes() throws {
+        let vault = SharedAPIKeyVault(store: InMemorySharedAPIKeyStore())
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let forbidden = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            _ = try? vault.admitSharedWrite {
+                started.signal()
+                release.wait()
+            }
+        }
+        started.wait()
+        DispatchQueue.global().async {
+            vault.setSharedWritesAllowed(false)
+            forbidden.signal()
+        }
+        XCTAssertEqual(forbidden.wait(timeout: .now() + 0.2), .timedOut, "the policy waits for the upload under way")
+        XCTAssertTrue(vault.current.sharedWritesAllowed)
+
+        release.signal()
+        XCTAssertEqual(forbidden.wait(timeout: .now() + 2), .success)
+        var wrote = false
+        XCTAssertFalse(try vault.admitSharedWrite { wrote = true })
+        XCTAssertFalse(wrote, "an upload after the policy is refused")
+    }
+
     func testPluginSavesDoNotReachICloudWhileAPolicyForbidsSync() {
         let shared = InMemorySharedAPIKeyStore()
         let vault = SharedAPIKeyVault(store: shared)
@@ -612,7 +648,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testTurningOnMovesKeysToICloudKeychainAndReloadsChangedPlugins() async {
-        local.write("gsk-mac", pluginId: groq.pluginId)
+        local.put("gsk-mac", pluginId: groq.pluginId)
         shared.set("sk-iphone", account: "openai", date: date(1))
         let service = makeService()
 
@@ -629,7 +665,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testAFailedTurnOnChangesNothing() async {
-        local.write("gsk-mac", pluginId: groq.pluginId)
+        local.put("gsk-mac", pluginId: groq.pluginId)
         shared.failReads(true)
         let service = makeService()
 
@@ -644,7 +680,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testTurningOffCopiesKeysBackAndKeepsThemInICloud() async {
-        local.write("gsk-mac", pluginId: groq.pluginId)
+        local.put("gsk-mac", pluginId: groq.pluginId)
         let service = makeService()
         service.setEnabled(true)
         await service.waitForPendingOperation()
@@ -743,7 +779,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testAKeySavedWhileTurningOnIsNotLost() async {
-        local.write("gsk-old", pluginId: groq.pluginId)
+        local.put("gsk-old", pluginId: groq.pluginId)
         // The upload of the old key gets a later date than the save that follows it.
         shared.modificationDate = .distantFuture
         let service = makeService()
@@ -751,9 +787,8 @@ final class APIKeySyncServiceTests: XCTestCase {
         let store = local!
         shared.afterNextWrite {
             // The plugin saves a new key while the copy runs; sync is not on yet.
-            try? vault.storePluginKey("gsk-new", account: "groq", displayName: "Groq") {
-                store.write("gsk-new", pluginId: "com.typewhisper.groq")
-            }
+            store.put("gsk-new", pluginId: "com.typewhisper.groq")
+            vault.recordLocalChangeForTesting()
         }
 
         service.setEnabled(true)
@@ -767,8 +802,8 @@ final class APIKeySyncServiceTests: XCTestCase {
 
     func testAPluginLeavingItsCustomServerWhileTurningOnKeepsItsKey() async {
         let deepgram = plugin("deepgram")
-        local.write("gsk", pluginId: groq.pluginId)
-        local.write("dg-key", pluginId: deepgram.pluginId)
+        local.put("gsk", pluginId: groq.pluginId)
+        local.put("dg-key", pluginId: deepgram.pluginId)
         let service = makeService()
         let customServerCleared = Decision()
         service.pluginKeys = { [groq] in customServerCleared.confirms ? [groq, deepgram] : [groq] }
@@ -776,7 +811,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         shared.afterNextWrite {
             // The custom server is cleared while the copy runs: Deepgram's key syncs from now on.
             customServerCleared.confirms = true
-            vault.withLocalChange {}
+            vault.recordLocalChangeForTesting()
         }
 
         service.setEnabled(true)
@@ -788,15 +823,14 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testAKeyDeletedWhileTurningOnIsNotBroughtBack() async {
-        local.write("gsk-old", pluginId: groq.pluginId)
+        local.put("gsk-old", pluginId: groq.pluginId)
         let service = makeService()
         let vault = service.vault
         let store = local!
         shared.afterNextWrite {
             // The plugin removes its key while the copy runs; sync is not on yet.
-            try? vault.storePluginKey("", account: "groq", displayName: "Groq") {
-                store.delete(pluginId: "com.typewhisper.groq")
-            }
+            store.delete(pluginId: "com.typewhisper.groq")
+            vault.recordLocalChangeForTesting()
         }
 
         service.setEnabled(true)
@@ -809,8 +843,8 @@ final class APIKeySyncServiceTests: XCTestCase {
 
     func testAFailedTurnOnTakesBackItsUploads() async {
         let deepgram = plugin("deepgram")
-        local.write("gsk", pluginId: groq.pluginId)
-        local.write("dg", pluginId: deepgram.pluginId)
+        local.put("gsk", pluginId: groq.pluginId)
+        local.put("dg", pluginId: deepgram.pluginId)
         shared.set("sk-iphone", account: "openai")
         let service = makeService()
         service.pluginKeys = { [groq] in [groq, deepgram] }
@@ -847,7 +881,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         }
         vault.withLocalChange {
             vault.setPendingHandOff(false, pluginId: "com.typewhisper.groq")
-            local.write("gsk-own-server", pluginId: "com.typewhisper.groq")
+            local.put("gsk-own-server", pluginId: "com.typewhisper.groq")
         }
 
         await service.prepareForPluginActivation(policy: policySnapshot([:]))
@@ -859,14 +893,13 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testKeysThatKeepChangingLeaveSyncOffWhenTurningOn() async {
-        local.write("gsk-1", pluginId: groq.pluginId)
+        local.put("gsk-1", pluginId: groq.pluginId)
         let service = makeService()
         let vault = service.vault
         let store = local!
         shared.afterEveryWrite {
-            try? vault.storePluginKey("gsk-\(UUID().uuidString)", account: "groq", displayName: "Groq") {
-                store.write("gsk-\(UUID().uuidString)", pluginId: "com.typewhisper.groq")
-            }
+            store.put("gsk-\(UUID().uuidString)", pluginId: "com.typewhisper.groq")
+            vault.recordLocalChangeForTesting()
         }
 
         service.setEnabled(true)
@@ -879,7 +912,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testKeysThatKeepChangingLeaveSyncOnWhenTurningOff() async {
-        local.write("gsk-1", pluginId: groq.pluginId)
+        local.put("gsk-1", pluginId: groq.pluginId)
         let service = makeService()
         service.setEnabled(true)
         await service.waitForPendingOperation()
@@ -944,9 +977,9 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testAPolicyArrivingWhileTurningOnKeepsSyncOff() async {
-        local.write("gsk-mac", pluginId: groq.pluginId)
+        local.put("gsk-mac", pluginId: groq.pluginId)
         let service = makeService()
-        local.afterNextRead {
+        shared.afterNextRead {
             DispatchQueue.main.sync {
                 MainActor.assumeIsolated {
                     service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
@@ -965,7 +998,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testAPolicyArrivingAtTheSwitchKeepsSyncOff() async {
-        local.write("gsk-mac", pluginId: groq.pluginId)
+        local.put("gsk-mac", pluginId: groq.pluginId)
         let service = makeService()
         service.beforeSwitchForTesting = { [unowned service] in
             // Applied after the last policy check of the copy, right before the switch.
@@ -984,7 +1017,7 @@ final class APIKeySyncServiceTests: XCTestCase {
 
     func testTurningOffLeavesACustomServersKeyAloneWhenTheAccountIsNotShared() throws {
         let deepgram = plugin("deepgram")
-        local.write("dg-custom-server", pluginId: deepgram.pluginId)
+        local.put("dg-custom-server", pluginId: deepgram.pluginId)
         try APIKeySyncMigrator(shared: shared, local: local).copySharedKeysToLocal(
             plugins: [deepgram],
             keys: [:],
@@ -994,7 +1027,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     }
 
     func testAKeySavedWhileTurningOffReachesThisMac() async {
-        local.write("gsk-old", pluginId: groq.pluginId)
+        local.put("gsk-old", pluginId: groq.pluginId)
         let service = makeService()
         service.setEnabled(true)
         await service.waitForPendingOperation()
@@ -1047,7 +1080,7 @@ final class APIKeySyncServiceTests: XCTestCase {
                        "a plugin set to a custom server after sync came on keeps the shared key on this Mac")
         XCTAssertNil(vault.sharedKeyToKeepLocally(pluginId: "com.typewhisper.groq"))
 
-        local.write("r8-custom", pluginId: "com.typewhisper.reson8")
+        local.put("r8-custom", pluginId: "com.typewhisper.reson8")
         try APIKeySyncMigrator(shared: shared, local: local).copySharedKeysToLocal(
             plugins: [],
             keys: ["reson8": "r8-cloud", "deepgram": "dg-cloud", "groq": "gsk"],
@@ -1061,8 +1094,42 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertNil(vault.sharedKeyToKeepLocally(pluginId: "com.typewhisper.deepgram"))
     }
 
+    func testAPolicyTurnOffThatFailedIsRetriedWhenTheAppBecomesActive() async {
+        local.put("gsk-mac", pluginId: groq.pluginId)
+        let service = makeService()
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+        local.failWrites(true)
+
+        service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
+        await service.waitForPendingOperation()
+        XCTAssertTrue(service.isEnabled, "the Keychain refused the copy")
+
+        local.failWrites(false)
+        service.applicationDidBecomeActive()
+        await service.waitForPendingOperation()
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertEqual(local.values[groq.pluginId], "gsk-mac")
+    }
+
+    func testAHandOffThatFailedStaysPending() throws {
+        let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: { _ in true })
+        vault.setPendingHandOff(true, pluginId: "com.typewhisper.deepgram")
+        local.failWrites(true)
+        let migrator = APIKeySyncMigrator(shared: shared, local: local)
+
+        XCTAssertThrowsError(try migrator.completeHandOffs(
+            ["com.typewhisper.deepgram"],
+            keys: ["deepgram": "dg-cloud"],
+            claim: { vault.claimPendingHandOff(pluginId: $0) },
+            unclaim: { vault.setPendingHandOff(true, pluginId: $0) },
+            keepsKeyLocal: vault.keepsKeyLocal
+        ))
+        XCTAssertEqual(vault.current.pendingHandOffs, ["com.typewhisper.deepgram"], "a later read tries again")
+    }
+
     func testThePolicyTurnsSyncOffAndItStaysOff() async {
-        local.write("gsk-mac", pluginId: groq.pluginId)
+        local.put("gsk-mac", pluginId: groq.pluginId)
         let service = makeService()
         service.setEnabled(true)
         await service.waitForPendingOperation()

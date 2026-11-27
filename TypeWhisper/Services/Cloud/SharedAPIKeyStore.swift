@@ -334,6 +334,12 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         state.withLock { $0.pendingHandOffs.remove(pluginId) != nil }
     }
 
+    /// Records a local change without the lock, for tests that act like a plugin from inside a
+    /// store call the vault's lock already covers; a real plugin would wait for the lock instead.
+    func recordLocalChangeForTesting() {
+        state.withLock { $0.localWriteGeneration += 1 }
+    }
+
     /// Runs a copy step's look at one plugin, ordered with `withLocalChange`.
     func withLocalLock(_ body: () throws -> Void) throws {
         saveLock.lock()
@@ -341,10 +347,24 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         try body()
     }
 
-    /// Off while a managed setting or the region forbids sync: plugin saves then do not reach
-    /// iCloud Keychain, also in the moment before sync is turned off.
+    /// Off while a managed setting or the region forbids sync: plugin saves and the uploads of
+    /// turning sync on then do not reach iCloud Keychain, also in the moment before sync is turned
+    /// off. Taken under the same lock as every admitted write, so a write either starts before the
+    /// change or is refused after it.
     func setSharedWritesAllowed(_ allowed: Bool) {
+        saveLock.lock()
+        defer { saveLock.unlock() }
         state.withLock { $0.sharedWritesAllowed = allowed }
+    }
+
+    /// Runs an upload of turning sync on while shared writes are allowed, as one step with that
+    /// check. - Returns: false, without running `write`, when they are not.
+    func admitSharedWrite(_ write: () throws -> Void) throws -> Bool {
+        saveLock.lock()
+        defer { saveLock.unlock() }
+        guard state.withLock({ $0.sharedWritesAllowed }) else { return false }
+        try write()
+        return true
     }
 
     /// The shared key of a plugin that was just set to a custom server, while sync is on, so the
