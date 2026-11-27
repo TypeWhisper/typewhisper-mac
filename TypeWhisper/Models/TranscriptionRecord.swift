@@ -349,6 +349,11 @@ extension TranscriptionRecord {
         guard transcriptionVersionsData != nil,
               let original = (try? savedTranscriptionVersions())?.first(where: { $0.id == id })
         else { return timing }
-        return original.matchesContent(of: self) ? timing : nil
+        // Only the text counts: speaker and alignment data can be added later without a new run.
+        return hasText(of: original) ? timing : nil
+    }
+
+    func hasText(of version: HistoryTranscriptionVersion) -> Bool {
+        version.rawText == rawText && version.finalText == finalText
     }
 }

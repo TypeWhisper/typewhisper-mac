@@ -513,6 +513,9 @@ final class HistoryServiceTests: XCTestCase {
                     to: record, expected: .capture(record)
                 )
             }
+            // Alignment added after the dictation leaves its text, and so its times, in place.
+            record.timedTextGranularityRaw = TimedTextGranularity.word.rawValue
+            XCTAssertEqual(record.dictationTimingForActiveText, timing)
 
             let echo = try XCTUnwrap(service.userDataSyncHistoryRecords().first).content
             try service.applyUserDataSyncMutations([.upsertHistoryContent(echo)])

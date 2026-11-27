@@ -1630,7 +1630,8 @@ final class HistoryService: ObservableObject {
                     // An unchanged sync echo can retain the active local source.
                     record.activeTranscriptionVersionID = nil
                     // The dictation's times only stay where a saved original keeps its text.
-                    if (try? record.savedTranscriptionVersions())?.contains(where: { $0.id == record.id }) != true {
+                    if !record.hasText(of: previousContent),
+                       (try? record.savedTranscriptionVersions())?.contains(where: { $0.id == record.id }) != true {
                         record.dictationStopToTranscriptSeconds = nil
                         record.dictationWorkflowSeconds = nil
                     }
