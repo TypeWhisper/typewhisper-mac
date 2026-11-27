@@ -301,6 +301,18 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         state.withLock { $0.keys[account] }
     }
 
+    /// The shared key of a plugin whose own key stays on this Mac (`keepsKeyLocal`), while sync
+    /// is on. Such a plugin reads its own key first and this one only until it saves one, so
+    /// setting a custom server after sync came on keeps the plugin configured.
+    func sharedFallback(pluginId: String, key: String) -> String? {
+        guard key == SharedAPIKeyItemFormat.pluginSecretKey,
+              let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
+              keepsKeyLocal(pluginId) else {
+            return nil
+        }
+        return state.withLock { $0.isActive ? $0.keys[account] : nil }
+    }
+
     /// Writes through to iCloud Keychain, then updates the copy. An empty value deletes the key
     /// on every device that syncs it.
     func save(_ value: String, account: String, displayName: String) throws {

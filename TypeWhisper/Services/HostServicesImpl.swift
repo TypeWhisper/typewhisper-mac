@@ -159,9 +159,11 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         // Plugins read credentials synchronously in activate(host:), so keychain
         // latency is part of launch. The interval carries no key or value.
         let signposter = LaunchSignposts.signposter
-        return signposter.withIntervalSignpost("Plugin.loadSecret", id: signposter.makeSignpostID()) {
+        let local = signposter.withIntervalSignpost("Plugin.loadSecret", id: signposter.makeSignpostID()) {
             KeychainService.load(service: scopedService)
         }
+        // A plugin set to a custom server after sync came on has no key of its own here yet.
+        return local ?? apiKeyVault.sharedFallback(pluginId: pluginId, key: key)
     }
 
     // MARK: - UserDefaults (plugin-scoped)

@@ -820,18 +820,27 @@ final class APIKeySyncServiceTests: XCTestCase {
         endpointDefaults.set("eu", forKey: "plugin.com.typewhisper.soniox.selectedRegion")
         XCTAssertFalse(SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: "com.typewhisper.soniox", defaults: endpointDefaults))
 
-        let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: { $0 == "com.typewhisper.reson8" })
-        vault.activate(keys: ["reson8": "r8-cloud"])
+        let customServer: @Sendable (String) -> Bool = { $0 == "com.typewhisper.reson8" || $0 == "com.typewhisper.deepgram" }
+        let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: customServer)
+        vault.activate(keys: ["reson8": "r8-cloud", "deepgram": "dg-cloud"])
         XCTAssertNil(vault.routedAccount(pluginId: "com.typewhisper.reson8", key: "api-key"))
+        XCTAssertEqual(vault.sharedFallback(pluginId: "com.typewhisper.reson8", key: "api-key"), "r8-cloud",
+                       "a plugin set to a custom server after sync came on stays configured")
+        XCTAssertNil(vault.sharedFallback(pluginId: "com.typewhisper.groq", key: "api-key"))
+        XCTAssertNil(vault.sharedFallback(pluginId: "com.typewhisper.reson8", key: "hf-token"))
 
         local.write("r8-custom", pluginId: "com.typewhisper.reson8")
         try APIKeySyncMigrator(shared: shared, local: local).copySharedKeysToLocal(
             plugins: [],
-            keys: ["reson8": "r8-cloud", "groq": "gsk"],
+            keys: ["reson8": "r8-cloud", "deepgram": "dg-cloud", "groq": "gsk"],
             keepsKeyLocal: vault.keepsKeyLocal
         )
-        XCTAssertEqual(local.values["com.typewhisper.reson8"], "r8-custom")
+        XCTAssertEqual(local.values["com.typewhisper.reson8"], "r8-custom", "its own key is never replaced")
+        XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-cloud", "without its own key it keeps the shared one")
         XCTAssertEqual(local.values["com.typewhisper.groq"], "gsk")
+
+        vault.deactivate()
+        XCTAssertNil(vault.sharedFallback(pluginId: "com.typewhisper.deepgram", key: "api-key"))
     }
 
     func testThePolicyTurnsSyncOffAndItStaysOff() async {
