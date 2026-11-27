@@ -227,7 +227,12 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
                   KeychainService.load(service: scopedService) == nil else {
                 return
             }
-            try? KeychainService.save(key: shared, service: scopedService)
+            do {
+                try KeychainService.save(key: shared, service: scopedService)
+            } catch {
+                // Retried with the next read of the shared keys, or when sync turns off.
+                apiKeyVault.setPendingHandOff(true, pluginId: pluginId)
+            }
         }
     }
 

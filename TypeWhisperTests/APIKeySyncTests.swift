@@ -112,7 +112,9 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
 
     func failReads(_ fails: Bool) { lock.withLock { failsReads = fails } }
     func failWrites(_ fails: Bool) { lock.withLock { failsWrites = fails } }
+    func failWrites(forPluginId pluginId: String) { lock.withLock { _ = failingWrites.insert(pluginId) } }
     private var failsWrites = false
+    private var failingWrites = Set<String>()
 
     /// Runs once, right after the next read took its value, like a plugin saving its key at
     /// that moment.
@@ -135,7 +137,9 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
     /// Stamps the time of the write, as the Keychain does.
     func write(_ value: String, pluginId: String) throws {
         try lock.withLock {
-            if failsWrites { throw KeychainError.saveFailed(errSecInteractionNotAllowed) }
+            if failsWrites || failingWrites.contains(pluginId) {
+                throw KeychainError.saveFailed(errSecInteractionNotAllowed)
+            }
             storage[pluginId] = LocalPluginSecret(value: value, modificationDate: Date())
         }
     }
@@ -148,6 +152,16 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
     func delete(pluginId: String) {
         lock.withLock { storage[pluginId] = nil }
     }
+}
+
+private final class InMemoryOwnUploadArchive: OwnUploadArchiving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String: APIKeySyncMigrator.OwnUpload] = [:]
+
+    var uploads: [String: APIKeySyncMigrator.OwnUpload] { lock.withLock { stored } }
+
+    func load() throws -> [String: APIKeySyncMigrator.OwnUpload] { lock.withLock { stored } }
+    func save(_ uploads: [String: APIKeySyncMigrator.OwnUpload]) throws { lock.withLock { stored = uploads } }
 }
 
 private final class Decision: @unchecked Sendable {
@@ -638,6 +652,7 @@ final class APIKeySyncServiceTests: XCTestCase {
     private var local: InMemoryLocalSecretStore!
     private var reloaded: [Set<String>] = []
     private var clock = Date(timeIntervalSince1970: 10_000)
+    private var archive = InMemoryOwnUploadArchive()
 
     private let groq = plugin("groq")
     private let openAI = plugin("openai")
@@ -647,6 +662,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         defaults = UserDefaults(suiteName: suiteName)
         shared = InMemorySharedAPIKeyStore()
         local = InMemoryLocalSecretStore()
+        archive = InMemoryOwnUploadArchive()
         reloaded = []
     }
 
@@ -661,7 +677,8 @@ final class APIKeySyncServiceTests: XCTestCase {
             vault: SharedAPIKeyVault(store: shared),
             local: local,
             storefrontCountryCode: { nil },
-            now: { [unowned self] in clock }
+            now: { [unowned self] in clock },
+            uploadArchive: archive
         )
         service.pluginKeys = { [groq, openAI] in [groq, openAI] }
         service.reloadPlugins = { [unowned self] in reloaded.append($0) }
@@ -789,7 +806,8 @@ final class APIKeySyncServiceTests: XCTestCase {
             vault: SharedAPIKeyVault(store: blocking),
             local: local,
             storefrontCountryCode: { nil },
-            launchWait: .milliseconds(200)
+            launchWait: .milliseconds(200),
+            uploadArchive: archive
         )
         service.reloadPlugins = { [unowned self] in reloaded.append($0) }
 
@@ -930,7 +948,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         shared.set("gsk-cloud", account: "groq")
         let customServer: @Sendable (String) -> Bool = { $0 == "com.typewhisper.deepgram" || $0 == "com.typewhisper.groq" }
         let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: customServer)
-        let service = APIKeySyncService(defaults: defaults, vault: vault, local: local, storefrontCountryCode: { nil })
+        let service = APIKeySyncService(defaults: defaults, vault: vault, local: local, storefrontCountryCode: { nil }, uploadArchive: archive)
         service.reloadPlugins = { [unowned self] in reloaded.append($0) }
         // What the host does when both are set to a custom server before the first read; the
         // user then saves Groq's own key, which cancels its hand-off.
@@ -1012,7 +1030,8 @@ final class APIKeySyncServiceTests: XCTestCase {
             vault: SharedAPIKeyVault(store: shared),
             local: local,
             storefrontCountryCode: { nil },
-            retryDelay: .milliseconds(50)
+            retryDelay: .milliseconds(50),
+            uploadArchive: archive
         )
         let vault = service.vault
         let staleReads = Received()
@@ -1247,14 +1266,86 @@ final class APIKeySyncServiceTests: XCTestCase {
         local.failWrites(true)
         let migrator = APIKeySyncMigrator(shared: shared, local: local)
 
-        XCTAssertThrowsError(try migrator.completeHandOffs(
+        let result = migrator.completeHandOffs(
             ["com.typewhisper.deepgram"],
             keys: ["deepgram": "dg-cloud"],
             claim: { vault.claimPendingHandOff(pluginId: $0) },
             unclaim: { vault.setPendingHandOff(true, pluginId: $0) },
             keepsKeyLocal: vault.keepsKeyLocal
-        ))
+        )
+        XCTAssertEqual(result.failed, ["com.typewhisper.deepgram"])
         XCTAssertEqual(vault.current.pendingHandOffs, ["com.typewhisper.deepgram"], "a later read tries again")
+    }
+
+    func testOneFailedHandOffDoesNotHoldBackTheOthers() {
+        let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: { _ in true })
+        vault.setPendingHandOff(true, pluginId: "com.typewhisper.deepgram")
+        vault.setPendingHandOff(true, pluginId: "com.typewhisper.reson8")
+        local.failWrites(forPluginId: "com.typewhisper.deepgram")
+
+        let result = APIKeySyncMigrator(shared: shared, local: local).completeHandOffs(
+            ["com.typewhisper.deepgram", "com.typewhisper.reson8"],
+            keys: ["deepgram": "dg-cloud", "reson8": "r8-cloud"],
+            claim: { vault.claimPendingHandOff(pluginId: $0) },
+            unclaim: { vault.setPendingHandOff(true, pluginId: $0) },
+            keepsKeyLocal: vault.keepsKeyLocal
+        )
+        XCTAssertEqual(result.handedOff, ["com.typewhisper.reson8"], "this plugin is reloaded")
+        XCTAssertEqual(result.failed, ["com.typewhisper.deepgram"])
+        XCTAssertEqual(local.values["com.typewhisper.reson8"], "r8-cloud")
+        XCTAssertEqual(vault.current.pendingHandOffs, ["com.typewhisper.deepgram"])
+    }
+
+    func testAHandOffCompletedWhileTurningOffReloadsThePlugin() async {
+        defaults.set("iCloudKeychain", forKey: APIKeySyncService.storageLocationKey)
+        shared.set("dg-cloud", account: "deepgram")
+        let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: { $0 == "com.typewhisper.deepgram" })
+        let service = APIKeySyncService(defaults: defaults, vault: vault, local: local, storefrontCountryCode: { nil }, uploadArchive: archive)
+        service.pluginKeys = { [groq] in [groq] }
+        service.reloadPlugins = { [unowned self] in reloaded.append($0) }
+        // Set to a custom server before the shared keys were read.
+        vault.activate(keys: nil)
+        vault.withLocalChange { vault.setPendingHandOff(true, pluginId: "com.typewhisper.deepgram") }
+
+        service.setEnabled(false)
+        await service.waitForPendingOperation()
+
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-cloud")
+        XCTAssertTrue(reloaded.contains(["com.typewhisper.deepgram"]))
+    }
+
+    func testUploadsThatCouldNotBeTakenBackSurviveARelaunch() async {
+        let deepgram = plugin("deepgram")
+        local.put("gsk", pluginId: groq.pluginId)
+        local.put("dg", pluginId: deepgram.pluginId)
+        let first = makeService()
+        first.pluginKeys = { [groq] in [groq, deepgram] }
+        let store = local!
+        let sharedStore = shared!
+        shared.afterNextWrite {
+            store.failReads(true)
+            sharedStore.failWrites(true)
+        }
+        first.setEnabled(true)
+        await first.waitForPendingOperation()
+        XCTAssertFalse(first.isEnabled)
+        XCTAssertEqual(archive.uploads["groq"]?.value, "gsk", "kept in this Mac's Keychain for the next launch")
+
+        // A new launch. Meanwhile the user removed the Groq key, and another device added OpenAI.
+        store.delete(pluginId: groq.pluginId)
+        store.failReads(false)
+        sharedStore.failWrites(false)
+        shared.set("sk-iphone", account: "openai", date: date(1))
+        let second = makeService()
+        second.pluginKeys = { [groq] in [groq, deepgram] }
+        second.setEnabled(true)
+        await second.waitForPendingOperation()
+
+        XCTAssertTrue(second.isEnabled)
+        XCTAssertNil(shared.items["groq"], "the earlier upload is taken back instead of received")
+        XCTAssertEqual(second.vault.value(forAccount: "openai"), "sk-iphone", "a genuine shared key still arrives")
+        XCTAssertTrue(archive.uploads.isEmpty)
     }
 
     func testAPolicyChangeDoesNotWaitOnTheMainActorForAWriteUnderWay() throws {
