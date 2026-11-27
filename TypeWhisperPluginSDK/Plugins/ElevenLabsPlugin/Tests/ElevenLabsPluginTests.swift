@@ -841,18 +841,20 @@ final class ElevenLabsPluginTests: XCTestCase {
             "Speaker count",
             "Choose Automatic or the maximum number of speakers (1–32). Applies to REST transcription only.",
             "Use TypeWhisper dictionary terms",
-            "Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.",
+            "Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra.",
+            "With keyterms, %@ only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from %@. If batch REST fails, the realtime text without keyterms is used.",
             "Tuned for clinical audio, at the Scribe v2 price. Batch only, without realtime streaming.",
-            "Auto streams while you dictate, so the live preview and the final text come from one realtime session, and falls back to batch REST. With active dictionary terms, the final text comes from batch REST, so dictations with a live preview are billed for both. REST only avoids realtime concurrency limits and bills the batch rate.",
+            "Auto streams while you dictate and falls back to batch REST. REST only avoids realtime concurrency limits and bills the batch rate.",
         ]
 
         for key in requiredKeys {
             let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing localization key: \(key)")
             let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
-            for language in ["de", "ja", "zh-Hans"] {
+            for language in ["de", "es", "ja", "zh-Hans"] {
                 XCTAssertNotNil(localizations[language], "Missing \(language) localization for \(key)")
             }
-            XCTAssertTrue(source.contains(key), "Settings UI should use \(key)")
+            let sourceText = key.replacingOccurrences(of: "%@", with: "\\(realtimeModel.displayName)")
+            XCTAssertTrue(source.contains(sourceText), "Settings UI should use \(key)")
         }
 
         XCTAssertTrue(source.contains(".accessibilityIdentifier(ElevenLabsSettingsAccessibility.cleanTranscript)"))
