@@ -1340,10 +1340,12 @@ final class PluginManager: ObservableObject {
         setRuleNamesProvider(provider)
     }
 
-    /// The installed first-party plugins whose `api-key` syncs, enabled or not.
+    /// The installed first-party plugins whose `api-key` syncs, enabled or not. A plugin set to a
+    /// custom server keeps its key on this Mac.
     var syncablePluginKeys: [SyncablePluginKey] {
         loadedPlugins.compactMap {
-            SyncablePluginKey(pluginId: $0.manifest.id, pluginName: $0.manifest.name)
+            guard !SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: $0.manifest.id) else { return nil }
+            return SyncablePluginKey(pluginId: $0.manifest.id, pluginName: $0.manifest.name)
         }
     }
 

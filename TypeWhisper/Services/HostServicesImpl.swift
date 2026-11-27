@@ -122,6 +122,7 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         }
 
         let scopedService = "\(pluginId).\(key)"
+        defer { apiKeyVault.noteLocalWrite(pluginId: pluginId, key: key) }
         if value.isEmpty {
             try KeychainService.delete(service: scopedService)
         } else {

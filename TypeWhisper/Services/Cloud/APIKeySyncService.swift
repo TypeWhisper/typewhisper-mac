@@ -126,9 +126,17 @@ struct APIKeySyncMigrator: Sendable {
     /// plugin that is not installed or did not load, so no key is lost. A key missing from iCloud
     /// Keychain was deleted on another device, so an installed plugin's copy is deleted too.
     /// The iCloud Keychain items stay, so the user's other devices keep their keys.
-    func copySharedKeysToLocal(plugins: [SyncablePluginKey], keys: [String: String]) throws {
+    /// `keepsKeyLocal` names plugins whose own key stays untouched, such as one set to a
+    /// custom server.
+    func copySharedKeysToLocal(
+        plugins: [SyncablePluginKey],
+        keys: [String: String],
+        keepsKeyLocal: (_ pluginId: String) -> Bool = { _ in false }
+    ) throws {
         for (account, value) in keys.sorted(by: { $0.key < $1.key }) {
-            try local.write(value, pluginId: SharedAPIKeyItemFormat.pluginId(forAccount: account))
+            let pluginId = SharedAPIKeyItemFormat.pluginId(forAccount: account)
+            guard !keepsKeyLocal(pluginId) else { continue }
+            try local.write(value, pluginId: pluginId)
         }
         for plugin in plugins where keys[plugin.account] == nil {
             try local.delete(pluginId: plugin.pluginId)
@@ -310,6 +318,9 @@ final class APIKeySyncService: ObservableObject {
 
     // MARK: - Moving keys
 
+    /// A copy step runs again when a plugin key changed while it ran, at most this often.
+    static let copyAttempts = 3
+
     private func turnOn() async {
         #if APPSTORE
         await applyStorefront()
@@ -320,7 +331,21 @@ final class APIKeySyncService: ObservableObject {
         let plugins = pluginKeys()
         let migrator = migrator
         do {
-            let result = try await Self.run { try migrator.copyLocalKeysToShared(plugins: plugins) }
+            var result: APIKeySyncMigrator.TurnOnResult
+            var attempt = 0
+            repeat {
+                // A key saved while the copy runs goes to this Mac's Keychain and would be removed
+                // with the copies, so the copy runs again until no plugin wrote in between.
+                let localWrites = vault.current.localWriteGeneration
+                result = try await Self.run { try migrator.copyLocalKeysToShared(plugins: plugins) }
+                attempt += 1
+                if vault.current.localWriteGeneration == localWrites { break }
+            } while attempt < Self.copyAttempts
+            // The managed settings may have changed while the keys moved.
+            guard restriction == nil else {
+                apiKeySyncLogger.info("API key sync stays off: the managed settings changed while turning it on")
+                return
+            }
             save(enabled: true)
             vault.activate(keys: result.keys)
             notifyChanged(result.changed)
@@ -340,22 +365,34 @@ final class APIKeySyncService: ObservableObject {
         defer { isUpdating = false }
         let plugins = pluginKeys()
         let migrator = migrator
-        let before = vault.current
+        let keepsKeyLocal = vault.keepsKeyLocal
         do {
-            let keys: [String: String]
-            do {
-                keys = try await Self.run { try migrator.loadSharedKeys() }
-            } catch let error where before.isLoaded {
-                // The copy plugins use now is the best source while iCloud Keychain is unreachable.
-                apiKeySyncLogger.notice("Turning API key sync off from the copy in memory: \(Self.technicalSummary(error), privacy: .public)")
-                keys = before.keys
-            }
-            try await Self.run { try migrator.copySharedKeysToLocal(plugins: plugins, keys: keys) }
+            var keys: [String: String]
+            var attempt = 0
+            repeat {
+                // A key saved while the copy runs goes to iCloud Keychain; copy again so this Mac
+                // does not keep the older one.
+                let snapshot = vault.current
+                do {
+                    keys = try await Self.run { try migrator.loadSharedKeys() }
+                } catch let error where snapshot.isLoaded {
+                    // The copy plugins use now is the best source while iCloud Keychain is unreachable.
+                    apiKeySyncLogger.notice("Turning API key sync off from the copy in memory: \(Self.technicalSummary(error), privacy: .public)")
+                    keys = snapshot.keys
+                }
+                let copied = keys
+                try await Self.run {
+                    try migrator.copySharedKeysToLocal(plugins: plugins, keys: copied, keepsKeyLocal: keepsKeyLocal)
+                }
+                attempt += 1
+                if vault.current.generation == snapshot.generation { break }
+            } while attempt < Self.copyAttempts
+            let inUse = vault.current.keys
             save(enabled: false)
             vault.deactivate()
             defaults.removeObject(forKey: Self.pendingLocalCleanupKey)
             let installed = Set(plugins.map(\.account))
-            notifyChanged(SharedAPIKeyVault.changedAccounts(before.keys, keys).intersection(installed))
+            notifyChanged(SharedAPIKeyVault.changedAccounts(inUse, keys).intersection(installed))
             apiKeySyncLogger.info("API key sync off: \(keys.count, privacy: .public) shared keys kept in iCloud Keychain")
         } catch {
             apiKeySyncLogger.error("Turning API key sync off failed: \(Self.technicalSummary(error), privacy: .public)")
@@ -378,15 +415,20 @@ final class APIKeySyncService: ObservableObject {
 
     private func reloadSharedKeys(retryingAfterFailure: Bool) async {
         guard isEnabled else { return }
-        let generation = vault.current.generation
         let migrator = migrator
         do {
-            let keys = try await Self.run { try migrator.loadSharedKeys() }
-            guard isEnabled, let changed = vault.apply(keys, ifGeneration: generation) else { return }
-            apiKeySyncLogger.info(
-                "Read shared API keys: \(Self.names(keys.keys), privacy: .public). Changed: \(Self.names(changed), privacy: .public)"
-            )
-            notifyChanged(changed)
+            // A save while reading makes the read stale; read again so the other keys arrive too.
+            for _ in 0..<Self.copyAttempts {
+                let generation = vault.current.generation
+                let keys = try await Self.run { try migrator.loadSharedKeys() }
+                guard isEnabled else { return }
+                guard let changed = vault.apply(keys, ifGeneration: generation) else { continue }
+                apiKeySyncLogger.info(
+                    "Read shared API keys: \(Self.names(keys.keys), privacy: .public). Changed: \(Self.names(changed), privacy: .public)"
+                )
+                notifyChanged(changed)
+                return
+            }
         } catch {
             apiKeySyncLogger.error("Reading shared API keys failed: \(Self.technicalSummary(error), privacy: .public)")
             guard retryingAfterFailure else { return }

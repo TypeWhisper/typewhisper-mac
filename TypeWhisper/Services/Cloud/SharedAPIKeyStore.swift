@@ -202,6 +202,26 @@ struct KeychainPluginSecretStore: LocalPluginSecretStoring {
     }
 }
 
+// MARK: - Keys bound to a custom endpoint
+
+/// A plugin key that belongs to a server address the user entered stays on this Mac, like the
+/// keys in `SharedAPIKeyItemFormat.neverSyncedAccounts`, but only while such an address is set.
+enum SharedAPIKeyEndpointPolicy {
+    /// The plugin default that holds a custom server address, by account.
+    static let customEndpointDefaults: [String: String] = [
+        "reson8": "customBaseURL",
+    ]
+
+    static func keepsKeyLocal(pluginId: String, defaults: UserDefaults = .standard) -> Bool {
+        guard let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
+              let key = customEndpointDefaults[account],
+              let value = defaults.string(forKey: "plugin.\(pluginId).\(key)") else {
+            return false
+        }
+        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 // MARK: - What plugins read while sync is on
 
 /// The keys `HostServicesImpl` hands to plugins while API key sync is on: a copy of the shared
@@ -219,16 +239,27 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         var keys: [String: String] = [:]
         /// Advances with every write, so a read that started before it is not applied.
         var generation = 0
+        /// Advances when a plugin writes its key to this Mac's Keychain, so turning sync on
+        /// notices an edit made while it copied the keys.
+        var localWriteGeneration = 0
     }
 
     let store: any SharedAPIKeyStoring
+    /// Whether a plugin's key stays on this Mac even while sync is on.
+    let keepsKeyLocal: @Sendable (_ pluginId: String) -> Bool
     private let state = OSAllocatedUnfairLock(initialState: State())
     /// Orders saves, so iCloud Keychain and the copy end with the same value. Separate from
     /// `state`, so reads never wait for a blocked write.
     private let saveLock = NSLock()
 
-    init(store: any SharedAPIKeyStoring) {
+    init(
+        store: any SharedAPIKeyStoring,
+        keepsKeyLocal: @escaping @Sendable (_ pluginId: String) -> Bool = {
+            SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: $0)
+        }
+    ) {
         self.store = store
+        self.keepsKeyLocal = keepsKeyLocal
     }
 
     var current: State { state.withLock { $0 } }
@@ -237,10 +268,20 @@ final class SharedAPIKeyVault: @unchecked Sendable {
     func routedAccount(pluginId: String, key: String) -> String? {
         guard key == SharedAPIKeyItemFormat.pluginSecretKey,
               let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
-              state.withLock({ $0.isActive }) else {
+              state.withLock({ $0.isActive }),
+              !keepsKeyLocal(pluginId) else {
             return nil
         }
         return account
+    }
+
+    /// Records that a plugin wrote its `api-key` to this Mac's Keychain.
+    func noteLocalWrite(pluginId: String, key: String) {
+        guard key == SharedAPIKeyItemFormat.pluginSecretKey,
+              SharedAPIKeyItemFormat.account(forPluginId: pluginId) != nil else {
+            return
+        }
+        state.withLock { $0.localWriteGeneration += 1 }
     }
 
     func value(forAccount account: String) -> String? {
@@ -298,7 +339,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
 
     func deactivate() {
         state.withLock { state in
-            state = State(generation: state.generation + 1)
+            state = State(
+                generation: state.generation + 1,
+                localWriteGeneration: state.localWriteGeneration
+            )
         }
     }
 
