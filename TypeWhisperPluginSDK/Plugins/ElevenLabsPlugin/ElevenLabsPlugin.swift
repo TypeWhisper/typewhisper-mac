@@ -154,9 +154,17 @@ final class ElevenLabsPlugin: NSObject,
     static let automaticSpeakerCount = 0
     static let defaultSpeakerCount = 1
     static let maximumSpeakerCount = 32
+    /// The batch API takes up to 1,000 keyterms of up to 50 characters and 5 words each.
     static let maximumKeytermCount = 1_000
     static let maximumKeytermCharacterCount = 49
     static let maximumKeytermWordCount = 5
+    /// The realtime API takes up to 100 keyterms in the URL with 1,000 characters in
+    /// total; more answer the connection with `invalid_request`.
+    static let maximumRealtimeKeytermCount = 100
+    static let maximumRealtimeKeytermTotalCharacterCount = 1_000
+    /// Scribe v3 Live also takes a keyterm library of up to 10,000 terms in the first
+    /// audio chunk, so a session can carry this many dictionary terms in total.
+    static let maximumKeytermLibraryCount = 10_000
     static let scribeV3ModelId = "scribe_v3"
     static let scribeV2ModelId = "scribe_v2"
     static let medicalModelId = "scribe_v2_medical"
@@ -256,6 +264,16 @@ final class ElevenLabsPlugin: NSObject,
         (modelId ?? defaultModelId) == scribeV3ModelId
     }
 
+    /// Whether the realtime model transcribes with the dictionary terms itself, so its
+    /// committed transcripts are the final text. Measured in November 2026: with keyterms,
+    /// Scribe v3 Live spelled them right and put none of 53 transcripts in quotation marks.
+    /// With Scribe v2 Realtime, the batch API transcribes for the final text: with keyterms
+    /// and Clean transcript off, it quoted 2 of 3 transcripts of one clip, and it has no
+    /// keyterm library.
+    static func streamsKeyterms(_ modelId: String?) -> Bool {
+        (modelId ?? defaultModelId) == scribeV3ModelId
+    }
+
     var transcriptionMode: ElevenLabsTranscriptionMode { _transcriptionMode }
     var tagAudioEvents: Bool { _tagAudioEvents }
     var noVerbatim: Bool { _noVerbatim }
@@ -307,13 +325,22 @@ final class ElevenLabsPlugin: NSObject,
     var dictionaryTermsSupport: DictionaryTermsSupport {
         _useDictionaryTerms ? .supported : .requiresPluginSetting
     }
+    /// Streamed dictations take the terms of a keyterm library too. The per-term limits of
+    /// the batch API stay, so the batch fallback can use every term.
     var dictionaryTermsBudget: DictionaryTermsBudget {
         DictionaryTermsBudget(
-            maxTerms: Self.maximumKeytermCount,
+            maxTerms: maximumActiveKeytermCount,
             maxCharsPerTerm: Self.maximumKeytermCharacterCount,
             maxWordsPerTerm: Self.maximumKeytermWordCount
         )
     }
+
+    private var maximumActiveKeytermCount: Int {
+        _transcriptionMode == .automatic && Self.streamsKeyterms(_selectedModelId)
+            ? Self.maximumKeytermLibraryCount
+            : Self.maximumKeytermCount
+    }
+
     var supportedLanguages: [String] { elevenLabsSupportedLanguages }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
@@ -409,6 +436,7 @@ final class ElevenLabsPlugin: NSObject,
                     modelId: modelId,
                     apiKey: apiKey,
                     noVerbatim: self._noVerbatim,
+                    keyterms: ElevenLabsRealtimeKeyterms(keyterms),
                     onProgress: onProgress
                 )
             },
@@ -477,22 +505,16 @@ final class ElevenLabsPlugin: NSObject,
         }
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
 
-        var request = URLRequest(
-            url: try Self.realtimeURL(
-                modelId: modelId,
-                language: language,
-                noVerbatim: _noVerbatim,
-                multilangMode: _multilangMode
-            )
-        )
-        request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
-
-        // The realtime API wraps transcripts in quotation marks with keyterms, so the
-        // session streams without them for the preview, and the batch API transcribes
-        // the recording with them for the final text.
+        // Scribe v3 Live transcribes with the dictionary terms, so its committed transcripts
+        // are the final text and only the session is billed. Scribe v2 Realtime streams
+        // without them for the preview, and the batch API transcribes the recording with
+        // them for the final text (see `streamsKeyterms`).
         let keyterms = activeKeyterms(prompt: prompt, dictionaryTermHints: dictionaryTermHints)
+        let realtimeKeyterms = Self.streamsKeyterms(modelId)
+            ? ElevenLabsRealtimeKeyterms(keyterms)
+            : ElevenLabsRealtimeKeyterms([])
         var finalTranscriber: ElevenLabsLiveTranscriptionSession.FinalTranscriber?
-        if !keyterms.isEmpty {
+        if !keyterms.isEmpty, !Self.streamsKeyterms(modelId) {
             finalTranscriber = { @Sendable [self] audio in
                 try await self.transcribeREST(
                     audio: audio,
@@ -504,9 +526,21 @@ final class ElevenLabsPlugin: NSObject,
             }
         }
 
+        var request = URLRequest(
+            url: try Self.realtimeURL(
+                modelId: modelId,
+                language: language,
+                noVerbatim: _noVerbatim,
+                multilangMode: _multilangMode,
+                keyterms: realtimeKeyterms.urlTerms
+            )
+        )
+        request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+
         return try await ElevenLabsLiveTranscriptionSession.connect(
             socket: URLSessionElevenLabsRealtimeSocket(request: request),
             language: language,
+            keytermLibrary: realtimeKeyterms.library,
             finalTranscriber: finalTranscriber,
             onProgress: onProgress
         )
@@ -575,8 +609,9 @@ final class ElevenLabsPlugin: NSObject,
                     value: String(_speakerCount)
                 )
             }
-            // Every Scribe model takes keyterms.
-            for term in keyterms {
+            // Every Scribe model takes keyterms, the batch API up to 1,000. A streamed
+            // dictation can carry more for its keyterm library; its fallback sends the first.
+            for term in keyterms.prefix(Self.maximumKeytermCount) {
                 body.appendMultipartField(boundary: boundary, name: "keyterms", value: term)
             }
             body.append("--\(boundary)--\r\n".data(using: .utf8)!)
@@ -626,6 +661,7 @@ final class ElevenLabsPlugin: NSObject,
         modelId: String,
         apiKey: String,
         noVerbatim: Bool,
+        keyterms: ElevenLabsRealtimeKeyterms,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
@@ -633,7 +669,8 @@ final class ElevenLabsPlugin: NSObject,
             modelId: modelId,
             language: language,
             noVerbatim: noVerbatim,
-            multilangMode: _multilangMode
+            multilangMode: _multilangMode,
+            keyterms: keyterms.urlTerms
         )
 
         var request = URLRequest(url: url)
@@ -733,6 +770,9 @@ final class ElevenLabsPlugin: NSObject,
             if isFinalChunk {
                 payload["commit"] = true
             }
+            if offset == 0, !keyterms.library.isEmpty {
+                payload["keyterm_library"] = keyterms.library
+            }
 
             let jsonData = try JSONSerialization.data(withJSONObject: payload)
             guard let jsonText = String(data: jsonData, encoding: .utf8) else {
@@ -771,11 +811,11 @@ final class ElevenLabsPlugin: NSObject,
         keyterms: [String],
         audioDuration: TimeInterval
     ) -> ElevenLabsTranscriptionTransport {
-        // The realtime API takes keyterms too, but with them it often wraps
-        // the whole transcript in quotation marks; the batch API does not.
+        // Scribe v2 Realtime takes keyterms too, but with them it can put the whole
+        // transcript in quotation marks; the batch API does not.
         mode == .restOnly
             || !modelStreams(modelId)
-            || !keyterms.isEmpty
+            || (!keyterms.isEmpty && !streamsKeyterms(modelId))
             || audioDuration > maximumRealtimeAudioDuration
             ? .rest
             : .realtime
@@ -807,7 +847,7 @@ final class ElevenLabsPlugin: NSObject,
         )
     }
 
-    static func validKeyterms(from terms: [String]) -> [String] {
+    static func validKeyterms(from terms: [String], limit: Int = maximumKeytermCount) -> [String] {
         var valid: [String] = []
         for term in PluginDictionaryTerms.normalizedTerms(from: terms) {
             guard term.count <= maximumKeytermCharacterCount,
@@ -817,7 +857,7 @@ final class ElevenLabsPlugin: NSObject,
             }
 
             valid.append(term)
-            if valid.count == maximumKeytermCount {
+            if valid.count == limit {
                 break
             }
         }
@@ -832,7 +872,7 @@ final class ElevenLabsPlugin: NSObject,
         let terms = dictionaryTermHints.isEmpty
             ? PluginDictionaryTerms.terms(fromPrompt: prompt)
             : dictionaryTermHints.map(\.text)
-        return Self.validKeyterms(from: terms)
+        return Self.validKeyterms(from: terms, limit: maximumActiveKeytermCount)
     }
 
     private func transcriptionTransport(
@@ -852,7 +892,8 @@ final class ElevenLabsPlugin: NSObject,
         modelId: String?,
         language: String?,
         noVerbatim: Bool,
-        multilangMode: Bool = false
+        multilangMode: Bool = false,
+        keyterms: [String] = []
     ) throws -> URL {
         guard let realtimeModel = realtimeModel(for: modelId) else {
             throw PluginTranscriptionError.apiError("\(modelId ?? "") has no realtime model")
@@ -879,8 +920,13 @@ final class ElevenLabsPlugin: NSObject,
             // Without it, committed transcripts carry no language code.
             queryItems.append(URLQueryItem(name: "include_language_detection", value: "true"))
         }
+        queryItems += keyterms.map { URLQueryItem(name: "keyterms", value: $0) }
 
         components.queryItems = queryItems
+        // URLComponents keeps "+" in query values, which servers read as a space, so a
+        // keyterm such as "C++" would arrive as "C  ".
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
 
         guard let url = components.url else {
             throw PluginTranscriptionError.apiError("Invalid realtime query parameters")
@@ -1273,19 +1319,31 @@ private struct ElevenLabsSettingsView: View {
                             plugin.setUseDictionaryTerms(useDictionaryTerms)
                         }
 
-                        Text("Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.", bundle: bundle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        // With keyterms, a streamed dictation also goes to the batch API
-                        // when it stops (see createLiveTranscriptionSession).
+                        // Scribe v3 Live takes the keyterms itself; with Scribe v2 Realtime, a
+                        // dictation also goes to the batch API when it stops (see
+                        // createLiveTranscriptionSession).
                         if transcriptionMode == .automatic,
                            let realtimeModel = ElevenLabsPlugin.realtimeModel(for: selectedModel) {
-                            Text("With keyterms, \(realtimeModel.displayName) only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from \(realtimeModel.displayName). If batch REST fails, the realtime text without keyterms is used.", bundle: bundle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                            if ElevenLabsPlugin.streamsKeyterms(selectedModel) {
+                                Text("Sends up to 10,000 active dictionary terms to \(realtimeModel.displayName). Up to 100 terms with 1,000 characters in total go as keyterms, the rest as a keyterm library, which the model only consults when it hears a likely match. The final text comes straight from \(realtimeModel.displayName), so only the live session is billed. Keyterms cost 20% extra.", bundle: bundle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Text("For dictionaries beyond these limits, REST only (Batch) recognizes more terms: it applies up to 1,000 keyterms, but shows no live preview from ElevenLabs. There, each request with more than 100 keyterms is billed for at least 20 seconds of audio.", bundle: bundle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                batchKeytermsCaption
+
+                                Text("With keyterms, \(realtimeModel.displayName) only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from \(realtimeModel.displayName). If batch REST fails, the realtime text without keyterms is used.", bundle: bundle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        } else {
+                            batchKeytermsCaption
                         }
                     }
 
@@ -1299,7 +1357,7 @@ private struct ElevenLabsSettingsView: View {
                                 plugin.setMultilangMode(multilangMode)
                             }
 
-                            Text("For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode. Final text from batch REST, such as with dictionary terms, does not use it.", bundle: bundle)
+                            Text("For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode, not to batch REST.", bundle: bundle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -1335,6 +1393,13 @@ private struct ElevenLabsSettingsView: View {
             useDictionaryTerms = plugin.useDictionaryTerms
             multilangMode = plugin.multilangMode
         }
+    }
+
+    private var batchKeytermsCaption: some View {
+        Text("Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.", bundle: bundle)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func saveApiKey() {
@@ -1380,6 +1445,35 @@ private extension Data {
 }
 
 // MARK: - Live Session
+
+/// How a realtime session carries the dictionary terms: as many as the URL takes as
+/// `keyterms`, in their order, and the rest as a keyterm library in the first audio chunk.
+/// Keyterms fixed every misheard name in the tests; a library fixed one of three, because
+/// Scribe v3 Live only consults it when it hears a likely match.
+/// https://elevenlabs.io/docs/eleven-api/guides/how-to/speech-to-text/batch/keyterm-prompting
+struct ElevenLabsRealtimeKeyterms: Equatable, Sendable {
+    let urlTerms: [String]
+    let library: [String]
+
+    init(_ terms: [String]) {
+        var urlTerms: [String] = []
+        var library: [String] = []
+        var urlCharacterCount = 0
+        for term in terms {
+            // ElevenLabs counts characters, not bytes, against the limit.
+            let characterCount = term.unicodeScalars.count
+            if urlTerms.count < ElevenLabsPlugin.maximumRealtimeKeytermCount,
+               urlCharacterCount + characterCount <= ElevenLabsPlugin.maximumRealtimeKeytermTotalCharacterCount {
+                urlTerms.append(term)
+                urlCharacterCount += characterCount
+            } else if library.count < ElevenLabsPlugin.maximumKeytermLibraryCount {
+                library.append(term)
+            }
+        }
+        self.urlTerms = urlTerms
+        self.library = library
+    }
+}
 
 /// The WebSocket a live session talks to, so tests can play the server.
 protocol ElevenLabsRealtimeSocket: Sendable {
@@ -1489,10 +1583,11 @@ struct ElevenLabsLiveCommitPolicy: Sendable {
 /// The session commits on its own (`commit_strategy=manual`, see
 /// `ElevenLabsLiveCommitPolicy`) and once more when the recording stops. Every commit
 /// is answered by one `committed_transcript_with_timestamps`, also with empty text for
-/// silence, so the transcript is complete once all commits are answered. With active
-/// dictionary terms, the final text comes from `finalTranscriber`, the batch API, and the
-/// realtime transcript is only the preview: with keyterms, the realtime API often wraps
-/// the whole transcript in quotation marks.
+/// silence, so the transcript is complete once all commits are answered. Scribe v3 Live
+/// gets the dictionary terms as keyterms in the URL and as `keytermLibrary`, which goes
+/// with the first audio chunk. With a `finalTranscriber`, used for Scribe v2 Realtime with
+/// dictionary terms, the final text comes from the batch API and the realtime transcript
+/// is only the preview.
 actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
     typealias FinalTranscriber = @Sendable (AudioData) async throws -> PluginTranscriptionResult
 
@@ -1509,6 +1604,8 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
     private let onProgress: @Sendable (String) -> Bool
     private let finalTranscriber: FinalTranscriber?
     private var receiveTask: Task<Void, Never>?
+    /// Sent with the first audio chunk; ElevenLabs rejects it in a later one.
+    private var pendingKeytermLibrary: [String]
 
     private var hasStarted = false
     private var isClosed = false
@@ -1527,11 +1624,13 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
     private init(
         socket: any ElevenLabsRealtimeSocket,
         language: String?,
+        keytermLibrary: [String],
         finalTranscriber: FinalTranscriber?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) {
         self.socket = socket
         self.language = language
+        self.pendingKeytermLibrary = keytermLibrary
         self.finalTranscriber = finalTranscriber
         self.onProgress = onProgress
     }
@@ -1541,6 +1640,7 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
     static func connect(
         socket: any ElevenLabsRealtimeSocket,
         language: String?,
+        keytermLibrary: [String] = [],
         finalTranscriber: FinalTranscriber?,
         startTimeout: Duration = startTimeout,
         onProgress: @Sendable @escaping (String) -> Bool
@@ -1548,6 +1648,7 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
         let session = ElevenLabsLiveTranscriptionSession(
             socket: socket,
             language: language,
+            keytermLibrary: keytermLibrary,
             finalTranscriber: finalTranscriber,
             onProgress: onProgress
         )
@@ -1575,7 +1676,7 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
         while start < samples.count {
             let end = min(start + Self.maximumChunkSampleCount, samples.count)
             let chunk = Array(samples[start..<end])
-            try await send(Self.audioMessage(chunk, commit: false))
+            try await sendAudio(chunk, commit: false)
             commitPolicy.append(chunk)
             start = end
             if commitPolicy.shouldCommit {
@@ -1592,7 +1693,7 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
             if commitPolicy.uncommittedSampleCount > 0 || sentCommitCount == 0 {
                 let padding = commitPolicy.finalCommitPaddingSampleCount
                 if padding > 0 {
-                    try await send(Self.audioMessage([Float](repeating: 0, count: padding), commit: false))
+                    try await sendAudio([Float](repeating: 0, count: padding), commit: false)
                     commitPolicy.append([Float](repeating: 0, count: padding))
                 }
                 try await commit()
@@ -1661,7 +1762,7 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
 
     private func commit() async throws {
         let audioDuration = commitPolicy.uncommittedAudioDuration
-        try await send(Self.audioMessage([], commit: true))
+        try await sendAudio([], commit: true)
         sentCommitCount += 1
         commitPolicy.didCommit()
         Self.logger.info("Realtime commit \(self.sentCommitCount, privacy: .public) after \(String(format: "%.1f", audioDuration), privacy: .public)s of audio")
@@ -1677,9 +1778,19 @@ actor ElevenLabsLiveTranscriptionSession: LiveTranscriptionSession {
         }
     }
 
-    static func audioMessage(_ samples: [Float], commit: Bool) -> String {
+    private func sendAudio(_ samples: [Float], commit: Bool) async throws {
+        let keytermLibrary = pendingKeytermLibrary
+        pendingKeytermLibrary = []
+        try await send(Self.audioMessage(samples, commit: commit, keytermLibrary: keytermLibrary))
+    }
+
+    static func audioMessage(_ samples: [Float], commit: Bool, keytermLibrary: [String] = []) -> String {
         let audio = ElevenLabsPlugin.floatToPCM16(samples).base64EncodedString()
-        return #"{"message_type":"input_audio_chunk","audio_base_64":"\#(audio)","sample_rate":16000,"commit":\#(commit)}"#
+        guard !keytermLibrary.isEmpty,
+              let library = try? JSONSerialization.data(withJSONObject: keytermLibrary) else {
+            return #"{"message_type":"input_audio_chunk","audio_base_64":"\#(audio)","sample_rate":16000,"commit":\#(commit)}"#
+        }
+        return #"{"message_type":"input_audio_chunk","audio_base_64":"\#(audio)","sample_rate":16000,"commit":\#(commit),"keyterm_library":\#(String(decoding: library, as: UTF8.self))}"#
     }
 
     // MARK: Receiving
