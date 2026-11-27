@@ -105,6 +105,24 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
     }
 }
 
+private final class Decision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var confirms: Bool {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
+    }
+}
+
+private final class Received: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+    var events: [String] {
+        get { lock.withLock { storage } }
+        set { lock.withLock { storage = newValue } }
+    }
+}
+
 private func plugin(_ name: String, displayName: String? = nil) -> SyncablePluginKey {
     SyncablePluginKey(pluginId: "com.typewhisper.\(name)", pluginName: displayName ?? name.capitalized)!
 }
@@ -313,7 +331,9 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
             eventBus: EventBus(),
             ruleNamesProvider: { [] },
             pluginName: "OpenAI / ChatGPT",
-            apiKeyVault: vault
+            apiKeyVault: vault,
+            confirmSharedKeyDeletion: { _ in true },
+            sharedKeyDeletionCancelled: { _ in }
         )
     }
 
@@ -334,6 +354,43 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
         try host.storeSecret(key: "api-key", value: "")
         XCTAssertNil(shared.items["openai"], "deleting a key deletes it on every device that syncs")
         XCTAssertNil(host.loadSecret(key: "api-key"))
+    }
+
+    func testDeletingASyncedKeyAsksFirstAndKeepsTheKeyOnCancel() throws {
+        let shared = InMemorySharedAPIKeyStore()
+        let vault = SharedAPIKeyVault(store: shared)
+        vault.activate(keys: [:])
+        try vault.save("gsk-key", account: "groq", displayName: "Groq")
+        let answers = Received()
+        let cancelled = Received()
+        let decision = Decision()
+        let host = HostServicesImpl(
+            pluginId: "com.typewhisper.groq",
+            eventBus: EventBus(),
+            ruleNamesProvider: { [] },
+            pluginName: "Groq",
+            apiKeyVault: vault,
+            confirmSharedKeyDeletion: { [answers, decision] name in
+                answers.events.append(name)
+                return decision.confirms
+            },
+            sharedKeyDeletionCancelled: { [cancelled] pluginId in cancelled.events.append(pluginId) }
+        )
+
+        XCTAssertThrowsError(try host.storeSecret(key: "api-key", value: "")) { error in
+            XCTAssertEqual(error as? SharedAPIKeyStoreError, .deletionCancelled)
+        }
+        XCTAssertEqual(answers.events, ["Groq"])
+        XCTAssertEqual(cancelled.events, ["com.typewhisper.groq"])
+        XCTAssertEqual(shared.values["groq"], "gsk-key")
+        XCTAssertEqual(host.loadSecret(key: "api-key"), "gsk-key")
+
+        decision.confirms = true
+        try host.storeSecret(key: "api-key", value: "")
+        XCTAssertNil(shared.items["groq"])
+
+        try host.storeSecret(key: "api-key", value: "")
+        XCTAssertEqual(answers.events.count, 2, "no question when there is nothing to delete")
     }
 
     func testOtherSecretsAndOtherPublishersStayOnThisMac() {

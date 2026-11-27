@@ -23,6 +23,41 @@ struct SyncablePluginKey: Equatable, Sendable {
     }
 }
 
+/// Asks before a plugin deletes a synced key, as TypeWhisper for iOS does: the key disappears on
+/// every device that syncs API keys. Plugins delete keys from their own settings through the SDK,
+/// so the host asks while the plugin's call waits.
+enum SharedAPIKeyDeletionPrompt {
+    /// Asks on the main thread, where keys are removed from settings. Elsewhere no one clicked,
+    /// so the deletion goes ahead.
+    static func confirm(providerName: String) -> Bool {
+        guard Thread.isMainThread else { return true }
+        return MainActor.assumeIsolated {
+            makeAlert(providerName: providerName).runModal() == .alertFirstButtonReturn
+        }
+    }
+
+    @MainActor
+    static func makeAlert(providerName: String) -> NSAlert {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Delete the \(providerName) API Key?")
+        alert.informativeText = String(localized: "API key sync is on, so this also deletes the key on your devices that sync API keys.")
+        let delete = alert.addButton(withTitle: String(localized: "Delete"))
+        delete.hasDestructiveAction = true
+        let cancel = alert.addButton(withTitle: String(localized: "Cancel"))
+        cancel.keyEquivalent = "\u{1b}"
+        return alert
+    }
+
+    /// The plugin already forgot the key before it asked the host to delete it, so it is
+    /// activated again and reads the kept key.
+    static func restoreKey(ofPluginId pluginId: String) {
+        Task { @MainActor in
+            PluginManager.shared?.reloadCredentials(ofPluginIds: [pluginId])
+        }
+    }
+}
+
 /// Moves plugin keys between this Mac's Keychain and iCloud Keychain, with the same rules as
 /// TypeWhisper for iOS. Every call blocks; `APIKeySyncService` runs them off the main actor.
 struct APIKeySyncMigrator: Sendable {

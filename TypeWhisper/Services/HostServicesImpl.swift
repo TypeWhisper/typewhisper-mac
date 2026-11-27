@@ -56,6 +56,10 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     /// The plugin's name for the label of a synced API key.
     private let pluginName: String?
     private let apiKeyVault: SharedAPIKeyVault
+    /// Asks before a synced key is deleted on every device; returns whether to go ahead.
+    private let confirmSharedKeyDeletion: @Sendable (_ providerName: String) -> Bool
+    /// Called after the user kept a synced key, with this plugin's ID.
+    private let sharedKeyDeletionCancelled: @Sendable (_ pluginId: String) -> Void
 
     init(
         pluginId: String,
@@ -66,11 +70,15 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] },
         backsSelectedTranscriptionEngine: @escaping @Sendable () -> Bool = { true },
         pluginName: String? = nil,
-        apiKeyVault: SharedAPIKeyVault = .shared
+        apiKeyVault: SharedAPIKeyVault = .shared,
+        confirmSharedKeyDeletion: @escaping @Sendable (_ providerName: String) -> Bool = SharedAPIKeyDeletionPrompt.confirm,
+        sharedKeyDeletionCancelled: @escaping @Sendable (_ pluginId: String) -> Void = SharedAPIKeyDeletionPrompt.restoreKey
     ) {
         self.pluginId = pluginId
         self.pluginName = pluginName
         self.apiKeyVault = apiKeyVault
+        self.confirmSharedKeyDeletion = confirmSharedKeyDeletion
+        self.sharedKeyDeletionCancelled = sharedKeyDeletionCancelled
         self.backsSelectedEngine = backsSelectedTranscriptionEngine
         self.policyStore = policyStore
         self.locality = locality
@@ -102,11 +110,14 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
 
         // While API key sync is on, a first-party plugin's `api-key` lives in iCloud Keychain.
         if let account = apiKeyVault.routedAccount(pluginId: pluginId, key: key) {
-            try apiKeyVault.save(
-                value,
-                account: account,
-                displayName: SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: pluginName)
-            )
+            let displayName = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: pluginName)
+            if SharedAPIKeyItemFormat.encode(value) == nil,
+               apiKeyVault.value(forAccount: account) != nil,
+               !confirmSharedKeyDeletion(displayName) {
+                sharedKeyDeletionCancelled(pluginId)
+                throw SharedAPIKeyStoreError.deletionCancelled
+            }
+            try apiKeyVault.save(value, account: account, displayName: displayName)
             return
         }
 
