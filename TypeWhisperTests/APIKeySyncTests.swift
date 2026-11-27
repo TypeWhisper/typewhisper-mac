@@ -892,6 +892,38 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertEqual(local.values, [groq.pluginId: "gsk", deepgram.pluginId: "dg"])
     }
 
+    func testUploadsThatCouldNotBeTakenBackCountAsOwnInTheNextSwitch() async {
+        let deepgram = plugin("deepgram")
+        local.put("gsk", pluginId: groq.pluginId)
+        local.put("dg", pluginId: deepgram.pluginId)
+        let service = makeService()
+        service.pluginKeys = { [groq] in [groq, deepgram] }
+        let store = local!
+        let sharedStore = shared!
+        shared.afterNextWrite {
+            // Groq is uploaded; then reading Deepgram's key fails, and so does taking Groq back.
+            store.failReads(true)
+            sharedStore.failWrites(true)
+        }
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertEqual(shared.values["groq"], "gsk", "the upload could not be taken back")
+
+        // The user removes the Groq key on this Mac, then turns sync on again.
+        store.delete(pluginId: groq.pluginId)
+        store.failReads(false)
+        sharedStore.failWrites(false)
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+
+        XCTAssertTrue(service.isEnabled)
+        XCTAssertNil(shared.items["groq"], "the earlier upload is taken back instead of received")
+        XCTAssertNil(service.vault.value(forAccount: "groq"))
+        XCTAssertEqual(shared.values["deepgram"], "dg")
+    }
+
     func testACustomServerSetBeforeTheSharedKeysArriveGetsTheSharedKey() async {
         defaults.set("iCloudKeychain", forKey: APIKeySyncService.storageLocationKey)
         shared.set("dg-cloud", account: "deepgram")

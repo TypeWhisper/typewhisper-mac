@@ -271,7 +271,12 @@ struct APIKeySyncMigrator: Sendable {
         let uploads = log.current
         guard !uploads.isEmpty, let current = try? loadSharedKeys() else { return Set(uploads.keys) }
         var failed = Set<String>()
-        for (account, upload) in uploads where current[account] == upload.value {
+        for (account, upload) in uploads {
+            // Changed since: it belongs to another device now and is no longer this switch's.
+            guard current[account] == upload.value else {
+                log.record(nil, for: account)
+                continue
+            }
             do {
                 if let previous = upload.previous {
                     let name = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: nil)
@@ -374,6 +379,10 @@ final class APIKeySyncService: ObservableObject {
     private let launchWait: Duration
     private let retryDelay: Duration
     private var pendingOperation: Task<Void, Never>?
+    /// Uploads of a failed switch that could not be taken back. The next switch treats them as
+    /// its own, so a key deleted on this Mac meanwhile is not received as another device's.
+    /// Kept in memory only, like every key value.
+    private var leftoverUploads = APIKeySyncMigrator.OwnUploadLog()
     private var activationObserver: NSObjectProtocol?
     private var lastActivationRefresh: Date?
 
@@ -520,7 +529,7 @@ final class APIKeySyncService: ObservableObject {
         isUpdating = true
         defer { isUpdating = false }
         let migrator = migrator
-        let uploadLog = APIKeySyncMigrator.OwnUploadLog()
+        let uploadLog = leftoverUploads
         do {
             var activated: (result: APIKeySyncMigrator.TurnOnResult, plugins: [SyncablePluginKey])?
             let vault = vault
@@ -550,6 +559,7 @@ final class APIKeySyncService: ObservableObject {
             }
             guard let (result, plugins) = activated else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
             save(enabled: true)
+            leftoverUploads = APIKeySyncMigrator.OwnUploadLog()
             notifyChanged(result.changed)
             apiKeySyncLogger.info(
                 "API key sync on. Shared: \(Self.names(result.keys.keys), privacy: .public). Uploaded: \(Self.names(result.uploaded), privacy: .public). Received: \(Self.names(result.changed), privacy: .public)"
