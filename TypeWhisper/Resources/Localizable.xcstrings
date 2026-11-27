@@ -17836,7 +17836,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "活动图表：总计 %@，%@ 达到峰值 %@。"
+            "value" : "活动图表：总计 %1$@，%3$@ 达到峰值 %2$@。"
           }
         }
       }

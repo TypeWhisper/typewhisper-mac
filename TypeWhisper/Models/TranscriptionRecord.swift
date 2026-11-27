@@ -340,9 +340,15 @@ extension TranscriptionRecord {
     }
 
     /// The original dictation's timing while its text is the one in use; nil after another
-    /// run was chosen, since the times did not produce that text.
+    /// run was chosen or synchronized text replaced it, since the times did not produce that text.
     var dictationTimingForActiveText: HistoryDictationTiming? {
+        guard let timing = dictationTiming else { return nil }
         if let activeID = activeTranscriptionVersionID, activeID != id { return nil }
-        return dictationTiming
+        // A saved original keeps the dictated text; a synchronized replacement clears the
+        // active version without matching it. Without saved versions, sync clears the times.
+        guard transcriptionVersionsData != nil,
+              let original = (try? savedTranscriptionVersions())?.first(where: { $0.id == id })
+        else { return timing }
+        return original.matchesContent(of: self) ? timing : nil
     }
 }
