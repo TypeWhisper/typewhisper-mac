@@ -1325,12 +1325,12 @@ private struct ElevenLabsSettingsView: View {
                         if transcriptionMode == .automatic,
                            let realtimeModel = ElevenLabsPlugin.realtimeModel(for: selectedModel) {
                             if ElevenLabsPlugin.streamsKeyterms(selectedModel) {
-                                Text("Sends up to 10,000 active dictionary terms to \(realtimeModel.displayName). Up to 100 terms with 1,000 characters in total go as keyterms, the rest as a keyterm library, which the model only consults when it hears a likely match. The final text comes straight from \(realtimeModel.displayName), so only the live session is billed. Keyterms cost 20% extra.", bundle: bundle)
+                                Text("Sends up to 10,000 active dictionary terms to \(realtimeModel.displayName). Up to 100 terms with 1,000 characters in total go as keyterms, the rest as a keyterm library, which the model only consults when it hears a likely match. The final text comes straight from \(realtimeModel.displayName), without a second batch upload. Batch REST is only billed when the live session fails or cannot start. Keyterms cost 20% extra.", bundle: bundle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
 
-                                Text("For dictionaries beyond these limits, REST only (Batch) recognizes more terms: it applies up to 1,000 keyterms, but shows no live preview from ElevenLabs. There, each request with more than 100 keyterms is billed for at least 20 seconds of audio.", bundle: bundle)
+                                Text("REST only (Batch) sends up to 1,000 terms as keyterms instead of a keyterm library, but shows no live preview from ElevenLabs. There, each request with more than 100 keyterms is billed for at least 20 seconds of audio.", bundle: bundle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)

@@ -673,58 +673,58 @@
         }
       }
     },
-    "Sends up to 10,000 active dictionary terms to %@. Up to 100 terms with 1,000 characters in total go as keyterms, the rest as a keyterm library, which the model only consults when it hears a likely match. The final text comes straight from %@, so only the live session is billed. Keyterms cost 20% extra.": {
+    "Sends up to 10,000 active dictionary terms to %@. Up to 100 terms with 1,000 characters in total go as keyterms, the rest as a keyterm library, which the model only consults when it hears a likely match. The final text comes straight from %@, without a second batch upload. Batch REST is only billed when the live session fails or cannot start. Keyterms cost 20% extra.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sendet bis zu 10.000 aktive Wörterbuchbegriffe an %@. Bis zu 100 Begriffe mit zusammen 1.000 Zeichen gehen als Schlüsselbegriffe mit, der Rest als Schlüsselbegriff-Bibliothek, die das Modell nur heranzieht, wenn es einen passenden Begriff zu hören glaubt. Der Endtext kommt direkt von %@, daher wird nur die Live-Sitzung abgerechnet. Schlüsselbegriffe kosten 20 % Aufschlag."
+            "value": "Sendet bis zu 10.000 aktive Wörterbuchbegriffe an %@. Bis zu 100 Begriffe mit zusammen 1.000 Zeichen gehen als Schlüsselbegriffe mit, der Rest als Schlüsselbegriff-Bibliothek, die das Modell nur heranzieht, wenn es einen passenden Begriff zu hören glaubt. Der Endtext kommt direkt von %@, ohne zweiten Batch-Upload. Batch-REST wird nur abgerechnet, wenn die Live-Sitzung fehlschlägt oder nicht starten kann. Schlüsselbegriffe kosten 20 % Aufschlag."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Envía hasta 10 000 términos activos del diccionario a %@. Hasta 100 términos con 1000 caracteres en total van como términos clave y el resto como biblioteca de términos clave, que el modelo solo consulta cuando oye una coincidencia probable. El texto final viene directamente de %@, así que solo se factura la sesión en vivo. Los términos clave cuestan un 20 % más."
+            "value": "Envía hasta 10 000 términos activos del diccionario a %@. Hasta 100 términos con 1000 caracteres en total van como términos clave y el resto como biblioteca de términos clave, que el modelo solo consulta cuando oye una coincidencia probable. El texto final viene directamente de %@, sin una segunda subida por lotes. REST por lotes solo se factura si la sesión en vivo falla o no puede iniciarse. Los términos clave cuestan un 20 % más."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "有効な辞書の用語を最大10,000件、%@に送信します。合計1,000文字以内で最大100件の用語はキータームとして、残りはキータームライブラリとして送信されます。モデルはライブラリを、一致しそうな語が聞こえたときにだけ参照します。最終テキストは%@から直接得られるため、課金されるのはライブセッションのみです。キータームには20%の追加料金がかかります。"
+            "value": "有効な辞書の用語を最大10,000件、%@に送信します。合計1,000文字以内で最大100件の用語はキータームとして、残りはキータームライブラリとして送信されます。モデルはライブラリを、一致しそうな語が聞こえたときにだけ参照します。最終テキストは%@から直接得られ、バッチへの再アップロードは行われません。バッチRESTが課金されるのは、ライブセッションが失敗した場合や開始できない場合のみです。キータームには20%の追加料金がかかります。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "最多将 10,000 个启用的词典术语发送给 %@。总字符数不超过 1,000 的最多 100 个术语作为关键词发送，其余作为关键词库发送，模型只有在听到可能匹配的词时才会参考关键词库。最终文本直接来自 %@，因此只对实时会话计费。关键词会加收 20% 的费用。"
+            "value": "最多将 10,000 个启用的词典术语发送给 %@。总字符数不超过 1,000 的最多 100 个术语作为关键词发送，其余作为关键词库发送，模型只有在听到可能匹配的词时才会参考关键词库。最终文本直接来自 %@，不会再次上传进行批量转写。只有实时会话失败或无法启动时，才会产生批量 REST 费用。关键词会加收 20% 的费用。"
           }
         }
       }
     },
-    "For dictionaries beyond these limits, REST only (Batch) recognizes more terms: it applies up to 1,000 keyterms, but shows no live preview from ElevenLabs. There, each request with more than 100 keyterms is billed for at least 20 seconds of audio.": {
+    "REST only (Batch) sends up to 1,000 terms as keyterms instead of a keyterm library, but shows no live preview from ElevenLabs. There, each request with more than 100 keyterms is billed for at least 20 seconds of audio.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Für Wörterbücher über diesen Grenzen erkennt „Nur REST (Batch)“ mehr Begriffe: Es nutzt bis zu 1.000 Schlüsselbegriffe, zeigt aber keine Live-Vorschau von ElevenLabs. Dort wird jede Anfrage mit mehr als 100 Schlüsselbegriffen mit mindestens 20 Sekunden Audio abgerechnet."
+            "value": "„Nur REST (Batch)“ sendet bis zu 1.000 Begriffe als Schlüsselbegriffe statt als Schlüsselbegriff-Bibliothek, zeigt aber keine Live-Vorschau von ElevenLabs. Dort wird jede Anfrage mit mehr als 100 Schlüsselbegriffen mit mindestens 20 Sekunden Audio abgerechnet."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Para diccionarios que superan estos límites, «Solo REST (por lotes)» reconoce más términos: aplica hasta 1000 términos clave, pero no muestra la vista previa en vivo de ElevenLabs. Allí, cada solicitud con más de 100 términos clave se factura como mínimo por 20 segundos de audio."
+            "value": "«Solo REST (por lotes)» envía hasta 1000 términos como términos clave en lugar de una biblioteca de términos clave, pero no muestra la vista previa en vivo de ElevenLabs. Allí, cada solicitud con más de 100 términos clave se factura como mínimo por 20 segundos de audio."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "辞書がこれらの上限を超える場合は、「RESTのみ（バッチ）」のほうが多くの用語を認識します。最大1,000件のキータームを適用しますが、ElevenLabsのライブプレビューは表示されません。このモードでは、キータームが100件を超える各リクエストは最低20秒分の音声として課金されます。"
+            "value": "「RESTのみ（バッチ）」は最大1,000件の用語をキータームライブラリではなくキータームとして送信しますが、ElevenLabsのライブプレビューは表示されません。このモードでは、キータームが100件を超える各リクエストは最低20秒分の音声として課金されます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "词典超出这些限制时，“仅 REST（批量）”能识别更多术语：它最多应用 1,000 个关键词，但不显示 ElevenLabs 的实时预览。在该模式下，关键词超过 100 个的每个请求至少按 20 秒音频计费。"
+            "value": "“仅 REST（批量）”最多将 1,000 个术语作为关键词而不是关键词库发送，但不显示 ElevenLabs 的实时预览。在该模式下，关键词超过 100 个的每个请求至少按 20 秒音频计费。"
           }
         }
       }
