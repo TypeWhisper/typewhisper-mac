@@ -530,6 +530,34 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
         XCTAssertFalse(wrote, "an upload after the policy is refused")
     }
 
+    func testAPolicyChangeWaitsForAPluginSaveUnderWay() throws {
+        let shared = InMemorySharedAPIKeyStore()
+        let vault = SharedAPIKeyVault(store: shared)
+        vault.activate(keys: [:])
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let forbidden = DispatchSemaphore(value: 0)
+        shared.afterNextWrite {
+            // The routed save is between its gate check and the end of its write.
+            started.signal()
+            release.wait()
+        }
+        DispatchQueue.global().async {
+            try? vault.storePluginKey("gsk-1", account: "groq", displayName: "Groq") {}
+        }
+        started.wait()
+        DispatchQueue.global().async {
+            vault.setSharedWritesAllowed(false)
+            forbidden.signal()
+        }
+        XCTAssertEqual(forbidden.wait(timeout: .now() + 0.2), .timedOut, "the policy waits for the save under way")
+
+        release.signal()
+        XCTAssertEqual(forbidden.wait(timeout: .now() + 2), .success)
+        XCTAssertThrowsError(try vault.storePluginKey("gsk-2", account: "groq", displayName: "Groq") {})
+        XCTAssertEqual(shared.values["groq"], "gsk-1")
+    }
+
     func testPluginSavesDoNotReachICloudWhileAPolicyForbidsSync() {
         let shared = InMemorySharedAPIKeyStore()
         let vault = SharedAPIKeyVault(store: shared)
