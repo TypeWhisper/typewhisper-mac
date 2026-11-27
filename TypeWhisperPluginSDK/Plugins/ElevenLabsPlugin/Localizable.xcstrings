@@ -169,30 +169,30 @@
         }
       }
     },
-    "Auto streams while you dictate, so the live preview and the final text come from one realtime session, and falls back to batch REST. With active dictionary terms, the final text comes from batch REST, so dictations with a live preview are billed for both. REST only avoids realtime concurrency limits and bills the batch rate.": {
+    "Auto streams while you dictate and falls back to batch REST. REST only avoids realtime concurrency limits and bills the batch rate.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatisch streamt bereits während des Diktats, sodass Live-Vorschau und Endtext aus einer Echtzeit-Sitzung stammen, und wechselt bei Fehlern zu Batch-REST. Mit aktiven Wörterbuchbegriffen kommt der Endtext von Batch-REST, sodass Diktate mit Live-Vorschau doppelt abgerechnet werden. Nur REST vermeidet Echtzeit-Parallelitätslimits und wird zum Batch-Tarif abgerechnet."
+            "value": "Automatisch streamt bereits während des Diktats und wechselt bei Fehlern zu Batch-REST. Nur REST vermeidet Echtzeit-Parallelitätslimits und wird zum Batch-Tarif abgerechnet."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Auto transmite mientras dictas, de modo que la vista previa en vivo y el texto final salen de una sola sesión en tiempo real, y recurre a REST por lotes si falla. Con términos del diccionario activos, el texto final viene de REST por lotes, por lo que los dictados con vista previa en vivo se facturan dos veces. Solo REST evita los límites de simultaneidad en tiempo real y se factura con la tarifa por lotes."
+            "value": "Auto transmite mientras dictas y recurre a REST por lotes si falla. Solo REST evita los límites de simultaneidad en tiempo real y se factura con la tarifa por lotes."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "自動モードでは音声入力中にストリーミングするため、ライブプレビューと最終テキストが同じリアルタイムセッションから得られます。失敗時はバッチRESTに切り替えます。辞書の用語が有効な場合、最終テキストはバッチRESTで作成されるため、ライブプレビュー付きの音声入力は二重に課金されます。RESTのみではリアルタイムの同時実行制限を回避し、バッチ料金で課金されます。"
+            "value": "自動モードでは音声入力中にストリーミングし、失敗時はバッチRESTに切り替えます。RESTのみではリアルタイムの同時実行制限を回避し、バッチ料金で課金されます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自动模式在听写时即进行流式传输，因此实时预览和最终文本来自同一个实时会话，失败时回退到批量 REST。启用词典术语时，最终文本由批量 REST 生成，因此带实时预览的听写会被计费两次。仅 REST 模式可避免实时并发限制，并按批量费率计费。"
+            "value": "自动模式在听写时进行流式传输，失败时回退到批量 REST。仅 REST 模式可避免实时并发限制，并按批量费率计费。"
           }
         }
       }
@@ -645,30 +645,58 @@
         }
       }
     },
-    "Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.": {
+    "Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sendet aktive TypeWhisper-Wörterbucheinträge als Erkennungsschlüsselbegriffe an ElevenLabs. ElevenLabs berechnet für Schlüsselbegriffe einen Aufschlag von 20 %."
+            "value": "Sendet bis zu 1.000 aktive Wörterbuchbegriffe als Schlüsselbegriffe an ElevenLabs. Schlüsselbegriffe kosten 20 % Aufschlag. Bei mehr als 100 Schlüsselbegriffen wird jede Anfrage mit mindestens 20 Sekunden Audio abgerechnet."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Envía los términos activos del diccionario de TypeWhisper a ElevenLabs como términos clave de reconocimiento. ElevenLabs aplica un recargo del 20 % por los términos clave."
+            "value": "Envía hasta 1000 términos activos del diccionario a ElevenLabs como términos clave. Los términos clave cuestan un 20 % más. Con más de 100 términos clave, cada solicitud se factura como mínimo por 20 segundos de audio."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "有効なTypeWhisper辞書用語を認識キータームとしてElevenLabsに送信します。ElevenLabsではキータームに20%の追加料金がかかります。"
+            "value": "有効な辞書の用語を最大1,000件、キータームとしてElevenLabsに送信します。キータームには20%の追加料金がかかります。キータームが100件を超えると、各リクエストは最低20秒分の音声として課金されます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将启用的 TypeWhisper 词典术语作为识别关键词发送给 ElevenLabs。ElevenLabs 会对关键词提示加收 20% 的费用。"
+            "value": "最多将 1,000 个启用的词典术语作为关键词发送给 ElevenLabs。关键词会加收 20% 的费用。关键词超过 100 个时，每个请求至少按 20 秒音频计费。"
+          }
+        }
+      }
+    },
+    "With keyterms, %@ only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from %@. If batch REST fails, the realtime text without keyterms is used.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Schlüsselbegriffen zeigt %@ nur die Live-Vorschau: Nach dem Stopp transkribiert Batch-REST die Aufnahme erneut für den Endtext. Dadurch wird beides abgerechnet, und der Text erscheint später. Ohne Schlüsselbegriffe kommt der Endtext direkt von %@. Schlägt Batch-REST fehl, wird der Echtzeittext ohne Schlüsselbegriffe verwendet."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con términos clave, %@ solo muestra la vista previa en vivo: al detener, REST por lotes vuelve a transcribir la grabación para el texto final, así que se facturan ambos y el texto tarda más en aparecer. Sin términos clave, el texto final viene directamente de %@. Si REST por lotes falla, se usa el texto en tiempo real sin términos clave."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キータームを使うと、%@はライブプレビューのみを表示します。停止後にバッチRESTが録音全体をもう一度文字起こしして最終テキストを作成するため、両方が課金され、テキストの表示にも時間がかかります。キータームなしでは、最終テキストは%@から直接得られます。バッチRESTが失敗した場合は、キータームなしのリアルタイムテキストが使われます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用关键词时，%@ 仅显示实时预览：停止后，批量 REST 会重新转写整段录音以生成最终文本，因此两者都会计费，文本也会更晚出现。不使用关键词时，最终文本直接来自 %@。如果批量 REST 失败，则使用不含关键词的实时文本。"
           }
         }
       }

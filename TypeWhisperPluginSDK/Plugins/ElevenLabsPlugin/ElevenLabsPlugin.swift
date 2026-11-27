@@ -1192,7 +1192,7 @@ private struct ElevenLabsSettingsView: View {
                         plugin.setTranscriptionMode(transcriptionMode)
                     }
 
-                    Text("Auto streams while you dictate, so the live preview and the final text come from one realtime session, and falls back to batch REST. With active dictionary terms, the final text comes from batch REST, so dictations with a live preview are billed for both. REST only avoids realtime concurrency limits and bills the batch rate.", bundle: bundle)
+                    Text("Auto streams while you dictate and falls back to batch REST. REST only avoids realtime concurrency limits and bills the batch rate.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1273,10 +1273,20 @@ private struct ElevenLabsSettingsView: View {
                             plugin.setUseDictionaryTerms(useDictionaryTerms)
                         }
 
-                        Text("Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.", bundle: bundle)
+                        Text("Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        // With keyterms, a streamed dictation also goes to the batch API
+                        // when it stops (see createLiveTranscriptionSession).
+                        if transcriptionMode == .automatic,
+                           let realtimeModel = ElevenLabsPlugin.realtimeModel(for: selectedModel) {
+                            Text("With keyterms, \(realtimeModel.displayName) only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from \(realtimeModel.displayName). If batch REST fails, the realtime text without keyterms is used.", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     if ElevenLabsPlugin.supportsMultilangMode(selectedModel) {
