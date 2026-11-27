@@ -2100,6 +2100,11 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(hints("Sophia, I'll go through the contract tonight."), ["Sophia→Sofya"])
         XCTAssertEqual(hints("Mark my words, they will sign it."), [])
         XCTAssertEqual(hints("Sure. Mark the date in the calendar."), [])
+        // The OpenAI API reports the detected language as a lowercase name.
+        XCTAssertEqual(
+            ScreenContextService.ordinaryWordLanguages(dictationLanguage: "french"),
+            ScreenContextService.ordinaryWordLanguages(dictationLanguage: "fr")
+        )
         XCTAssertTrue(
             WorkflowTextProcessingService.screenContextInstruction(
                 screen,

@@ -252,13 +252,15 @@ extension ScreenContextService {
 
     /// The spell checker languages for `isOrdinaryWord`: English, the dictation's language
     /// and the user's preferred languages. A language the spell checker lacks is left out,
-    /// because the spell checker accepts every word in it.
+    /// because the spell checker accepts every word in it. The dictation's language may be
+    /// a lowercase name, as the OpenAI API reports it ("english"), which `Locale` does not read.
     @MainActor
     static func ordinaryWordLanguages(dictationLanguage: String?) -> [String] {
         let available = NSSpellChecker.shared.availableLanguages
         var languages: [String] = []
         for identifier in ["en", dictationLanguage].compactMap({ $0 }) + Locale.preferredLanguages {
-            guard let code = Locale(identifier: identifier).language.languageCode?.identifier,
+            guard let code = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(from: identifier)
+                      .flatMap({ Locale(identifier: $0).language.languageCode?.identifier }),
                   let language = available.contains(code) ? code : available.first(where: { $0.hasPrefix(code + "_") }),
                   !languages.contains(language) else { continue }
             languages.append(language)
