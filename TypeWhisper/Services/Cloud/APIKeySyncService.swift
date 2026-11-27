@@ -260,7 +260,7 @@ final class APIKeySyncService: ObservableObject {
             vault.activate(keys: result.keys)
             notifyChanged(result.changed)
             apiKeySyncLogger.info(
-                "API key sync on: \(result.keys.count, privacy: .public) shared keys, \(result.uploaded.count, privacy: .public) uploaded, \(result.changed.count, privacy: .public) received"
+                "API key sync on. Shared: \(Self.names(result.keys.keys), privacy: .public). Uploaded: \(Self.names(result.uploaded), privacy: .public). Received: \(Self.names(result.changed), privacy: .public)"
             )
             await removeLocalCopies()
         } catch {
@@ -318,6 +318,9 @@ final class APIKeySyncService: ObservableObject {
         do {
             let keys = try await Self.run { try migrator.loadSharedKeys() }
             guard isEnabled, let changed = vault.apply(keys, ifGeneration: generation) else { return }
+            apiKeySyncLogger.info(
+                "Read shared API keys: \(Self.names(keys.keys), privacy: .public). Changed: \(Self.names(changed), privacy: .public)"
+            )
             notifyChanged(changed)
         } catch {
             apiKeySyncLogger.error("Reading shared API keys failed: \(Self.technicalSummary(error), privacy: .public)")
@@ -390,6 +393,12 @@ final class APIKeySyncService: ObservableObject {
             }
         }
         return String(describing: type(of: error))
+    }
+
+    /// Account names for logs. They name providers, never keys.
+    private nonisolated static func names<S: Sequence>(_ accounts: S) -> String where S.Element == String {
+        let sorted = accounts.sorted()
+        return sorted.isEmpty ? "none" : sorted.joined(separator: ", ")
     }
 
     private static func userMessage(for error: Error) -> String {
