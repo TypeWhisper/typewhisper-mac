@@ -239,7 +239,8 @@ final class APIKeySyncService: ObservableObject {
     static let storageLocationKey = "apiKeySync.storageLocation.v1"
     static let iCloudKeychainLocation = "iCloudKeychain"
     static let thisDeviceLocation = "thisDevice"
-    /// Set when removing this Mac's copies failed after sync came on; retried at launch.
+    /// The plugin IDs whose copies on this Mac could not be removed after sync came on; retried
+    /// at launch. Only plugins whose keys that switch handled, so no other key is removed.
     static let pendingLocalCleanupKey = "apiKeySync.pendingLocalCleanup.v1"
     /// How long launch waits for iCloud Keychain before plugins activate without shared keys.
     static let defaultLaunchWait: Duration = .seconds(2)
@@ -323,8 +324,9 @@ final class APIKeySyncService: ObservableObject {
     func pluginsDidLoad() {
         enforceManagedPolicy()
         guard isEnabled else { return }
-        if defaults.bool(forKey: Self.pendingLocalCleanupKey) {
-            enqueue { [weak self] in await self?.removeLocalCopies() }
+        if let pending = defaults.stringArray(forKey: Self.pendingLocalCleanupKey) {
+            let plugins = pluginKeys().filter { pending.contains($0.pluginId) }
+            enqueue { [weak self] in await self?.removeLocalCopies(of: plugins) }
         }
         #if APPSTORE
         enqueue { [weak self] in await self?.applyStorefront() }
@@ -410,10 +412,9 @@ final class APIKeySyncService: ObservableObject {
         guard !isEnabled, restriction == nil else { return }
         isUpdating = true
         defer { isUpdating = false }
-        let plugins = pluginKeys()
         let migrator = migrator
         do {
-            var activated: APIKeySyncMigrator.TurnOnResult?
+            var activated: (result: APIKeySyncMigrator.TurnOnResult, plugins: [SyncablePluginKey])?
             var ownUploads: [String: APIKeySyncMigrator.OwnUpload] = [:]
             let vault = vault
             let gate = uploadsAllowed
@@ -421,6 +422,8 @@ final class APIKeySyncService: ObservableObject {
                 // A key saved while the copy runs goes to this Mac's Keychain and would be removed
                 // with the copies, so the copy runs again until no plugin wrote in between.
                 let localWrites = vault.current.localWriteGeneration
+                // Taken again each time: a plugin set to or away from a custom server changes it.
+                let plugins = pluginKeys()
                 let earlier = ownUploads
                 let result = try await Self.run {
                     try migrator.copyLocalKeysToShared(
@@ -437,11 +440,11 @@ final class APIKeySyncService: ObservableObject {
                 // Off the main actor: the switch waits for a plugin write that is under way.
                 let keys = result.keys
                 if try await Self.run({ vault.activate(keys: keys, ifLocalWriteGeneration: localWrites) }) {
-                    activated = result
+                    activated = (result, plugins)
                     break
                 }
             }
-            guard let result = activated else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
+            guard let (result, plugins) = activated else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
             save(enabled: true)
             notifyChanged(result.changed)
             apiKeySyncLogger.info(
@@ -455,7 +458,7 @@ final class APIKeySyncService: ObservableObject {
                 enqueue { [weak self] in await self?.turnOff() }
                 return
             }
-            await removeLocalCopies()
+            await removeLocalCopies(of: plugins)
         } catch is APIKeySyncMigrator.Stopped {
             apiKeySyncLogger.info("API key sync stays off: the managed settings or the region changed while turning it on")
         } catch {
@@ -512,16 +515,16 @@ final class APIKeySyncService: ObservableObject {
         }
     }
 
-    private func removeLocalCopies() async {
+    /// Removes this Mac's copies of the keys that turning sync on handled, and only those.
+    private func removeLocalCopies(of plugins: [SyncablePluginKey]) async {
         guard isEnabled else { return }
-        let plugins = pluginKeys()
         let migrator = migrator
         let keepsKeyLocal = vault.keepsKeyLocal
         do {
             try await Self.run { try migrator.removeLocalCopies(plugins: plugins, keepsKeyLocal: keepsKeyLocal) }
             defaults.removeObject(forKey: Self.pendingLocalCleanupKey)
         } catch {
-            defaults.set(true, forKey: Self.pendingLocalCleanupKey)
+            defaults.set(plugins.map(\.pluginId), forKey: Self.pendingLocalCleanupKey)
             apiKeySyncLogger.error("Keys on this Mac stay until the next launch: \(Self.technicalSummary(error), privacy: .public)")
         }
     }

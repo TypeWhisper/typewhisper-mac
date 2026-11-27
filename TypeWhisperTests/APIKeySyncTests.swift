@@ -720,6 +720,28 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertTrue(local.secrets.isEmpty)
     }
 
+    func testAPluginLeavingItsCustomServerWhileTurningOnKeepsItsKey() async {
+        let deepgram = plugin("deepgram")
+        local.write("gsk", pluginId: groq.pluginId)
+        local.write("dg-key", pluginId: deepgram.pluginId)
+        let service = makeService()
+        let customServerCleared = Decision()
+        service.pluginKeys = { [groq] in customServerCleared.confirms ? [groq, deepgram] : [groq] }
+        let vault = service.vault
+        local.afterNextRead {
+            // The custom server is cleared while the copy runs: Deepgram's key syncs from now on.
+            customServerCleared.confirms = true
+            vault.noteLocalChange()
+        }
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+
+        XCTAssertTrue(service.isEnabled)
+        XCTAssertEqual(shared.values["deepgram"], "dg-key", "the key was uploaded before this Mac's copy was removed")
+        XCTAssertTrue(local.secrets.isEmpty)
+    }
+
     func testAKeyDeletedWhileTurningOnIsNotBroughtBack() async {
         local.write("gsk-old", pluginId: groq.pluginId)
         let service = makeService()
