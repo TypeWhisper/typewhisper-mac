@@ -143,10 +143,19 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(defaultPlugin.speakerCount, ElevenLabsPlugin.defaultSpeakerCount)
         XCTAssertTrue(defaultPlugin.useDictionaryTerms)
         XCTAssertEqual(defaultPlugin.dictionaryTermsSupport, .supported)
+        // Scribe v3 Live takes a keyterm library; batch transcriptions take 1,000 keyterms.
+        XCTAssertEqual(
+            defaultPlugin.dictionaryTermsBudget,
+            DictionaryTermsBudget(maxTerms: 10_000, maxCharsPerTerm: 49, maxWordsPerTerm: 5)
+        )
+        defaultPlugin.setTranscriptionMode(.restOnly)
         XCTAssertEqual(
             defaultPlugin.dictionaryTermsBudget,
             DictionaryTermsBudget(maxTerms: 1_000, maxCharsPerTerm: 49, maxWordsPerTerm: 5)
         )
+        defaultPlugin.setTranscriptionMode(.automatic)
+        defaultPlugin.selectModel(ElevenLabsPlugin.scribeV2ModelId)
+        XCTAssertEqual(defaultPlugin.dictionaryTermsBudget.maxTerms, 1_000)
 
         let invalidHost = try PluginTestHostServices(defaults: [
             ElevenLabsPlugin.tagAudioEventsKey: "true",
@@ -406,6 +415,13 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(keyterms.first, "Term1")
         XCTAssertEqual(keyterms.last, "Term1000")
         XCTAssertFalse(keyterms.contains("Term1001"))
+
+        // Scribe v3 in Auto mode takes more terms for its keyterm library; its batch
+        // requests still send the first 1,000.
+        let streamedRequest = try await captureRESTRequest(dictionaryTermHints: hints) { plugin in
+            plugin.selectModel(ElevenLabsPlugin.scribeV3ModelId)
+        }
+        XCTAssertEqual(try Self.multipartValues(named: "keyterms", in: streamedRequest), keyterms)
     }
 
     func testRESTRequestExcludesDictionaryKeytermsWhenDisabled() async throws {
@@ -449,6 +465,38 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(verbatimItems["no_verbatim"], "false")
         XCTAssertNil(verbatimItems["language_code"])
         XCTAssertEqual(verbatimItems["include_language_detection"], "true")
+    }
+
+    func testRealtimeKeytermsFillTheURLInOrderAndPutTheRestIntoTheLibrary() throws {
+        // 99 terms of 10 characters, then one that would pass 1,000 characters, one that
+        // fits as the 100th, and two more.
+        let tenCharacterTerms = (100...198).map { "Keyterm\($0)" }
+        let terms = tenCharacterTerms + ["Twelve chars", "Ab", "Cd", "Ef"]
+        let keyterms = ElevenLabsRealtimeKeyterms(terms)
+        XCTAssertEqual(keyterms.urlTerms, tenCharacterTerms + ["Ab"])
+        XCTAssertEqual(keyterms.library, ["Twelve chars", "Cd", "Ef"])
+        XCTAssertLessThanOrEqual(keyterms.urlTerms.map(\.count).reduce(0, +), 1_000)
+
+        // ElevenLabs counts characters: 100 terms with umlauts fit although they have more bytes.
+        let umlautTerms = (0..<100).map { "Größe\(String(format: "%05d", $0))" }
+        XCTAssertEqual(ElevenLabsRealtimeKeyterms(umlautTerms).urlTerms, umlautTerms)
+
+        let many = ElevenLabsRealtimeKeyterms((0..<10_200).map { "T\($0)" })
+        XCTAssertEqual(many.urlTerms.count, 100)
+        XCTAssertEqual(many.library.count, 10_000)
+        XCTAssertEqual(many.library.last, "T10099")
+
+        let url = try ElevenLabsPlugin.realtimeURL(
+            modelId: ElevenLabsPlugin.scribeV3ModelId,
+            language: nil,
+            noVerbatim: true,
+            keyterms: ["C++", "LM Studio", "R&D"]
+        )
+        let values = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .filter { $0.name == "keyterms" }.map(\.value)
+        XCTAssertEqual(values, ["C++", "LM Studio", "R&D"])
+        XCTAssertTrue(url.absoluteString.contains("keyterms=C%2B%2B&"))
+        XCTAssertFalse(url.absoluteString.contains("+"))
     }
 
     func testScribeV3IsTheDefaultTranscribesInBatchAndStreamsWithScribeV3Live() async throws {
@@ -537,6 +585,14 @@ final class ElevenLabsPluginTests: XCTestCase {
             plugin.transcriptionTransport(prompt: nil, dictionaryTermHints: []),
             .realtime
         )
+        // Scribe v3 Live transcribes with the keyterms itself.
+        XCTAssertEqual(
+            plugin.transcriptionTransport(prompt: nil, dictionaryTermHints: validHints),
+            .realtime
+        )
+
+        // With keyterms, Scribe v2 Realtime can quote the whole transcript, so the batch API transcribes.
+        plugin.selectModel(ElevenLabsPlugin.scribeV2ModelId)
         XCTAssertEqual(
             plugin.transcriptionTransport(prompt: nil, dictionaryTermHints: validHints),
             .rest
@@ -668,7 +724,39 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(result.segments.map(\.text), ["First part.", "Second part."])
     }
 
-    func testLiveSessionWithDictionaryTermsTakesTheFinalTextFromTheBatchAPI() async throws {
+    func testLiveSessionSendsTheKeytermLibraryWithTheFirstAudioChunkOnly() async throws {
+        let socket = FakeRealtimeSocket(commitAnswers: [
+            (nil, Self.committedWithTimestamps("Quentaro called.", words: [])),
+        ])
+        let session = try await ElevenLabsLiveTranscriptionSession.connect(
+            socket: socket,
+            language: "en",
+            keytermLibrary: ["Quentaro", "Vexmora"],
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+
+        try await session.appendAudio(samples: [Float](repeating: 0.2, count: 12_000))
+        let result = try await session.finish()
+        XCTAssertEqual(result.text, "Quentaro called.")
+        XCTAssertEqual(socket.audioChunks.map(\.keytermLibrary), [["Quentaro", "Vexmora"], nil, nil])
+
+        // A session that stops before any audio sends it with the padding before the commit.
+        socket.reset(commitAnswers: [(nil, Self.committedWithTimestamps("", words: []))])
+        let silentSession = try await ElevenLabsLiveTranscriptionSession.connect(
+            socket: socket,
+            language: "en",
+            keytermLibrary: ["Quentaro"],
+            finalTranscriber: nil,
+            onProgress: { _ in true }
+        )
+        _ = try? await silentSession.finish()
+        XCTAssertEqual(socket.audioChunks.map(\.keytermLibrary), [["Quentaro"], nil])
+        XCTAssertEqual(socket.audioChunks.map(\.commit), [false, true])
+    }
+
+    /// Scribe v2 Realtime with dictionary terms.
+    func testLiveSessionWithAFinalTranscriberTakesTheFinalTextFromTheBatchAPI() async throws {
         let socket = FakeRealtimeSocket(commitAnswers: [
             (nil, Self.committedWithTimestamps("type whisper", words: [])),
         ])
@@ -842,6 +930,9 @@ final class ElevenLabsPluginTests: XCTestCase {
             "Choose Automatic or the maximum number of speakers (1–32). Applies to REST transcription only.",
             "Use TypeWhisper dictionary terms",
             "Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.",
+            "Sends up to 10,000 active dictionary terms to %@. Up to 100 terms with 1,000 characters in total go as keyterms, the rest as a keyterm library, which the model only consults when it hears a likely match. The final text comes straight from %@, without a second batch upload. Batch REST is only billed when the live session fails or cannot start. Keyterms cost 20% extra.",
+            "REST only (Batch) sends up to 1,000 terms as keyterms instead of a keyterm library, but shows no live preview from ElevenLabs. There, each request with more than 100 keyterms is billed for at least 20 seconds of audio.",
+            "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode, not to batch REST.",
             "With keyterms, %@ only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from %@. If batch REST fails, the realtime text without keyterms is used.",
             "Tuned for clinical audio, at the Scribe v2 price. Batch only, without realtime streaming.",
             "Auto streams while you dictate and falls back to batch REST. REST only avoids realtime concurrency limits and bills the batch rate.",
@@ -1024,6 +1115,7 @@ private final class FakeRealtimeSocket: ElevenLabsRealtimeSocket, @unchecked Sen
     struct AudioChunk {
         let sampleCount: Int
         let commit: Bool
+        let keytermLibrary: [String]?
     }
 
     private struct State {
@@ -1056,8 +1148,9 @@ private final class FakeRealtimeSocket: ElevenLabsRealtimeSocket, @unchecked Sen
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
         let audio = try XCTUnwrap(Data(base64Encoded: json["audio_base_64"] as? String ?? ""))
         let commit = json["commit"] as? Bool ?? false
+        let keytermLibrary = json["keyterm_library"] as? [String]
         let (answers, continuation, closes) = state.withLock { state -> ([String], AsyncThrowingStream<String, Error>.Continuation?, Bool) in
-            state.chunks.append(AudioChunk(sampleCount: audio.count / 2, commit: commit))
+            state.chunks.append(AudioChunk(sampleCount: audio.count / 2, commit: commit, keytermLibrary: keytermLibrary))
             guard commit else { return ([], nil, false) }
             if state.closesOnCommit { return ([], state.continuation, true) }
             guard !state.commitAnswers.isEmpty else { return ([], nil, false) }

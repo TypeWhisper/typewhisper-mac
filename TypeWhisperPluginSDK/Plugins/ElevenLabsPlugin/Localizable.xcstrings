@@ -673,6 +673,62 @@
         }
       }
     },
+    "Sends up to 10,000 active dictionary terms to %@. Up to 100 terms with 1,000 characters in total go as keyterms, the rest as a keyterm library, which the model only consults when it hears a likely match. The final text comes straight from %@, without a second batch upload. Batch REST is only billed when the live session fails or cannot start. Keyterms cost 20% extra.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendet bis zu 10.000 aktive Wörterbuchbegriffe an %@. Bis zu 100 Begriffe mit zusammen 1.000 Zeichen gehen als Schlüsselbegriffe mit, der Rest als Schlüsselbegriff-Bibliothek, die das Modell nur heranzieht, wenn es einen passenden Begriff zu hören glaubt. Der Endtext kommt direkt von %@, ohne zweiten Batch-Upload. Batch-REST wird nur abgerechnet, wenn die Live-Sitzung fehlschlägt oder nicht starten kann. Schlüsselbegriffe kosten 20 % Aufschlag."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envía hasta 10 000 términos activos del diccionario a %@. Hasta 100 términos con 1000 caracteres en total van como términos clave y el resto como biblioteca de términos clave, que el modelo solo consulta cuando oye una coincidencia probable. El texto final viene directamente de %@, sin una segunda subida por lotes. REST por lotes solo se factura si la sesión en vivo falla o no puede iniciarse. Los términos clave cuestan un 20 % más."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効な辞書の用語を最大10,000件、%@に送信します。合計1,000文字以内で最大100件の用語はキータームとして、残りはキータームライブラリとして送信されます。モデルはライブラリを、一致しそうな語が聞こえたときにだけ参照します。最終テキストは%@から直接得られ、バッチへの再アップロードは行われません。バッチRESTが課金されるのは、ライブセッションが失敗した場合や開始できない場合のみです。キータームには20%の追加料金がかかります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多将 10,000 个启用的词典术语发送给 %@。总字符数不超过 1,000 的最多 100 个术语作为关键词发送，其余作为关键词库发送，模型只有在听到可能匹配的词时才会参考关键词库。最终文本直接来自 %@，不会再次上传进行批量转写。只有实时会话失败或无法启动时，才会产生批量 REST 费用。关键词会加收 20% 的费用。"
+          }
+        }
+      }
+    },
+    "REST only (Batch) sends up to 1,000 terms as keyterms instead of a keyterm library, but shows no live preview from ElevenLabs. There, each request with more than 100 keyterms is billed for at least 20 seconds of audio.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Nur REST (Batch)“ sendet bis zu 1.000 Begriffe als Schlüsselbegriffe statt als Schlüsselbegriff-Bibliothek, zeigt aber keine Live-Vorschau von ElevenLabs. Dort wird jede Anfrage mit mehr als 100 Schlüsselbegriffen mit mindestens 20 Sekunden Audio abgerechnet."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Solo REST (por lotes)» envía hasta 1000 términos como términos clave en lugar de una biblioteca de términos clave, pero no muestra la vista previa en vivo de ElevenLabs. Allí, cada solicitud con más de 100 términos clave se factura como mínimo por 20 segundos de audio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「RESTのみ（バッチ）」は最大1,000件の用語をキータームライブラリではなくキータームとして送信しますが、ElevenLabsのライブプレビューは表示されません。このモードでは、キータームが100件を超える各リクエストは最低20秒分の音声として課金されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“仅 REST（批量）”最多将 1,000 个术语作为关键词而不是关键词库发送，但不显示 ElevenLabs 的实时预览。在该模式下，关键词超过 100 个的每个请求至少按 20 秒音频计费。"
+          }
+        }
+      }
+    },
     "With keyterms, %@ only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from %@. If batch REST fails, the realtime text without keyterms is used.": {
       "localizations": {
         "de": {
@@ -869,30 +925,30 @@
         }
       }
     },
-    "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode. Final text from batch REST, such as with dictionary terms, does not use it.": {
+    "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Auto mode, not to batch REST.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Für Diktate, die innerhalb eines Satzes die Sprache wechseln. Gilt für Scribe v3 Live im Modus Automatisch. Endtext von Batch-REST, etwa mit Wörterbuchbegriffen, nutzt es nicht."
+            "value": "Für Diktate, die innerhalb eines Satzes die Sprache wechseln. Gilt für Scribe v3 Live im Modus Automatisch, nicht für Batch-REST."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Para dictados que cambian de idioma dentro de una frase. Se aplica a Scribe v3 Live en modo Auto. El texto final de REST por lotes, por ejemplo con términos del diccionario, no lo usa."
+            "value": "Para dictados que cambian de idioma dentro de una frase. Se aplica a Scribe v3 Live en modo Auto, no a REST por lotes."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "文の途中で言語が切り替わる音声入力向けです。自動モードのScribe v3 Liveに適用されます。辞書の用語がある場合など、バッチRESTで作成される最終テキストには適用されません。"
+            "value": "文の途中で言語が切り替わる音声入力向けです。自動モードのScribe v3 Liveに適用され、バッチRESTには適用されません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "适用于在一句话中切换语言的听写。在自动模式下作用于 Scribe v3 Live。来自批量 REST 的最终文本（例如启用词典术语时）不使用此设置。"
+            "value": "适用于在一句话中切换语言的听写。在自动模式下作用于 Scribe v3 Live，不适用于批量 REST。"
           }
         }
       }
