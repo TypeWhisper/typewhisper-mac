@@ -386,11 +386,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
 
     /// Off while a managed setting or the region forbids sync: plugin saves and the uploads of
     /// turning sync on then do not reach iCloud Keychain, also in the moment before sync is turned
-    /// off. Taken under the same lock as every admitted write, so a write either starts before the
-    /// change or is refused after it.
+    /// off. Takes effect at once and never waits: every write checks it when it is admitted, under
+    /// the vault's lock, so a write admitted after this call is refused, and one admitted before
+    /// finishes (turning sync off sees it through the generation).
     func setSharedWritesAllowed(_ allowed: Bool) {
-        saveLock.lock()
-        defer { saveLock.unlock() }
         state.withLock { $0.sharedWritesAllowed = allowed }
     }
 

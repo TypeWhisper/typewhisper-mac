@@ -62,9 +62,14 @@ private final class InMemorySharedAPIKeyStore: SharedAPIKeyStoring, @unchecked S
     private var writeHook: (@Sendable () -> Void)?
     private var keepsWriteHook = false
 
+    /// Writes and deletes that reached the store, refused ones not counted.
+    var writeCount: Int { lock.withLock { writes } }
+    private var writes = 0
+
     func write(_ value: String, account: String, displayName: String) throws {
         let hook = try lock.withLock { () throws -> (@Sendable () -> Void)? in
             if failsWrites { throw SharedAPIKeyStoreError.keychain(errSecInteractionNotAllowed) }
+            writes += 1
             storage[account] = SharedAPIKeyStoredItem(value: Data(value.utf8), modificationDate: modificationDate)
             labels[account] = SharedAPIKeyItemFormat.label(displayName: displayName)
             defer { if !keepsWriteHook { writeHook = nil } }
@@ -76,6 +81,7 @@ private final class InMemorySharedAPIKeyStore: SharedAPIKeyStoring, @unchecked S
     func delete(account: String) throws {
         try lock.withLock {
             if failsWrites { throw SharedAPIKeyStoreError.keychain(errSecInteractionNotAllowed) }
+            writes += 1
             storage[account] = nil
         }
     }
@@ -536,58 +542,30 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
         XCTAssertEqual(shared.values["groq"], "gsk-from-iphone")
     }
 
-    func testAPolicyChangeWaitsForAnUploadUnderWayAndRefusesLaterOnes() throws {
+    func testAPolicyChangeLetsAnUploadUnderWayFinishAndRefusesLaterOnes() throws {
         let vault = SharedAPIKeyVault(store: InMemorySharedAPIKeyStore())
         let started = DispatchSemaphore(value: 0)
         let release = DispatchSemaphore(value: 0)
-        let forbidden = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        let admitted = Decision()
         DispatchQueue.global().async {
-            _ = try? vault.admitSharedWrite {
+            admitted.confirms = (try? vault.admitSharedWrite {
                 started.signal()
                 release.wait()
-            }
+            }) ?? false
+            finished.signal()
         }
         started.wait()
-        DispatchQueue.global().async {
-            vault.setSharedWritesAllowed(false)
-            forbidden.signal()
-        }
-        XCTAssertEqual(forbidden.wait(timeout: .now() + 0.2), .timedOut, "the policy waits for the upload under way")
-        XCTAssertTrue(vault.current.sharedWritesAllowed)
 
-        release.signal()
-        XCTAssertEqual(forbidden.wait(timeout: .now() + 2), .success)
+        let before = Date()
+        vault.setSharedWritesAllowed(false)
+        XCTAssertLessThan(Date().timeIntervalSince(before), 0.1, "the policy does not wait for the upload")
         var wrote = false
+        DispatchQueue.global().async { release.signal() }
+        XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
+        XCTAssertTrue(admitted.confirms, "the upload admitted before the policy finishes")
         XCTAssertFalse(try vault.admitSharedWrite { wrote = true })
         XCTAssertFalse(wrote, "an upload after the policy is refused")
-    }
-
-    func testAPolicyChangeWaitsForAPluginSaveUnderWay() throws {
-        let shared = InMemorySharedAPIKeyStore()
-        let vault = SharedAPIKeyVault(store: shared)
-        vault.activate(keys: [:])
-        let started = DispatchSemaphore(value: 0)
-        let release = DispatchSemaphore(value: 0)
-        let forbidden = DispatchSemaphore(value: 0)
-        shared.afterNextWrite {
-            // The routed save is between its gate check and the end of its write.
-            started.signal()
-            release.wait()
-        }
-        DispatchQueue.global().async {
-            try? vault.storePluginKey("gsk-1", account: "groq", displayName: "Groq") {}
-        }
-        started.wait()
-        DispatchQueue.global().async {
-            vault.setSharedWritesAllowed(false)
-            forbidden.signal()
-        }
-        XCTAssertEqual(forbidden.wait(timeout: .now() + 0.2), .timedOut, "the policy waits for the save under way")
-
-        release.signal()
-        XCTAssertEqual(forbidden.wait(timeout: .now() + 2), .success)
-        XCTAssertThrowsError(try vault.storePluginKey("gsk-2", account: "groq", displayName: "Groq") {})
-        XCTAssertEqual(shared.values["groq"], "gsk-1")
     }
 
     func testPluginSavesDoNotReachICloudWhileAPolicyForbidsSync() {
@@ -1116,6 +1094,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertFalse(service.vault.current.isActive)
         XCTAssertEqual(local.values, [groq.pluginId: "gsk-mac"], "this Mac keeps its keys")
         XCTAssertTrue(shared.items.isEmpty, "nothing is uploaded once the policy forbids sync")
+        XCTAssertEqual(shared.writeCount, 0, "not even a write that is taken back later")
         XCTAssertNil(service.errorMessage)
     }
 
@@ -1409,11 +1388,25 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(before), 0.1, "the main actor does not wait for the write")
         XCTAssertEqual(service.restriction, .managedConfiguration)
 
+        XCTAssertFalse(vault.current.sharedWritesAllowed, "new writes are refused at once")
         release.signal()
-        for _ in 0..<100 where vault.current.sharedWritesAllowed {
-            Thread.sleep(forTimeInterval: 0.02)
-        }
-        XCTAssertFalse(vault.current.sharedWritesAllowed, "the gate closes once the write is done")
+    }
+
+    func testASaveRightAfterThePolicyIsRefusedBeforeTheTurnOffRuns() async throws {
+        local.put("gsk-mac", pluginId: groq.pluginId)
+        let service = makeService()
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+        let writesBefore = shared.writeCount
+
+        service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
+        // The queued turn-off has not run yet; the plugin saves now.
+        XCTAssertTrue(service.isEnabled)
+        XCTAssertThrowsError(try service.vault.storePluginKey("gsk-new", account: "groq", displayName: "Groq") {})
+        XCTAssertEqual(shared.writeCount, writesBefore, "no write reached iCloud Keychain")
+
+        await service.waitForPendingOperation()
+        XCTAssertFalse(service.isEnabled)
     }
 
     func testThePolicyTurnsSyncOffAndItStaysOff() async {
