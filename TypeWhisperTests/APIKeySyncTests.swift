@@ -417,6 +417,30 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
         XCTAssertEqual(answers.events.count, 2, "no question when there is nothing to delete")
     }
 
+    func testDeletingWhileTheSharedKeysAreUnreadAsksToo() throws {
+        let shared = InMemorySharedAPIKeyStore()
+        shared.set("gsk-elsewhere", account: "groq")
+        let vault = SharedAPIKeyVault(store: shared)
+        vault.activate(keys: nil)
+        let answers = Received()
+        let host = HostServicesImpl(
+            pluginId: "com.typewhisper.groq",
+            eventBus: EventBus(),
+            ruleNamesProvider: { [] },
+            pluginName: "Groq",
+            apiKeyVault: vault,
+            confirmSharedKeyDeletion: { [answers] name in
+                answers.events.append(name)
+                return false
+            },
+            sharedKeyDeletionCancelled: { _ in }
+        )
+
+        XCTAssertThrowsError(try host.storeSecret(key: "api-key", value: ""))
+        XCTAssertEqual(answers.events, ["Groq"])
+        XCTAssertEqual(shared.values["groq"], "gsk-elsewhere")
+    }
+
     func testOtherSecretsAndOtherPublishersStayOnThisMac() {
         let vault = SharedAPIKeyVault(store: InMemorySharedAPIKeyStore())
         vault.activate(keys: [:])
@@ -657,6 +681,8 @@ final class APIKeySyncServiceTests: XCTestCase {
 
     func testAKeySavedWhileTurningOnIsNotLost() async {
         local.write("gsk-old", pluginId: groq.pluginId)
+        // The upload of the old key gets a later date than the save that follows it.
+        shared.modificationDate = .distantFuture
         let service = makeService()
         let vault = service.vault
         let store = local!
@@ -674,6 +700,26 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertEqual(shared.values["groq"], "gsk-new")
         XCTAssertEqual(service.vault.value(forAccount: "groq"), "gsk-new")
         XCTAssertTrue(local.secrets.isEmpty)
+    }
+
+    func testAKeyDeletedWhileTurningOnIsNotBroughtBack() async {
+        local.write("gsk-old", pluginId: groq.pluginId)
+        let service = makeService()
+        let vault = service.vault
+        let store = local!
+        local.afterNextRead {
+            // The plugin removes its key while the copy runs; sync is not on yet.
+            try? vault.storePluginKey("", account: "groq", displayName: "Groq") {
+                store.delete(pluginId: "com.typewhisper.groq")
+            }
+        }
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+
+        XCTAssertTrue(service.isEnabled)
+        XCTAssertNil(shared.items["groq"], "the upload of the deleted key is undone")
+        XCTAssertNil(service.vault.value(forAccount: "groq"))
     }
 
     func testKeysThatKeepChangingLeaveSyncOffWhenTurningOn() async {
@@ -740,12 +786,18 @@ final class APIKeySyncServiceTests: XCTestCase {
             retryDelay: .milliseconds(50)
         )
         let vault = service.vault
+        let staleReads = Received()
         shared.afterEveryRead {
             try? vault.save("gsk-\(UUID().uuidString)", account: "groq", displayName: "Groq")
+            staleReads.events.append("read")
         }
 
         await service.prepareForPluginActivation(policy: policySnapshot([:]))
-        XCTAssertFalse(service.vault.current.isLoaded)
+        for _ in 0..<100 where staleReads.events.count < APIKeySyncService.copyAttempts {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertGreaterThanOrEqual(staleReads.events.count, APIKeySyncService.copyAttempts)
+        XCTAssertFalse(service.vault.current.isLoaded, "every attempt of the first load was stale")
 
         shared.stopHook()
         for _ in 0..<100 where !service.vault.current.isLoaded {
@@ -772,6 +824,8 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertFalse(service.isEnabled)
         XCTAssertFalse(service.vault.current.isActive)
         XCTAssertEqual(local.values, [groq.pluginId: "gsk-mac"], "this Mac keeps its keys")
+        XCTAssertTrue(shared.items.isEmpty, "nothing is uploaded once the policy forbids sync")
+        XCTAssertNil(service.errorMessage)
     }
 
     func testAKeySavedWhileTurningOffReachesThisMac() async {
@@ -835,7 +889,7 @@ final class APIKeySyncServiceTests: XCTestCase {
             keepsKeyLocal: vault.keepsKeyLocal
         )
         XCTAssertEqual(local.values["com.typewhisper.reson8"], "r8-custom", "its own key is never replaced")
-        XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-cloud", "without its own key it keeps the shared one")
+        XCTAssertNil(local.values["com.typewhisper.deepgram"], "the host kept its key when the server was set")
         XCTAssertEqual(local.values["com.typewhisper.groq"], "gsk")
 
         vault.deactivate()

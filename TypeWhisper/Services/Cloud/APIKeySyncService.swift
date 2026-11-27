@@ -67,7 +67,18 @@ struct APIKeySyncMigrator: Sendable {
         var uploaded: Set<String> = []
         /// Accounts whose key on this Mac differed from the one plugins read from now on.
         var changed: Set<String> = []
+        /// What this switch has uploaded so far, for a repeated copy step.
+        var ownUploads: [String: OwnUpload] = [:]
     }
+
+    /// A key this switch uploaded, and the shared key it replaced (nil when there was none).
+    struct OwnUpload: Equatable, Sendable {
+        let value: String
+        let previous: String?
+    }
+
+    /// Thrown when uploads must stop, such as when a managed setting forbids sync mid-copy.
+    struct Stopped: Error {}
 
     let shared: any SharedAPIKeyStoring
     let local: any LocalPluginSecretStoring
@@ -79,28 +90,52 @@ struct APIKeySyncMigrator: Sendable {
     /// Step 1 of turning sync on. A key only this Mac has is uploaded, one only iCloud Keychain
     /// has is received. Two different keys: the newer modification date wins, and without both
     /// dates iCloud Keychain wins. Throws at the first failed read or write.
-    func copyLocalKeysToShared(plugins: [SyncablePluginKey]) throws -> TurnOnResult {
+    ///
+    /// `earlierUploads` are this switch's uploads from an earlier attempt. They are not another
+    /// device's keys, so for them this Mac's key as it is now decides: a key saved meanwhile is
+    /// uploaded, and a key deleted meanwhile puts back what iCloud Keychain held before.
+    /// `mayUpload` is asked before every write to iCloud Keychain.
+    func copyLocalKeysToShared(
+        plugins: [SyncablePluginKey],
+        earlierUploads: [String: OwnUpload] = [:],
+        mayUpload: () -> Bool = { true }
+    ) throws -> TurnOnResult {
         let sharedItems = try shared.readAll()
         var result = TurnOnResult(
-            keys: sharedItems.compactMapValues { SharedAPIKeyItemFormat.decode($0.value) }
+            keys: sharedItems.compactMapValues { SharedAPIKeyItemFormat.decode($0.value) },
+            ownUploads: earlierUploads
         )
         for plugin in plugins {
             let sharedValue = result.keys[plugin.account]
-            guard let localItem = try local.read(pluginId: plugin.pluginId),
-                  let localValue = SharedAPIKeyItemFormat.encode(localItem.value)
-                    .flatMap(SharedAPIKeyItemFormat.decode) else {
+            let localItem = try local.read(pluginId: plugin.pluginId)
+            let localValue = localItem.flatMap {
+                SharedAPIKeyItemFormat.encode($0.value).flatMap(SharedAPIKeyItemFormat.decode)
+            }
+
+            if let earlier = earlierUploads[plugin.account], sharedValue == earlier.value {
+                if let localValue {
+                    if localValue != earlier.value {
+                        try upload(localValue, replacing: earlier.previous, for: plugin, into: &result, mayUpload: mayUpload)
+                    }
+                } else {
+                    try restore(earlier.previous, for: plugin, into: &result, mayUpload: mayUpload)
+                }
+                continue
+            }
+
+            guard let localItem, let localValue else {
                 if sharedValue != nil { result.changed.insert(plugin.account) }
                 continue
             }
             guard let sharedValue else {
-                try upload(localValue, for: plugin, into: &result)
+                try upload(localValue, replacing: nil, for: plugin, into: &result, mayUpload: mayUpload)
                 continue
             }
             guard sharedValue != localValue else { continue }
             if let localDate = localItem.modificationDate,
                let sharedDate = sharedItems[plugin.account]?.modificationDate,
                localDate > sharedDate {
-                try upload(localValue, for: plugin, into: &result)
+                try upload(localValue, replacing: sharedValue, for: plugin, into: &result, mayUpload: mayUpload)
             } else {
                 result.changed.insert(plugin.account)
             }
@@ -126,8 +161,8 @@ struct APIKeySyncMigrator: Sendable {
     /// plugin that is not installed or did not load, so no key is lost. A key missing from iCloud
     /// Keychain was deleted on another device, so an installed plugin's copy is deleted too.
     /// The iCloud Keychain items stay, so the user's other devices keep their keys.
-    /// `keepsKeyLocal` names plugins whose own key is never replaced, such as one set to a custom
-    /// server; one without a key of its own gets the shared key.
+    /// `keepsKeyLocal` names plugins whose key is left alone, such as one set to a custom server:
+    /// the host already kept its key on this Mac when the server was set.
     func copySharedKeysToLocal(
         plugins: [SyncablePluginKey],
         keys: [String: String],
@@ -135,7 +170,7 @@ struct APIKeySyncMigrator: Sendable {
     ) throws {
         for (account, value) in keys.sorted(by: { $0.key < $1.key }) {
             let pluginId = SharedAPIKeyItemFormat.pluginId(forAccount: account)
-            if keepsKeyLocal(pluginId), try local.read(pluginId: pluginId) != nil { continue }
+            guard !keepsKeyLocal(pluginId) else { continue }
             try local.write(value, pluginId: pluginId)
         }
         for plugin in plugins where keys[plugin.account] == nil {
@@ -145,12 +180,37 @@ struct APIKeySyncMigrator: Sendable {
 
     private func upload(
         _ value: String,
+        replacing previous: String?,
         for plugin: SyncablePluginKey,
-        into result: inout TurnOnResult
+        into result: inout TurnOnResult,
+        mayUpload: () -> Bool
     ) throws {
+        guard mayUpload() else { throw Stopped() }
         try shared.write(value, account: plugin.account, displayName: plugin.displayName)
         result.keys[plugin.account] = value
         result.uploaded.insert(plugin.account)
+        // Keeps the key from before the switch when an earlier attempt already replaced it.
+        let original = result.ownUploads[plugin.account].map(\.previous) ?? previous
+        result.ownUploads[plugin.account] = OwnUpload(value: value, previous: original)
+    }
+
+    /// Undoes this switch's upload of a key that was deleted on this Mac meanwhile.
+    private func restore(
+        _ previous: String?,
+        for plugin: SyncablePluginKey,
+        into result: inout TurnOnResult,
+        mayUpload: () -> Bool
+    ) throws {
+        guard mayUpload() else { throw Stopped() }
+        if let previous {
+            try shared.write(previous, account: plugin.account, displayName: plugin.displayName)
+        } else {
+            try shared.delete(account: plugin.account)
+        }
+        result.keys[plugin.account] = previous
+        result.uploaded.remove(plugin.account)
+        result.ownUploads[plugin.account] = nil
+        if previous != nil { result.changed.insert(plugin.account) }
     }
 }
 
@@ -183,8 +243,14 @@ final class APIKeySyncService: ObservableObject {
     @Published private(set) var isUpdating = false
     /// A message after a failed change. Never contains a key.
     @Published var errorMessage: String?
-    @Published private(set) var managedConfigurationForbids = false
-    @Published private(set) var storefrontForbids = false
+    @Published private(set) var managedConfigurationForbids = false {
+        didSet { updateUploadGate() }
+    }
+    @Published private(set) var storefrontForbids = false {
+        didSet { updateUploadGate() }
+    }
+    /// Read by the copy step off the main actor before each upload.
+    private let uploadsAllowed = OSAllocatedUnfairLock(initialState: true)
 
     /// The first-party plugins that are installed, enabled or not. Set by the container.
     var pluginKeys: @MainActor () -> [SyncablePluginKey] = { [] }
@@ -255,6 +321,11 @@ final class APIKeySyncService: ObservableObject {
         #if APPSTORE
         enqueue { [weak self] in await self?.applyStorefront() }
         #endif
+    }
+
+    private func updateUploadGate() {
+        let allowed = !managedConfigurationForbids && !storefrontForbids
+        uploadsAllowed.withLock { $0 = allowed }
     }
 
     /// Follows the managed settings: `AllowAPIKeySync` and both cloud keys.
@@ -335,17 +406,27 @@ final class APIKeySyncService: ObservableObject {
         let migrator = migrator
         do {
             var activated: APIKeySyncMigrator.TurnOnResult?
+            var ownUploads: [String: APIKeySyncMigrator.OwnUpload] = [:]
+            let vault = vault
+            let gate = uploadsAllowed
             for _ in 0..<Self.copyAttempts {
                 // A key saved while the copy runs goes to this Mac's Keychain and would be removed
                 // with the copies, so the copy runs again until no plugin wrote in between.
                 let localWrites = vault.current.localWriteGeneration
-                let result = try await Self.run { try migrator.copyLocalKeysToShared(plugins: plugins) }
-                // The managed settings may have changed while the keys moved.
-                guard restriction == nil else {
-                    apiKeySyncLogger.info("API key sync stays off: the managed settings changed while turning it on")
-                    return
+                let earlier = ownUploads
+                let result = try await Self.run {
+                    try migrator.copyLocalKeysToShared(
+                        plugins: plugins,
+                        earlierUploads: earlier,
+                        mayUpload: { gate.withLock { $0 } }
+                    )
                 }
-                if vault.activate(keys: result.keys, ifLocalWriteGeneration: localWrites) {
+                ownUploads = result.ownUploads
+                // The managed settings may have changed while the keys moved.
+                guard restriction == nil else { throw APIKeySyncMigrator.Stopped() }
+                // Off the main actor: the switch waits for a plugin write that is under way.
+                let keys = result.keys
+                if try await Self.run({ vault.activate(keys: keys, ifLocalWriteGeneration: localWrites) }) {
                     activated = result
                     break
                 }
@@ -357,6 +438,8 @@ final class APIKeySyncService: ObservableObject {
                 "API key sync on. Shared: \(Self.names(result.keys.keys), privacy: .public). Uploaded: \(Self.names(result.uploaded), privacy: .public). Received: \(Self.names(result.changed), privacy: .public)"
             )
             await removeLocalCopies()
+        } catch is APIKeySyncMigrator.Stopped {
+            apiKeySyncLogger.info("API key sync stays off: the managed settings or the region changed while turning it on")
         } catch {
             apiKeySyncLogger.error("Turning API key sync on failed: \(Self.technicalSummary(error), privacy: .public)")
             errorMessage = Self.userMessage(for: error)
@@ -390,7 +473,10 @@ final class APIKeySyncService: ObservableObject {
                     try migrator.copySharedKeysToLocal(plugins: plugins, keys: copied, keepsKeyLocal: keepsKeyLocal)
                 }
                 inUse = vault.current.keys
-                if vault.deactivate(ifGeneration: snapshot.generation) {
+                // Off the main actor: the switch waits for a plugin write that is under way.
+                let vault = vault
+                let generation = snapshot.generation
+                if try await Self.run({ vault.deactivate(ifGeneration: generation) }) {
                     copiedKeys = keys
                     break
                 }

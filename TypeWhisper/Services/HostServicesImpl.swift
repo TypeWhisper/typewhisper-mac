@@ -127,9 +127,10 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         }
         let displayName = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: pluginName)
         // Asked before the vault's lock is taken: the alert runs the main run loop.
+        // Until the shared keys are read, a key may exist on other devices: ask as well.
         if SharedAPIKeyItemFormat.encode(value) == nil,
            apiKeyVault.routedAccount(pluginId: pluginId, key: key) != nil,
-           apiKeyVault.value(forAccount: account) != nil,
+           apiKeyVault.value(forAccount: account) != nil || !apiKeyVault.current.isLoaded,
            !confirmSharedKeyDeletion(displayName) {
             sharedKeyDeletionCancelled(pluginId)
             throw SharedAPIKeyStoreError.deletionCancelled
