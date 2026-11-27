@@ -1026,6 +1026,41 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertEqual(local.values[deepgram.pluginId], "dg-custom-server")
     }
 
+    func testAKeySavedWhileAPolicyUndoesTheSwitchIsRefusedNotLost() async throws {
+        local.put("gsk-old", pluginId: groq.pluginId)
+        let service = makeService()
+        let vault = service.vault
+        let refused = Decision()
+        service.beforeSwitchForTesting = { [unowned service, shared] in
+            service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
+            // The next shared read is the one of the turn-off this policy queues; a plugin saves
+            // while it runs, after the routing switched to iCloud Keychain.
+            shared!.afterNextRead {
+                do {
+                    try vault.storePluginKey("gsk-new", account: "groq", displayName: "Groq") {}
+                } catch {
+                    refused.confirms = true
+                }
+            }
+        }
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+        await service.waitForPendingOperation()
+
+        XCTAssertTrue(refused.confirms, "the save is refused with a message, not dropped")
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertNotEqual(shared.values["groq"], "gsk-new", "nothing reached iCloud Keychain")
+        XCTAssertEqual(local.values[groq.pluginId], "gsk-old")
+
+        // Saved again once sync is off, the key lands on this Mac.
+        let store = local!
+        try vault.storePluginKey("gsk-new", account: "groq", displayName: "Groq") {
+            store.put("gsk-new", pluginId: "com.typewhisper.groq")
+        }
+        XCTAssertEqual(local.values[groq.pluginId], "gsk-new")
+    }
+
     func testAKeySavedWhileTurningOffReachesThisMac() async {
         local.put("gsk-old", pluginId: groq.pluginId)
         let service = makeService()
