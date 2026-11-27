@@ -87,16 +87,16 @@ struct APIKeySyncMigrator: Sendable {
         if let firstError { throw firstError }
     }
 
-    /// Step 1 of turning sync off: the shared keys become this Mac's keys again. A key missing
-    /// from iCloud Keychain was deleted on another device, so it is deleted here too.
+    /// Step 1 of turning sync off: every shared key becomes this Mac's key again, also for a
+    /// plugin that is not installed or did not load, so no key is lost. A key missing from iCloud
+    /// Keychain was deleted on another device, so an installed plugin's copy is deleted too.
     /// The iCloud Keychain items stay, so the user's other devices keep their keys.
     func copySharedKeysToLocal(plugins: [SyncablePluginKey], keys: [String: String]) throws {
-        for plugin in plugins {
-            if let value = keys[plugin.account] {
-                try local.write(value, pluginId: plugin.pluginId)
-            } else {
-                try local.delete(pluginId: plugin.pluginId)
-            }
+        for (account, value) in keys.sorted(by: { $0.key < $1.key }) {
+            try local.write(value, pluginId: SharedAPIKeyItemFormat.pluginId(forAccount: account))
+        }
+        for plugin in plugins where keys[plugin.account] == nil {
+            try local.delete(pluginId: plugin.pluginId)
         }
     }
 
@@ -133,7 +133,7 @@ final class APIKeySyncService: ObservableObject {
     /// Set when removing this Mac's copies failed after sync came on; retried at launch.
     static let pendingLocalCleanupKey = "apiKeySync.pendingLocalCleanup.v1"
     /// How long launch waits for iCloud Keychain before plugins activate without shared keys.
-    static let launchWait: Duration = .seconds(2)
+    static let defaultLaunchWait: Duration = .seconds(2)
     static let activationRefreshInterval: TimeInterval = 5
 
     @Published private(set) var isEnabled: Bool
@@ -153,6 +153,7 @@ final class APIKeySyncService: ObservableObject {
     private let migrator: APIKeySyncMigrator
     private let storefrontCountryCode: @Sendable () async -> String?
     private let now: () -> Date
+    private let launchWait: Duration
     private var pendingOperation: Task<Void, Never>?
     private var activationObserver: NSObjectProtocol?
     private var lastActivationRefresh: Date?
@@ -162,9 +163,11 @@ final class APIKeySyncService: ObservableObject {
         vault: SharedAPIKeyVault = .shared,
         local: any LocalPluginSecretStoring = KeychainPluginSecretStore(),
         storefrontCountryCode: @escaping @Sendable () async -> String? = APIKeySyncService.currentStorefrontCountryCode,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        launchWait: Duration = APIKeySyncService.defaultLaunchWait
     ) {
         self.defaults = defaults
+        self.launchWait = launchWait
         self.vault = vault
         migrator = APIKeySyncMigrator(shared: vault.store, local: local)
         self.storefrontCountryCode = storefrontCountryCode
@@ -182,24 +185,24 @@ final class APIKeySyncService: ObservableObject {
 
     // MARK: - Launch and refresh
 
-    /// Runs before plugins activate. Waits briefly for iCloud Keychain so plugins find their
-    /// keys at once; a slower answer still reaches them by activating them again.
-    /// While a policy turns sync off, plugins keep reading the shared keys until they are copied
-    /// back to this Mac.
+    /// Runs before plugins activate. Waits at most `launchWait` for iCloud Keychain so plugins
+    /// find their keys at once; a slower answer still reaches them by activating them again.
+    /// Only records the managed policy: enforcing it needs the installed plugins, see
+    /// `pluginsDidLoad()`. Until then plugins read the shared keys.
     func prepareForPluginActivation(policy: ManagedPolicySnapshot) async {
-        applyManagedPolicy(policy)
+        applyManagedPolicy(policy, enforcing: false)
         startObservingActivation()
         guard isEnabled else { return }
 
         vault.activate(keys: nil)
         let load = Task { await self.reloadSharedKeys(retryingAfterFailure: true) }
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { await load.value }
-            group.addTask { try? await Task.sleep(for: Self.launchWait) }
-            await group.next()
-            group.cancelAll()
-        }
+        await Self.waitForFirst(load, orAtMost: launchWait)
+    }
 
+    /// Runs after the plugin scan at launch, when `pluginKeys()` lists the installed plugins.
+    func pluginsDidLoad() {
+        enforceManagedPolicy()
+        guard isEnabled else { return }
         if defaults.bool(forKey: Self.pendingLocalCleanupKey) {
             enqueue { [weak self] in await self?.removeLocalCopies() }
         }
@@ -209,11 +212,38 @@ final class APIKeySyncService: ObservableObject {
     }
 
     /// Follows the managed settings: `AllowAPIKeySync` and both cloud keys.
-    func applyManagedPolicy(_ snapshot: ManagedPolicySnapshot) {
+    func applyManagedPolicy(_ snapshot: ManagedPolicySnapshot, enforcing: Bool = true) {
         managedConfigurationForbids = !ManagedAPIKeySyncPolicy.allowsAPIKeySync(snapshot)
+        if enforcing { enforceManagedPolicy() }
+    }
+
+    private func enforceManagedPolicy() {
         guard managedConfigurationForbids, isEnabled else { return }
         apiKeySyncLogger.info("The managed settings turn API key sync off")
         enqueue { [weak self] in await self?.turnOff() }
+    }
+
+    /// Returns when `task` finishes or `limit` has passed, whichever comes first. The task keeps
+    /// running either way.
+    private static func waitForFirst(_ task: Task<Void, Never>, orAtMost limit: Duration) async {
+        let resumed = OSAllocatedUnfairLock(initialState: false)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumeOnce: @Sendable () -> Void = {
+                let isFirst = resumed.withLock { wasResumed in
+                    defer { wasResumed = true }
+                    return !wasResumed
+                }
+                if isFirst { continuation.resume() }
+            }
+            Task {
+                await task.value
+                resumeOnce()
+            }
+            Task {
+                try? await Task.sleep(for: limit)
+                resumeOnce()
+            }
+        }
     }
 
     /// iCloud Keychain may have changed keys while the app was in the background.

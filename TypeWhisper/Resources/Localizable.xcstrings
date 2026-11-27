@@ -118,7 +118,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Deine Organisation lässt die API-Schlüssel nur auf diesem Mac."
+            "value" : "Deine Organisation sorgt dafür, dass die API-Schlüssel auf diesem Mac bleiben."
           }
         },
         "es" : {
@@ -130,13 +130,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "組織の設定により、APIキーはこのMacにのみ保存されます。"
+            "value" : "組織の設定により、APIキーはこのMacに保存されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的组织要求 API 密钥只保留在这台 Mac 上。"
+            "value" : "你的组织要求 API 密钥保留在这台 Mac 上。"
           }
         }
       }

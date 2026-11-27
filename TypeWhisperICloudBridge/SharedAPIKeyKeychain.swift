@@ -21,8 +21,10 @@ enum SharedAPIKeyItemFormat {
     static let pluginIdPrefix = "com.typewhisper."
     /// The one plugin secret that syncs. OAuth tokens and other secrets stay on this Mac.
     static let pluginSecretKey = "api-key"
-    /// Per-server keys: the key belongs to an address that is not in the Keychain.
-    static let neverSyncedAccounts: Set<String> = ["openai-compatible"]
+    /// Keys that belong to an address the user enters (a server, an Azure resource, a Cloudflare
+    /// endpoint). The address is not in the Keychain, so a synced key would reach another Mac
+    /// without it, or replace the key that belongs to that Mac's own address.
+    static let neverSyncedAccounts: Set<String> = ["openai-compatible", "microsoft-ai", "cloudflare-asr"]
     static let maximumAccountLength = 64
     static let maximumDisplayNameLength = 64
 
@@ -190,13 +192,10 @@ struct SystemSharedAPIKeyKeychain: Sendable {
         for attributes in attributeList {
             guard let account = attributes[kSecAttrAccount as String] as? String,
                   SharedAPIKeyItemFormat.isValidAccount(account),
-                  let value = try read(account: account) else {
+                  let item = try read(account: account) else {
                 continue
             }
-            items[account] = SharedAPIKeyStoredItem(
-                value: value,
-                modificationDate: attributes[kSecAttrModificationDate as String] as? Date
-            )
+            items[account] = item
         }
         return items
     }
@@ -243,16 +242,26 @@ struct SystemSharedAPIKeyKeychain: Sendable {
         }
     }
 
-    private func read(account: String) throws -> Data? {
+    /// Value and modification date from one lookup, so both describe the same version of an item
+    /// that another device may change at any moment.
+    private func read(account: String) throws -> SharedAPIKeyStoredItem? {
         var search = baseQuery(account: account)
         search[kSecReturnData as String] = true
+        search[kSecReturnAttributes as String] = true
         search[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var result: CFTypeRef?
         let status = SecItemCopyMatching(search as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw SharedAPIKeyStoreError.keychain(status) }
-        return result as? Data
+        guard let attributes = result as? [String: Any],
+              let value = attributes[kSecValueData as String] as? Data else {
+            return nil
+        }
+        return SharedAPIKeyStoredItem(
+            value: value,
+            modificationDate: attributes[kSecAttrModificationDate as String] as? Date
+        )
     }
 
     private func baseQuery(account: String? = nil) -> [String: Any] {

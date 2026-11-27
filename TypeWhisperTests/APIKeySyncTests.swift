@@ -58,6 +58,23 @@ private final class InMemorySharedAPIKeyStore: SharedAPIKeyStoring, @unchecked S
     }
 }
 
+/// Blocks every read until `release()`, like a bridge that does not answer.
+private final class BlockingSharedAPIKeyStore: SharedAPIKeyStoring, @unchecked Sendable {
+    private let gate = DispatchSemaphore(value: 0)
+    let isAvailable = true
+
+    func release() { gate.signal() }
+
+    func readAll() throws -> [String: SharedAPIKeyStoredItem] {
+        gate.wait()
+        gate.signal()
+        return ["groq": SharedAPIKeyStoredItem(value: Data("gsk-late".utf8), modificationDate: nil)]
+    }
+
+    func write(_ value: String, account: String, displayName: String) throws {}
+    func delete(account: String) throws {}
+}
+
 private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [String: LocalPluginSecret]
@@ -146,6 +163,8 @@ final class SharedAPIKeyItemFormatTests: XCTestCase {
         for pluginId in [
             "com.minerale.mistralai",
             "com.typewhisper.openai-compatible",
+            "com.typewhisper.microsoft-ai",
+            "com.typewhisper.cloudflare-asr",
             "com.typewhisper.",
             "com.typewhisper.Groq",
             "com.typewhisper.a..b",
@@ -276,7 +295,10 @@ final class APIKeySyncMigratorTests: XCTestCase {
 
         try migrator.copySharedKeysToLocal(plugins: [groq, openAI], keys: migrator.loadSharedKeys())
 
-        XCTAssertEqual(local.values, [groq.pluginId: "gsk-shared"])
+        XCTAssertEqual(local.values, [
+            groq.pluginId: "gsk-shared",
+            "com.typewhisper.assemblyai": "aai",
+        ], "keys of plugins that are not installed or did not load come back as well")
         XCTAssertEqual(shared.values, ["groq": "gsk-shared", "assemblyai": "aai"])
     }
 }
@@ -504,6 +526,52 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertTrue(service.vault.current.isActive)
         XCTAssertTrue(service.vault.current.isLoaded)
         XCTAssertEqual(service.vault.value(forAccount: "groq"), "gsk-shared")
+    }
+
+    func testAPolicyAtLaunchCopiesTheKeysBackOncePluginsHaveLoaded() async {
+        defaults.set("iCloudKeychain", forKey: APIKeySyncService.storageLocationKey)
+        shared.set("gsk-shared", account: "groq")
+        let service = makeService()
+        var pluginsLoaded = false
+        service.pluginKeys = { [groq, openAI] in pluginsLoaded ? [groq, openAI] : [] }
+
+        await service.prepareForPluginActivation(policy: policySnapshot(["AllowAPIKeySync": .boolean(false)]))
+        await service.waitForPendingOperation()
+        XCTAssertTrue(service.isEnabled, "nothing changes before the plugins are known")
+        XCTAssertEqual(service.vault.value(forAccount: "groq"), "gsk-shared")
+
+        pluginsLoaded = true
+        service.pluginsDidLoad()
+        await service.waitForPendingOperation()
+
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertEqual(local.values, [groq.pluginId: "gsk-shared"])
+        XCTAssertFalse(service.vault.current.isActive)
+    }
+
+    func testLaunchWaitsForIcloudKeychainAtMostTheLaunchWait() async {
+        defaults.set("iCloudKeychain", forKey: APIKeySyncService.storageLocationKey)
+        let blocking = BlockingSharedAPIKeyStore()
+        let service = APIKeySyncService(
+            defaults: defaults,
+            vault: SharedAPIKeyVault(store: blocking),
+            local: local,
+            storefrontCountryCode: { nil },
+            launchWait: .milliseconds(200)
+        )
+        service.reloadPlugins = { [unowned self] in reloaded.append($0) }
+
+        let started = Date()
+        await service.prepareForPluginActivation(policy: policySnapshot([:]))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        XCTAssertFalse(service.vault.current.isLoaded)
+
+        blocking.release()
+        for _ in 0..<100 where !service.vault.current.isLoaded {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(service.vault.value(forAccount: "groq"), "gsk-late")
+        XCTAssertEqual(reloaded, [["com.typewhisper.groq"]], "a late answer reaches the plugins")
     }
 
     func testThePolicyTurnsSyncOffAndItStaysOff() async {

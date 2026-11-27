@@ -223,6 +223,9 @@ final class SharedAPIKeyVault: @unchecked Sendable {
 
     let store: any SharedAPIKeyStoring
     private let state = OSAllocatedUnfairLock(initialState: State())
+    /// Orders saves, so iCloud Keychain and the copy end with the same value. Separate from
+    /// `state`, so reads never wait for a blocked write.
+    private let saveLock = NSLock()
 
     init(store: any SharedAPIKeyStoring) {
         self.store = store
@@ -247,6 +250,8 @@ final class SharedAPIKeyVault: @unchecked Sendable {
     /// Writes through to iCloud Keychain, then updates the copy. An empty value deletes the key
     /// on every device that syncs it.
     func save(_ value: String, account: String, displayName: String) throws {
+        saveLock.lock()
+        defer { saveLock.unlock() }
         if let data = SharedAPIKeyItemFormat.encode(value),
            let trimmed = SharedAPIKeyItemFormat.decode(data) {
             try store.write(trimmed, account: account, displayName: displayName)
