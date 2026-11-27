@@ -174,6 +174,8 @@
 		C23000000000000000000012 /* TypeWhisperFluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000017 /* TypeWhisperFluidAudio */; };
 		C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */; };
 		C23000000000000000000010 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
+		C23000000000000000000013 /* CoherePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000282 /* CoherePlugin.swift */; };
+		C23000000000000000000014 /* CoherePluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23000000000000000000015 /* CoherePluginTests.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
 		A17C69E6B6A43880D94B24FF /* DictationQuickSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836B1A400007048E1736246F /* DictationQuickSelectionTests.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */; };
@@ -1511,6 +1513,7 @@
 		7A1018FIX0000000000A002 /* PassiveRestoreSelectedEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PassiveRestoreSelectedEngineTests.swift; sourceTree = "<group>"; };
 		103600000000000000000002 /* MLXPluginModelStorageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MLXPluginModelStorageTests.swift; sourceTree = "<group>"; };
 		50F700000000000000000017 /* SOVTranscribePluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SOVTranscribePluginTests.swift; sourceTree = "<group>"; };
+		C23000000000000000000015 /* CoherePluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CoherePluginTests.swift; sourceTree = "<group>"; };
 		BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnippetServiceTests.swift; sourceTree = "<group>"; };
 		B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionTemperaturePersistenceTests.swift; sourceTree = "<group>"; };
 		FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptProcessingModelResolutionTests.swift; sourceTree = "<group>"; };
@@ -3677,6 +3680,7 @@
 				7A1018FIX0000000000A002 /* PassiveRestoreSelectedEngineTests.swift */,
 				103600000000000000000002 /* MLXPluginModelStorageTests.swift */,
 				50F700000000000000000017 /* SOVTranscribePluginTests.swift */,
+				C23000000000000000000015 /* CoherePluginTests.swift */,
 				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
 				545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */,
 				133200000000000000000001 /* SetupWizardEngineRecommendationTests.swift */,
@@ -5900,6 +5904,7 @@
 				PKIM00000000000000000003 /* ParakeetModelImport.swift in Sources */,
 				C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */,
 				C23000000000000000000010 /* DeepgramPlugin.swift in Sources */,
+				C23000000000000000000013 /* CoherePlugin.swift in Sources */,
 				C23000000000000000000003 /* LocalLLMPlugin.swift in Sources */,
 				C23000000000000000000004 /* LocalLLMSettingsView.swift in Sources */,
 				C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */,
@@ -5907,6 +5912,7 @@
 				7A1018FIX0000000000A001 /* PassiveRestoreSelectedEngineTests.swift in Sources */,
 				103600000000000000000001 /* MLXPluginModelStorageTests.swift in Sources */,
 				50F700000000000000000018 /* SOVTranscribePluginTests.swift in Sources */,
+				C23000000000000000000014 /* CoherePluginTests.swift in Sources */,
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */,

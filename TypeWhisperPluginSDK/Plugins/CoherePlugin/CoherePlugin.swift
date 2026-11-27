@@ -106,7 +106,7 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
             body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-            body.append(chunk.wavData)
+            body.append(Self.paddedWavData(chunk.samples))
             body.append("\r\n".data(using: .utf8)!)
 
             body.append("--\(boundary)--\r\n".data(using: .utf8)!)
@@ -148,6 +148,18 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
 
             return PluginTranscriptionResult(text: text, detectedLanguage: lang)
         }
+    }
+
+    /// Silence sent before and after the recording. Without it, Cohere Transcribe invented a sentence for
+    /// some recordings whose speech starts at the first sample: 19 of 60 Italian legal dictations in the
+    /// TypeWhisper benchmark, none with this padding.
+    static let silencePadding: TimeInterval = 0.5
+
+    /// The WAV the plugin uploads: `samples` (16 kHz mono) with `silencePadding` of silence before and after.
+    static func paddedWavData(_ samples: [Float]) -> Data {
+        let sampleRate = PluginAudioUploadEncoder.sampleRate
+        let silence = [Float](repeating: 0, count: Int(silencePadding * Double(sampleRate)))
+        return PluginWavEncoder.encode(silence + samples + silence, sampleRate: sampleRate)
     }
 
     /// The base ISO 639-1 code Cohere accepts for a host language code, or nil when there is none.
