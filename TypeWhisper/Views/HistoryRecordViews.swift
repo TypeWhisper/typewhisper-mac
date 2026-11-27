@@ -387,6 +387,10 @@ struct HistoryRecordDetailView: View {
             .foregroundStyle(.secondary)
             .accessibilityElement(children: .combine)
 
+            if let timing = record.dictationTimingForActiveText {
+                HistoryTimingLabel(dictationTiming: timing)
+            }
+
             DisclosureGroup(String(localized: "Details")) {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
                     metadataRow(
@@ -691,6 +695,65 @@ enum HistoryAccessibilityText {
             ja: "長さ \(spoken)",
             zh: "时长 \(spoken)",
             es: "Duración \(spoken)"
+        )
+    }
+}
+
+/// Processing times in History, shown only where they were measured.
+enum HistoryTimingText {
+    /// "Stop to transcript 1.2s · Workflow 0.8s" for a dictation on this Mac.
+    static func dictationParts(_ timing: HistoryDictationTiming, spoken: Bool) -> [String] {
+        var parts: [String] = []
+        if let seconds = timing.stopToTranscriptSeconds {
+            parts.append(String(format: String(localized: "history.timing.stopToTranscript"),
+                                formattedSeconds(seconds, spoken: spoken)))
+        }
+        if let seconds = timing.workflowSeconds {
+            parts.append(String(format: String(localized: "history.retranscribe.workflowTime"),
+                                formattedSeconds(seconds, spoken: spoken)))
+        }
+        return parts
+    }
+
+    /// "2.4s" or "3m 5s"; VoiceOver hears "2.4 seconds". Below 0.1 s shows 0.1 s, not 0.
+    static func formattedSeconds(_ seconds: Double, spoken: Bool) -> String {
+        let shown = max(seconds, 0.1)
+        return Duration.milliseconds(Int64((shown * 1_000).rounded())).formatted(.units(
+            allowed: [.hours, .minutes, .seconds], width: spoken ? .wide : .narrow, maximumUnitCount: 2,
+            fractionalPart: shown < 10 ? .show(length: 1) : .hide
+        ))
+    }
+}
+
+/// A stopwatch line with processing times, read by VoiceOver as one sentence with its help.
+struct HistoryTimingLabel: View {
+    let parts: [String]
+    let spokenParts: [String]
+    let help: String
+
+    var body: some View {
+        if !parts.isEmpty {
+            Label {
+                Text(parts.joined(separator: " · "))
+            } icon: {
+                Image(systemName: "stopwatch")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .help(help)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(spokenParts.joined(separator: ", "))
+            .accessibilityHint(help)
+        }
+    }
+}
+
+extension HistoryTimingLabel {
+    init(dictationTiming timing: HistoryDictationTiming) {
+        self.init(
+            parts: HistoryTimingText.dictationParts(timing, spoken: false),
+            spokenParts: HistoryTimingText.dictationParts(timing, spoken: true),
+            help: String(localized: "history.timing.dictationHelp")
         )
     }
 }

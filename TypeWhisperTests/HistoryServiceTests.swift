@@ -464,6 +464,28 @@ final class HistoryServiceTests: XCTestCase {
         )
     }
 
+    /// The entry keeps its dictation's times and shows them while the dictated text is in use.
+    @MainActor
+    func testDictationTimingIsStoredAndHiddenAfterAnotherRunIsChosen() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let id = UUID()
+        let timing = HistoryDictationTiming(stopToTranscriptSeconds: 0.6, workflowSeconds: 1.1)
+
+        service.addRecord(
+            id: id, rawText: "raw", finalText: "final", appName: nil, appBundleIdentifier: nil,
+            durationSeconds: 4, language: "en", engineUsed: "test", audioFileName: nil,
+            dictationTiming: timing
+        )
+
+        let record = try XCTUnwrap(service.record(withID: id))
+        XCTAssertEqual(record.dictationTimingForActiveText, timing)
+        record.activeTranscriptionVersionID = UUID()
+        XCTAssertNil(record.dictationTimingForActiveText)
+        XCTAssertEqual(record.dictationTiming, timing)
+    }
+
     @MainActor
     func testDiscardedAudioFileIsNotLeftBehindByABackgroundWrite() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

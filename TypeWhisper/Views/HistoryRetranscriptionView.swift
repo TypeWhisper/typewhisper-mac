@@ -454,19 +454,17 @@ struct HistoryRetranscriptionView: View {
 
     @ViewBuilder
     private func timing(_ version: HistoryTranscriptionVersion) -> some View {
-        let parts = timingParts(version, spoken: false)
-        if !parts.isEmpty {
-            Label {
-                Text(parts.joined(separator: " · "))
-            } icon: {
-                Image(systemName: "stopwatch")
+        // The original dictation was timed from the stop, not from handing a file to the engine.
+        if version.id == record.id {
+            if let timing = record.dictationTiming {
+                HistoryTimingLabel(dictationTiming: timing)
             }
-            .font(.caption).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .help(String(localized: "history.retranscribe.timingHelp"))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(timingParts(version, spoken: true).joined(separator: ", "))
-            .accessibilityHint(String(localized: "history.retranscribe.timingHelp"))
+        } else {
+            HistoryTimingLabel(
+                parts: timingParts(version, spoken: false),
+                spokenParts: timingParts(version, spoken: true),
+                help: String(localized: "history.retranscribe.timingHelp")
+            )
         }
     }
 
@@ -475,7 +473,7 @@ struct HistoryRetranscriptionView: View {
         var parts: [String] = []
         if let seconds = version.engineSeconds, seconds.isFinite, seconds > 0 {
             parts.append(String(format: String(localized: "history.retranscribe.engineTime"),
-                                Self.formattedSeconds(seconds, spoken: spoken)))
+                                HistoryTimingText.formattedSeconds(seconds, spoken: spoken)))
             let audioSeconds = record.durationSeconds
             if audioSeconds.isFinite, audioSeconds > 0 {
                 let factor = audioSeconds / seconds
@@ -485,18 +483,9 @@ struct HistoryRetranscriptionView: View {
         }
         if let seconds = version.workflowSeconds, seconds.isFinite, seconds >= 0 {
             parts.append(String(format: String(localized: "history.retranscribe.workflowTime"),
-                                Self.formattedSeconds(seconds, spoken: spoken)))
+                                HistoryTimingText.formattedSeconds(seconds, spoken: spoken)))
         }
         return parts
-    }
-
-    /// "2.4s" or "3m 5s"; VoiceOver hears "2.4 seconds". Below 0.1 s shows 0.1 s, not 0.
-    private static func formattedSeconds(_ seconds: Double, spoken: Bool) -> String {
-        let shown = max(seconds, 0.1)
-        return Duration.milliseconds(Int64((shown * 1_000).rounded())).formatted(.units(
-            allowed: [.hours, .minutes, .seconds], width: spoken ? .wide : .narrow, maximumUnitCount: 2,
-            fractionalPart: shown < 10 ? .show(length: 1) : .hide
-        ))
     }
 
     // MARK: Differences

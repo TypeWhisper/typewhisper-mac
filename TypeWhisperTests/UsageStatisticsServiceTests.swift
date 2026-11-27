@@ -315,6 +315,45 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(StatisticsViewModel.spokenTimeSaved(minutes: 2, locale: Locale(identifier: "de_DE")), "2 Minuten")
     }
 
+    /// Speech-to-text prices are per minute of audio, so the period's recorded time, its
+    /// change from the previous period and the time per day come from the stored durations.
+    @MainActor
+    func testRecordingTimeSumsThePeriodComparesItAndChartsItPerDay() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsRecordingTime")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Calendar.current
+        let usageStatisticsService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let today = calendar.date(byAdding: .hour, value: 9, to: calendar.startOfDay(for: Date()))!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let previousWeek = calendar.date(byAdding: .day, value: -8, to: today)!
+        for (timestamp, seconds) in [(today, 90.0), (today, 64.0), (yesterday, 600.0), (previousWeek, 377.0)] {
+            usageStatisticsService.recordTranscription(
+                timestamp: timestamp,
+                wordsCount: 10,
+                durationSeconds: seconds,
+                appBundleIdentifier: "com.example.editor"
+            )
+        }
+
+        let viewModel = StatisticsViewModel(usageStatisticsService: usageStatisticsService)
+        viewModel.selectedTimePeriod = .week
+        viewModel.refresh()
+
+        let english = Locale(identifier: "en_US")
+        XCTAssertEqual(viewModel.recordingTime, StatisticsViewModel.formattedRecordingTime(seconds: 754))
+        XCTAssertEqual(StatisticsViewModel.formattedRecordingTime(seconds: 754, locale: english), "12m 34s")
+        XCTAssertEqual(StatisticsViewModel.formattedRecordingTime(seconds: 754, spoken: true, locale: english),
+                       "12 minutes, 34 seconds")
+        XCTAssertEqual(viewModel.recordingTimeTrend ?? 0, 100, accuracy: 0.001)
+        XCTAssertEqual(viewModel.chartData.suffix(2).map(\.recordingSeconds), [600, 154])
+
+        usageStatisticsService.clearUsageStatistics()
+        viewModel.refresh()
+        XCTAssertEqual(viewModel.recordingTime, "—")
+        XCTAssertNil(viewModel.spokenRecordingTime)
+    }
+
     /// Statistics must stay fully populated even when history is disabled or has a short
     /// retention window, because the view model never reads `HistoryService` records - only the
     /// persistent usage-statistics snapshots, which are unaffected by history retention/purging.
