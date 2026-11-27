@@ -25,6 +25,23 @@ final class DictationLatencyTraceTests: XCTestCase {
         XCTAssertNil(trace.stopToVerifiedInsertionMs)
     }
 
+    /// History keeps the stop-to-transcript time, and the post-processing time only when a
+    /// Workflow ran, so a dictation without one shows no Workflow time.
+    func testHistoryTimingTakesTheWorkflowTimeOnlyWhenAWorkflowRan() {
+        var trace = trace()
+
+        XCTAssertEqual(
+            HistoryDictationTiming(trace: trace),
+            HistoryDictationTiming(stopToTranscriptSeconds: 0.4, workflowSeconds: nil)
+        )
+
+        trace.llmPostProcessing = true
+        XCTAssertEqual(
+            HistoryDictationTiming(trace: trace),
+            HistoryDictationTiming(stopToTranscriptSeconds: 0.4, workflowSeconds: 0.0125)
+        )
+    }
+
     func testPrerollDefaultsToZeroAndIsLogged() {
         var trace = trace()
 

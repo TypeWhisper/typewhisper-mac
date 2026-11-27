@@ -29,6 +29,8 @@ struct ActivityDataPoint: Identifiable {
     let id = UUID()
     let date: Date
     let wordCount: Int
+    /// Audio dictated that day, the basis of per-minute speech-to-text prices.
+    var recordingSeconds: Double = 0
 }
 
 struct AppUsageStat: Identifiable {
@@ -76,11 +78,17 @@ final class StatisticsViewModel: ObservableObject {
     /// Whole minutes behind `timeSaved`, or nil while there is no data. VoiceOver
     /// reads these with their unit, since "2m" alone can be read as two metres.
     @Published var timeSavedMinutes: Int?
+    /// Audio dictated in the period, such as "12m 34s"; "—" while there is none.
+    @Published var recordingTime: String = "—"
+    /// `recordingTime` with its units spelled out for VoiceOver, or nil while there is none.
+    @Published var spokenRecordingTime: String?
     @Published var chartData: [ActivityDataPoint] = []
+    @Published var transcriptionsTrend: Double?
     @Published var wordsTrend: Double?
     @Published var wpmTrend: Double?
     @Published var appsTrend: Double?
     @Published var timeSavedTrend: Double?
+    @Published var recordingTimeTrend: Double?
 
     var maxHourlyCount: Int { hourlyActivity.flatMap { $0 }.max() ?? 0 }
 
@@ -151,18 +159,31 @@ final class StatisticsViewModel: ObservableObject {
         appsUsed = stats.apps
         timeSaved = stats.timeSaved
         timeSavedMinutes = stats.savedMinutes
+        recordingTime = Self.formattedRecordingTime(seconds: stats.recordingSeconds) ?? "—"
+        spokenRecordingTime = Self.formattedRecordingTime(
+            seconds: stats.recordingSeconds,
+            spoken: true,
+            locale: HistoryAccessibilityText.locale
+        )
 
         if let days = selectedTimePeriod.days {
             let prevStats = computeStats(for: usageStatisticsService.previousPeriodSummary(days: days, endingAt: now))
+            transcriptionsTrend = Self.trendPercent(
+                current: Double(stats.transcriptions),
+                previous: Double(prevStats.transcriptions)
+            )
             wordsTrend = Self.trendPercent(current: Double(stats.words), previous: Double(prevStats.words))
             appsTrend = Self.trendPercent(current: Double(stats.apps), previous: Double(prevStats.apps))
             wpmTrend = Self.trendPercent(current: stats.rawWPM, previous: prevStats.rawWPM)
             timeSavedTrend = Self.trendPercent(current: stats.rawSavedMinutes, previous: prevStats.rawSavedMinutes)
+            recordingTimeTrend = Self.trendPercent(current: stats.recordingSeconds, previous: prevStats.recordingSeconds)
         } else {
+            transcriptionsTrend = nil
             wordsTrend = nil
             wpmTrend = nil
             appsTrend = nil
             timeSavedTrend = nil
+            recordingTimeTrend = nil
         }
 
         chartData = buildChartData(now: now)
@@ -171,6 +192,7 @@ final class StatisticsViewModel: ObservableObject {
     // MARK: - Words / WPM / apps / time-saved metrics
 
     private struct PeriodStats {
+        let transcriptions: Int
         let words: Int
         let wpm: String
         let rawWPM: Double
@@ -178,6 +200,7 @@ final class StatisticsViewModel: ObservableObject {
         let timeSaved: String
         let savedMinutes: Int?
         let rawSavedMinutes: Double
+        let recordingSeconds: Double
     }
 
     private func currentSummary(now: Date) -> UsageStatisticsSummary {
@@ -224,14 +247,31 @@ final class StatisticsViewModel: ObservableObject {
         }
 
         return PeriodStats(
+            transcriptions: summary.transcriptionCount,
             words: words,
             wpm: wpm,
             rawWPM: rawWPM,
             apps: apps,
             timeSaved: timeSaved,
             savedMinutes: savedMinutes,
-            rawSavedMinutes: rawSavedMinutes
+            rawSavedMinutes: rawSavedMinutes,
+            recordingSeconds: summary.durationSeconds
         )
+    }
+
+    /// "45s", "12m 34s" or "3h 26m" for the card and the chart, or with the units spelled out
+    /// for VoiceOver. Nil without recorded audio.
+    nonisolated static func formattedRecordingTime(
+        seconds: Double,
+        spoken: Bool = false,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String? {
+        guard seconds.isFinite, seconds > 0 else { return nil }
+        return Duration.seconds(max(1, Int64(seconds.rounded()))).formatted(.units(
+            allowed: [.hours, .minutes, .seconds],
+            width: spoken ? .wide : .narrow,
+            maximumUnitCount: 2
+        ).locale(locale))
     }
 
     /// "2 minutes" or "1 hour, 5 minutes" for the compact "2m" and "1h 5m" on the cards.
@@ -250,7 +290,7 @@ final class StatisticsViewModel: ObservableObject {
     private func buildChartData(now: Date) -> [ActivityDataPoint] {
         usageStatisticsService
             .dailyWordCounts(days: selectedTimePeriod.days, endingAt: now)
-            .map { ActivityDataPoint(date: $0.day, wordCount: $0.totalWords) }
+            .map { ActivityDataPoint(date: $0.day, wordCount: $0.totalWords, recordingSeconds: $0.totalDurationSeconds) }
     }
 
     // MARK: - Streaks

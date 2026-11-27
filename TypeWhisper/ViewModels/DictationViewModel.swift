@@ -1459,6 +1459,8 @@ final class DictationViewModel: ObservableObject {
         let audioSamples: [Float]?
         let pipelineSteps: [String]?
         let llmUsage: HistoryLLMUsage?
+        /// Stop to transcript and the Workflow's time, which History shows with the entry.
+        let timing: HistoryDictationTiming?
         /// Set when `.transcriptionCompleted` went out before persistence, so it is emitted once.
         var completionEventEmitted = false
     }
@@ -1583,6 +1585,7 @@ final class DictationViewModel: ObservableObject {
                 audioFileName: historyAudioFileName,
                 pipelineSteps: dictation.pipelineSteps,
                 llmUsage: dictation.llmUsage,
+                dictationTiming: dictation.timing,
                 capturedInClearGeneration: dictation.historyClearGeneration
             )
         }
@@ -3499,6 +3502,10 @@ final class DictationViewModel: ObservableObject {
                     trace.postProcessingDoneUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
                     trace.llmPostProcessing = modelPostProcessingRan.withLock { $0 }
                 }
+                // The same measurements as the "Dictation latency" log line, kept with the entry.
+                let dictationTiming = sessionID
+                    .flatMap { dictationLatencyTraces[$0] }
+                    .map(HistoryDictationTiming.init(trace:))
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()
                 recentTranscriptionStore.recordTranscription(
@@ -3829,7 +3836,8 @@ final class DictationViewModel: ObservableObject {
                         historyClearGeneration: historyService.clearGeneration,
                         audioSamples: audioSamplesForHistory,
                         pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps,
-                        llmUsage: llmUsage.usage
+                        llmUsage: llmUsage.usage,
+                        timing: dictationTiming
                     ),
                     pendingURLResolution: activeApp.url == nil ? pendingURLResolution : nil
                 )

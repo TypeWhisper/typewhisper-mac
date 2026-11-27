@@ -324,6 +324,7 @@ final class HistoryService: ObservableObject {
         audioFileName: String?,
         pipelineSteps: [String]? = nil,
         llmUsage: HistoryLLMUsage? = nil,
+        dictationTiming: HistoryDictationTiming? = nil,
         capturedInClearGeneration: Int? = nil
     ) -> Bool {
         let wasCleared = capturedInClearGeneration.map { $0 != clearGeneration } ?? false
@@ -355,7 +356,8 @@ final class HistoryService: ObservableObject {
             modelUsed: modelUsed,
             audioFileName: audioFileName,
             pipelineSteps: pipelineSteps,
-            llmUsage: llmUsage
+            llmUsage: llmUsage,
+            dictationTiming: dictationTiming
         )
         return true
     }
@@ -441,7 +443,8 @@ final class HistoryService: ObservableObject {
         modelUsed: String?,
         audioFileName: String?,
         pipelineSteps: [String]?,
-        llmUsage: HistoryLLMUsage?
+        llmUsage: HistoryLLMUsage?,
+        dictationTiming: HistoryDictationTiming? = nil
     ) {
         let record = TranscriptionRecord(
             id: id,
@@ -460,6 +463,8 @@ final class HistoryService: ObservableObject {
         record.pipelineStepList = pipelineSteps ?? []
         // Set before the first save so the first synchronized content carries it.
         record.llmUsage = llmUsage
+        record.dictationStopToTranscriptSeconds = dictationTiming?.stopToTranscriptSeconds
+        record.dictationWorkflowSeconds = dictationTiming?.workflowSeconds
         record.originDeviceID = historySyncPreferences?.deviceID ?? ""
         record.originPlatformRaw = "macOS"
         record.source = .mac
@@ -1624,6 +1629,12 @@ final class HistoryService: ObservableObject {
                     // A remote replacement has no known local version provenance.
                     // An unchanged sync echo can retain the active local source.
                     record.activeTranscriptionVersionID = nil
+                    // The dictation's times only stay where a saved original keeps its text.
+                    if !record.hasText(of: previousContent),
+                       (try? record.savedTranscriptionVersions())?.contains(where: { $0.id == record.id }) != true {
+                        record.dictationStopToTranscriptSeconds = nil
+                        record.dictationWorkflowSeconds = nil
+                    }
                 }
             case .upsertHistoryInbox(let inbox):
                 guard historySyncPreferences?.isSuppressed(inbox.recordID) != true else { continue }

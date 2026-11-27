@@ -464,6 +464,77 @@ final class HistoryServiceTests: XCTestCase {
         )
     }
 
+    /// The entry keeps its dictation's times and shows them while the dictated text is in use.
+    @MainActor
+    func testDictationTimingIsStoredAndHiddenAfterAnotherRunIsChosen() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let id = UUID()
+        let timing = HistoryDictationTiming(stopToTranscriptSeconds: 0.6, workflowSeconds: 1.1)
+
+        service.addRecord(
+            id: id, rawText: "raw", finalText: "final", appName: nil, appBundleIdentifier: nil,
+            durationSeconds: 4, language: "en", engineUsed: "test", audioFileName: nil,
+            dictationTiming: timing
+        )
+
+        let record = try XCTUnwrap(service.record(withID: id))
+        XCTAssertEqual(record.dictationTimingForActiveText, timing)
+        record.activeTranscriptionVersionID = UUID()
+        XCTAssertNil(record.dictationTimingForActiveText)
+        XCTAssertEqual(record.dictationTiming, timing)
+    }
+
+    /// Text another device synchronized did not come from this Mac's dictation, so its times
+    /// stop showing for it. A saved original keeps them for the comparison; an echo keeps them.
+    @MainActor
+    func testDictationTimingIsHiddenWhenSynchronizedTextReplacesTheDictation() throws {
+        for keepsSavedOriginal in [false, true] {
+            let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(appSupportDirectory) }
+            let suiteName = "HistoryDictationTimingSync-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let preferences = HistorySyncPreferences(defaults: defaults)
+            preferences.isEnabled = true
+            let service = HistoryService(appSupportDirectory: appSupportDirectory, historySyncPreferences: preferences)
+            let id = UUID()
+            let timing = HistoryDictationTiming(stopToTranscriptSeconds: 0.6, workflowSeconds: 1.1)
+            service.addRecord(
+                id: id, rawText: "raw", finalText: "final", appName: nil, appBundleIdentifier: nil,
+                durationSeconds: 4, language: "en", engineUsed: "test", audioFileName: nil,
+                dictationTiming: timing
+            )
+            let record = try XCTUnwrap(service.record(withID: id))
+            if keepsSavedOriginal {
+                try service.appendTranscriptionVersion(
+                    HistoryTranscriptionVersion(rawText: "other raw", finalText: "other final", engineID: "other"),
+                    to: record, expected: .capture(record)
+                )
+            }
+            // Alignment added after the dictation leaves its text, and so its times, in place.
+            record.timedTextGranularityRaw = TimedTextGranularity.word.rawValue
+            XCTAssertEqual(record.dictationTimingForActiveText, timing)
+
+            let echo = try XCTUnwrap(service.userDataSyncHistoryRecords().first).content
+            try service.applyUserDataSyncMutations([.upsertHistoryContent(echo)])
+            XCTAssertEqual(record.dictationTimingForActiveText, timing)
+
+            try service.applyUserDataSyncMutations([.upsertHistoryContent(UserDataSyncHistoryContentV1(
+                recordID: id, createdAt: echo.createdAt, updatedAt: echo.updatedAt.addingTimeInterval(60),
+                originDeviceID: echo.originDeviceID, originPlatform: echo.originPlatform, source: echo.source,
+                processingState: echo.processingState, rawTranscript: "raw", finalText: "edited on iPhone",
+                durationSeconds: echo.durationSeconds, detectedLanguage: echo.detectedLanguage,
+                engineDisplayName: echo.engineDisplayName
+            ))])
+
+            XCTAssertEqual(record.finalText, "edited on iPhone")
+            XCTAssertNil(record.dictationTimingForActiveText)
+            XCTAssertEqual(record.dictationTiming, keepsSavedOriginal ? timing : nil)
+        }
+    }
+
     @MainActor
     func testDiscardedAudioFileIsNotLeftBehindByABackgroundWrite() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

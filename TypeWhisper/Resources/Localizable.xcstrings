@@ -5482,6 +5482,76 @@
         }
       }
     },
+    "history.timing.dictationHelp" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop to transcript counts from when you stopped recording until the transcript was ready. For cloud engines that includes the upload and the wait. Workflow counts the text step after it."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stopp bis Transkript zählt vom Ende der Aufnahme bis zum fertigen Transkript. Bei Cloud-Engines gehören Upload und Wartezeit dazu. Workflow zählt den Textschritt danach."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcripción tras detener cuenta desde que detuviste la grabación hasta que la transcripción estuvo lista. En los motores en la nube incluye la subida y la espera. Flujo de trabajo cuenta el paso de texto posterior."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止から文字起こしまでは、録音を停止してから文字起こしが完成するまでの時間です。クラウドエンジンではアップロードと待ち時間を含みます。ワークフローはその後のテキスト処理の時間です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止到转写完成指从停止录音到转写文本就绪的时间。云端引擎包含上传和等待时间。工作流时间指之后的文本处理步骤。"
+          }
+        }
+      }
+    },
+    "history.timing.stopToTranscript" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop to transcript %@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stopp bis Transkript %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcripción tras detener %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止から文字起こしまで %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止到转写完成 %@"
+          }
+        }
+      }
+    },
     "history.retranscribe.workflowTime" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17766,7 +17836,35 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "活动图表：总计 %@，%@ 达到峰值 %@。"
+            "value" : "活动图表：总计 %1$@，%3$@ 达到峰值 %2$@。"
+          }
+        }
+      }
+    },
+    "Activity chart, no recording time in this period." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktivitätsdiagramm, keine Aufnahmezeit in diesem Zeitraum."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gráfico de actividad, sin tiempo de grabación en este periodo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクティビティチャート、この期間の録音時間はありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "活动图表，此时间段暂无录音时长。"
           }
         }
       }
@@ -53347,6 +53445,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "时间"
+          }
+        }
+      }
+    },
+    "Recording Time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmezeit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiempo de grabación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音時間"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音时长"
           }
         }
       }

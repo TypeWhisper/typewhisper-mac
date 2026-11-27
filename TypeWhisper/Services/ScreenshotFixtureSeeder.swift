@@ -324,6 +324,8 @@ extension ServiceContainer {
                     outputTokens: 18
                 ),
             ])
+            selectedRecord.dictationStopToTranscriptSeconds = 0.62
+            selectedRecord.dictationWorkflowSeconds = 1.14
             historyViewModel.requestRecordSelection([selectedRecord.id])
         }
         if AppConstants.screenshotState == "history-speakers" {
@@ -340,6 +342,7 @@ extension ServiceContainer {
                 : "We will move the release to friday. Please check. The German translation first."
             record.rawText = dictated
             record.finalText = dictated
+            record.dictationStopToTranscriptSeconds = 0.58
             var version = HistoryTranscriptionVersion(
                 createdAt: referenceDate.addingTimeInterval(120),
                 rawText: text, finalText: text, engineID: "parakeet", engineName: "Parakeet",

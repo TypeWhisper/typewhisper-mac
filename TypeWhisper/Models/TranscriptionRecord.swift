@@ -124,6 +124,12 @@ final class TranscriptionRecord {
     /// The LLM requests behind the text: `HistoryLLMUsage` as JSON. Nil when
     /// none were recorded, as for every entry made before this existed.
     var llmUsageData: Data?
+    /// Seconds from stopping this Mac's dictation until its transcript was ready, before any
+    /// Workflow. Kept on this device only. Nil for entries made before this existed and for
+    /// entries that were not dictated on this Mac, such as Recorder, imported or synced ones.
+    var dictationStopToTranscriptSeconds: Double?
+    /// Seconds the dictation's Workflow took after the transcript. Nil when no Workflow ran.
+    var dictationWorkflowSeconds: Double?
 
     var preview: String { String(finalText.prefix(100)) }
     var source: RecordingSource {
@@ -293,5 +299,61 @@ final class TranscriptionRecord {
         contentUpdatedAt = timestamp
         inboxUpdatedAt = timestamp
         audioUpdatedAt = timestamp
+    }
+}
+
+/// How long a dictation on this Mac took after the recording stopped, as History shows it.
+struct HistoryDictationTiming: Equatable, Sendable {
+    var stopToTranscriptSeconds: Double?
+    var workflowSeconds: Double?
+
+    /// Takes the measurements of a dictation's latency trace. The Workflow time counts only
+    /// when a Workflow processed the text; the rest of the pipeline takes no noticeable time.
+    init(trace: DictationLatencyTrace) {
+        self.init(
+            stopToTranscriptSeconds: trace.stopToFinalTranscriptMs.map { $0 / 1_000 },
+            workflowSeconds: trace.llmPostProcessing == true ? trace.postProcessingMs.map { $0 / 1_000 } : nil
+        )
+    }
+
+    init(stopToTranscriptSeconds: Double?, workflowSeconds: Double?) {
+        self.stopToTranscriptSeconds = Self.valid(stopToTranscriptSeconds)
+        self.workflowSeconds = Self.valid(workflowSeconds)
+    }
+
+    var isEmpty: Bool { stopToTranscriptSeconds == nil && workflowSeconds == nil }
+
+    private static func valid(_ seconds: Double?) -> Double? {
+        guard let seconds, seconds.isFinite, seconds >= 0 else { return nil }
+        return seconds
+    }
+}
+
+extension TranscriptionRecord {
+    /// The original dictation's timing, or nil when none was measured.
+    var dictationTiming: HistoryDictationTiming? {
+        let timing = HistoryDictationTiming(
+            stopToTranscriptSeconds: dictationStopToTranscriptSeconds,
+            workflowSeconds: dictationWorkflowSeconds
+        )
+        return timing.isEmpty ? nil : timing
+    }
+
+    /// The original dictation's timing while its text is the one in use; nil after another
+    /// run was chosen or synchronized text replaced it, since the times did not produce that text.
+    var dictationTimingForActiveText: HistoryDictationTiming? {
+        guard let timing = dictationTiming else { return nil }
+        if let activeID = activeTranscriptionVersionID, activeID != id { return nil }
+        // A saved original keeps the dictated text; a synchronized replacement clears the
+        // active version without matching it. Without saved versions, sync clears the times.
+        guard transcriptionVersionsData != nil,
+              let original = (try? savedTranscriptionVersions())?.first(where: { $0.id == id })
+        else { return timing }
+        // Only the text counts: speaker and alignment data can be added later without a new run.
+        return hasText(of: original) ? timing : nil
+    }
+
+    func hasText(of version: HistoryTranscriptionVersion) -> Bool {
+        version.rawText == rawText && version.finalText == finalText
     }
 }

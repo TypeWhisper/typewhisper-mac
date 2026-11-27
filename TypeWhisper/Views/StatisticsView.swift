@@ -8,6 +8,7 @@ struct StatisticsView: View {
     @State private var hoveredDate: Date?
     @State private var hoverLocation: CGPoint = .zero
     @State private var animateBars = false
+    @State private var activityMetric: StatisticsActivityMetric = .words
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -74,8 +75,14 @@ struct StatisticsView: View {
 
     // MARK: - Overview
 
+    /// Three columns keep the nine cards in full rows: the streak row, then the six metrics
+    /// that compare with the previous period.
+    private var cardColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    }
+
     private var overviewGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+        LazyVGrid(columns: cardColumns, spacing: 12) {
             StatisticsStatCard(
                 title: String(localized: "Days Active"),
                 value: "\(viewModel.totalDaysActive)",
@@ -93,24 +100,34 @@ struct StatisticsView: View {
                 systemImage: "trophy",
                 accessibilityValue: String.localizedStringWithFormat(String(localized: "%lld days"), viewModel.longestStreak)
             )
-            StatisticsStatCard(
-                title: String(localized: "Transcriptions"),
-                value: "\(viewModel.totalTranscriptions)",
-                systemImage: "waveform",
-                accessibilityValue: String.localizedStringWithFormat(String(localized: "%lld dictations"), viewModel.totalTranscriptions)
-            )
         }
     }
 
     // MARK: - Words / WPM / apps / time-saved metrics
 
     private var metricsGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+        LazyVGrid(columns: cardColumns, spacing: 12) {
+            StatisticsMetricCard(
+                title: String(localized: "Transcriptions"),
+                value: "\(viewModel.totalTranscriptions)",
+                systemImage: "waveform",
+                trend: viewModel.transcriptionsTrend,
+                accessibilityValue: String.localizedStringWithFormat(String(localized: "%lld dictations"), viewModel.totalTranscriptions)
+            )
             StatisticsMetricCard(
                 title: String(localized: "Words"),
                 value: "\(viewModel.wordsCount)",
                 systemImage: "text.word.spacing",
                 trend: viewModel.wordsTrend
+            )
+            // Speech-to-text services charge by the minute of audio, so this is what to
+            // multiply by a price.
+            StatisticsMetricCard(
+                title: String(localized: "Recording Time"),
+                value: viewModel.recordingTime,
+                systemImage: "mic",
+                trend: viewModel.recordingTimeTrend,
+                accessibilityValue: viewModel.spokenRecordingTime
             )
             StatisticsMetricCard(
                 title: String(localized: "Avg. WPM"),
@@ -142,11 +159,21 @@ struct StatisticsView: View {
     private var chartSection: some View {
         SettingsCard {
             VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "Activity"))
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
+                HStack {
+                    Text(String(localized: "Activity"))
+                        .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Picker(String(localized: "Activity"), selection: $activityMetric) {
+                        Text(String(localized: "Words")).tag(StatisticsActivityMetric.words)
+                        Text(String(localized: "Recording Time")).tag(StatisticsActivityMetric.recordingTime)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
 
-                if viewModel.chartData.isEmpty || viewModel.chartData.allSatisfy({ $0.wordCount == 0 }) {
+                if viewModel.chartData.allSatisfy({ chartValue($0) <= 0 }) {
                     Text(String(localized: "No activity in this period."))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 200)
@@ -155,7 +182,7 @@ struct StatisticsView: View {
                     Chart(viewModel.chartData) { point in
                         BarMark(
                             x: .value(String(localized: "Date"), point.date, unit: .day),
-                            y: .value(String(localized: "Words"), animateBars ? point.wordCount : 0)
+                            y: .value(chartValueLabel, animateBars ? chartValue(point) : 0)
                         )
                         .foregroundStyle(
                             hoveredDate != nil && Calendar.current.isDate(point.date, inSameDayAs: hoveredDate!)
@@ -168,6 +195,16 @@ struct StatisticsView: View {
                         AxisMarks(values: .stride(by: .day, count: chartAxisStride)) { _ in
                             AxisGridLine()
                             AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks(values: chartYAxisValues) { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let number = value.as(Double.self) {
+                                    Text(chartYAxisLabel(number))
+                                }
+                            }
                         }
                     }
                     .chartOverlay { proxy in
@@ -188,11 +225,11 @@ struct StatisticsView: View {
                                 }
                         }
                     }
-                    .id(viewModel.selectedTimePeriod)
+                    .id(chartIdentity)
                     .overlay(alignment: .topLeading) {
-                        if let hoveredDate, let point = viewModel.chartData.first(where: { Calendar.current.isDate($0.date, inSameDayAs: hoveredDate) }), point.wordCount > 0 {
+                        if let hoveredDate, let point = viewModel.chartData.first(where: { Calendar.current.isDate($0.date, inSameDayAs: hoveredDate) }), chartValue(point) > 0 {
                             VStack(spacing: 2) {
-                                Text(String.localizedStringWithFormat(String(localized: "%lld words"), point.wordCount))
+                                Text(chartTooltipValue(point))
                                     .font(.caption.bold())
                                     .monospacedDigit()
                                 Text(point.date.formatted(.dateTime.month(.abbreviated).day()))
@@ -215,6 +252,9 @@ struct StatisticsView: View {
                     .onChange(of: viewModel.selectedTimePeriod) { _, _ in
                         startBarAnimation()
                     }
+                    .onChange(of: activityMetric) { _, _ in
+                        startBarAnimation()
+                    }
                     .accessibilityElement(children: .ignore)
                     .accessibilityAddTraits(.isStaticText)
                     .accessibilityLabel(chartAccessibilitySummary)
@@ -223,13 +263,74 @@ struct StatisticsView: View {
         }
     }
 
+    /// Rebuilds the chart, and so its hover state, when the period or the metric changes.
+    private var chartIdentity: [String] {
+        [viewModel.selectedTimePeriod.rawValue, activityMetric.rawValue]
+    }
+
+    private func chartValue(_ point: ActivityDataPoint) -> Double {
+        switch activityMetric {
+        case .words: Double(point.wordCount)
+        case .recordingTime: point.recordingSeconds
+        }
+    }
+
+    private var chartValueLabel: String {
+        switch activityMetric {
+        case .words: String(localized: "Words")
+        case .recordingTime: String(localized: "Recording Time")
+        }
+    }
+
+    private func chartTooltipValue(_ point: ActivityDataPoint) -> String {
+        switch activityMetric {
+        case .words:
+            String.localizedStringWithFormat(String(localized: "%lld words"), point.wordCount)
+        case .recordingTime:
+            StatisticsViewModel.formattedRecordingTime(seconds: point.recordingSeconds) ?? ""
+        }
+    }
+
+    /// Recording time ticks fall on whole durations, such as every 5 minutes, instead of
+    /// the chart's decimal steps in seconds.
+    private var chartYAxisValues: AxisMarkValues {
+        switch activityMetric {
+        case .words: .automatic
+        case .recordingTime: .stride(by: recordingTimeTickInterval)
+        }
+    }
+
+    private func chartYAxisLabel(_ value: Double) -> String {
+        switch activityMetric {
+        case .words:
+            Int(value.rounded()).formatted()
+        case .recordingTime:
+            StatisticsViewModel.formattedRecordingTime(seconds: value) ?? 0.formatted()
+        }
+    }
+
+    private var chartPeak: Double {
+        viewModel.chartData.map(chartValue).max() ?? 0
+    }
+
+    /// The smallest whole interval that keeps the axis at four ticks or fewer.
+    private var recordingTimeTickInterval: Double {
+        let intervals: [Double] = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1_800, 3_600, 7_200, 10_800, 21_600]
+        let top = chartPeak * 1.15
+        return intervals.first { top / $0 <= 4 } ?? 43_200
+    }
+
     /// Fixed upper bound for the activity chart's y-axis (with a little headroom),
     /// so bars animate up into a stable axis rather than rescaling as they grow.
-    private var chartYMax: Int {
+    private var chartYMax: Double {
         // ~15% headroom above the tallest bar so it doesn't sit flush against the
         // top edge, and the axis stays stable while the bars animate up.
-        let peak = viewModel.chartData.map(\.wordCount).max() ?? 0
-        return max(Int((Double(peak) * 1.15).rounded(.up)), 1)
+        switch activityMetric {
+        case .words:
+            return max((chartPeak * 1.15).rounded(.up), 1)
+        case .recordingTime:
+            return max(chartPeak * 1.15, recordingTimeTickInterval)
+        }
     }
 
     /// Drops the activity bars to the baseline and animates them up. Runs on first
@@ -246,6 +347,13 @@ struct StatisticsView: View {
     }
 
     private var chartAccessibilitySummary: Text {
+        switch activityMetric {
+        case .words: wordsChartAccessibilitySummary
+        case .recordingTime: recordingTimeChartAccessibilitySummary
+        }
+    }
+
+    private var wordsChartAccessibilitySummary: Text {
         let totalWords = viewModel.chartData.reduce(0) { $0 + $1.wordCount }
         guard let peak = viewModel.chartData.max(by: { $0.wordCount < $1.wordCount }), peak.wordCount > 0 else {
             return Text(String(localized: "Activity chart, no words in this period."))
@@ -254,6 +362,22 @@ struct StatisticsView: View {
         let totalWordsPhrase = String.localizedStringWithFormat(String(localized: "%lld words"), totalWords)
         let peakWordsPhrase = String.localizedStringWithFormat(String(localized: "%lld words"), peak.wordCount)
         return Text(String(localized: "Activity chart, \(totalWordsPhrase) total, peak \(peakWordsPhrase) on \(peakDay)."))
+    }
+
+    private var recordingTimeChartAccessibilitySummary: Text {
+        let locale = HistoryAccessibilityText.locale
+        let total = viewModel.chartData.reduce(0) { $0 + $1.recordingSeconds }
+        guard let peak = viewModel.chartData.max(by: { $0.recordingSeconds < $1.recordingSeconds }),
+              let peakPhrase = StatisticsViewModel.formattedRecordingTime(
+                seconds: peak.recordingSeconds, spoken: true, locale: locale
+              ),
+              let totalPhrase = StatisticsViewModel.formattedRecordingTime(
+                seconds: total, spoken: true, locale: locale
+              ) else {
+            return Text(String(localized: "Activity chart, no recording time in this period."))
+        }
+        let peakDay = peak.date.formatted(.dateTime.month(.abbreviated).day())
+        return Text(String(localized: "Activity chart, \(totalPhrase) total, peak \(peakPhrase) on \(peakDay)."))
     }
 
     private var chartAxisStride: Int {
@@ -516,6 +640,12 @@ struct StatisticsView: View {
             .padding(.vertical, 8)
         }
     }
+}
+
+/// What the Activity chart shows per day.
+enum StatisticsActivityMetric: String, Hashable {
+    case words
+    case recordingTime
 }
 
 private struct StatisticsStatCard: View {
