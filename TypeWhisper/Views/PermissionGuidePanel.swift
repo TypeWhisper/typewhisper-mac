@@ -37,6 +37,8 @@ final class PermissionGuideController {
     private var watchTask: Task<Void, Never>?
     private var lastPlacedOrigin: NSPoint?
     private var userMovedPanel = false
+    /// Counts up with every guide, so a guide replaced during its confirmation leaves the new one alone.
+    private var guideID = 0
 
     /// Whether a guide is waiting for a permission.
     var isActive: Bool { watchTask != nil }
@@ -60,8 +62,10 @@ final class PermissionGuideController {
             ApplicationRelauncher.relaunch()
         }
         self.model = model
+        guideID += 1
+        let guideID = self.guideID
         watchTask = Task { [weak self] in
-            await self?.watch(isGranted: isGranted)
+            await self?.watch(guideID: guideID, isGranted: isGranted)
         }
     }
 
@@ -76,14 +80,14 @@ final class PermissionGuideController {
         userMovedPanel = false
     }
 
-    private func watch(isGranted: (@MainActor () -> Bool)?) async {
+    private func watch(guideID: Int, isGranted: (@MainActor () -> Bool)?) async {
         let start = ContinuousClock.now
         var settingsWasRunning = false
         var frontWithoutWindowTicks = 0
 
         while !Task.isCancelled {
             if let isGranted, isGranted() {
-                await finishAfterGrant()
+                await finishAfterGrant(guideID: guideID)
                 return
             }
 
@@ -114,18 +118,21 @@ final class PermissionGuideController {
         }
     }
 
-    private func finishAfterGrant() async {
+    private func finishAfterGrant(guideID: Int) async {
         let wasVisible = panel?.isVisible == true
-        let userIsInSettings = SystemSettingsWindowLocator.isFrontmost
         model?.isGranted = true
         if wasVisible {
-            // Long enough to read the confirmation before the panel goes away.
+            // Long enough to read the confirmation before the panel goes away. Closing the
+            // panel cuts this short; the grant still counts and the wizard still moves on.
             try? await Task.sleep(for: .milliseconds(1200))
         }
+        // A newer guide started meanwhile and owns the panel now.
+        guard guideID == self.guideID else { return }
         end()
 
-        // Only pulls TypeWhisper forward when the user is still in System Settings.
-        if userIsInSettings || SystemSettingsWindowLocator.isFrontmost {
+        // Only pulls TypeWhisper forward when the user is still in System Settings, not when
+        // they switched to another app during the confirmation.
+        if SystemSettingsWindowLocator.isFrontmost {
             _ = NSRunningApplication.current.activate()
             NSApp.activate(ignoringOtherApps: true)
         }
