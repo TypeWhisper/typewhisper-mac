@@ -1273,7 +1273,7 @@ private struct ElevenLabsSettingsView: View {
                             plugin.setUseDictionaryTerms(useDictionaryTerms)
                         }
 
-                        Text("Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra.", bundle: bundle)
+                        Text("Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

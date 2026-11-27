@@ -841,7 +841,7 @@ final class ElevenLabsPluginTests: XCTestCase {
             "Speaker count",
             "Choose Automatic or the maximum number of speakers (1–32). Applies to REST transcription only.",
             "Use TypeWhisper dictionary terms",
-            "Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra.",
+            "Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.",
             "With keyterms, %@ only shows the live preview: after you stop, batch REST transcribes the recording again for the final text, so both are billed and the text takes longer to appear. Without keyterms, the final text comes straight from %@. If batch REST fails, the realtime text without keyterms is used.",
             "Tuned for clinical audio, at the Scribe v2 price. Batch only, without realtime streaming.",
             "Auto streams while you dictate and falls back to batch REST. REST only avoids realtime concurrency limits and bills the batch rate.",

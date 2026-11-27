@@ -645,30 +645,30 @@
         }
       }
     },
-    "Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra.": {
+    "Sends up to 1,000 active dictionary terms to ElevenLabs as keyterms. Keyterms cost 20% extra. With more than 100 keyterms, each request is billed for at least 20 seconds of audio.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sendet bis zu 1.000 aktive Wörterbuchbegriffe als Schlüsselbegriffe an ElevenLabs. Schlüsselbegriffe kosten 20 % Aufschlag."
+            "value": "Sendet bis zu 1.000 aktive Wörterbuchbegriffe als Schlüsselbegriffe an ElevenLabs. Schlüsselbegriffe kosten 20 % Aufschlag. Bei mehr als 100 Schlüsselbegriffen wird jede Anfrage mit mindestens 20 Sekunden Audio abgerechnet."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Envía hasta 1000 términos activos del diccionario a ElevenLabs como términos clave. Los términos clave cuestan un 20 % más."
+            "value": "Envía hasta 1000 términos activos del diccionario a ElevenLabs como términos clave. Los términos clave cuestan un 20 % más. Con más de 100 términos clave, cada solicitud se factura como mínimo por 20 segundos de audio."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "有効な辞書の用語を最大1,000件、キータームとしてElevenLabsに送信します。キータームには20%の追加料金がかかります。"
+            "value": "有効な辞書の用語を最大1,000件、キータームとしてElevenLabsに送信します。キータームには20%の追加料金がかかります。キータームが100件を超えると、各リクエストは最低20秒分の音声として課金されます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "最多将 1,000 个启用的词典术语作为关键词发送给 ElevenLabs。关键词会加收 20% 的费用。"
+            "value": "最多将 1,000 个启用的词典术语作为关键词发送给 ElevenLabs。关键词会加收 20% 的费用。关键词超过 100 个时，每个请求至少按 20 秒音频计费。"
           }
         }
       }
