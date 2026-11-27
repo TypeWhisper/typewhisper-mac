@@ -120,8 +120,13 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         // A first-party plugin's `api-key` lives in iCloud Keychain while API key sync is on. The
         // vault decides where it goes, so turning sync on or off never misses the write.
         guard key == SharedAPIKeyItemFormat.pluginSecretKey,
-              let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
-              !apiKeyVault.keepsKeyLocal(pluginId) else {
+              let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId) else {
+            try writeLocally()
+            return
+        }
+        guard !apiKeyVault.keepsKeyLocal(pluginId) else {
+            // A custom server's key: turning sync on must notice it before it switches.
+            defer { apiKeyVault.noteLocalChange() }
             try writeLocally()
             return
         }
@@ -181,7 +186,11 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     func setUserDefault(_ value: Any?, forKey key: String) {
         let keptKeyLocal = apiKeyVault.keepsKeyLocal(pluginId)
         UserDefaults.standard.set(value, forKey: "plugin.\(pluginId).\(key)")
-        guard !keptKeyLocal, apiKeyVault.keepsKeyLocal(pluginId) else { return }
+        let keepsKeyLocal = apiKeyVault.keepsKeyLocal(pluginId)
+        guard keepsKeyLocal != keptKeyLocal else { return }
+        // Where the key lives changed; turning sync on must notice it before it switches.
+        defer { apiKeyVault.noteLocalChange() }
+        guard keepsKeyLocal else { return }
         // The plugin was just set to a custom server, so its key now lives on this Mac. While sync
         // is on, that copy does not exist yet: keep the shared key here, so the plugin stays
         // configured until the user enters the server's own key.

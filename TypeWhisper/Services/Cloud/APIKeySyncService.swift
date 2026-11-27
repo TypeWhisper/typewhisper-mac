@@ -95,17 +95,20 @@ struct APIKeySyncMigrator: Sendable {
     /// device's keys, so for them this Mac's key as it is now decides: a key saved meanwhile is
     /// uploaded, and a key deleted meanwhile puts back what iCloud Keychain held before.
     /// `mayUpload` is asked before every write to iCloud Keychain.
+    /// `keepsKeyLocal` is asked for each plugin when it is reached, so a plugin set to a custom
+    /// server while the copy runs is left alone.
     func copyLocalKeysToShared(
         plugins: [SyncablePluginKey],
         earlierUploads: [String: OwnUpload] = [:],
-        mayUpload: () -> Bool = { true }
+        mayUpload: () -> Bool = { true },
+        keepsKeyLocal: (_ pluginId: String) -> Bool = { _ in false }
     ) throws -> TurnOnResult {
         let sharedItems = try shared.readAll()
         var result = TurnOnResult(
             keys: sharedItems.compactMapValues { SharedAPIKeyItemFormat.decode($0.value) },
             ownUploads: earlierUploads
         )
-        for plugin in plugins {
+        for plugin in plugins where !keepsKeyLocal(plugin.pluginId) {
             let sharedValue = result.keys[plugin.account]
             let localItem = try local.read(pluginId: plugin.pluginId)
             let localValue = localItem.flatMap {
@@ -145,9 +148,12 @@ struct APIKeySyncMigrator: Sendable {
 
     /// Step 3 of turning sync on, retried at launch after a failure. Nothing reads these copies
     /// while sync is on.
-    func removeLocalCopies(plugins: [SyncablePluginKey]) throws {
+    func removeLocalCopies(
+        plugins: [SyncablePluginKey],
+        keepsKeyLocal: (_ pluginId: String) -> Bool = { _ in false }
+    ) throws {
         var firstError: Error?
-        for plugin in plugins {
+        for plugin in plugins where !keepsKeyLocal(plugin.pluginId) {
             do {
                 try local.delete(pluginId: plugin.pluginId)
             } catch {
@@ -418,7 +424,8 @@ final class APIKeySyncService: ObservableObject {
                     try migrator.copyLocalKeysToShared(
                         plugins: plugins,
                         earlierUploads: earlier,
-                        mayUpload: { gate.withLock { $0 } }
+                        mayUpload: { gate.withLock { $0 } },
+                        keepsKeyLocal: vault.keepsKeyLocal
                     )
                 }
                 ownUploads = result.ownUploads
@@ -498,8 +505,9 @@ final class APIKeySyncService: ObservableObject {
         guard isEnabled else { return }
         let plugins = pluginKeys()
         let migrator = migrator
+        let keepsKeyLocal = vault.keepsKeyLocal
         do {
-            try await Self.run { try migrator.removeLocalCopies(plugins: plugins) }
+            try await Self.run { try migrator.removeLocalCopies(plugins: plugins, keepsKeyLocal: keepsKeyLocal) }
             defaults.removeObject(forKey: Self.pendingLocalCleanupKey)
         } catch {
             defaults.set(true, forKey: Self.pendingLocalCleanupKey)

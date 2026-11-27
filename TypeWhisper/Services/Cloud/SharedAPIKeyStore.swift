@@ -301,6 +301,14 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         state.withLock { $0.keys[account] }
     }
 
+    /// Records a change that turning sync on must see before it switches: a plugin key written to
+    /// this Mac outside `storePluginKey`, or a plugin set to or away from a custom server.
+    func noteLocalChange() {
+        saveLock.lock()
+        defer { saveLock.unlock() }
+        state.withLock { $0.localWriteGeneration += 1 }
+    }
+
     /// The shared key of a plugin that was just set to a custom server, while sync is on, so the
     /// host can keep it on this Mac before the plugin reads its key from there.
     func sharedKeyToKeepLocally(pluginId: String) -> String? {

@@ -330,6 +330,24 @@ final class APIKeySyncMigratorTests: XCTestCase {
         XCTAssertTrue(shared.items.isEmpty)
     }
 
+    func testAPluginSetToACustomServerMeanwhileIsLeftAlone() throws {
+        let deepgram = plugin("deepgram")
+        let shared = InMemorySharedAPIKeyStore()
+        let local = InMemoryLocalSecretStore([
+            groq.pluginId: secret("gsk", 1),
+            deepgram.pluginId: secret("dg-custom-server", 1),
+        ])
+        let migrator = APIKeySyncMigrator(shared: shared, local: local)
+        let customServer: (String) -> Bool = { $0 == "com.typewhisper.deepgram" }
+
+        let result = try migrator.copyLocalKeysToShared(plugins: [groq, deepgram], keepsKeyLocal: customServer)
+        XCTAssertEqual(result.uploaded, ["groq"])
+        XCTAssertNil(shared.items["deepgram"], "a custom server's key never syncs")
+
+        try migrator.removeLocalCopies(plugins: [groq, deepgram], keepsKeyLocal: customServer)
+        XCTAssertEqual(local.values, [deepgram.pluginId: "dg-custom-server"])
+    }
+
     func testTurningOffCopiesKeysBackAndKeepsTheICloudCopies() throws {
         let shared = InMemorySharedAPIKeyStore(["groq": item("gsk-shared", 1), "assemblyai": item("aai", 1)])
         let local = InMemoryLocalSecretStore([openAI.pluginId: secret("sk-deleted-elsewhere", 1)])
