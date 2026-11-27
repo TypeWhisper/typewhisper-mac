@@ -2053,8 +2053,10 @@ final class WorkflowServiceTests: XCTestCase {
             Send
             """
         func hints(_ dictation: String) -> [String] {
-            ScreenContextService.spellingHints(dictation: dictation, screenText: screen)
-                .map { "\($0.dictated)→\($0.screen)" }
+            ScreenContextService.spellingHints(dictation: dictation, screenText: screen) {
+                ScreenContextService.isOrdinaryWord($0, languages: ["en"])
+            }
+            .map { "\($0.dictated)→\($0.screen)" }
         }
 
         XCTAssertEqual(hints("See you soon, Linda. Thanks, Steven and Ryan."), ["Linda→Lynda", "Steven→Stephen"])
@@ -2062,10 +2064,49 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(hints("Thanks, Herr Meier."), ["Meier→Mayer"])
         // Other vowels make other names, and Cyrillic names have no sound key to compare.
         XCTAssertEqual(hints("Please ask Tim, Jane and Анна about it."), [])
-        // Speech recognition capitalizes every sentence start, so it is no sign of a name.
-        XCTAssertEqual(hints("Mark my words. Linda will reply."), [])
+        // Speech recognition capitalizes every sentence start, so there only a name that is
+        // no ordinary word counts: "linda" is none in English, "mark" is one.
+        XCTAssertEqual(hints("Mark my words. Linda will reply."), ["Linda→Lynda"])
         // Lowercase words and spellings that are on screen already need no hint.
         XCTAssertEqual(hints("I'll mark it and see you soon, Lynda."), [])
+    }
+
+    func testScreenContextSpellingHintsPairNamesAtASentenceStartButNotOrdinaryWords() {
+        // Vision's text of a chat window with the conversation with Sofya open; it read the
+        // selected chat in the list as "Sotya".
+        let screen = """
+            Search or start a new chat
+            Sotya
+            Perfect, see you on Monday then
+            12:41
+            Marc Dubois
+            Can you send me the invoice again?
+            Sofya
+            last seen today at 12:41
+            Hi! Did you have a chance to look at the contract draft? 12:30
+            Type a message
+            """
+        func hints(_ dictation: String) -> [String] {
+            ScreenContextService.spellingHints(dictation: dictation, screenText: screen) {
+                ScreenContextService.isOrdinaryWord($0, languages: ["en"])
+            }
+            .map { "\($0.dictated)→\($0.screen)" }
+        }
+
+        XCTAssertEqual(hints("Sofia, I'll go through the contract tonight."), ["Sofia→Sofya"])
+        XCTAssertEqual(hints("Thanks. Sofia, see you on Monday."), ["Sofia→Sofya"])
+        XCTAssertEqual(hints("I'll send the draft to Sofia tonight."), ["Sofia→Sofya"])
+        // Whisper mostly writes the name as "Sophia"; ph and f are one sound.
+        XCTAssertEqual(hints("Sophia, I'll go through the contract tonight."), ["Sophia→Sofya"])
+        XCTAssertEqual(hints("Mark my words, they will sign it."), [])
+        XCTAssertEqual(hints("Sure. Mark the date in the calendar."), [])
+        XCTAssertTrue(
+            WorkflowTextProcessingService.screenContextInstruction(
+                screen,
+                dictation: "Sofia, can you send me the signed contract?",
+                dictationLanguage: "en"
+            ).contains("\n- \"Sofia\" → \"Sofya\"")
+        )
     }
 
     func testScreenContextPromptKeepsTheWindowEndAndListsNameSpellings() async throws {
