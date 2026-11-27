@@ -224,6 +224,24 @@ enum SharedAPIKeyEndpointPolicy {
     }
 }
 
+/// The plugin IDs waiting for a hand-off of the shared key, kept across launches. Plugin IDs only,
+/// never keys.
+enum PendingHandOffDefaults {
+    static let key = "apiKeySync.pendingHandOffs.v1"
+
+    static func load(from defaults: UserDefaults = .standard) -> Set<String> {
+        Set(defaults.stringArray(forKey: key) ?? [])
+    }
+
+    static func save(_ pluginIds: Set<String>, to defaults: UserDefaults = .standard) {
+        if pluginIds.isEmpty {
+            defaults.removeObject(forKey: key)
+        } else {
+            defaults.set(pluginIds.sorted(), forKey: key)
+        }
+    }
+}
+
 // MARK: - What plugins read while sync is on
 
 /// The keys `HostServicesImpl` hands to plugins while API key sync is on: a copy of the shared
@@ -231,7 +249,11 @@ enum SharedAPIKeyEndpointPolicy {
 /// changed by the app's own writes. Plugins read their key synchronously in `activate(host:)`,
 /// which is why a copy is needed. It is never written to disk.
 final class SharedAPIKeyVault: @unchecked Sendable {
-    static let shared = SharedAPIKeyVault(store: SharedAPIKeyStoreFactory.makeDefault())
+    static let shared = SharedAPIKeyVault(
+        store: SharedAPIKeyStoreFactory.makeDefault(),
+        initialPendingHandOffs: PendingHandOffDefaults.load(),
+        persistPendingHandOffs: { PendingHandOffDefaults.save($0) }
+    )
 
     struct State: Equatable, Sendable {
         /// Sync is on: the `api-key` of first-party plugins comes from here.
@@ -260,14 +282,21 @@ final class SharedAPIKeyVault: @unchecked Sendable {
     /// asking the user.
     private let saveLock = NSLock()
 
+    /// Receives the pending hand-offs after every change, so they survive a relaunch.
+    private let persistPendingHandOffs: (@Sendable (Set<String>) -> Void)?
+
     init(
         store: any SharedAPIKeyStoring,
         keepsKeyLocal: @escaping @Sendable (_ pluginId: String) -> Bool = {
             SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: $0)
-        }
+        },
+        initialPendingHandOffs: Set<String> = [],
+        persistPendingHandOffs: (@Sendable (Set<String>) -> Void)? = nil
     ) {
         self.store = store
         self.keepsKeyLocal = keepsKeyLocal
+        self.persistPendingHandOffs = persistPendingHandOffs
+        state.withLock { $0.pendingHandOffs = initialPendingHandOffs }
     }
 
     var current: State { state.withLock { $0 } }
@@ -323,15 +352,23 @@ final class SharedAPIKeyVault: @unchecked Sendable {
     /// Notes, inside `withLocalChange`, that a plugin set to a custom server waits for the shared
     /// key, or that it no longer does.
     func setPendingHandOff(_ pending: Bool, pluginId: String) {
-        state.withLock {
-            if pending { $0.pendingHandOffs.insert(pluginId) } else { $0.pendingHandOffs.remove(pluginId) }
+        let changed = state.withLock { state -> Set<String>? in
+            let before = state.pendingHandOffs
+            if pending { state.pendingHandOffs.insert(pluginId) } else { state.pendingHandOffs.remove(pluginId) }
+            return state.pendingHandOffs == before ? nil : state.pendingHandOffs
         }
+        if let changed { persistPendingHandOffs?(changed) }
     }
 
     /// Takes a plugin's pending hand-off; false when it was cancelled. Called inside
     /// `withLocalLock`, so it is ordered with the host's changes.
     func claimPendingHandOff(pluginId: String) -> Bool {
-        state.withLock { $0.pendingHandOffs.remove(pluginId) != nil }
+        let remaining = state.withLock { state -> Set<String>? in
+            state.pendingHandOffs.remove(pluginId) == nil ? nil : state.pendingHandOffs
+        }
+        guard let remaining else { return false }
+        persistPendingHandOffs?(remaining)
+        return true
     }
 
     /// Records a local change without the lock, for tests that act like a plugin from inside a
@@ -451,8 +488,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
             state = State(
                 generation: state.generation + 1,
                 localWriteGeneration: state.localWriteGeneration,
-                sharedWritesAllowed: state.sharedWritesAllowed
-                // Pending hand-offs end here; turning sync off completes them first.
+                sharedWritesAllowed: state.sharedWritesAllowed,
+                // Turning sync off completes them first; one the Keychain refused waits for the
+                // next time sync is on.
+                pendingHandOffs: state.pendingHandOffs
             )
         }
     }
@@ -468,8 +507,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
             state = State(
                 generation: state.generation + 1,
                 localWriteGeneration: state.localWriteGeneration,
-                sharedWritesAllowed: state.sharedWritesAllowed
-                // Pending hand-offs end here; turning sync off completes them first.
+                sharedWritesAllowed: state.sharedWritesAllowed,
+                // Turning sync off completes them first; one the Keychain refused waits for the
+                // next time sync is on.
+                pendingHandOffs: state.pendingHandOffs
             )
             return true
         }

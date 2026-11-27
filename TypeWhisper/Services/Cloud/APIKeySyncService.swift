@@ -174,6 +174,12 @@ struct APIKeySyncMigrator: Sendable {
                     if localValue != earlier.value {
                         try upload(localValue, replacing: earlier.previous, for: plugin, into: &result, log: log, admitUpload: admitUpload)
                     }
+                } else if earlier.previous == earlier.value {
+                    // Put back by a rollback: the key from before the switch, which this Mac does
+                    // not hold. It is received like any shared key.
+                    result.changed.insert(plugin.account)
+                    result.ownUploads[plugin.account] = nil
+                    log.record(nil, for: plugin.account)
                 } else {
                     try restore(earlier.previous, for: plugin, into: &result, log: log, admitUpload: admitUpload)
                 }
@@ -307,10 +313,13 @@ struct APIKeySyncMigrator: Sendable {
                 if let previous = upload.previous {
                     let name = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: nil)
                     try shared.write(previous, account: account, displayName: name)
+                    // The restored key gets a new modification date. Recorded as this switch's
+                    // own, so a retry lets this Mac's key decide again instead of the date.
+                    log.record(OwnUpload(value: previous, previous: previous), for: account)
                 } else {
                     try shared.delete(account: account)
+                    log.record(nil, for: account)
                 }
-                log.record(nil, for: account)
             } catch {
                 failed.insert(account)
             }

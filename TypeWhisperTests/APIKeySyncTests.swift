@@ -395,6 +395,24 @@ final class APIKeySyncMigratorTests: XCTestCase {
         XCTAssertEqual(result.ownUploads["groq"], .init(value: "gsk-y", previous: "gsk-b"))
     }
 
+    func testARolledBackKeyDoesNotWinByItsNewDate() throws {
+        let shared = InMemorySharedAPIKeyStore(["groq": item("gsk-older", 100)])
+        let local = InMemoryLocalSecretStore([groq.pluginId: secret("gsk-newer", 500)])
+        let migrator = APIKeySyncMigrator(shared: shared, local: local)
+        let log = APIKeySyncMigrator.OwnUploadLog()
+
+        _ = try migrator.copyLocalKeysToShared(plugins: [groq], log: log)
+        XCTAssertEqual(shared.values["groq"], "gsk-newer")
+        // The switch fails elsewhere and takes its upload back; the restored item gets a new date.
+        shared.modificationDate = .distantFuture
+        XCTAssertTrue(migrator.undoOwnUploads(log).isEmpty)
+        XCTAssertEqual(shared.values["groq"], "gsk-older")
+
+        let retry = try migrator.copyLocalKeysToShared(plugins: [groq], log: log)
+        XCTAssertEqual(shared.values["groq"], "gsk-newer", "the key that won before wins again")
+        XCTAssertEqual(retry.keys["groq"], "gsk-newer")
+    }
+
     func testTurningOffCopiesKeysBackAndKeepsTheICloudCopies() throws {
         let shared = InMemorySharedAPIKeyStore(["groq": item("gsk-shared", 1), "assemblyai": item("aai", 1)])
         let local = InMemoryLocalSecretStore([openAI.pluginId: secret("sk-deleted-elsewhere", 1)])
@@ -580,6 +598,31 @@ final class SharedAPIKeyRoutingTests: XCTestCase {
 
         XCTAssertThrowsError(try vault.storePluginKey("gsk", account: "groq", displayName: "Groq") {})
         XCTAssertTrue(shared.items.isEmpty)
+    }
+
+    func testPendingHandOffsSurviveARelaunch() {
+        let persisted = Received()
+        let persist: @Sendable (Set<String>) -> Void = { persisted.events = $0.sorted() }
+        let vault = SharedAPIKeyVault(store: InMemorySharedAPIKeyStore(), persistPendingHandOffs: persist)
+        vault.setPendingHandOff(true, pluginId: "com.typewhisper.deepgram")
+        XCTAssertEqual(persisted.events, ["com.typewhisper.deepgram"])
+
+        let relaunched = SharedAPIKeyVault(
+            store: InMemorySharedAPIKeyStore(),
+            initialPendingHandOffs: Set(persisted.events),
+            persistPendingHandOffs: persist
+        )
+        XCTAssertEqual(relaunched.current.pendingHandOffs, ["com.typewhisper.deepgram"])
+        XCTAssertTrue(relaunched.claimPendingHandOff(pluginId: "com.typewhisper.deepgram"))
+        XCTAssertEqual(persisted.events, [], "a completed hand-off is no longer kept")
+
+        let suite = "APIKeySyncTests.pending.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        PendingHandOffDefaults.save(["com.typewhisper.reson8"], to: defaults)
+        XCTAssertEqual(PendingHandOffDefaults.load(from: defaults), ["com.typewhisper.reson8"])
+        PendingHandOffDefaults.save([], to: defaults)
+        XCTAssertNil(defaults.object(forKey: PendingHandOffDefaults.key))
     }
 
     func testOtherSecretsAndOtherPublishersStayOnThisMac() {
