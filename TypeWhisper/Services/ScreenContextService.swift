@@ -178,12 +178,19 @@ extension ScreenContextService {
     /// even with the screen text in the prompt, but they follow an explicit pair.
     ///
     /// They follow it even where the word is no name ("Mark my words" with "Marc" on
-    /// screen), so the match is strict: only capitalized dictated words that do not start
-    /// a sentence count, because there speech recognition capitalizes names and not
-    /// ordinary words. The screen word must be capitalized as well, have the same sound
-    /// key and vowel sounds and differ by a few letters, the dictated spelling must not
-    /// appear on screen, and the screen must offer only one such spelling.
-    static func spellingHints(dictation: String, screenText: String) -> [SpellingHint] {
+    /// screen), so the match is strict: only capitalized dictated words count, because
+    /// within a sentence speech recognition capitalizes names and not ordinary words. A
+    /// word that starts a sentence is capitalized either way, so it counts only when
+    /// `isOrdinaryWord` says it is no ordinary word ("Sofia, can you…" but not "Mark my
+    /// words"). The screen word must be capitalized as well, have the same sound key and
+    /// vowel sounds and differ by a few letters, where letters for the same sound count as
+    /// one ("Sophia" and "Sofya"). The dictated spelling must not appear on screen, and the
+    /// screen must offer only one such spelling.
+    static func spellingHints(
+        dictation: String,
+        screenText: String,
+        isOrdinaryWord: (String) -> Bool
+    ) -> [SpellingHint] {
         let screenWords = words(in: screenText)
         let screenSpellings = Set(screenWords.map { $0.text.lowercased() })
         var namesByKey: [String: [String]] = [:]
@@ -199,16 +206,20 @@ extension ScreenContextService {
 
         var hints: [SpellingHint] = []
         var seen = Set<String>()
-        for word in words(in: dictation) where !word.startsSentence && isNameCandidate(word.text) {
+        for word in words(in: dictation) where isNameCandidate(word.text) {
             let dictated = word.text.lowercased()
-            guard !screenSpellings.contains(dictated), seen.insert(dictated).inserted else { continue }
+            guard !screenSpellings.contains(dictated), !seen.contains(dictated) else { continue }
             let vowels = vowelSounds(word.text)
+            let sounds = soundSpelling(word.text)
             let matches = (namesByKey[soundKey(word.text)] ?? []).filter { name in
                 let spelled = name.lowercased()
+                let distance = min(editDistance(dictated, spelled), editDistance(sounds, soundSpelling(name)))
                 return vowelSounds(name) == vowels
-                    && editDistance(dictated, spelled) <= (max(dictated.count, spelled.count) > 6 ? 3 : 2)
+                    && distance <= (max(dictated.count, spelled.count) > 6 ? 3 : 2)
             }
-            guard matches.count == 1 else { continue }
+            // The dictionary is asked last, and only for words that would pair.
+            guard matches.count == 1, !word.startsSentence || !isOrdinaryWord(word.text) else { continue }
+            seen.insert(dictated)
             hints.append(SpellingHint(dictated: word.text, screen: matches[0]))
             if hints.count == maxSpellingHints { break }
         }
@@ -217,6 +228,44 @@ extension ScreenContextService {
 
     private static func isNameCandidate(_ word: String) -> Bool {
         word.count >= 3 && word.first?.isUppercase == true
+    }
+
+    /// Whether `word` in lowercase is spelled correctly in one of `languages`, as "mark"
+    /// and "will" are in English. The spell checker knows names only capitalized, so
+    /// "sofia" and "steven" are no ordinary words. Some names are ("linda" in Spanish),
+    /// and then a sentence start gets no pair.
+    @MainActor
+    static func isOrdinaryWord(_ word: String, languages: [String]) -> Bool {
+        let checker = NSSpellChecker.shared
+        let lowercased = word.lowercased()
+        return languages.contains { language in
+            checker.checkSpelling(
+                of: lowercased,
+                startingAt: 0,
+                language: language,
+                wrap: false,
+                inSpellDocumentWithTag: 0,
+                wordCount: nil
+            ).location == NSNotFound
+        }
+    }
+
+    /// The spell checker languages for `isOrdinaryWord`: English, the dictation's language
+    /// and the user's preferred languages. A language the spell checker lacks is left out,
+    /// because the spell checker accepts every word in it. The dictation's language may be
+    /// a lowercase name, as the OpenAI API reports it ("english"), which `Locale` does not read.
+    @MainActor
+    static func ordinaryWordLanguages(dictationLanguage: String?) -> [String] {
+        let available = NSSpellChecker.shared.availableLanguages
+        var languages: [String] = []
+        for identifier in ["en", dictationLanguage].compactMap({ $0 }) + Locale.preferredLanguages {
+            guard let code = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(from: identifier)
+                      .flatMap({ Locale(identifier: $0).language.languageCode?.identifier }),
+                  let language = available.contains(code) ? code : available.first(where: { $0.hasPrefix(code + "_") }),
+                  !languages.contains(language) else { continue }
+            languages.append(language)
+        }
+        return languages
     }
 
     /// The words of `text`, each marked when it starts a sentence or a line.

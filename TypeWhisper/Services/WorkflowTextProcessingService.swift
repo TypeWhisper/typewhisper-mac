@@ -192,7 +192,12 @@ struct WorkflowTextProcessingService {
         screenContext: String? = nil
     ) async throws -> String {
         let screenContextBlock = workflow.usesScreenContext
-            ? Self.screenContextInstruction(screenContext, dictation: text)
+            ? Self.screenContextInstruction(
+                screenContext,
+                dictation: text,
+                dictationLanguage: Workflow.languageIdentifier(detectedLanguage)
+                    ?? Workflow.languageIdentifier(configuredLanguage)
+            )
             : ""
         if workflow.usesInlineCommands {
             let behavior = workflow.behavior
@@ -482,7 +487,11 @@ struct WorkflowTextProcessingService {
     /// contain anything, including instructions, so the prompt fences it off explicitly.
     /// Dictated names that sound like a differently spelled name on screen are listed
     /// after it (see `ScreenContextService.spellingHints`).
-    static func screenContextInstruction(_ screenContext: String?, dictation: String = "") -> String {
+    static func screenContextInstruction(
+        _ screenContext: String?,
+        dictation: String = "",
+        dictationLanguage: String? = nil
+    ) -> String {
         guard let screenContext = trimmedOrNil(screenContext) else { return "" }
         let fenced = ScreenContextService.promptExcerpt(screenContext)
             .replacingOccurrences(of: "</screen_context>", with: "")
@@ -495,7 +504,14 @@ struct WorkflowTextProcessingService {
             </screen_context>
             """
 
-        let hints = ScreenContextService.spellingHints(dictation: dictation, screenText: screenContext)
+        let hints = ScreenContextService.spellingHints(dictation: dictation, screenText: screenContext) { word in
+            ScreenContextService.isOrdinaryWord(
+                word,
+                languages: ScreenContextService.ordinaryWordLanguages(
+                    dictationLanguage: dictationLanguage ?? DictatedTextLanguage.identifier(of: dictation)
+                )
+            )
+        }
         if !hints.isEmpty {
             workflowTextProcessingLogger.info("Screen context: \(hints.count, privacy: .public) spelling hints")
             instruction += """
