@@ -127,6 +127,8 @@ enum SharedAPIKeyStoreError: LocalizedError, Codable, Equatable, Sendable {
     case timedOut
     /// The user kept a synced key instead of deleting it on every device.
     case deletionCancelled
+    /// Keys kept changing while sync was turned on or off; nothing changed.
+    case keysChangedDuringSwitch
 
     var errorDescription: String? {
         switch self {
@@ -140,6 +142,8 @@ enum SharedAPIKeyStoreError: LocalizedError, Codable, Equatable, Sendable {
             String(localized: "iCloud Keychain didn't answer in time. Try again in a moment.")
         case .deletionCancelled:
             String(localized: "The API key was kept.")
+        case .keysChangedDuringSwitch:
+            String(localized: "API keys changed while sync was switching. Try again.")
         }
     }
 
@@ -152,6 +156,7 @@ enum SharedAPIKeyStoreError: LocalizedError, Codable, Equatable, Sendable {
         case let .keychain(status): "OSStatus \(status)"
         case .timedOut: "timed out"
         case .deletionCancelled: "deletion cancelled"
+        case .keysChangedDuringSwitch: "keys changed during switch"
         }
     }
 }

@@ -1,6 +1,34 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "API keys changed while sync was switching. Try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schlüssel haben sich beim Umschalten der Synchronisierung geändert. Versuche es noch einmal."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las claves API cambiaron mientras se cambiaba la sincronización. Vuelve a intentarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期の切り替え中にAPIキーが変更されました。もう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换同步时 API 密钥发生了变化。请再试一次。"
+          }
+        }
+      }
+    },
     "Delete the %@ API Key?" : {
       "localizations" : {
         "de" : {

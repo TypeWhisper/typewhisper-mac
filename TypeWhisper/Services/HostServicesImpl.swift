@@ -108,26 +108,38 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
             return
         }
 
-        // While API key sync is on, a first-party plugin's `api-key` lives in iCloud Keychain.
-        if let account = apiKeyVault.routedAccount(pluginId: pluginId, key: key) {
-            let displayName = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: pluginName)
-            if SharedAPIKeyItemFormat.encode(value) == nil,
-               apiKeyVault.value(forAccount: account) != nil,
-               !confirmSharedKeyDeletion(displayName) {
-                sharedKeyDeletionCancelled(pluginId)
-                throw SharedAPIKeyStoreError.deletionCancelled
+        let scopedService = "\(pluginId).\(key)"
+        let writeLocally = {
+            if value.isEmpty {
+                try KeychainService.delete(service: scopedService)
+            } else {
+                try KeychainService.save(key: value, service: scopedService)
             }
-            try apiKeyVault.save(value, account: account, displayName: displayName)
-            return
         }
 
-        let scopedService = "\(pluginId).\(key)"
-        defer { apiKeyVault.noteLocalWrite(pluginId: pluginId, key: key) }
-        if value.isEmpty {
-            try KeychainService.delete(service: scopedService)
-        } else {
-            try KeychainService.save(key: value, service: scopedService)
+        // A first-party plugin's `api-key` lives in iCloud Keychain while API key sync is on. The
+        // vault decides where it goes, so turning sync on or off never misses the write.
+        guard key == SharedAPIKeyItemFormat.pluginSecretKey,
+              let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
+              !apiKeyVault.keepsKeyLocal(pluginId) else {
+            try writeLocally()
+            return
         }
+        let displayName = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: pluginName)
+        // Asked before the vault's lock is taken: the alert runs the main run loop.
+        if SharedAPIKeyItemFormat.encode(value) == nil,
+           apiKeyVault.routedAccount(pluginId: pluginId, key: key) != nil,
+           apiKeyVault.value(forAccount: account) != nil,
+           !confirmSharedKeyDeletion(displayName) {
+            sharedKeyDeletionCancelled(pluginId)
+            throw SharedAPIKeyStoreError.deletionCancelled
+        }
+        try apiKeyVault.storePluginKey(
+            value,
+            account: account,
+            displayName: displayName,
+            writeLocally: writeLocally
+        )
     }
 
     func loadSecret(key: String) -> String? {

@@ -37,13 +37,17 @@ private final class InMemorySharedAPIKeyStore: SharedAPIKeyStoring, @unchecked S
 
     /// Runs once, right after the next read took its values, like a change made in a plugin
     /// while the read was on its way back.
-    func afterNextRead(_ hook: @escaping @Sendable () -> Void) { lock.withLock { readHook = hook } }
+    func afterNextRead(_ hook: @escaping @Sendable () -> Void) { lock.withLock { readHook = hook; keepsHook = false } }
+    /// Like `afterNextRead`, for every read until `stopHook()`.
+    func afterEveryRead(_ hook: @escaping @Sendable () -> Void) { lock.withLock { readHook = hook; keepsHook = true } }
+    func stopHook() { lock.withLock { readHook = nil } }
     private var readHook: (@Sendable () -> Void)?
+    private var keepsHook = false
 
     func readAll() throws -> [String: SharedAPIKeyStoredItem] {
         let (items, hook) = try lock.withLock { () throws -> ([String: SharedAPIKeyStoredItem], (@Sendable () -> Void)?) in
             if failsReads { throw SharedAPIKeyStoreError.keychain(errSecInteractionNotAllowed) }
-            defer { readHook = nil }
+            defer { if !keepsHook { readHook = nil } }
             return (storage, readHook)
         }
         hook?()
@@ -99,13 +103,16 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
 
     /// Runs once, right after the next read took its value, like a plugin saving its key at
     /// that moment.
-    func afterNextRead(_ hook: @escaping @Sendable () -> Void) { lock.withLock { readHook = hook } }
+    func afterNextRead(_ hook: @escaping @Sendable () -> Void) { lock.withLock { readHook = hook; keepsHook = false } }
+    /// Like `afterNextRead`, for every read.
+    func afterEveryRead(_ hook: @escaping @Sendable () -> Void) { lock.withLock { readHook = hook; keepsHook = true } }
     private var readHook: (@Sendable () -> Void)?
+    private var keepsHook = false
 
     func read(pluginId: String) throws -> LocalPluginSecret? {
         let (secret, hook) = try lock.withLock { () throws -> (LocalPluginSecret?, (@Sendable () -> Void)?) in
             if failsReads { throw KeychainError.readFailed(errSecAuthFailed) }
-            defer { readHook = nil }
+            defer { if !keepsHook { readHook = nil } }
             return (storage[pluginId], readHook)
         }
         hook?()
@@ -655,8 +662,9 @@ final class APIKeySyncServiceTests: XCTestCase {
         let store = local!
         local.afterNextRead {
             // The plugin saves a new key while the copy runs; sync is not on yet.
-            store.write("gsk-new", pluginId: "com.typewhisper.groq")
-            vault.noteLocalWrite(pluginId: "com.typewhisper.groq", key: "api-key")
+            try? vault.storePluginKey("gsk-new", account: "groq", displayName: "Groq") {
+                store.write("gsk-new", pluginId: "com.typewhisper.groq")
+            }
         }
 
         service.setEnabled(true)
@@ -666,6 +674,85 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertEqual(shared.values["groq"], "gsk-new")
         XCTAssertEqual(service.vault.value(forAccount: "groq"), "gsk-new")
         XCTAssertTrue(local.secrets.isEmpty)
+    }
+
+    func testKeysThatKeepChangingLeaveSyncOffWhenTurningOn() async {
+        local.write("gsk-1", pluginId: groq.pluginId)
+        let service = makeService()
+        let vault = service.vault
+        let store = local!
+        local.afterEveryRead {
+            try? vault.storePluginKey("gsk-\(UUID().uuidString)", account: "groq", displayName: "Groq") {
+                store.write("gsk-\(UUID().uuidString)", pluginId: "com.typewhisper.groq")
+            }
+        }
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertFalse(service.vault.current.isActive)
+        XCTAssertNotNil(local.values[groq.pluginId], "this Mac keeps its key")
+        XCTAssertNotNil(service.errorMessage)
+    }
+
+    func testKeysThatKeepChangingLeaveSyncOnWhenTurningOff() async {
+        local.write("gsk-1", pluginId: groq.pluginId)
+        let service = makeService()
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+        let vault = service.vault
+        shared.afterEveryRead {
+            try? vault.save("gsk-\(UUID().uuidString)", account: "groq", displayName: "Groq")
+        }
+
+        service.setEnabled(false)
+        await service.waitForPendingOperation()
+        shared.stopHook()
+
+        XCTAssertTrue(service.isEnabled, "plugins keep using the shared keys")
+        XCTAssertTrue(service.vault.current.isActive)
+        XCTAssertNotNil(service.errorMessage)
+    }
+
+    func testAKeySavedAfterSyncTurnedOffGoesToThisMac() throws {
+        let vault = SharedAPIKeyVault(store: shared)
+        vault.activate(keys: ["groq": "gsk-shared"])
+        let generation = vault.current.generation
+        try vault.save("gsk-newer", account: "groq", displayName: "Groq")
+        XCTAssertFalse(vault.deactivate(ifGeneration: generation), "a key changed since the copy")
+        XCTAssertTrue(vault.deactivate(ifGeneration: vault.current.generation))
+
+        var wroteLocally = false
+        try vault.storePluginKey("gsk-late", account: "groq", displayName: "Groq") { wroteLocally = true }
+        XCTAssertTrue(wroteLocally)
+        XCTAssertEqual(shared.values["groq"], "gsk-newer")
+    }
+
+    func testReadsThatStayStaleAreRetriedLater() async {
+        defaults.set("iCloudKeychain", forKey: APIKeySyncService.storageLocationKey)
+        shared.set("sk-shared", account: "openai")
+        let service = APIKeySyncService(
+            defaults: defaults,
+            vault: SharedAPIKeyVault(store: shared),
+            local: local,
+            storefrontCountryCode: { nil },
+            retryDelay: .milliseconds(50)
+        )
+        let vault = service.vault
+        shared.afterEveryRead {
+            try? vault.save("gsk-\(UUID().uuidString)", account: "groq", displayName: "Groq")
+        }
+
+        await service.prepareForPluginActivation(policy: policySnapshot([:]))
+        XCTAssertFalse(service.vault.current.isLoaded)
+
+        shared.stopHook()
+        for _ in 0..<100 where !service.vault.current.isLoaded {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(service.vault.current.isLoaded)
+        XCTAssertEqual(service.vault.value(forAccount: "openai"), "sk-shared")
     }
 
     func testAPolicyArrivingWhileTurningOnKeepsSyncOff() async {

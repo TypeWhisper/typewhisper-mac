@@ -197,6 +197,7 @@ final class APIKeySyncService: ObservableObject {
     private let storefrontCountryCode: @Sendable () async -> String?
     private let now: () -> Date
     private let launchWait: Duration
+    private let retryDelay: Duration
     private var pendingOperation: Task<Void, Never>?
     private var activationObserver: NSObjectProtocol?
     private var lastActivationRefresh: Date?
@@ -207,10 +208,12 @@ final class APIKeySyncService: ObservableObject {
         local: any LocalPluginSecretStoring = KeychainPluginSecretStore(),
         storefrontCountryCode: @escaping @Sendable () async -> String? = APIKeySyncService.currentStorefrontCountryCode,
         now: @escaping () -> Date = Date.init,
-        launchWait: Duration = APIKeySyncService.defaultLaunchWait
+        launchWait: Duration = APIKeySyncService.defaultLaunchWait,
+        retryDelay: Duration = .seconds(30)
     ) {
         self.defaults = defaults
         self.launchWait = launchWait
+        self.retryDelay = retryDelay
         self.vault = vault
         migrator = APIKeySyncMigrator(shared: vault.store, local: local)
         self.storefrontCountryCode = storefrontCountryCode
@@ -331,23 +334,24 @@ final class APIKeySyncService: ObservableObject {
         let plugins = pluginKeys()
         let migrator = migrator
         do {
-            var result: APIKeySyncMigrator.TurnOnResult
-            var attempt = 0
-            repeat {
+            var activated: APIKeySyncMigrator.TurnOnResult?
+            for _ in 0..<Self.copyAttempts {
                 // A key saved while the copy runs goes to this Mac's Keychain and would be removed
                 // with the copies, so the copy runs again until no plugin wrote in between.
                 let localWrites = vault.current.localWriteGeneration
-                result = try await Self.run { try migrator.copyLocalKeysToShared(plugins: plugins) }
-                attempt += 1
-                if vault.current.localWriteGeneration == localWrites { break }
-            } while attempt < Self.copyAttempts
-            // The managed settings may have changed while the keys moved.
-            guard restriction == nil else {
-                apiKeySyncLogger.info("API key sync stays off: the managed settings changed while turning it on")
-                return
+                let result = try await Self.run { try migrator.copyLocalKeysToShared(plugins: plugins) }
+                // The managed settings may have changed while the keys moved.
+                guard restriction == nil else {
+                    apiKeySyncLogger.info("API key sync stays off: the managed settings changed while turning it on")
+                    return
+                }
+                if vault.activate(keys: result.keys, ifLocalWriteGeneration: localWrites) {
+                    activated = result
+                    break
+                }
             }
+            guard let result = activated else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
             save(enabled: true)
-            vault.activate(keys: result.keys)
             notifyChanged(result.changed)
             apiKeySyncLogger.info(
                 "API key sync on. Shared: \(Self.names(result.keys.keys), privacy: .public). Uploaded: \(Self.names(result.uploaded), privacy: .public). Received: \(Self.names(result.changed), privacy: .public)"
@@ -367,12 +371,13 @@ final class APIKeySyncService: ObservableObject {
         let migrator = migrator
         let keepsKeyLocal = vault.keepsKeyLocal
         do {
-            var keys: [String: String]
-            var attempt = 0
-            repeat {
+            var copiedKeys: [String: String]?
+            var inUse: [String: String] = [:]
+            for _ in 0..<Self.copyAttempts {
                 // A key saved while the copy runs goes to iCloud Keychain; copy again so this Mac
                 // does not keep the older one.
                 let snapshot = vault.current
+                let keys: [String: String]
                 do {
                     keys = try await Self.run { try migrator.loadSharedKeys() }
                 } catch let error where snapshot.isLoaded {
@@ -384,12 +389,15 @@ final class APIKeySyncService: ObservableObject {
                 try await Self.run {
                     try migrator.copySharedKeysToLocal(plugins: plugins, keys: copied, keepsKeyLocal: keepsKeyLocal)
                 }
-                attempt += 1
-                if vault.current.generation == snapshot.generation { break }
-            } while attempt < Self.copyAttempts
-            let inUse = vault.current.keys
+                inUse = vault.current.keys
+                if vault.deactivate(ifGeneration: snapshot.generation) {
+                    copiedKeys = keys
+                    break
+                }
+            }
+            // Sync stays on: plugins keep using the shared keys, nothing is lost.
+            guard let keys = copiedKeys else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
             save(enabled: false)
-            vault.deactivate()
             defaults.removeObject(forKey: Self.pendingLocalCleanupKey)
             let installed = Set(plugins.map(\.account))
             notifyChanged(SharedAPIKeyVault.changedAccounts(inUse, keys).intersection(installed))
@@ -429,14 +437,24 @@ final class APIKeySyncService: ObservableObject {
                 notifyChanged(changed)
                 return
             }
+            apiKeySyncLogger.notice("Shared API keys kept changing while reading them")
+            scheduleRetryWhileUnloaded()
         } catch {
             apiKeySyncLogger.error("Reading shared API keys failed: \(Self.technicalSummary(error), privacy: .public)")
             guard retryingAfterFailure else { return }
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(30))
-                guard let self, self.isEnabled, !self.vault.current.isLoaded else { return }
-                self.enqueue { [weak self] in await self?.reloadSharedKeys(retryingAfterFailure: false) }
-            }
+            scheduleRetryWhileUnloaded()
+        }
+    }
+
+    /// Reads once more later while plugins have no shared keys yet; a refresh on activation
+    /// covers the loaded case.
+    private func scheduleRetryWhileUnloaded() {
+        guard !vault.current.isLoaded else { return }
+        let delay = retryDelay
+        Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, self.isEnabled, !self.vault.current.isLoaded else { return }
+            self.enqueue { [weak self] in await self?.reloadSharedKeys(retryingAfterFailure: false) }
         }
     }
 

@@ -248,8 +248,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
     /// Whether a plugin's key stays on this Mac even while sync is on.
     let keepsKeyLocal: @Sendable (_ pluginId: String) -> Bool
     private let state = OSAllocatedUnfairLock(initialState: State())
-    /// Orders saves, so iCloud Keychain and the copy end with the same value. Separate from
-    /// `state`, so reads never wait for a blocked write.
+    /// Orders plugin writes with each other and with turning sync on or off, so a write lands
+    /// either before the switch (and the switch sees it) or after it (and goes where the switch
+    /// sent it). Separate from `state`, so reads never wait for a blocked write. Never held while
+    /// asking the user.
     private let saveLock = NSLock()
 
     init(
@@ -275,13 +277,22 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         return account
     }
 
-    /// Records that a plugin wrote its `api-key` to this Mac's Keychain.
-    func noteLocalWrite(pluginId: String, key: String) {
-        guard key == SharedAPIKeyItemFormat.pluginSecretKey,
-              SharedAPIKeyItemFormat.account(forPluginId: pluginId) != nil else {
-            return
+    /// Stores a plugin's `api-key` where it belongs at this moment: in iCloud Keychain while sync
+    /// is on, otherwise through `writeLocally`. Turning sync on or off waits for it.
+    func storePluginKey(
+        _ value: String,
+        account: String,
+        displayName: String,
+        writeLocally: () throws -> Void
+    ) throws {
+        saveLock.lock()
+        defer { saveLock.unlock() }
+        if state.withLock({ $0.isActive }) {
+            try saveLocked(value, account: account, displayName: displayName)
+        } else {
+            try writeLocally()
+            state.withLock { $0.localWriteGeneration += 1 }
         }
-        state.withLock { $0.localWriteGeneration += 1 }
     }
 
     func value(forAccount account: String) -> String? {
@@ -293,6 +304,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
     func save(_ value: String, account: String, displayName: String) throws {
         saveLock.lock()
         defer { saveLock.unlock() }
+        try saveLocked(value, account: account, displayName: displayName)
+    }
+
+    private func saveLocked(_ value: String, account: String, displayName: String) throws {
         if let data = SharedAPIKeyItemFormat.encode(value),
            let trimmed = SharedAPIKeyItemFormat.decode(data) {
             try store.write(trimmed, account: account, displayName: displayName)
@@ -324,6 +339,22 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         }
     }
 
+    /// Turns routing on with the keys of turning sync on, unless a plugin wrote its key to this
+    /// Mac since `localWriteGeneration`.
+    /// - Returns: false when the keys must be copied again.
+    func activate(keys: [String: String], ifLocalWriteGeneration localWriteGeneration: Int) -> Bool {
+        saveLock.lock()
+        defer { saveLock.unlock() }
+        return state.withLock { state in
+            guard state.localWriteGeneration == localWriteGeneration else { return false }
+            state.isActive = true
+            state.isLoaded = true
+            state.keys = keys
+            state.generation += 1
+            return true
+        }
+    }
+
     /// Replaces the copy with a fresh read unless a write happened since `generation`.
     /// - Returns: The accounts whose value changed, or nil when the read was dropped.
     func apply(_ keys: [String: String], ifGeneration generation: Int) -> Set<String>? {
@@ -343,6 +374,22 @@ final class SharedAPIKeyVault: @unchecked Sendable {
                 generation: state.generation + 1,
                 localWriteGeneration: state.localWriteGeneration
             )
+        }
+    }
+
+    /// Turns routing off unless a key changed since `generation`; later plugin writes go to this
+    /// Mac's Keychain.
+    /// - Returns: false when the keys must be copied again.
+    func deactivate(ifGeneration generation: Int) -> Bool {
+        saveLock.lock()
+        defer { saveLock.unlock() }
+        return state.withLock { state in
+            guard state.generation == generation else { return false }
+            state = State(
+                generation: state.generation + 1,
+                localWriteGeneration: state.localWriteGeneration
+            )
+            return true
         }
     }
 
