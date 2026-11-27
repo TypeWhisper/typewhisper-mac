@@ -207,9 +207,11 @@ struct KeychainPluginSecretStore: LocalPluginSecretStoring {
 /// A plugin key that belongs to a server address the user entered stays on this Mac, like the
 /// keys in `SharedAPIKeyItemFormat.neverSyncedAccounts`, but only while such an address is set.
 enum SharedAPIKeyEndpointPolicy {
-    /// The plugin default that holds a custom server address, by account.
+    /// The plugin default that holds a custom server address, by account. Region choices such as
+    /// Soniox's stay out: they select the provider's own servers, as on iOS, which syncs those keys.
     static let customEndpointDefaults: [String: String] = [
         "reson8": "customBaseURL",
+        "deepgram": "customBaseURL",
     ]
 
     static func keepsKeyLocal(pluginId: String, defaults: UserDefaults = .standard) -> Bool {

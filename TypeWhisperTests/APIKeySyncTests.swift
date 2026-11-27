@@ -814,6 +814,11 @@ final class APIKeySyncServiceTests: XCTestCase {
         endpointDefaults.set("https://speech.example.com", forKey: "plugin.com.typewhisper.reson8.customBaseURL")
         XCTAssertTrue(SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: "com.typewhisper.reson8", defaults: endpointDefaults))
         XCTAssertFalse(SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: "com.typewhisper.groq", defaults: endpointDefaults))
+        XCTAssertFalse(SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: "com.typewhisper.deepgram", defaults: endpointDefaults))
+        endpointDefaults.set("https://deepgram.example.com", forKey: "plugin.com.typewhisper.deepgram.customBaseURL")
+        XCTAssertTrue(SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: "com.typewhisper.deepgram", defaults: endpointDefaults))
+        endpointDefaults.set("eu", forKey: "plugin.com.typewhisper.soniox.selectedRegion")
+        XCTAssertFalse(SharedAPIKeyEndpointPolicy.keepsKeyLocal(pluginId: "com.typewhisper.soniox", defaults: endpointDefaults))
 
         let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: { $0 == "com.typewhisper.reson8" })
         vault.activate(keys: ["reson8": "r8-cloud"])
