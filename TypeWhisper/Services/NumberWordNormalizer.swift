@@ -15,8 +15,10 @@ enum NumberWordNormalizer {
     private static let hanApproximationPrefixes: Set<Character> = [
         "幾", "几", "數", "数", "上", "成",
     ]
-    private static let hanUnitCharacters: Set<Character> = [
-        "十", "百", "千", "万", "萬", "亿", "億",
+    private static let hanLargeUnitCharacters: Set<Character> = ["万", "萬", "亿", "億"]
+    private static let hanUnitCharacters = hanLargeUnitCharacters.union(["十", "百", "千"])
+    private static let hanFractionalDigitCharacters: Set<Character> = [
+        "零", "〇", "一", "二", "两", "兩", "三", "四", "五", "六", "七", "八", "九",
     ]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
@@ -261,13 +263,8 @@ enum NumberWordNormalizer {
                 if index > 1,
                    tokens[index - 1].kind == .other,
                    tokens[index - 1].text == ".",
-                   tokens[index - 2].kind == .digit {
-                    // A merged numeric run directly preceded by "<digits>."
-                    // belongs to a decimal fraction (1.5万, 2.3亿), not to
-                    // the large unit. The Han parsers cannot represent
-                    // fractional unit scaling yet, so leave the text
-                    // unchanged rather than producing a plausible-looking
-                    // wrong value such as 1.50000元.
+                   tokens[index - 2].kind == .digit,
+                   shouldPreserveHanRunAfterPeriod(wordTexts[0]) {
                     return nil
                 }
             }
@@ -430,6 +427,20 @@ enum NumberWordNormalizer {
         }
 
         return false
+    }
+
+    private static func shouldPreserveHanRunAfterPeriod(_ text: String) -> Bool {
+        guard let first = text.first else { return false }
+        // Don't rewrite fractional scaling (1.5万) or create a second
+        // decimal point in compact text such as 1.二點五.
+        if first.isASCII && first.isNumber { return true }
+        if text.contains("点") || text.contains("點") { return true }
+        guard hanFractionalDigitCharacters.contains(first) else { return false }
+
+        // Preserve possible fractional scaling (五万), but not Han
+        // cardinals with internal place values (二十, 一萬二千).
+        return text.drop(while: { hanFractionalDigitCharacters.contains($0) || ($0.isASCII && $0.isNumber) })
+            .allSatisfy { hanLargeUnitCharacters.contains($0) }
     }
 
     private static func isBareHanUnitRun(_ text: String) -> Bool {
