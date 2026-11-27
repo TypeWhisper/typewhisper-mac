@@ -846,6 +846,27 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertNil(service.errorMessage)
     }
 
+    func testAPolicyArrivingAtTheSwitchKeepsSyncOff() async {
+        local.write("gsk-mac", pluginId: groq.pluginId)
+        let service = makeService()
+        service.beforeSwitchForTesting = { [unowned service] in
+            // Applied after the last policy check of the copy, while the switch is under way.
+            Task { @MainActor in
+                service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
+            }
+        }
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+        await Task.yield()
+        await service.waitForPendingOperation()
+
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertFalse(service.vault.current.isActive)
+        XCTAssertEqual(local.values, [groq.pluginId: "gsk-mac"], "this Mac keeps its keys")
+        XCTAssertNil(defaults.string(forKey: APIKeySyncService.storageLocationKey))
+    }
+
     func testAKeySavedWhileTurningOffReachesThisMac() async {
         local.write("gsk-old", pluginId: groq.pluginId)
         let service = makeService()

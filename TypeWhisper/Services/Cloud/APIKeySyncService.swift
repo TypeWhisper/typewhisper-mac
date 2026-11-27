@@ -262,6 +262,8 @@ final class APIKeySyncService: ObservableObject {
     var pluginKeys: @MainActor () -> [SyncablePluginKey] = { [] }
     /// Activates plugins again whose key changed, because they read it in `activate(host:)`.
     var reloadPlugins: @MainActor (Set<String>) -> Void = { _ in }
+    /// Runs right before turning sync on switches the routing; tests change the policy there.
+    var beforeSwitchForTesting: (@MainActor () -> Void)?
 
     let vault: SharedAPIKeyVault
     private let defaults: UserDefaults
@@ -431,6 +433,7 @@ final class APIKeySyncService: ObservableObject {
                 ownUploads = result.ownUploads
                 // The managed settings may have changed while the keys moved.
                 guard restriction == nil else { throw APIKeySyncMigrator.Stopped() }
+                beforeSwitchForTesting?()
                 // Off the main actor: the switch waits for a plugin write that is under way.
                 let keys = result.keys
                 if try await Self.run({ vault.activate(keys: keys, ifLocalWriteGeneration: localWrites) }) {
@@ -439,6 +442,12 @@ final class APIKeySyncService: ObservableObject {
                 }
             }
             guard let result = activated else { throw SharedAPIKeyStoreError.keysChangedDuringSwitch }
+            // A policy that arrived during the switch: undo it in the same main-actor step that
+            // would save the setting, so no later policy check can miss it.
+            guard restriction == nil else {
+                vault.deactivate()
+                throw APIKeySyncMigrator.Stopped()
+            }
             save(enabled: true)
             notifyChanged(result.changed)
             apiKeySyncLogger.info(
