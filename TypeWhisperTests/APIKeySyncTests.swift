@@ -365,7 +365,7 @@ final class APIKeySyncMigratorTests: XCTestCase {
         let local = InMemoryLocalSecretStore([groq.pluginId: secret("gsk-y", 500)])
         let result = try APIKeySyncMigrator(shared: shared, local: local).copyLocalKeysToShared(
             plugins: [groq],
-            earlierUploads: ["groq": .init(value: "gsk-x", previous: "gsk-a")]
+            log: .init(["groq": .init(value: "gsk-x", previous: "gsk-a")])
         )
         XCTAssertEqual(shared.values["groq"], "gsk-y")
         XCTAssertEqual(result.ownUploads["groq"], .init(value: "gsk-y", previous: "gsk-b"))
@@ -805,6 +805,57 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertTrue(service.isEnabled)
         XCTAssertNil(shared.items["groq"], "the upload of the deleted key is undone")
         XCTAssertNil(service.vault.value(forAccount: "groq"))
+    }
+
+    func testAFailedTurnOnTakesBackItsUploads() async {
+        let deepgram = plugin("deepgram")
+        local.write("gsk", pluginId: groq.pluginId)
+        local.write("dg", pluginId: deepgram.pluginId)
+        shared.set("sk-iphone", account: "openai")
+        let service = makeService()
+        service.pluginKeys = { [groq] in [groq, deepgram] }
+        let store = local!
+        shared.afterNextWrite {
+            // Groq is uploaded; then reading Deepgram's key fails.
+            store.failReads(true)
+        }
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertNotNil(service.errorMessage)
+        XCTAssertEqual(shared.values, ["openai": "sk-iphone"], "iCloud Keychain is as the switch found it")
+        local.failReads(false)
+        XCTAssertEqual(local.values, [groq.pluginId: "gsk", deepgram.pluginId: "dg"])
+    }
+
+    func testACustomServerSetBeforeTheSharedKeysArriveGetsTheSharedKey() async {
+        defaults.set("iCloudKeychain", forKey: APIKeySyncService.storageLocationKey)
+        shared.set("dg-cloud", account: "deepgram")
+        shared.set("gsk-cloud", account: "groq")
+        let customServer: @Sendable (String) -> Bool = { $0 == "com.typewhisper.deepgram" || $0 == "com.typewhisper.groq" }
+        let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: customServer)
+        let service = APIKeySyncService(defaults: defaults, vault: vault, local: local, storefrontCountryCode: { nil })
+        service.reloadPlugins = { [unowned self] in reloaded.append($0) }
+        // What the host does when both are set to a custom server before the first read; the
+        // user then saves Groq's own key, which cancels its hand-off.
+        vault.activate(keys: nil)
+        vault.withLocalChange {
+            vault.setPendingHandOff(true, pluginId: "com.typewhisper.deepgram")
+            vault.setPendingHandOff(true, pluginId: "com.typewhisper.groq")
+        }
+        vault.withLocalChange {
+            vault.setPendingHandOff(false, pluginId: "com.typewhisper.groq")
+            local.write("gsk-own-server", pluginId: "com.typewhisper.groq")
+        }
+
+        await service.prepareForPluginActivation(policy: policySnapshot([:]))
+
+        XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-cloud")
+        XCTAssertEqual(local.values["com.typewhisper.groq"], "gsk-own-server")
+        XCTAssertTrue(reloaded.contains(["com.typewhisper.deepgram"]))
+        XCTAssertTrue(service.vault.current.pendingHandOffs.isEmpty)
     }
 
     func testKeysThatKeepChangingLeaveSyncOffWhenTurningOn() async {

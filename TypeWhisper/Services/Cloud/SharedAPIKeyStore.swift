@@ -245,6 +245,9 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         /// notices an edit made while it copied the keys.
         var localWriteGeneration = 0
         var sharedWritesAllowed = true
+        /// Plugins set to a custom server before the shared keys were read; they get the shared
+        /// key on this Mac once it is read, unless they got a key of their own meanwhile.
+        var pendingHandOffs: Set<String> = []
     }
 
     let store: any SharedAPIKeyStoring
@@ -315,6 +318,20 @@ final class SharedAPIKeyVault: @unchecked Sendable {
             saveLock.unlock()
         }
         return try body()
+    }
+
+    /// Notes, inside `withLocalChange`, that a plugin set to a custom server waits for the shared
+    /// key, or that it no longer does.
+    func setPendingHandOff(_ pending: Bool, pluginId: String) {
+        state.withLock {
+            if pending { $0.pendingHandOffs.insert(pluginId) } else { $0.pendingHandOffs.remove(pluginId) }
+        }
+    }
+
+    /// Takes a plugin's pending hand-off; false when it was cancelled. Called inside
+    /// `withLocalLock`, so it is ordered with the host's changes.
+    func claimPendingHandOff(pluginId: String) -> Bool {
+        state.withLock { $0.pendingHandOffs.remove(pluginId) != nil }
     }
 
     /// Runs a copy step's look at one plugin, ordered with `withLocalChange`.
@@ -415,6 +432,7 @@ final class SharedAPIKeyVault: @unchecked Sendable {
                 generation: state.generation + 1,
                 localWriteGeneration: state.localWriteGeneration,
                 sharedWritesAllowed: state.sharedWritesAllowed
+                // Pending hand-offs end here; turning sync off completes them first.
             )
         }
     }
@@ -431,6 +449,7 @@ final class SharedAPIKeyVault: @unchecked Sendable {
                 generation: state.generation + 1,
                 localWriteGeneration: state.localWriteGeneration,
                 sharedWritesAllowed: state.sharedWritesAllowed
+                // Pending hand-offs end here; turning sync off completes them first.
             )
             return true
         }

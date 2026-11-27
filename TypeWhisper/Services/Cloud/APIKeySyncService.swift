@@ -80,6 +80,23 @@ struct APIKeySyncMigrator: Sendable {
     /// Thrown when uploads must stop, such as when a managed setting forbids sync mid-copy.
     struct Stopped: Error {}
 
+    /// This switch's uploads, recorded as they happen, so they survive a copy step that fails
+    /// partway and can be undone.
+    final class OwnUploadLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var uploads: [String: OwnUpload]
+
+        init(_ uploads: [String: OwnUpload] = [:]) {
+            self.uploads = uploads
+        }
+
+        var current: [String: OwnUpload] { lock.withLock { uploads } }
+
+        func record(_ upload: OwnUpload?, for account: String) {
+            lock.withLock { uploads[account] = upload }
+        }
+    }
+
     let shared: any SharedAPIKeyStoring
     let local: any LocalPluginSecretStoring
     /// Runs one plugin's look at its custom-server setting and its key on this Mac as a single
@@ -94,18 +111,20 @@ struct APIKeySyncMigrator: Sendable {
     /// has is received. Two different keys: the newer modification date wins, and without both
     /// dates iCloud Keychain wins. Throws at the first failed read or write.
     ///
-    /// `earlierUploads` are this switch's uploads from an earlier attempt. They are not another
-    /// device's keys, so for them this Mac's key as it is now decides: a key saved meanwhile is
-    /// uploaded, and a key deleted meanwhile puts back what iCloud Keychain held before.
+    /// `log` holds this switch's uploads from earlier attempts and receives this attempt's. They
+    /// are not another device's keys, so for them this Mac's key as it is now decides: a key saved
+    /// meanwhile is uploaded, and a key deleted meanwhile puts back what iCloud Keychain held
+    /// before.
     /// `mayUpload` is asked before every write to iCloud Keychain.
     /// `keepsKeyLocal` is asked for each plugin when it is reached, so a plugin set to a custom
     /// server while the copy runs is left alone.
     func copyLocalKeysToShared(
         plugins: [SyncablePluginKey],
-        earlierUploads: [String: OwnUpload] = [:],
+        log: OwnUploadLog = OwnUploadLog(),
         mayUpload: () -> Bool = { true },
         keepsKeyLocal: (_ pluginId: String) -> Bool = { _ in false }
     ) throws -> TurnOnResult {
+        let earlierUploads = log.current
         let sharedItems = try shared.readAll()
         var result = TurnOnResult(
             keys: sharedItems.compactMapValues { SharedAPIKeyItemFormat.decode($0.value) },
@@ -127,10 +146,10 @@ struct APIKeySyncMigrator: Sendable {
             if let earlier = earlierUploads[plugin.account], sharedValue == earlier.value {
                 if let localValue {
                     if localValue != earlier.value {
-                        try upload(localValue, replacing: earlier.previous, for: plugin, into: &result, mayUpload: mayUpload)
+                        try upload(localValue, replacing: earlier.previous, for: plugin, into: &result, log: log, mayUpload: mayUpload)
                     }
                 } else {
-                    try restore(earlier.previous, for: plugin, into: &result, mayUpload: mayUpload)
+                    try restore(earlier.previous, for: plugin, into: &result, log: log, mayUpload: mayUpload)
                 }
                 continue
             }
@@ -140,14 +159,14 @@ struct APIKeySyncMigrator: Sendable {
                 continue
             }
             guard let sharedValue else {
-                try upload(localValue, replacing: nil, for: plugin, into: &result, mayUpload: mayUpload)
+                try upload(localValue, replacing: nil, for: plugin, into: &result, log: log, mayUpload: mayUpload)
                 continue
             }
             guard sharedValue != localValue else { continue }
             if let localDate = localItem.modificationDate,
                let sharedDate = sharedItems[plugin.account]?.modificationDate,
                localDate > sharedDate {
-                try upload(localValue, replacing: sharedValue, for: plugin, into: &result, mayUpload: mayUpload)
+                try upload(localValue, replacing: sharedValue, for: plugin, into: &result, log: log, mayUpload: mayUpload)
             } else {
                 result.changed.insert(plugin.account)
             }
@@ -206,6 +225,7 @@ struct APIKeySyncMigrator: Sendable {
         replacing previous: String?,
         for plugin: SyncablePluginKey,
         into result: inout TurnOnResult,
+        log: OwnUploadLog,
         mayUpload: () -> Bool
     ) throws {
         guard mayUpload() else { throw Stopped() }
@@ -214,7 +234,9 @@ struct APIKeySyncMigrator: Sendable {
         result.uploaded.insert(plugin.account)
         // The caller passes the key this upload replaces: the one from before the switch when it
         // replaces this switch's own upload, otherwise the shared key it found.
-        result.ownUploads[plugin.account] = OwnUpload(value: value, previous: previous)
+        let upload = OwnUpload(value: value, previous: previous)
+        result.ownUploads[plugin.account] = upload
+        log.record(upload, for: plugin.account)
     }
 
     /// Undoes this switch's upload of a key that was deleted on this Mac meanwhile.
@@ -222,6 +244,7 @@ struct APIKeySyncMigrator: Sendable {
         _ previous: String?,
         for plugin: SyncablePluginKey,
         into result: inout TurnOnResult,
+        log: OwnUploadLog,
         mayUpload: () -> Bool
     ) throws {
         guard mayUpload() else { throw Stopped() }
@@ -233,7 +256,60 @@ struct APIKeySyncMigrator: Sendable {
         result.keys[plugin.account] = previous
         result.uploaded.remove(plugin.account)
         result.ownUploads[plugin.account] = nil
+        log.record(nil, for: plugin.account)
         if previous != nil { result.changed.insert(plugin.account) }
+    }
+
+    /// Undoes this switch's uploads after it failed, so a failed switch leaves iCloud Keychain as
+    /// it found it and a later switch cannot mistake an upload for another device's key. An item
+    /// that changed since the upload belongs to another device and stays. Best effort.
+    /// - Returns: The accounts that could not be put back.
+    @discardableResult
+    func undoOwnUploads(_ log: OwnUploadLog) -> Set<String> {
+        let uploads = log.current
+        guard !uploads.isEmpty, let current = try? loadSharedKeys() else { return Set(uploads.keys) }
+        var failed = Set<String>()
+        for (account, upload) in uploads where current[account] == upload.value {
+            do {
+                if let previous = upload.previous {
+                    let name = SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: nil)
+                    try shared.write(previous, account: account, displayName: name)
+                } else {
+                    try shared.delete(account: account)
+                }
+                log.record(nil, for: account)
+            } catch {
+                failed.insert(account)
+            }
+        }
+        return failed
+    }
+
+    /// Gives plugins that were set to a custom server before the shared keys were read the shared
+    /// key once, on this Mac, unless they got a key of their own meanwhile. `claim` takes a
+    /// plugin's pending hand-off and returns false when it was cancelled.
+    /// - Returns: The plugins that received a key.
+    func completeHandOffs(
+        _ pluginIds: Set<String>,
+        keys: [String: String],
+        claim: (_ pluginId: String) -> Bool,
+        keepsKeyLocal: (_ pluginId: String) -> Bool
+    ) throws -> Set<String> {
+        var handedOff = Set<String>()
+        for pluginId in pluginIds.sorted() {
+            try serializeLocal {
+                guard claim(pluginId),
+                      keepsKeyLocal(pluginId),
+                      let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
+                      let value = keys[account],
+                      try local.read(pluginId: pluginId) == nil else {
+                    return
+                }
+                try local.write(value, pluginId: pluginId)
+                handedOff.insert(pluginId)
+            }
+        }
+        return handedOff
     }
 }
 
@@ -433,9 +509,9 @@ final class APIKeySyncService: ObservableObject {
         isUpdating = true
         defer { isUpdating = false }
         let migrator = migrator
+        let uploadLog = APIKeySyncMigrator.OwnUploadLog()
         do {
             var activated: (result: APIKeySyncMigrator.TurnOnResult, plugins: [SyncablePluginKey])?
-            var ownUploads: [String: APIKeySyncMigrator.OwnUpload] = [:]
             let vault = vault
             let gate = uploadsAllowed
             for _ in 0..<Self.copyAttempts {
@@ -444,16 +520,14 @@ final class APIKeySyncService: ObservableObject {
                 let localWrites = vault.current.localWriteGeneration
                 // Taken again each time: a plugin set to or away from a custom server changes it.
                 let plugins = pluginKeys()
-                let earlier = ownUploads
                 let result = try await Self.run {
                     try migrator.copyLocalKeysToShared(
                         plugins: plugins,
-                        earlierUploads: earlier,
+                        log: uploadLog,
                         mayUpload: { gate.withLock { $0 } },
                         keepsKeyLocal: vault.keepsKeyLocal
                     )
                 }
-                ownUploads = result.ownUploads
                 // The managed settings may have changed while the keys moved.
                 guard restriction == nil else { throw APIKeySyncMigrator.Stopped() }
                 beforeSwitchForTesting?()
@@ -481,9 +555,20 @@ final class APIKeySyncService: ObservableObject {
             await removeLocalCopies(of: plugins)
         } catch is APIKeySyncMigrator.Stopped {
             apiKeySyncLogger.info("API key sync stays off: the managed settings or the region changed while turning it on")
+            await undoUploads(uploadLog)
         } catch {
             apiKeySyncLogger.error("Turning API key sync on failed: \(Self.technicalSummary(error), privacy: .public)")
+            await undoUploads(uploadLog)
             errorMessage = Self.userMessage(for: error)
+        }
+    }
+
+    /// A failed switch takes back what it uploaded, so it changes nothing.
+    private func undoUploads(_ log: APIKeySyncMigrator.OwnUploadLog) async {
+        let migrator = migrator
+        let failed = (try? await Self.run { migrator.undoOwnUploads(log) }) ?? []
+        if !failed.isEmpty {
+            apiKeySyncLogger.error("Could not take back uploads of a failed switch: \(Self.names(failed), privacy: .public)")
         }
     }
 
@@ -510,8 +595,18 @@ final class APIKeySyncService: ObservableObject {
                     keys = snapshot.keys
                 }
                 let copied = keys
+                let pendingHandOffs = snapshot.pendingHandOffs
+                let vaultForClaims = vault
                 try await Self.run {
                     try migrator.copySharedKeysToLocal(plugins: plugins, keys: copied, keepsKeyLocal: keepsKeyLocal)
+                    // Plugins set to a custom server before the shared keys were read get them now;
+                    // the copy above leaves custom servers alone.
+                    _ = try migrator.completeHandOffs(
+                        pendingHandOffs,
+                        keys: copied,
+                        claim: { vaultForClaims.claimPendingHandOff(pluginId: $0) },
+                        keepsKeyLocal: keepsKeyLocal
+                    )
                 }
                 inUse = vault.current.keys
                 // Off the main actor: the switch waits for a plugin write that is under way.
@@ -563,6 +658,7 @@ final class APIKeySyncService: ObservableObject {
                     "Read shared API keys: \(Self.names(keys.keys), privacy: .public). Changed: \(Self.names(changed), privacy: .public)"
                 )
                 notifyChanged(changed)
+                await completeHandOffs(keys: keys)
                 return
             }
             apiKeySyncLogger.notice("Shared API keys kept changing while reading them")
@@ -571,6 +667,27 @@ final class APIKeySyncService: ObservableObject {
             apiKeySyncLogger.error("Reading shared API keys failed: \(Self.technicalSummary(error), privacy: .public)")
             guard retryingAfterFailure else { return }
             scheduleRetryWhileUnloaded()
+        }
+    }
+
+    /// Plugins set to a custom server before the shared keys were read get the shared key now.
+    private func completeHandOffs(keys: [String: String]) async {
+        let pending = vault.current.pendingHandOffs
+        guard !pending.isEmpty else { return }
+        let migrator = migrator
+        let vault = vault
+        do {
+            let handedOff = try await Self.run {
+                try migrator.completeHandOffs(
+                    pending,
+                    keys: keys,
+                    claim: { vault.claimPendingHandOff(pluginId: $0) },
+                    keepsKeyLocal: vault.keepsKeyLocal
+                )
+            }
+            if !handedOff.isEmpty { reloadPlugins(handedOff) }
+        } catch {
+            apiKeySyncLogger.error("Keeping shared keys for custom servers failed: \(Self.technicalSummary(error), privacy: .public)")
         }
     }
 
