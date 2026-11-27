@@ -53,6 +53,9 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
 
     private let policyStore: ManagedPolicySnapshotStore
     private let locality: PluginLocality?
+    /// The plugin's name for the label of a synced API key.
+    private let pluginName: String?
+    private let apiKeyVault: SharedAPIKeyVault
 
     init(
         pluginId: String,
@@ -61,9 +64,13 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         eventBus: EventBusProtocol,
         ruleNamesProvider: @escaping @MainActor () -> [String],
         workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] },
-        backsSelectedTranscriptionEngine: @escaping @Sendable () -> Bool = { true }
+        backsSelectedTranscriptionEngine: @escaping @Sendable () -> Bool = { true },
+        pluginName: String? = nil,
+        apiKeyVault: SharedAPIKeyVault = .shared
     ) {
         self.pluginId = pluginId
+        self.pluginName = pluginName
+        self.apiKeyVault = apiKeyVault
         self.backsSelectedEngine = backsSelectedTranscriptionEngine
         self.policyStore = policyStore
         self.locality = locality
@@ -93,6 +100,16 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
             return
         }
 
+        // While API key sync is on, a first-party plugin's `api-key` lives in iCloud Keychain.
+        if let account = apiKeyVault.routedAccount(pluginId: pluginId, key: key) {
+            try apiKeyVault.save(
+                value,
+                account: account,
+                displayName: SharedAPIKeyItemFormat.displayName(forAccount: account, pluginName: pluginName)
+            )
+            return
+        }
+
         let scopedService = "\(pluginId).\(key)"
         if value.isEmpty {
             try KeychainService.delete(service: scopedService)
@@ -108,6 +125,10 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
                 pluginId: pluginId,
                 key: key
             )
+        }
+
+        if let account = apiKeyVault.routedAccount(pluginId: pluginId, key: key) {
+            return apiKeyVault.value(forAccount: account)
         }
 
         let scopedService = "\(pluginId).\(key)"

@@ -1,6 +1,342 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "API Keys" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schlüssel"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claves API"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APIキー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥"
+          }
+        }
+      }
+    },
+    "Sync with iCloud Keychain" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit iCloud-Schlüsselbund synchronisieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizar con el Llavero de iCloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudキーチェーンと同期"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 iCloud 钥匙串同步"
+          }
+        }
+      }
+    },
+    "Couldn't Change API Key Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisierung der API-Schlüssel konnte nicht geändert werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cambiar la sincronización de claves API"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APIキーの同期を変更できませんでした"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法更改 API 密钥同步"
+          }
+        }
+      }
+    },
+    "API key sync isn't available in your region." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Synchronisierung der API-Schlüssel ist in deiner Region nicht verfügbar."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sincronización de claves API no está disponible en tu región."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APIキーの同期はお住まいの地域ではご利用いただけません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥同步在你所在的地区不可用。"
+          }
+        }
+      }
+    },
+    "Your organization keeps API keys on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation lässt die API-Schlüssel nur auf diesem Mac."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu organización mantiene las claves API en este Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織の設定により、APIキーはこのMacにのみ保存されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织要求 API 密钥只保留在这台 Mac 上。"
+          }
+        }
+      }
+    },
+    "This build of TypeWhisper can't reach iCloud Keychain, so API keys stay on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser TypeWhisper-Build erreicht den iCloud-Schlüsselbund nicht, daher bleiben die API-Schlüssel auf diesem Mac."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta compilación de TypeWhisper no puede acceder al Llavero de iCloud, así que las claves API se quedan en este Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このTypeWhisperのビルドはiCloudキーチェーンにアクセスできないため、APIキーはこのMacに残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 TypeWhisper 版本无法访问 iCloud 钥匙串，因此 API 密钥会保留在这台 Mac 上。"
+          }
+        }
+      }
+    },
+    "API keys of TypeWhisper plugins sync through iCloud Keychain, which is end-to-end encrypted. Other devices receive them only while iCloud Keychain is on. If it's off on this Mac, the keys stay here and keep working. Deleting a key here also deletes it on your devices that sync API keys. Turning this off keeps the keys on this Mac and on your other devices." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schlüssel der TypeWhisper-Plugins werden über den iCloud-Schlüsselbund synchronisiert, der Ende-zu-Ende-verschlüsselt ist. Andere Geräte erhalten sie nur, wenn der iCloud-Schlüsselbund aktiviert ist. Ist er auf diesem Mac aus, bleiben die Schlüssel hier und funktionieren weiter. Löschst du hier einen Schlüssel, wird er auch auf deinen Geräten gelöscht, die API-Schlüssel synchronisieren. Schaltest du das aus, bleiben die Schlüssel auf diesem Mac und auf deinen anderen Geräten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las claves API de los plugins de TypeWhisper se sincronizan a través del Llavero de iCloud, que está cifrado de extremo a extremo. Los demás dispositivos solo las reciben si el Llavero de iCloud está activado. Si está desactivado en este Mac, las claves se quedan aquí y siguen funcionando. Si eliminas una clave aquí, también se elimina en tus dispositivos que sincronizan claves API. Si desactivas esta opción, las claves se quedan en este Mac y en tus otros dispositivos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperプラグインのAPIキーは、エンドツーエンドで暗号化されたiCloudキーチェーンを通じて同期されます。ほかのデバイスがキーを受け取れるのは、iCloudキーチェーンがオンのときだけです。このMacでオフになっていても、キーはここに残り、そのまま使えます。ここでキーを削除すると、APIキーを同期しているほかのデバイスからも削除されます。この設定をオフにしても、キーはこのMacとほかのデバイスに残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 插件的 API 密钥通过端到端加密的 iCloud 钥匙串同步。只有在 iCloud 钥匙串开启时，其他设备才会收到这些密钥。如果这台 Mac 上的 iCloud 钥匙串已关闭，密钥会保留在这里并继续可用。在这里删除密钥，也会在你同步 API 密钥的其他设备上删除它。关闭此选项后，密钥仍会保留在这台 Mac 和你的其他设备上。"
+          }
+        }
+      }
+    },
+    "Syncs the API keys of TypeWhisper plugins, such as OpenAI and Groq, with your iPhone, iPad and other Macs through iCloud Keychain. iCloud Keychain is end-to-end encrypted, so only your devices signed in to your Apple Account can read the keys. Keys for custom servers and plugins from other developers stay on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisiert die API-Schlüssel der TypeWhisper-Plugins wie OpenAI und Groq über den iCloud-Schlüsselbund mit deinem iPhone, iPad und deinen anderen Macs. Der iCloud-Schlüsselbund ist Ende-zu-Ende-verschlüsselt, daher können nur deine Geräte, die bei deinem Apple Account angemeldet sind, die Schlüssel lesen. Schlüssel für eigene Server und für Plugins anderer Entwickler bleiben auf diesem Mac."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincroniza las claves API de los plugins de TypeWhisper, como OpenAI y Groq, con tu iPhone, iPad y otros Mac a través del Llavero de iCloud. El Llavero de iCloud está cifrado de extremo a extremo, así que solo tus dispositivos con sesión iniciada en tu cuenta de Apple pueden leer las claves. Las claves de servidores personalizados y de plugins de otros desarrolladores se quedan en este Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAIやGroqなど、TypeWhisperプラグインのAPIキーをiCloudキーチェーンでiPhone、iPad、ほかのMacと同期します。iCloudキーチェーンはエンドツーエンドで暗号化されているため、キーを読み取れるのは同じAppleアカウントでサインインしているあなたのデバイスだけです。カスタムサーバーのキーと、ほかの開発者のプラグインのキーはこのMacに残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 iCloud 钥匙串，将 OpenAI 和 Groq 等 TypeWhisper 插件的 API 密钥同步到你的 iPhone、iPad 和其他 Mac。iCloud 钥匙串采用端到端加密，因此只有登录了你的 Apple 账户的设备才能读取这些密钥。自定义服务器的密钥以及其他开发者插件的密钥会保留在这台 Mac 上。"
+          }
+        }
+      }
+    },
+    "This build of TypeWhisper can't reach iCloud Keychain." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser TypeWhisper-Build erreicht den iCloud-Schlüsselbund nicht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta compilación de TypeWhisper no puede acceder al Llavero de iCloud."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このTypeWhisperのビルドはiCloudキーチェーンにアクセスできません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 TypeWhisper 版本无法访问 iCloud 钥匙串。"
+          }
+        }
+      }
+    },
+    "TypeWhisper couldn't save the API key in iCloud Keychain." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper konnte den API-Schlüssel nicht im iCloud-Schlüsselbund speichern."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper no pudo guardar la clave API en el Llavero de iCloud."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperはAPIキーをiCloudキーチェーンに保存できませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 无法将 API 密钥保存到 iCloud 钥匙串。"
+          }
+        }
+      }
+    },
+    "iCloud Keychain refused the change (error %lld)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der iCloud-Schlüsselbund hat die Änderung abgelehnt (Fehler %lld)."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El Llavero de iCloud rechazó el cambio (error %lld)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudキーチェーンが変更を拒否しました（エラー %lld）。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud 钥匙串拒绝了此更改（错误 %lld）。"
+          }
+        }
+      }
+    },
+    "iCloud Keychain didn't answer in time. Try again in a moment." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der iCloud-Schlüsselbund hat nicht rechtzeitig geantwortet. Versuche es gleich noch einmal."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El Llavero de iCloud no respondió a tiempo. Vuelve a intentarlo en un momento."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloudキーチェーンから時間内に応答がありませんでした。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud 钥匙串未及时响应。请稍后再试。"
+          }
+        }
+      }
+    },
     "Terminal Apps" : {
       "localizations" : {
         "de" : {

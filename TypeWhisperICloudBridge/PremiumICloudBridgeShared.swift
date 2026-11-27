@@ -102,6 +102,21 @@ protocol PremiumICloudBridgeXPCProtocol: NSObjectProtocol {
     func synchronize(reply: @escaping (Data) -> Void)
     func deleteRemotePackage(reply: @escaping (Data) -> Void)
     func removeDevice(_ deviceID: String, reply: @escaping (Data) -> Void)
+
+    // API keys in iCloud Keychain (`SharedAPIKeyItemFormat`). Every reply is an encoded
+    // `SharedAPIKeyBridgeReply`; values never appear in logs or errors.
+
+    /// Every present shared item with a valid account, with its modification date.
+    func sharedAPIKeys(reply: @escaping (Data) -> Void)
+    /// Adds or replaces the item of `account`. `displayName` goes into the item label.
+    func setSharedAPIKey(
+        _ account: String,
+        value: Data,
+        displayName: String,
+        reply: @escaping (Data) -> Void
+    )
+    /// Deletes the item of `account` on every device that syncs it.
+    func deleteSharedAPIKey(_ account: String, reply: @escaping (Data) -> Void)
 }
 
 enum PremiumICloudBridgeError: LocalizedError, Codable, Equatable, Sendable {

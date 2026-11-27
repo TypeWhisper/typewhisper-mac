@@ -20,8 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOYMENT = ROOT / "deployment" / "macos"
 DOCUMENTATION_URL = "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-PROFILE_MANIFEST_VERSION = 1
-PROFILE_MANIFEST_MODIFIED = datetime.datetime(2026, 10, 20)
+PROFILE_MANIFEST_VERSION = 2
+PROFILE_MANIFEST_MODIFIED = datetime.datetime(2026, 11, 27)
 EDITIONS = {
     "com.typewhisper.mac": "TypeWhisper",
     "com.typewhisper.typewhisper-app": "TypeWhisper (App Store)",
@@ -47,6 +47,7 @@ DESCRIPTIONS = {
     "SkipOnboardingWhenReady": ("Skip setup when ready", "Keeps the setup wizard closed when an engine, the permissions and a dictation shortcut are ready."),
     "SuppressOptionalPrompts": ("Hide optional prompts", "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button."),
     "AllowHistoryAsk": ("Allow Ask History", "Off turns Ask History off: the panel says so, and the search index of History takes in no recordings."),
+    "AllowAPIKeySync": ("Allow API key sync", "Off keeps plugin API keys on the Mac: API key sync through iCloud Keychain turns off and stays off. The same key applies to TypeWhisper for iOS."),
     "ManagedLicenseKey": ("Commercial license key", "Activates a commercial license for the signed-in user."),
 }
 ENUMERATION_TITLES = {

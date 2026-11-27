@@ -76,6 +76,8 @@ enum ManagedPolicyKeys {
     static let suppressOptionalPrompts = "SuppressOptionalPrompts"
     /// Mac only: whether Ask History and its search index may be used.
     static let allowHistoryAsk = "AllowHistoryAsk"
+    /// `false` keeps API keys on this Mac: API key sync through iCloud Keychain stays off.
+    static let allowAPIKeySync = "AllowAPIKeySync"
     /// Read by `LicenseService` since 1.6.1, which also accepts values set with `defaults write`.
     static let managedLicenseKey = UserDefaultsKeys.managedLicenseKey
 
@@ -102,6 +104,7 @@ enum ManagedPolicyKeys {
         .init(name: skipOnboardingWhenReady, kind: .boolean),
         .init(name: suppressOptionalPrompts, kind: .boolean, allowsRecommendation: true),
         .init(name: allowHistoryAsk, kind: .boolean),
+        .init(name: allowAPIKeySync, kind: .boolean),
         .init(name: managedLicenseKey, kind: .text, sensitive: true, acceptsUnmanagedValue: true),
     ]
 

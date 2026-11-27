@@ -1258,7 +1258,8 @@ final class PluginManager: ObservableObject {
             workflowProvider: workflowProvider,
             backsSelectedTranscriptionEngine: Self.selectionMatcher(
                 forEnginesExposedBy: transcriptionProviderIds(exposedBy: plugin.instance)
-            )
+            ),
+            pluginName: plugin.manifest.name
         )
         host.performPluginActivation(suppressPassiveLoadedModelRestore: shouldSuppressPassiveLoadedModelRestore(for: plugin)) {
             plugin.instance.activate(host: host)
@@ -1337,6 +1338,29 @@ final class PluginManager: ObservableObject {
     @available(*, deprecated, renamed: "setRuleNamesProvider")
     func setProfileNamesProvider(_ provider: @escaping @MainActor () -> [String]) {
         setRuleNamesProvider(provider)
+    }
+
+    /// The installed first-party plugins whose `api-key` syncs, enabled or not.
+    var syncablePluginKeys: [SyncablePluginKey] {
+        loadedPlugins.compactMap {
+            SyncablePluginKey(pluginId: $0.manifest.id, pluginName: $0.manifest.name)
+        }
+    }
+
+    /// Activates running plugins again after their API key changed in iCloud Keychain, because
+    /// plugins read their key in `activate(host:)`.
+    func reloadCredentials(ofPluginIds pluginIds: Set<String>) {
+        var reloaded = false
+        for plugin in loadedPlugins
+        where pluginIds.contains(plugin.manifest.id) && plugin.isEnabled && plugin.isRuntimeLoaded {
+            plugin.instance.deactivate()
+            activatePlugin(plugin)
+            reloaded = true
+        }
+        if reloaded {
+            logger.info("Activated \(pluginIds.count, privacy: .public) plugins again after their API keys changed")
+            notifyPluginStateChanged()
+        }
     }
 
     func setPluginEnabled(_ pluginId: String, enabled: Bool) {

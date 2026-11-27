@@ -265,7 +265,7 @@ commercial term packs) and cloud sync follow it.
 | Updates | No Sparkle; updates come from the App Store. |
 | Media pause | MediaRemote is private API and stays disabled (`MediaPlaybackService`). |
 | CLI | Not shipped; the local HTTP API stays available (`network.server`). |
-| Keychain | Own service names (`com.typewhisper.typewhisper-app.*`), never the direct app's items. |
+| Keychain | Own service names (`com.typewhisper.typewhisper-app.*`), never the direct app's items. API key sync uses the access group `2D8ALY3LCL.com.typewhisper.writing-services` itself (`keychain-access-groups` in `TypeWhisperAppStore.entitlements`), shared with TypeWhisper for iOS and the direct app's iCloud bridge. Builds from `build-dev.sh` lack the entitlement and show the switch as unavailable. |
 | Licensing | StoreKit Premium instead of license key entry and supporter tiers. An existing Polar license connects through the TypeWhisper account web page. |
 | iCloud | The app uses the iCloud container directly instead of the iCloud bridge XPC service. |
 | Browser URL | No AppleScript or `osascript`: browsers report no URL and no open tabs, so the Website workflow trigger is hidden and meeting detection relies on native apps. |

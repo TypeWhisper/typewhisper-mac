@@ -452,10 +452,31 @@
         }
       ]
     },
+    "AllowAPIKeySync": {
+      "title": "Allow API key sync",
+      "description": "Off keeps plugin API keys on the Mac: API key sync through iCloud Keychain turns off and stays off. The same key applies to TypeWhisper for iOS.",
+      "property_order": 95,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "boolean"
+        }
+      ]
+    },
     "ManagedLicenseKey": {
       "title": "Commercial license key",
       "description": "Activates a commercial license for the signed-in user.",
-      "property_order": 95,
+      "property_order": 100,
       "links": [
         {
           "rel": "More information",
@@ -480,7 +501,7 @@
     "Recommended": {
       "title": "Recommended settings (users can change)",
       "description": "Defaults that apply until the user makes a choice.",
-      "property_order": 100,
+      "property_order": 105,
       "anyOf": [
         {
           "type": "null",

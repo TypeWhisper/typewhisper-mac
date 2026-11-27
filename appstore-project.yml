@@ -120,6 +120,7 @@ targets:
       - path: TypeWhisperWidgetShared/WidgetData.swift
       - path: TypeWhisperSafariExtension/SafariExtensionConnection.swift
       - path: TypeWhisperICloudBridge/PremiumICloudBridgeShared.swift
+      - path: TypeWhisperICloudBridge/SharedAPIKeyKeychain.swift
       - path: AppStore/Sources
       - path: AppStore/Resources/AppStorePluginCatalog.json
         buildPhase: resources

@@ -7,6 +7,8 @@ scheme="TypeWhisper"
 team_id="2D8ALY3LCL"
 helper_bundle_id="com.typewhisper.typewhisper-mac"
 app_group="$team_id.com.typewhisper.mac"
+# API key sync: shared with TypeWhisper for iOS, used only by the iCloud helper.
+keychain_access_group="$team_id.com.typewhisper.writing-services"
 icloud_container="iCloud.com.typewhisper.sync"
 archive_path=""
 export_path=""
@@ -140,6 +142,7 @@ cp "$full_helper_entitlements" "$helper_build_entitlements"
 /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.icloud-container-identifiers' "$helper_build_entitlements"
 /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.icloud-services' "$helper_build_entitlements"
 /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.ubiquity-container-identifiers' "$helper_build_entitlements"
+/usr/libexec/PlistBuddy -c 'Delete :keychain-access-groups' "$helper_build_entitlements"
 
 security cms -D -i "$profile_path" > "$decoded_profile"
 
@@ -186,6 +189,17 @@ if ! plist_array_contains_or_wildcard \
   "Entitlements:com.apple.developer.icloud-services" \
   "CloudDocuments"; then
   echo "error: profile does not enable CloudDocuments" >&2
+  exit 1
+fi
+if ! plist_array_contains \
+  "$decoded_profile" \
+  "Entitlements:keychain-access-groups" \
+  "$keychain_access_group" &&
+  ! plist_array_contains \
+    "$decoded_profile" \
+    "Entitlements:keychain-access-groups" \
+    "$team_id.*"; then
+  echo "error: profile does not allow keychain access group '$keychain_access_group'" >&2
   exit 1
 fi
 expiration_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$profile_expiration" '+%s')"
@@ -262,6 +276,9 @@ cp "$full_helper_entitlements" "$expanded_helper_entitlements"
   "$expanded_helper_entitlements"
 /usr/libexec/PlistBuddy \
   -c "Set :com.apple.developer.ubiquity-container-identifiers:0 $icloud_container" \
+  "$expanded_helper_entitlements"
+/usr/libexec/PlistBuddy \
+  -c "Set :keychain-access-groups:0 $keychain_access_group" \
   "$expanded_helper_entitlements"
 /usr/libexec/PlistBuddy \
   -c "Add :com.apple.application-identifier string $team_id.$helper_bundle_id" \

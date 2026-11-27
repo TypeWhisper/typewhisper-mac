@@ -18,5 +18,9 @@
 	<array>
 		<string>$(ICLOUD_CONTAINER_ID)</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.typewhisper.writing-services</string>
+	</array>
 </dict>
 </plist>
