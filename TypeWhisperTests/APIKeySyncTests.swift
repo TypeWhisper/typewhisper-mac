@@ -163,10 +163,17 @@ private final class InMemoryLocalSecretStore: LocalPluginSecretStoring, @uncheck
 private final class InMemoryOwnUploadArchive: OwnUploadArchiving, @unchecked Sendable {
     private let lock = NSLock()
     private var stored: [String: APIKeySyncMigrator.OwnUpload] = [:]
+    private var failsLoads = false
 
     var uploads: [String: APIKeySyncMigrator.OwnUpload] { lock.withLock { stored } }
+    func failLoads(_ fails: Bool) { lock.withLock { failsLoads = fails } }
 
-    func load() throws -> [String: APIKeySyncMigrator.OwnUpload] { lock.withLock { stored } }
+    func load() throws -> [String: APIKeySyncMigrator.OwnUpload] {
+        try lock.withLock {
+            if failsLoads { throw KeychainError.readFailed(errSecInteractionNotAllowed) }
+            return stored
+        }
+    }
     func save(_ uploads: [String: APIKeySyncMigrator.OwnUpload]) throws { lock.withLock { stored = uploads } }
 }
 
@@ -1335,6 +1342,87 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertFalse(service.isEnabled)
         XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-cloud")
         XCTAssertTrue(reloaded.contains(["com.typewhisper.deepgram"]))
+    }
+
+    func testAnUnreadableArchiveStopsTheSwitch() async {
+        local.put("gsk", pluginId: groq.pluginId)
+        archive.failLoads(true)
+        let service = makeService()
+
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+
+        XCTAssertFalse(service.isEnabled)
+        XCTAssertNotNil(service.errorMessage)
+        XCTAssertEqual(shared.writeCount, 0, "nothing moved")
+        XCTAssertEqual(local.values[groq.pluginId], "gsk")
+    }
+
+    func testAHandOffThatSucceededBeforeAFailedTurnOffStillReloadsThePlugin() async {
+        defaults.set("iCloudKeychain", forKey: APIKeySyncService.storageLocationKey)
+        shared.set("dg-cloud", account: "deepgram")
+        let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: { $0 == "com.typewhisper.deepgram" })
+        let service = APIKeySyncService(defaults: defaults, vault: vault, local: local, storefrontCountryCode: { nil }, uploadArchive: archive)
+        service.pluginKeys = { [groq] in [groq] }
+        service.reloadPlugins = { [unowned self] in reloaded.append($0) }
+        vault.activate(keys: [:])
+        vault.withLocalChange { vault.setPendingHandOff(true, pluginId: "com.typewhisper.deepgram") }
+        shared.afterEveryRead {
+            // Keys keep changing, so the turn-off fails after the hand-off.
+            try? vault.save("gsk-\(UUID().uuidString)", account: "groq", displayName: "Groq")
+        }
+
+        service.setEnabled(false)
+        await service.waitForPendingOperation()
+        shared.stopHook()
+
+        XCTAssertTrue(service.isEnabled)
+        XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-cloud")
+        XCTAssertTrue(reloaded.contains(["com.typewhisper.deepgram"]))
+    }
+
+    func testAPendingHandOffIsRetriedWhileSyncIsOff() async {
+        shared.set("dg-cloud", account: "deepgram")
+        let vault = SharedAPIKeyVault(
+            store: shared,
+            keepsKeyLocal: { $0 == "com.typewhisper.deepgram" },
+            initialPendingHandOffs: ["com.typewhisper.deepgram"]
+        )
+        let service = APIKeySyncService(defaults: defaults, vault: vault, local: local, storefrontCountryCode: { nil }, uploadArchive: archive)
+        service.reloadPlugins = { [unowned self] in reloaded.append($0) }
+        XCTAssertFalse(service.isEnabled)
+
+        service.applicationDidBecomeActive()
+        await service.waitForPendingOperation()
+
+        XCTAssertEqual(local.values["com.typewhisper.deepgram"], "dg-cloud")
+        XCTAssertEqual(reloaded, [["com.typewhisper.deepgram"]])
+        XCTAssertTrue(vault.current.pendingHandOffs.isEmpty)
+    }
+
+    func testUploadsThatCouldNotBeTakenBackAreRetriedWhenTheAppBecomesActive() async {
+        let deepgram = plugin("deepgram")
+        local.put("gsk", pluginId: groq.pluginId)
+        local.put("dg", pluginId: deepgram.pluginId)
+        let service = makeService()
+        service.pluginKeys = { [groq] in [groq, deepgram] }
+        let store = local!
+        let sharedStore = shared!
+        shared.afterNextWrite {
+            store.failReads(true)
+            sharedStore.failWrites(true)
+        }
+        service.setEnabled(true)
+        await service.waitForPendingOperation()
+        XCTAssertEqual(shared.values["groq"], "gsk")
+
+        store.failReads(false)
+        sharedStore.failWrites(false)
+        service.applicationDidBecomeActive()
+        await service.waitForPendingOperation()
+
+        XCTAssertNil(shared.items["groq"], "the upload is taken back on the next activation")
+        XCTAssertTrue(archive.uploads.isEmpty)
     }
 
     func testUploadsThatCouldNotBeTakenBackSurviveARelaunch() async {

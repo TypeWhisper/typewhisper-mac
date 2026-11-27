@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 import os
+import Security
 #if APPSTORE
 import StoreKit
 #endif
@@ -74,13 +75,25 @@ struct KeychainOwnUploadArchive: OwnUploadArchiving {
         return (try? JSONDecoder().decode([String: APIKeySyncMigrator.OwnUpload].self, from: Data(item.value.utf8))) ?? [:]
     }
 
+    /// Replaces the item in place, so a failed write keeps what was archived before.
     func save(_ uploads: [String: APIKeySyncMigrator.OwnUpload]) throws {
         guard !uploads.isEmpty else {
             try KeychainService.delete(service: Self.service)
             return
         }
         let data = try JSONEncoder().encode(uploads)
-        try KeychainService.save(key: String(decoding: data, as: UTF8.self), service: Self.service)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: AppConstants.keychainServicePrefix + Self.service,
+        ]
+        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if status == errSecSuccess { return }
+        guard status == errSecItemNotFound else { throw KeychainError.saveFailed(status) }
+        var item = query
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        let addStatus = SecItemAdd(item as CFDictionary, nil)
+        guard addStatus == errSecSuccess else { throw KeychainError.saveFailed(addStatus) }
     }
 }
 
@@ -481,7 +494,12 @@ final class APIKeySyncService: ObservableObject {
     /// Runs after the plugin scan at launch, when `pluginKeys()` lists the installed plugins.
     func pluginsDidLoad() {
         enforceManagedPolicy()
-        guard isEnabled else { return }
+        guard isEnabled else {
+            if !vault.current.pendingHandOffs.isEmpty {
+                enqueue { [weak self] in await self?.completeHandOffsWhileOff() }
+            }
+            return
+        }
         if let pending = defaults.stringArray(forKey: Self.pendingLocalCleanupKey) {
             let plugins = pluginKeys().filter { pending.contains($0.pluginId) }
             enqueue { [weak self] in await self?.removeLocalCopies(of: plugins) }
@@ -533,7 +551,22 @@ final class APIKeySyncService: ObservableObject {
 
     /// iCloud Keychain may have changed keys while the app was in the background.
     func applicationDidBecomeActive() {
-        guard isEnabled, !isUpdating else { return }
+        guard !isUpdating else { return }
+        guard isEnabled else {
+            // A hand-off the Keychain refused while sync turned off: try again.
+            if !vault.current.pendingHandOffs.isEmpty {
+                enqueue { [weak self] in await self?.completeHandOffsWhileOff() }
+            }
+            // Uploads a failed switch could not take back, or not archive: try again, so they do
+            // not stay in iCloud Keychain or depend on this launch.
+            if !leftoverUploads.current.isEmpty {
+                enqueue { [weak self] in
+                    guard let self, !self.isEnabled else { return }
+                    await self.undoUploads(self.leftoverUploads)
+                }
+            }
+            return
+        }
         // A policy turned sync off but the Keychain refused; try again now.
         if managedConfigurationForbids || storefrontForbids {
             enqueue { [weak self] in await self?.turnOff() }
@@ -575,7 +608,15 @@ final class APIKeySyncService: ObservableObject {
         guard !isEnabled, restriction == nil else { return }
         isUpdating = true
         defer { isUpdating = false }
-        await loadArchivedUploads()
+        do {
+            // Without the uploads an earlier switch could not take back, this switch could take a
+            // key deleted meanwhile for another device's; it waits until they can be read.
+            try await loadArchivedUploads()
+        } catch {
+            apiKeySyncLogger.error("Reading uploads to take back failed: \(Self.technicalSummary(error), privacy: .public)")
+            errorMessage = Self.userMessage(for: error)
+            return
+        }
         let migrator = migrator
         let uploadLog = leftoverUploads
         do {
@@ -644,10 +685,10 @@ final class APIKeySyncService: ObservableObject {
     }
 
     /// Picks up the uploads an earlier launch could not take back.
-    private func loadArchivedUploads() async {
+    private func loadArchivedUploads() async throws {
         guard !archiveLoaded else { return }
         let archive = uploadArchive
-        let archived = (try? await Self.run { try archive.load() }) ?? [:]
+        let archived = try await Self.run { try archive.load() }
         archiveLoaded = true
         archiveHoldsUploads = !archived.isEmpty
         let current = leftoverUploads.current
@@ -674,10 +715,10 @@ final class APIKeySyncService: ObservableObject {
         let plugins = pluginKeys()
         let migrator = migrator
         let keepsKeyLocal = vault.keepsKeyLocal
+        var handedOff = Set<String>()
         do {
             var copiedKeys: [String: String]?
             var inUse: [String: String] = [:]
-            var handedOff = Set<String>()
             for _ in 0..<Self.copyAttempts {
                 // A key saved while the copy runs goes to iCloud Keychain; copy again so this Mac
                 // does not keep the older one.
@@ -727,6 +768,8 @@ final class APIKeySyncService: ObservableObject {
         } catch {
             apiKeySyncLogger.error("Turning API key sync off failed: \(Self.technicalSummary(error), privacy: .public)")
             errorMessage = Self.userMessage(for: error)
+            // A hand-off that succeeded before the failure already wrote the plugin's key.
+            if !handedOff.isEmpty { reloadPlugins(handedOff) }
         }
     }
 
@@ -768,6 +811,14 @@ final class APIKeySyncService: ObservableObject {
             guard retryingAfterFailure else { return }
             scheduleRetryWhileUnloaded()
         }
+    }
+
+    /// Pending hand-offs left after sync turned off: reads the shared keys once more for them.
+    private func completeHandOffsWhileOff() async {
+        guard !isEnabled, !vault.current.pendingHandOffs.isEmpty else { return }
+        let migrator = migrator
+        guard let keys = try? await Self.run({ try migrator.loadSharedKeys() }) else { return }
+        await completeHandOffs(keys: keys)
     }
 
     /// Plugins set to a custom server before the shared keys were read get the shared key now.
