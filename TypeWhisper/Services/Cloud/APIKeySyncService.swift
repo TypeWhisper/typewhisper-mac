@@ -379,6 +379,7 @@ final class APIKeySyncService: ObservableObject {
     private let launchWait: Duration
     private let retryDelay: Duration
     private var pendingOperation: Task<Void, Never>?
+    private let gateQueue = DispatchQueue(label: "com.typewhisper.apiKeySync.gate")
     /// Uploads of a failed switch that could not be taken back. The next switch treats them as
     /// its own, so a key deleted on this Mac meanwhile is not received as another device's.
     /// Kept in memory only, like every key value.
@@ -444,9 +445,19 @@ final class APIKeySyncService: ObservableObject {
         #endif
     }
 
+    /// The vault's gate waits for a write under way, which may wait for the Keychain bridge, so
+    /// it changes on a serial queue: the main actor never waits, and changes keep their order.
+    /// Turning sync on or off flushes the queue first (`applyPendingGateChanges`).
     private func updateUploadGate() {
         let allowed = !managedConfigurationForbids && !storefrontForbids
-        vault.setSharedWritesAllowed(allowed)
+        let vault = vault
+        gateQueue.async { vault.setSharedWritesAllowed(allowed) }
+    }
+
+    /// Waits, off the main actor, until every gate change queued so far is in place.
+    private func applyPendingGateChanges() async {
+        let queue = gateQueue
+        _ = try? await Self.run { queue.sync {} }
     }
 
     /// Follows the managed settings: `AllowAPIKeySync` and both cloud keys.
@@ -528,6 +539,7 @@ final class APIKeySyncService: ObservableObject {
         guard !isEnabled, restriction == nil else { return }
         isUpdating = true
         defer { isUpdating = false }
+        await applyPendingGateChanges()
         let migrator = migrator
         let uploadLog = leftoverUploads
         do {
@@ -596,6 +608,9 @@ final class APIKeySyncService: ObservableObject {
         guard isEnabled else { return }
         isUpdating = true
         defer { isUpdating = false }
+        // A policy that queued this turn-off is in place before keys move, so plugin saves meanwhile
+        // are refused instead of reaching iCloud Keychain.
+        await applyPendingGateChanges()
         let plugins = pluginKeys()
         let migrator = migrator
         let keepsKeyLocal = vault.keepsKeyLocal

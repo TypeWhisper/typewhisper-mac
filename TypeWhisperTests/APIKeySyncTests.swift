@@ -1257,6 +1257,31 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertEqual(vault.current.pendingHandOffs, ["com.typewhisper.deepgram"], "a later read tries again")
     }
 
+    func testAPolicyChangeDoesNotWaitOnTheMainActorForAWriteUnderWay() throws {
+        let service = makeService()
+        let vault = service.vault
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            _ = try? vault.admitSharedWrite {
+                started.signal()
+                release.wait()
+            }
+        }
+        started.wait()
+
+        let before = Date()
+        service.applyManagedPolicy(policySnapshot(["AllowAPIKeySync": .boolean(false)]))
+        XCTAssertLessThan(Date().timeIntervalSince(before), 0.1, "the main actor does not wait for the write")
+        XCTAssertEqual(service.restriction, .managedConfiguration)
+
+        release.signal()
+        for _ in 0..<100 where vault.current.sharedWritesAllowed {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        XCTAssertFalse(vault.current.sharedWritesAllowed, "the gate closes once the write is done")
+    }
+
     func testThePolicyTurnsSyncOffAndItStaysOff() async {
         local.put("gsk-mac", pluginId: groq.pluginId)
         let service = makeService()
