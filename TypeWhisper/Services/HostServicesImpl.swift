@@ -159,11 +159,9 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         // Plugins read credentials synchronously in activate(host:), so keychain
         // latency is part of launch. The interval carries no key or value.
         let signposter = LaunchSignposts.signposter
-        let local = signposter.withIntervalSignpost("Plugin.loadSecret", id: signposter.makeSignpostID()) {
+        return signposter.withIntervalSignpost("Plugin.loadSecret", id: signposter.makeSignpostID()) {
             KeychainService.load(service: scopedService)
         }
-        // A plugin set to a custom server after sync came on has no key of its own here yet.
-        return local ?? apiKeyVault.sharedFallback(pluginId: pluginId, key: key)
     }
 
     // MARK: - UserDefaults (plugin-scoped)
@@ -180,7 +178,19 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     }
 
     func setUserDefault(_ value: Any?, forKey key: String) {
+        let keptKeyLocal = apiKeyVault.keepsKeyLocal(pluginId)
         UserDefaults.standard.set(value, forKey: "plugin.\(pluginId).\(key)")
+        guard !keptKeyLocal, apiKeyVault.keepsKeyLocal(pluginId) else { return }
+        // The plugin was just set to a custom server, so its key now lives on this Mac. While sync
+        // is on, that copy does not exist yet: keep the shared key here, so the plugin stays
+        // configured until the user enters the server's own key.
+        let secretKey = SharedAPIKeyItemFormat.pluginSecretKey
+        let scopedService = "\(pluginId).\(secretKey)"
+        guard let shared = apiKeyVault.sharedKeyToKeepLocally(pluginId: pluginId),
+              KeychainService.load(service: scopedService) == nil else {
+            return
+        }
+        try? KeychainService.save(key: shared, service: scopedService)
     }
 
     // MARK: - Model Lifecycle Policy

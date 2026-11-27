@@ -127,7 +127,7 @@ struct APIKeySyncMigrator: Sendable {
     /// Keychain was deleted on another device, so an installed plugin's copy is deleted too.
     /// The iCloud Keychain items stay, so the user's other devices keep their keys.
     /// `keepsKeyLocal` names plugins whose own key is never replaced, such as one set to a custom
-    /// server; without a key of its own, such a plugin gets the shared one.
+    /// server; one without a key of its own gets the shared key.
     func copySharedKeysToLocal(
         plugins: [SyncablePluginKey],
         keys: [String: String],

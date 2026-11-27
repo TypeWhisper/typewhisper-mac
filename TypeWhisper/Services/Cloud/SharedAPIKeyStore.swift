@@ -301,12 +301,10 @@ final class SharedAPIKeyVault: @unchecked Sendable {
         state.withLock { $0.keys[account] }
     }
 
-    /// The shared key of a plugin whose own key stays on this Mac (`keepsKeyLocal`), while sync
-    /// is on. Such a plugin reads its own key first and this one only until it saves one, so
-    /// setting a custom server after sync came on keeps the plugin configured.
-    func sharedFallback(pluginId: String, key: String) -> String? {
-        guard key == SharedAPIKeyItemFormat.pluginSecretKey,
-              let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
+    /// The shared key of a plugin that was just set to a custom server, while sync is on, so the
+    /// host can keep it on this Mac before the plugin reads its key from there.
+    func sharedKeyToKeepLocally(pluginId: String) -> String? {
+        guard let account = SharedAPIKeyItemFormat.account(forPluginId: pluginId),
               keepsKeyLocal(pluginId) else {
             return nil
         }

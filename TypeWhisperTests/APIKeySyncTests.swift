@@ -824,10 +824,9 @@ final class APIKeySyncServiceTests: XCTestCase {
         let vault = SharedAPIKeyVault(store: shared, keepsKeyLocal: customServer)
         vault.activate(keys: ["reson8": "r8-cloud", "deepgram": "dg-cloud"])
         XCTAssertNil(vault.routedAccount(pluginId: "com.typewhisper.reson8", key: "api-key"))
-        XCTAssertEqual(vault.sharedFallback(pluginId: "com.typewhisper.reson8", key: "api-key"), "r8-cloud",
-                       "a plugin set to a custom server after sync came on stays configured")
-        XCTAssertNil(vault.sharedFallback(pluginId: "com.typewhisper.groq", key: "api-key"))
-        XCTAssertNil(vault.sharedFallback(pluginId: "com.typewhisper.reson8", key: "hf-token"))
+        XCTAssertEqual(vault.sharedKeyToKeepLocally(pluginId: "com.typewhisper.reson8"), "r8-cloud",
+                       "a plugin set to a custom server after sync came on keeps the shared key on this Mac")
+        XCTAssertNil(vault.sharedKeyToKeepLocally(pluginId: "com.typewhisper.groq"))
 
         local.write("r8-custom", pluginId: "com.typewhisper.reson8")
         try APIKeySyncMigrator(shared: shared, local: local).copySharedKeysToLocal(
@@ -840,7 +839,7 @@ final class APIKeySyncServiceTests: XCTestCase {
         XCTAssertEqual(local.values["com.typewhisper.groq"], "gsk")
 
         vault.deactivate()
-        XCTAssertNil(vault.sharedFallback(pluginId: "com.typewhisper.deepgram", key: "api-key"))
+        XCTAssertNil(vault.sharedKeyToKeepLocally(pluginId: "com.typewhisper.deepgram"))
     }
 
     func testThePolicyTurnsSyncOffAndItStaysOff() async {
