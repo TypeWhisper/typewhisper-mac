@@ -126,10 +126,11 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         }
         guard !apiKeyVault.keepsKeyLocal(pluginId) else {
             // A custom server's key: turning sync on must notice it before it switches. A key the
-            // user saves or removes here also cancels a pending hand-off of the shared key.
+            // user saves or removes here also cancels a pending hand-off of the shared key, once the
+            // Keychain took it; a refused write leaves the hand-off pending.
             try apiKeyVault.withLocalChange {
-                apiKeyVault.setPendingHandOff(false, pluginId: pluginId)
                 try writeLocally()
+                apiKeyVault.setPendingHandOff(false, pluginId: pluginId)
             }
             return
         }
