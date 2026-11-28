@@ -59,7 +59,9 @@ final class PermissionGuideController {
         model.onClose = { [weak self] in self?.end() }
         model.onRestart = {
             PermissionGuideController.shared.end()
-            ApplicationRelauncher.relaunch()
+            // Comes back with a window, so the user sees whether the permission is in effect.
+            // An unfinished setup wizard opens instead.
+            ApplicationRelauncher.relaunch(reopening: .home)
         }
         self.model = model
         guideID += 1

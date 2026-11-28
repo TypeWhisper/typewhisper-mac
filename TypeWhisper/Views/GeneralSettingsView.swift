@@ -112,6 +112,8 @@ struct GeneralSettingsView: View {
 /// does not leave the user without the window they were working in.
 /// Stored in the defaults because the sandbox drops launch arguments.
 enum RelaunchSettingsPage: String, CaseIterable {
+    /// Home shows whether a permission granted before the restart is in effect.
+    case home
     case general
     case integrations
 
@@ -120,6 +122,7 @@ enum RelaunchSettingsPage: String, CaseIterable {
 
     var tab: SettingsTab {
         switch self {
+        case .home: .home
         case .general: .general
         case .integrations: .integrations
         }
