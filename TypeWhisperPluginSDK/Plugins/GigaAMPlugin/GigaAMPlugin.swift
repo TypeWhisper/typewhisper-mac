@@ -516,7 +516,7 @@ extension GigaAMPlugin {
             revision: "9ae7c36c908bf7386913b447f6d9d6d2e856d3f8",
             files: .v4,
             sizeDescription: "~255 MB",
-            ramRequirement: "~0.7 GB"
+            ramRequirement: "2 GB+"
         ),
         GigaAMModelDef(
             id: "gigaam-multilingual-v2-rnnt",
@@ -525,7 +525,7 @@ extension GigaAMPlugin {
             revision: "6d6976b2e2cd53290f822501b3d68ebcdf5c9bb6",
             files: .multilingualV2,
             sizeDescription: "~805 MB",
-            ramRequirement: "~1.5 GB"
+            ramRequirement: "4 GB+"
         ),
     ]
 }
