@@ -599,6 +599,13 @@ final class DeepgramPlugin: NSObject,
     static let pluginName = "Deepgram"
     private static let logger = Logger(subsystem: "com.typewhisper.deepgram", category: "Plugin")
     private static let maxDictionaryTerms = 100
+    // Deepgram rejects a Nova-3 request when its keyterms exceed 500 tokens in total
+    // ("Keyterm limit exceeded"). Its tokenizer is not public. Measured against the API,
+    // each keyterm costs about 5 tokens plus at most one token per UTF-8 byte of its text.
+    // The estimate counts 6 tokens per keyterm plus one per byte and keeps 20 tokens spare.
+    static let keytermTokenLimit = 500
+    static let keytermTokenBudget = 480
+    static let estimatedTokensPerKeyterm = 6
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -1164,8 +1171,35 @@ final class DeepgramPlugin: NSObject,
             )
         }
 
-        let parameterName = modelId.lowercased().hasPrefix("nova-3") ? "keyterm" : "keywords"
-        return limitedTerms.map { URLQueryItem(name: parameterName, value: $0) }
+        guard modelId.lowercased().hasPrefix("nova-3") else {
+            return limitedTerms.map { URLQueryItem(name: "keywords", value: $0) }
+        }
+
+        let keyterms = keytermsWithinTokenBudget(limitedTerms)
+        if keyterms.count < limitedTerms.count {
+            logger.warning(
+                "Deepgram limited keyterms to \(keyterms.count) of \(limitedTerms.count) entries to stay under the \(Self.keytermTokenLimit)-token keyterm limit for model \(modelId, privacy: .public)"
+            )
+        }
+        return keyterms.map { URLQueryItem(name: "keyterm", value: $0) }
+    }
+
+    /// Conservative estimate of the tokens one keyterm uses of Deepgram's keyterm limit.
+    internal static func estimatedKeytermTokens(_ term: String) -> Int {
+        estimatedTokensPerKeyterm + term.utf8.count
+    }
+
+    /// Keeps keyterms in order and stops before their estimated total exceeds the budget.
+    internal static func keytermsWithinTokenBudget(_ terms: [String]) -> [String] {
+        var keyterms: [String] = []
+        var totalTokens = 0
+        for term in terms {
+            let nextTotal = totalTokens + estimatedKeytermTokens(term)
+            guard nextTotal <= keytermTokenBudget else { break }
+            keyterms.append(term)
+            totalTokens = nextTotal
+        }
+        return keyterms
     }
 
     // MARK: - JSON Parsing Helpers
