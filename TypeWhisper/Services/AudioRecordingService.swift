@@ -4632,6 +4632,10 @@ extension AudioRecordingService {
         configLock.withLock { _selectedInputDeviceName }
     }
 
+    func testingSelectedInputRoute() -> (deviceID: AudioDeviceID?, usesBluetoothTransport: Bool) {
+        configLock.withLock { (_selectedDeviceID, _selectedInputDeviceUsesBluetoothTransport) }
+    }
+
     func testingValidateTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
         try validateTapInstallationPreconditions(expected: expected, current: current)
     }
