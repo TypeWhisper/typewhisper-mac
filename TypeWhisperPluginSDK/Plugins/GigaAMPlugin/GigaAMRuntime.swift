@@ -1,12 +1,13 @@
 import Foundation
 import OnnxRuntimeBindings
 
-/// Runs the GigaAM v3 end-to-end RNN-T model (Russian, with punctuation and casing) through
-/// ONNX Runtime on the CPU.
+/// Runs a GigaAM end-to-end RNN-T model (with punctuation and casing) through ONNX Runtime on
+/// the CPU.
 ///
-/// The pipeline matches onnx-asr (MIT, github.com/istupakov/onnx-asr), which published the ONNX
-/// exports: a small bundled ONNX graph turns 16 kHz audio into 64 log-mel features, the Conformer
-/// encoder runs once per chunk, and a greedy transducer loop calls the decoder and joint networks.
+/// A small bundled ONNX graph turns 16 kHz audio into 64 log-mel features (all GigaAM models share
+/// the feature settings) and the encoder runs once per chunk. The v3 export of onnx-asr (MIT,
+/// github.com/istupakov/onnx-asr) is decoded by a greedy loop over its decoder and joint networks;
+/// v4 and Multilingual v2 run that loop inside their `advance` graph.
 final class GigaAMRuntime: @unchecked Sendable {
     static let sampleRate = 16_000
     /// The model was trained on short utterances; longer recordings are cut at quiet points.
@@ -15,35 +16,53 @@ final class GigaAMRuntime: @unchecked Sendable {
     private static let predictionHiddenSize = 320
     private static let maxTokensPerStep = 3
 
+    private enum Decoder {
+        case transducer(decoder: ORTSession, joint: ORTSession)
+        case advance(ORTSession)
+    }
+
     private let preprocessor: ORTSession
     private let encoder: ORTSession
-    private let decoder: ORTSession
-    private let joint: ORTSession
+    private let decoder: Decoder
+    let files: GigaAMModelFiles
     private let vocabulary: GigaAMVocabulary
     private let lock = NSLock()
 
-    init(modelDirectory: URL, preprocessorURL: URL) throws {
+    init(modelDirectory: URL, files: GigaAMModelFiles, preprocessorURL: URL) throws {
         let environment = try ORTEnv(loggingLevel: .warning)
         let options = try ORTSessionOptions()
         func session(_ url: URL) throws -> ORTSession {
             try ORTSession(env: environment, modelPath: url.path, sessionOptions: options)
         }
+        func model(_ name: String) throws -> ORTSession {
+            try session(modelDirectory.appendingPathComponent(name))
+        }
         preprocessor = try session(preprocessorURL)
-        encoder = try session(modelDirectory.appendingPathComponent(GigaAMModelFiles.encoder))
-        decoder = try session(modelDirectory.appendingPathComponent(GigaAMModelFiles.decoder))
-        joint = try session(modelDirectory.appendingPathComponent(GigaAMModelFiles.joint))
-        vocabulary = try GigaAMVocabulary(contentsOf: modelDirectory.appendingPathComponent(GigaAMModelFiles.vocabulary))
+        encoder = try model(files.encoder)
+        decoder = switch files.decoding {
+        case .transducer(let decoder, let joint): .transducer(decoder: try model(decoder), joint: try model(joint))
+        case .advance(let advance): .advance(try model(advance))
+        }
+        self.files = files
+        vocabulary = try GigaAMVocabulary(contentsOf: modelDirectory.appendingPathComponent(files.vocabulary))
     }
 
-    /// Transcribes one chunk of 16 kHz mono audio.
-    func transcribe(_ samples: [Float]) throws -> String {
+    /// Transcribes one chunk of 16 kHz mono audio; a language-conditioned model detects the
+    /// language itself when `language` is nil or not one of its languages.
+    func transcribe(_ samples: [Float], language: String? = nil) throws -> String {
         guard !samples.isEmpty else { return "" }
         // The feature extractor uses no centering, so very short input would yield no frames.
         let padded = Self.paddedToMinimumDuration(samples)
         return try lock.withLock {
             let (features, featureLength) = try extractFeatures(padded)
-            let (encoded, frameCount) = try encode(features, featureLength: featureLength)
-            let tokens = try decodeGreedy(encoded, frameCount: frameCount)
+            let tokens: [Int]
+            switch decoder {
+            case .transducer(let decoder, let joint):
+                let (encoded, frameCount) = try encode(features, featureLength: featureLength)
+                tokens = try decodeGreedy(encoded, frameCount: frameCount, decoder: decoder, joint: joint)
+            case .advance(let advance):
+                tokens = try decodeInGraph(features, featureLength: featureLength, language: language, advance: advance)
+            }
             return vocabulary.text(for: tokens)
         }
     }
@@ -98,7 +117,45 @@ final class GigaAMRuntime: @unchecked Sendable {
         return (encoded, validFrames)
     }
 
-    private func decodeGreedy(_ encoded: [[Float]], frameCount: Int) throws -> [Int] {
+    /// The encoder emits the projections of both heads, and `advance` decodes both greedily;
+    /// only the first, end-to-end head (with punctuation and casing) is read.
+    private func decodeInGraph(_ features: ORTValue, featureLength: Int64, language: String?, advance: ORTSession) throws -> [Int] {
+        var inputs = [
+            "audio_signal": features,
+            "length": try GigaAMTensor.make([featureLength], type: .int64, shape: [1]),
+        ]
+        if let vector = files.languageVector(for: language) {
+            inputs["language_vector"] = try GigaAMTensor.make(vector, type: .float, shape: [1, vector.count])
+        }
+        let encoded = try encoder.run(
+            withInputs: inputs,
+            outputNames: ["head_outputs", "encoded_len"],
+            runOptions: nil
+        )
+        guard let projected = encoded["head_outputs"], let lengths = encoded["encoded_len"] else {
+            throw GigaAMRuntimeError.missingOutput("head_outputs")
+        }
+        let outputs = try advance.run(
+            withInputs: ["projected": projected, "lengths": lengths],
+            outputNames: ["tokens"],
+            runOptions: nil
+        )
+        guard let tokens = outputs["tokens"] else { throw GigaAMRuntimeError.missingOutput("tokens") }
+        return try Self.firstHeadTokens(
+            GigaAMTensor.values(tokens), shape: tokens.tensorTypeAndShapeInfo().shape.map(\.intValue)
+        )
+    }
+
+    /// `tokens` is [steps, heads, batch] with -1 where a step emitted nothing; the batch is one.
+    static func firstHeadTokens(_ tokens: [Int64], shape: [Int]) throws -> [Int] {
+        guard shape.count == 3, shape[1] > 0, shape[2] == 1,
+              tokens.count.isMultiple(of: shape[1]), tokens.count / shape[1] == shape[0] else {
+            throw GigaAMRuntimeError.unexpectedShape(shape)
+        }
+        return stride(from: 0, to: tokens.count, by: shape[1]).compactMap { tokens[$0] >= 0 ? Int(tokens[$0]) : nil }
+    }
+
+    private func decodeGreedy(_ encoded: [[Float]], frameCount: Int, decoder: ORTSession, joint: ORTSession) throws -> [Int] {
         let blank = vocabulary.blankID
         var hidden = [Float](repeating: 0, count: Self.predictionHiddenSize)
         var cell = hidden
@@ -112,9 +169,9 @@ final class GigaAMRuntime: @unchecked Sendable {
 
         while frame < frameCount {
             if prediction == nil {
-                prediction = try runDecoder(token: lastToken, hidden: hidden, cell: cell)
+                prediction = try runDecoder(decoder, token: lastToken, hidden: hidden, cell: cell)
             }
-            let logits = try runJoint(encoded[frame], prediction: prediction!.output)
+            let logits = try runJoint(joint, encoded[frame], prediction: prediction!.output)
             let token = Self.argmax(logits)
 
             if token != blank {
@@ -133,7 +190,7 @@ final class GigaAMRuntime: @unchecked Sendable {
         return tokens
     }
 
-    private func runDecoder(token: Int, hidden: [Float], cell: [Float]) throws -> (ORTValue, [Float], [Float]) {
+    private func runDecoder(_ decoder: ORTSession, token: Int, hidden: [Float], cell: [Float]) throws -> (ORTValue, [Float], [Float]) {
         let size = Self.predictionHiddenSize
         let outputs = try decoder.run(
             withInputs: [
@@ -152,7 +209,7 @@ final class GigaAMRuntime: @unchecked Sendable {
         return (reshaped, try GigaAMTensor.values(newHidden), try GigaAMTensor.values(newCell))
     }
 
-    private func runJoint(_ frame: [Float], prediction: ORTValue) throws -> [Float] {
+    private func runJoint(_ joint: ORTSession, _ frame: [Float], prediction: ORTValue) throws -> [Float] {
         let outputs = try joint.run(
             withInputs: [
                 "enc": try GigaAMTensor.make(frame, type: .float, shape: [1, frame.count, 1]),
@@ -172,13 +229,67 @@ final class GigaAMRuntime: @unchecked Sendable {
     }
 }
 
-/// The files of the `istupakov/gigaam-v3-onnx` repository this plugin uses (int8 weights).
-enum GigaAMModelFiles {
-    static let encoder = "v3_e2e_rnnt_encoder.int8.onnx"
-    static let decoder = "v3_e2e_rnnt_decoder.int8.onnx"
-    static let joint = "v3_e2e_rnnt_joint.int8.onnx"
-    static let vocabulary = "v3_e2e_rnnt_vocab.txt"
-    static let all = [encoder, decoder, joint, vocabulary]
+/// The files of one GigaAM ONNX export and how its tokens are decoded.
+enum GigaAMModelFiles: String, Sendable {
+    case v3 = "v3_e2e_rnnt"
+    case v4 = "v4_rnnt"
+    case multilingualV2 = "multilingual_v2_rnnt"
+
+    enum Decoding: Sendable {
+        /// Separate decoder and joint networks, driven by the greedy loop in Swift.
+        case transducer(decoder: String, joint: String)
+        /// One graph that runs the greedy loop itself.
+        case advance(String)
+    }
+
+    var encoder: String { "\(rawValue)_encoder.int8.onnx" }
+    var vocabulary: String { rawValue + (self == .v3 ? "_vocab.txt" : "_e2e_vocab.txt") }
+
+    var decoding: Decoding {
+        switch self {
+        case .v3: .transducer(decoder: "\(rawValue)_decoder.int8.onnx", joint: "\(rawValue)_joint.int8.onnx")
+        case .v4, .multilingualV2: .advance("\(rawValue)_advance.onnx")
+        }
+    }
+
+    var all: [String] {
+        switch decoding {
+        case .transducer(let decoder, let joint): [encoder, decoder, joint, vocabulary]
+        case .advance(let advance): [encoder, advance, vocabulary]
+        }
+    }
+
+    var languages: [String] {
+        switch self {
+        case .v3: ["ru"]
+        case .v4: ["ru", "en"]
+        // The encoder's language slots, not alphabetical order.
+        case .multilingualV2: ["ru", "en", "kk", "ky", "uz", "be", "fr", "es", "ba", "ka", "hy",
+                               "ro", "tk", "az", "tg", "de", "it", "nl", "pl", "pt", "tt"]
+        }
+    }
+
+    /// Neither advance graph returns a detected language. Report a language only when it
+    /// was explicitly selected for Multilingual v2, or when using the monolingual v3.
+    func transcriptLanguage(for language: String?) -> String? {
+        switch self {
+        case .v3: return "ru"
+        case .v4: return nil
+        case .multilingualV2:
+            guard let language, let code = Locale(identifier: language).language.languageCode?.identifier,
+                  languages.contains(code) else { return nil }
+            return code
+        }
+    }
+
+    /// Only Multilingual v2 takes this 32-slot input; slot 0 requests automatic detection.
+    func languageVector(for language: String?) -> [Float]? {
+        guard self == .multilingualV2 else { return nil }
+        let index = transcriptLanguage(for: language).flatMap { languages.firstIndex(of: $0) }
+        var vector = [Float](repeating: 0, count: 32)
+        vector[index.map { $0 + 1 } ?? 0] = 1
+        return vector
+    }
 }
 
 enum GigaAMRuntimeError: LocalizedError {

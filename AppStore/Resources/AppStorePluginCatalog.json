@@ -220,10 +220,11 @@
       "bundleName": "GigaAMPlugin.bundle",
       "name": "GigaAM",
       "author": "TypeWhisper",
-      "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization. Russian only.",
+      "description": "Local speech-to-text with GigaAM by Sber: v3 for Russian, v4 for Russian and English, and Multilingual v2 for 21 languages. Adds punctuation and capitalization.",
       "descriptions": {
-        "de": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Großschreibung. Nur Russisch.",
-        "ja": "SberのGigaAM v3によるロシア語のローカル音声認識です。句読点と大文字を付けます。ロシア語専用です。"
+        "de": "Lokale Spracherkennung mit GigaAM von Sber: v3 für Russisch, v4 für Russisch und Englisch und Multilingual v2 für 21 Sprachen. Setzt Satzzeichen und Großschreibung.",
+        "es": "Transcripción local con GigaAM de Sber: v3 para ruso, v4 para ruso e inglés y Multilingual v2 para 21 idiomas. Añade puntuación y mayúsculas.",
+        "ja": "SberのGigaAMによるローカル音声認識。v3はロシア語、v4はロシア語と英語、Multilingual v2は21言語に対応し、句読点と大文字を補います。"
       },
       "category": "transcription",
       "iconSystemName": "waveform.badge.mic",

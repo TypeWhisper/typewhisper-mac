@@ -40,7 +40,7 @@ enum SetupWizardSpokenLanguages: Equatable, Sendable {
 // MARK: - Engine table
 
 /// Local engines the wizard can recommend, in the order it prefers them when several
-/// support the spoken languages. GigaAM transcribes Russian only, with punctuation, so it
+/// support the spoken languages. The wizard's GigaAM v3 model transcribes Russian only, so it
 /// comes first but only counts when Russian is the only spoken language. Parakeet comes
 /// next because it transcribes far faster than the others in the benchmark at similar
 /// accuracy in English, German and Russian. WhisperKit covers the most languages. Qwen3
@@ -97,12 +97,6 @@ extension SetupWizardLocalEngine {
         self != .appleSpeech
     }
 
-    /// An engine for a single language. It is recommended only when that language is the
-    /// only spoken language, never for automatic detection.
-    var isSingleLanguageEngine: Bool {
-        self == .gigaAM
-    }
-
     /// From the plugin manifests (`minOSVersion`).
     var minimumMacOSMajorVersion: Int {
         self == .appleSpeech ? 26 : 14
@@ -114,7 +108,7 @@ extension SetupWizardLocalEngine {
     var knownLanguages: [String]? {
         switch self {
         case .gigaAM:
-            // GigaAMPlugin.supportedLanguages
+            // The wizard downloads GigaAM v3, not v4 or Multilingual v2.
             ["ru"]
         case .parakeet:
             // ParakeetVersion.ultra and .v3
@@ -396,7 +390,8 @@ extension SetupWizardEngineRecommendation {
 
         switch spokenLanguages {
         case .automatic:
-            guard !engine.isSingleLanguageEngine else { return nil }
+            // The wizard downloads v3, but an already loaded GigaAM model may be multilingual.
+            if engine == .gigaAM, languages?.count == 1 { return nil }
             return .detectsLanguages(count: languages.map { Set($0).count })
         case .specific(let codes):
             // Apple Speech's languages are unknown until its engine is loaded.

@@ -113,33 +113,8 @@
         }
       }
     },
-    "GigaAM (Russian)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "GigaAM (Russisch)"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "GigaAM (ruso)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "GigaAM（ロシア語）"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "GigaAM（俄语）"
-          }
-        }
-      }
+    "GigaAM": {
+      "shouldTranslate": false
     },
     "Hide Hugging Face token": {
       "localizations": {
@@ -337,30 +312,30 @@
         }
       }
     },
-    "Local Russian speech recognition with GigaAM v3 by Sber. Adds punctuation and capitalization and runs on the CPU. It only recognizes Russian, so recordings in other languages are transcribed as Russian.": {
+    "GigaAM by Sber transcribes locally on the CPU with punctuation and capitalization. Choose v3 for Russian, v4 for Russian and English, or Multilingual v2 for 21 languages.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Großschreibung und läuft auf der CPU. Erkennt nur Russisch, daher werden Aufnahmen in anderen Sprachen als Russisch transkribiert."
+            "value": "GigaAM von Sber transkribiert lokal auf der CPU mit Satzzeichen und Großschreibung. Wähle v3 für Russisch, v4 für Russisch und Englisch oder Multilingual v2 für 21 Sprachen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reconocimiento de voz en ruso local con GigaAM v3 de Sber. Añade puntuación y mayúsculas y se ejecuta en la CPU. Solo reconoce ruso, así que las grabaciones en otros idiomas se transcriben como ruso."
+            "value": "GigaAM de Sber transcribe localmente en la CPU con puntuación y mayúsculas. Elige v3 para ruso, v4 para ruso e inglés o Multilingual v2 para 21 idiomas."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "SberのGigaAM v3によるロシア語のローカル音声認識です。句読点と大文字を付け、CPUで動作します。ロシア語のみを認識するため、他の言語の録音もロシア語として文字起こしされます。"
+            "value": "SberのGigaAMはCPU上でローカルに文字起こしを行い、句読点と大文字を補います。ロシア語にはv3、ロシア語と英語にはv4、21言語にはMultilingual v2を選べます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用 Sber 的 GigaAM v3 进行本地俄语语音识别。会添加标点和大小写，并在 CPU 上运行。仅识别俄语，因此其他语言的录音也会按俄语转写。"
+            "value": "Sber 的 GigaAM 在本机 CPU 上转写语音，并自动添加标点和处理大小写。v3 支持俄语，v4 支持俄语和英语，Multilingual v2 支持 21 种语言。"
           }
         }
       }
