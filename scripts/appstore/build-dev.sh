@@ -136,9 +136,12 @@ build() {
 }
 
 # Every worktree builds the same executable name, so match on it rather than
-# on the path; Launch Services lookups by bundle ID proved unreliable.
+# on the path; Launch Services lookups by bundle ID proved unreliable. A copy
+# started with --language or --install-plugin has arguments after the name.
+process_pattern='/Contents/MacOS/TypeWhisper App Store Dev( |$)'
+
 running_pid() {
-    pgrep -f "/Contents/MacOS/TypeWhisper App Store Dev$" | head -1
+    pgrep -f "$process_pattern" | head -1
 }
 
 launch() {
@@ -153,7 +156,7 @@ launch() {
             [[ -z "$(running_pid)" ]] && break
             sleep 0.5
         done
-        pkill -f "/Contents/MacOS/TypeWhisper App Store Dev\$" 2>/dev/null || true
+        pkill -f "$process_pattern" 2>/dev/null || true
     fi
 
     if $reset_permissions; then
