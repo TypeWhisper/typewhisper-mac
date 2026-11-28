@@ -7,13 +7,38 @@ import TypeWhisperPluginSDK
 #endif
 
 final class GigaAMPluginTests: XCTestCase {
-    func testPluginOnlyOffersRussian() {
+    func testSupportedLanguagesFollowModelSelection() {
         let plugin = GigaAMPlugin()
         XCTAssertEqual(plugin.providerId, "gigaam")
         XCTAssertEqual(plugin.supportedLanguages, ["ru"])
         XCTAssertFalse(plugin.supportsTranslation)
         XCTAssertFalse(plugin.isConfigured)
-        XCTAssertEqual(GigaAMPlugin.availableModels.map(\.repoId), ["istupakov/gigaam-v3-onnx"])
+        XCTAssertEqual(plugin.availableModels.map(\.languageCount), [1, 2, 21])
+        plugin.selectModel("gigaam-v4-rnnt")
+        XCTAssertEqual(plugin.supportedLanguages, ["ru", "en"])
+        plugin.selectModel("gigaam-multilingual-v2-rnnt")
+        XCTAssertEqual(plugin.supportedLanguages.count, 21)
+        XCTAssertTrue(plugin.supportedLanguages.contains("de"))
+        plugin.selectModel("gigaam-v3-e2e-rnnt")
+        XCTAssertEqual(plugin.supportedLanguages, ["ru"])
+    }
+
+    func testLanguageVectorUsesExportedSlotsAndFallsBackToDetection() {
+        let cases: [(String?, Int)] = [(nil, 0), ("zh", 0), ("ru", 1), ("en-US", 2), ("de", 16), ("tt", 21)]
+        for (language, slot) in cases {
+            var expected = [Float](repeating: 0, count: 32)
+            expected[slot] = 1
+            XCTAssertEqual(GigaAMModelFiles.multilingualV2.languageVector(for: language), expected)
+        }
+        XCTAssertNil(GigaAMModelFiles.v3.languageVector(for: "ru"))
+        XCTAssertNil(GigaAMModelFiles.v4.languageVector(for: "en"))
+    }
+
+    func testFirstHeadTokensSkipEmptySteps() throws {
+        // Three steps, two heads, one item: the first head emitted 5, nothing, 7.
+        XCTAssertEqual(try GigaAMRuntime.firstHeadTokens([5, 9, -1, 8, 7, -1], shape: [3, 2, 1]), [5, 7])
+        XCTAssertThrowsError(try GigaAMRuntime.firstHeadTokens([5, 9], shape: [1, 1, 2]))
+        XCTAssertThrowsError(try GigaAMRuntime.firstHeadTokens([5], shape: [1, 2, 1]))
     }
 
     func testPreprocessorShipsWithThePlugin() throws {
@@ -74,7 +99,8 @@ final class GigaAMPluginTests: XCTestCase {
     }
 
     /// Opt-in check against the real model: set GIGAAM_MODEL_DIR to a directory with the
-    /// downloaded model files and GIGAAM_AUDIO to a 16 kHz mono 16-bit WAV file.
+    /// downloaded model files, GIGAAM_AUDIO to a 16 kHz mono 16-bit WAV file, and
+    /// optionally GIGAAM_MODEL to the model's file prefix and GIGAAM_LANGUAGE to a language code.
     func testTranscribesRealAudioWhenModelIsAvailable() throws {
         let environment = ProcessInfo.processInfo.environment
         guard let modelPath = environment["GIGAAM_MODEL_DIR"], let audioPath = environment["GIGAAM_AUDIO"] else {
@@ -82,11 +108,12 @@ final class GigaAMPluginTests: XCTestCase {
         }
         let runtime = try GigaAMRuntime(
             modelDirectory: URL(fileURLWithPath: modelPath),
+            files: try XCTUnwrap(GigaAMModelFiles(rawValue: environment["GIGAAM_MODEL"] ?? GigaAMModelFiles.v3.rawValue)),
             preprocessorURL: try XCTUnwrap(GigaAMPlugin.preprocessorURL)
         )
         let samples = try Self.pcmSamples(Data(contentsOf: URL(fileURLWithPath: audioPath)))
         let start = Date()
-        let text = try runtime.transcribe(samples)
+        let text = try runtime.transcribe(samples, language: environment["GIGAAM_LANGUAGE"])
         print("GIGAAM_MS \(Int(Date().timeIntervalSince(start) * 1000))")
         print("GIGAAM_TRANSCRIPT \(text)")
         XCTAssertFalse(text.isEmpty)

@@ -452,8 +452,8 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
         XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.specific(["ja"]), engines: engines)), .whisperKit)
     }
 
-    func testReadyGigaAMIsOnlyPickedForRussianAlone() {
-        let engines: [SetupWizardLocalEngine: SetupWizardEngineState] = [
+    func testReadyGigaAMUsesTheSelectedModelsLanguages() {
+        var engines: [SetupWizardLocalEngine: SetupWizardEngineState] = [
             .gigaAM: SetupWizardEngineState(isInstalled: true, isReady: true, reportedLanguages: ["ru"]),
             .parakeet: SetupWizardEngineState(isInstalled: true, isReady: true),
         ]
@@ -461,6 +461,9 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
         XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.specific(["ru"]), engines: engines)), .gigaAM)
         XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.automatic, engines: engines)), .parakeet)
         XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.specific(["ru", "en"]), engines: engines)), .parakeet)
+
+        engines[.gigaAM]?.reportedLanguages = ["ru", "en"]
+        XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.automatic, engines: engines)), .gigaAM)
     }
 
     func testReadyEngineIgnoresAnEngineWithoutTheLanguage() {
@@ -646,13 +649,13 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
         let source = try String(contentsOf: url, encoding: .utf8)
 
         XCTAssertEqual(SetupWizardLocalEngine.gigaAM.knownLanguages, ["ru"])
-        XCTAssertTrue(source.contains(#"var supportedLanguages: [String] { ["ru"] }"#))
         XCTAssertTrue(source.contains(#"var providerId: String { "gigaam" }"#))
         XCTAssertEqual(SetupWizardLocalEngine.gigaAM.providerId, "gigaam")
 
         let model = try XCTUnwrap(SetupWizardLocalEngine.gigaAM.models.first)
         XCTAssertEqual(SetupWizardLocalEngine.gigaAM.models.count, 1)
         let definition = try XCTUnwrap(source.range(of: #"id: "\#(model.id)""#).map { String(source[$0.lowerBound...].prefix(400)) })
+        XCTAssertTrue(definition.contains("files: .v3,")) // v3's Russian-only behavior is covered in GigaAMPluginTests.
         let requirement = try XCTUnwrap(definition.range(of: #"ramRequirement: ""#).map { String(definition[$0.upperBound...]) })
         XCTAssertEqual(Self.gigabytes(requirement), model.minimumMemoryGB)
     }

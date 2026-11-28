@@ -7,7 +7,9 @@ import SwiftUI
 // MARK: - Plugin Entry Point
 
 @objc(GigaAMPlugin)
-final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PassiveModelRestoreProviding, @unchecked Sendable {
+final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding,
+    DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging,
+    PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gigaam"
     static let pluginName = "GigaAM"
 
@@ -24,11 +26,6 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     fileprivate var _hfToken: String?
 
     fileprivate var modelState: GigaAMModelState = .notLoaded
-
-    static let modelRequirements = PluginHuggingFaceModelStore.Requirements(
-        requiredFiles: Set(GigaAMModelFiles.all),
-        weightFileExtensions: ["onnx"]
-    )
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
@@ -86,7 +83,7 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     // MARK: - TranscriptionEnginePlugin
 
     var providerId: String { "gigaam" }
-    var providerDisplayName: String { "GigaAM (Russian)" }
+    var providerDisplayName: String { "GigaAM" }
 
     var isConfigured: Bool {
         runtime != nil && loadedModelId != nil
@@ -100,7 +97,7 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         guard let loadedModelId else { return [] }
         return Self.availableModels
             .filter { $0.id == loadedModelId }
-            .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, languageCount: 1) }
+            .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, languageCount: $0.files.languages.count) }
     }
 
     var availableModels: [PluginModelInfo] {
@@ -109,7 +106,7 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
                 id: def.id,
                 displayName: def.displayName,
                 sizeDescription: def.sizeDescription,
-                languageCount: 1,
+                languageCount: def.files.languages.count,
                 downloaded: hasDownloadedModel(def),
                 loaded: def.id == loadedModelId
             )
@@ -117,18 +114,7 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     }
 
     var downloadedModels: [PluginModelInfo] {
-        Self.availableModels
-            .filter { hasDownloadedModel($0) }
-            .map { def in
-                PluginModelInfo(
-                    id: def.id,
-                    displayName: def.displayName,
-                    sizeDescription: def.sizeDescription,
-                    languageCount: 1,
-                    downloaded: true,
-                    loaded: def.id == loadedModelId
-                )
-            }
+        availableModels.filter { $0.downloaded == true }
     }
 
     func deleteDownloadedModel(_ modelId: String) async throws {
@@ -162,8 +148,9 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         }
     }
 
-    /// GigaAM v3 only recognizes Russian.
-    var supportedLanguages: [String] { ["ru"] }
+    var supportedLanguages: [String] {
+        (Self.availableModels.first { $0.id == selectedModelId } ?? Self.availableModels[0]).files.languages
+    }
 
     var selectedModelId: String? { _selectedModelId }
 
@@ -205,20 +192,20 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         try await PluginLocalInferenceGate.shared.withLock { [self] in
             guard let runtime else { throw PluginTranscriptionError.notConfigured }
             guard !translate else {
-                throw PluginTranscriptionError.apiError("GigaAM cannot translate. It only transcribes Russian.")
+                throw PluginTranscriptionError.apiError("GigaAM cannot translate.")
             }
+            let detected = runtime.files.transcriptLanguage(for: language)
             let progress = GigaAMTranscriptProgress()
             do {
-                let result = try await PluginAudioChunking.transcribe(
+                return try await PluginAudioChunking.transcribe(
                     audio, maximumChunkDuration: GigaAMRuntime.maximumChunkDuration
                 ) { chunk in
                     try Task.checkCancellation()
-                    let text = progress.continuing(try runtime.transcribe(chunk.samples))
+                    let text = progress.continuing(try runtime.transcribe(chunk.samples, language: language))
                     try Task.checkCancellation()
                     guard onProgress(progress.append(text)) else { throw CancellationError() }
-                    return PluginTranscriptionResult(text: text, detectedLanguage: "ru")
+                    return PluginTranscriptionResult(text: text, detectedLanguage: detected)
                 }
-                return PluginTranscriptionResult(text: result.text, detectedLanguage: "ru", segments: result.segments)
             } catch let error as CancellationError {
                 throw error
             } catch let error as PluginTranscriptionError {
@@ -229,9 +216,11 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             }
         }
     }
+}
 
-    // MARK: - Model Management
+// MARK: - Model Management
 
+extension GigaAMPlugin {
     fileprivate func loadModel(_ modelDef: GigaAMModelDef, passively: Bool = false,
                                expectedGeneration: UUID? = nil) async throws {
         let generation = expectedGeneration ?? activationID
@@ -277,7 +266,9 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
                 runtime = nil
                 loadedModelId = nil
             }
-            let loaded = try GigaAMRuntime(modelDirectory: modelDirectory, preprocessorURL: preprocessorURL)
+            let loaded = try GigaAMRuntime(
+                modelDirectory: modelDirectory, files: modelDef.files, preprocessorURL: preprocessorURL
+            )
 
             try activationLock.withLock {
                 try Task.checkCancellation()
@@ -309,7 +300,8 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         }
         let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
             repositoryID: modelDef.repoId,
-            matching: GigaAMModelFiles.all,
+            revision: modelDef.revision ?? "main",
+            matching: modelDef.files.all,
             token: _hfToken,
             destination: modelsDirectory,
             trackedDirectory: PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
@@ -325,9 +317,11 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             cache: HubCache(cacheDirectory: modelsDirectory)
         )
         do {
-            let directory = try await client.downloadSnapshot(of: repoID, matching: GigaAMModelFiles.all)
+            let directory = try await client.downloadSnapshot(
+                of: repoID, revision: modelDef.revision ?? "main", matching: modelDef.files.all
+            )
             guard PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
-                .isUsableModelDirectory(directory, requirements: Self.modelRequirements) else {
+                .isUsableModelDirectory(directory, requirements: modelDef.requirements) else {
                 throw NSError(domain: "GigaAMPlugin", code: 2,
                               userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"])
             }
@@ -444,11 +438,16 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     }
 
     private func usableModelDirectory(for modelDef: GigaAMModelDef, modelsDirectory: URL) -> URL? {
-        PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
-            for: modelDef.repoId,
-            legacyDirectories: [],
-            requirements: Self.modelRequirements
-        )
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        if let revision = modelDef.revision {
+            // Pinned downloads have a snapshot directory, but no branch ref in the cache.
+            guard let repoID = Repo.ID(rawValue: modelDef.repoId),
+                  let snapshot = try? HubCache(cacheDirectory: modelsDirectory).snapshotPath(
+                    repo: repoID, kind: .model, commitHash: revision
+                  ), store.isUsableModelDirectory(snapshot, requirements: modelDef.requirements) else { return nil }
+            return snapshot
+        }
+        return store.snapshotDirectory(for: modelDef.repoId, requirements: modelDef.requirements)
     }
 
     private func removeIncompleteModelIfNeeded(_ modelDef: GigaAMModelDef, modelsDirectory: URL) {
@@ -506,8 +505,27 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             id: "gigaam-v3-e2e-rnnt",
             displayName: "GigaAM v3 (Russian, with punctuation)",
             repoId: "istupakov/gigaam-v3-onnx",
+            files: .v3,
             sizeDescription: "~230 MB",
             ramRequirement: "2 GB+"
+        ),
+        GigaAMModelDef(
+            id: "gigaam-v4-rnnt",
+            displayName: "GigaAM v4 (Russian and English, with punctuation)",
+            repoId: "TypeWhisper/gigaam-v4-onnx",
+            revision: "9ae7c36c908bf7386913b447f6d9d6d2e856d3f8",
+            files: .v4,
+            sizeDescription: "~255 MB",
+            ramRequirement: "2 GB+"
+        ),
+        GigaAMModelDef(
+            id: "gigaam-multilingual-v2-rnnt",
+            displayName: "GigaAM Multilingual v2 (21 languages, with punctuation)",
+            repoId: "TypeWhisper/gigaam-multilingual-v2-onnx",
+            revision: "6d6976b2e2cd53290f822501b3d68ebcdf5c9bb6",
+            files: .multilingualV2,
+            sizeDescription: "~805 MB",
+            ramRequirement: "4 GB+"
         ),
     ]
 }
@@ -550,8 +568,14 @@ struct GigaAMModelDef: Identifiable {
     let id: String
     let displayName: String
     let repoId: String
+    var revision: String? = nil
+    let files: GigaAMModelFiles
     let sizeDescription: String
     let ramRequirement: String
+
+    var requirements: PluginHuggingFaceModelStore.Requirements {
+        .init(requiredFiles: Set(files.all), weightFileExtensions: ["onnx"])
+    }
 }
 
 enum GigaAMModelState: Equatable {
@@ -586,12 +610,15 @@ private struct GigaAMSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("GigaAM (Russian)", bundle: bundle)
+            Text("GigaAM", bundle: bundle)
                 .font(.headline)
 
-            Text("Local Russian speech recognition with GigaAM v3 by Sber. Adds punctuation and capitalization and runs on the CPU. It only recognizes Russian, so recordings in other languages are transcribed as Russian.", bundle: bundle)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            Text(
+                "GigaAM by Sber transcribes locally on the CPU with punctuation and capitalization. Choose v3 for Russian, v4 for Russian and English, or Multilingual v2 for 21 languages.",
+                bundle: bundle
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
 
             Divider()
 
