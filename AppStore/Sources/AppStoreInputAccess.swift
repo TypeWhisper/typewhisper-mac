@@ -96,14 +96,17 @@ enum AppStoreInputAccess {
         hasRequestedListenEventAccess && !CGPreflightListenEventAccess()
     }
 
-    /// Asks for PostEvent access. macOS 27 neither prompts for it nor lists a
-    /// sandboxed app, so System Settings opens with a guide to drag the app in.
+    /// Asks for PostEvent access. macOS 27 does not prompt inside the app. It may
+    /// show its own alert and list the app with the switch off, or leave the app
+    /// out of the list, so System Settings opens with a guide that also offers
+    /// the icon to drag in. The guide cannot see the grant and offers a restart.
     @MainActor
     static func requestPostEventAccess() {
         guard isAutoPasteEnabled else { return }
         hasRequestedPostEventAccess = true
         guard !CGRequestPostEventAccess() else { return }
         openSettings(accessibilitySettingsURL)
+        PermissionGuideController.shared.begin(kind: .accessibility, isGranted: nil)
         offerRestartOnReturn { postEventAccessPending }
     }
 
@@ -114,6 +117,7 @@ enum AppStoreInputAccess {
         hasRequestedListenEventAccess = true
         guard !CGRequestListenEventAccess() else { return }
         openSettings(inputMonitoringSettingsURL)
+        PermissionGuideController.shared.begin(kind: .inputMonitoring, isGranted: nil)
         offerRestartOnReturn { listenEventAccessPending }
     }
 

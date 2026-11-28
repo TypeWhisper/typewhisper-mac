@@ -136,9 +136,11 @@ build() {
 }
 
 # Every worktree builds the same executable name, so match on it rather than
-# on the path; Launch Services lookups by bundle ID proved unreliable.
-running_pid() {
-    pgrep -f "/Contents/MacOS/TypeWhisper App Store Dev$" | head -1
+# on the path; Launch Services lookups by bundle ID proved unreliable. Only the
+# executable counts, not the arguments: a copy started with --language keeps
+# matching, and a debugger that was handed the app's path does not.
+running_pids() {
+    ps -axo pid=,comm= | awk '/\/Contents\/MacOS\/TypeWhisper App Store Dev$/ { print $1 }'
 }
 
 launch() {
@@ -146,14 +148,14 @@ launch() {
 
     # Every worktree builds the same bundle ID, so quit every running copy,
     # whichever checkout it was built from.
-    if [[ -n "$(running_pid)" ]]; then
+    if [[ -n "$(running_pids)" ]]; then
         echo "Quitting the running TypeWhisper App Store Dev..."
         osascript -e "tell application id \"$bundle_id\" to quit" >/dev/null 2>&1 || true
         for _ in $(seq 1 20); do
-            [[ -z "$(running_pid)" ]] && break
+            [[ -z "$(running_pids)" ]] && break
             sleep 0.5
         done
-        pkill -f "/Contents/MacOS/TypeWhisper App Store Dev\$" 2>/dev/null || true
+        running_pids | while read -r pid; do kill "$pid" 2>/dev/null || true; done
     fi
 
     if $reset_permissions; then

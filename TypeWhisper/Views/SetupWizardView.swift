@@ -105,6 +105,9 @@ struct SetupWizardView: View {
         .onReceive(NotificationCenter.default.publisher(for: .resetSetupWizardWindow)) { _ in
             restartWizardFromBeginning()
         }
+        .onReceive(NotificationCenter.default.publisher(for: PermissionGuideController.didGrantAccess)) { _ in
+            continueAfterGuidedPermission()
+        }
     }
 
     // MARK: - Shell
@@ -370,6 +373,14 @@ struct SetupWizardView: View {
         withAnimation(.easeInOut(duration: 0.3)) {
             currentStep = min(currentStep + 1, SetupWizardStep.allCases.count - 1)
         }
+    }
+
+    /// Moves on once the guide beside System Settings saw the last missing permission arrive.
+    private func continueAfterGuidedPermission() {
+        guard currentWizardStep == .permissions,
+              !dictation.needsMicPermission,
+              !dictation.needsAccessibilityPermission else { return }
+        handlePrimaryAction()
     }
 
     private func completeSetupAndOpenHome() {

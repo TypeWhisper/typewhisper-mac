@@ -171,7 +171,10 @@ final class DictationSettingsHandler {
             #else
             let pollSeconds = 30
             #endif
-            for _ in 0..<pollSeconds {
+            var polledSeconds = 0
+            // Keeps going while the guide beside System Settings waits for the user.
+            while polledSeconds < pollSeconds || PermissionGuideController.shared.isActive {
+                polledSeconds += 1
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
                 DispatchQueue.main.async { [weak self] in

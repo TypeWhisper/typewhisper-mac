@@ -477,6 +477,10 @@ final class TextInsertionService {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+        guard !isAccessibilityGranted else { return }
+        PermissionGuideController.shared.begin(kind: .accessibility) { [weak self] in
+            self?.isAccessibilityGranted ?? false
+        }
 #endif
     }
 
